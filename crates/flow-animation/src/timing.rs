@@ -70,7 +70,7 @@ impl PlaybackDirection {
             Self::Forward => false,
             Self::Reverse => true,
             Self::Alternate => iteration % 2 == 1,
-            Self::AlternateReverse => iteration % 2 == 0,
+            Self::AlternateReverse => iteration.is_multiple_of(2),
         }
     }
 }
@@ -257,10 +257,10 @@ impl Schedule {
         let scaled = delta.as_nanos() * u128::from(rate.numerator()) + u128::from(remainder);
         let denominator = u128::from(rate.denominator());
         let nanos = elapsed.as_nanos() + scaled / denominator;
-        if let Some(total) = self.total {
-            if nanos >= total.as_nanos() {
-                return Ok((total, 0));
-            }
+        if let Some(total) = self.total
+            && nanos >= total.as_nanos()
+        {
+            return Ok((total, 0));
         }
         Ok((
             duration_from_nanos(nanos, "animation clock overflow")?,

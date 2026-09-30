@@ -29,7 +29,8 @@ use crate::{AlignItems, FlowError, FlowStyle, JustifyContent};
 use gpui_flow_scene::DisplayId;
 use taffy::prelude::{
     AlignItems as TaffyAlign, AvailableSpace, Dimension, Display, FlexDirection, FlexWrap,
-    JustifyContent as TaffyJustify, LengthPercentage, Size, Style, TaffyTree,
+    FromLength, JustifyContent as TaffyJustify, LengthPercentage, Size, Style, TaffyAuto,
+    TaffyTree,
 };
 
 pub(super) struct Position {
