@@ -200,6 +200,7 @@ impl Shape {
                 size(s.size)?;
                 if !s.font_size.is_finite()
                     || s.font_size <= 0.0
+                    || !(1..=1000).contains(&s.font_weight)
                     || !s.line_height.is_finite()
                     || s.line_height <= 0.0
                     || s.font_family.trim().is_empty()

@@ -8,7 +8,7 @@ Status: source research and proposed contracts, **not an implementation/parity c
 
 - 引擎实例、生命周期、registry/schema、dirty 缓存、默认动作前事件路由：已实现，见 [engine.md](engine.md)
 - 外观：有序多层矢量 fill/stroke、渐变纹理逐层缓存、可见描边 bounds/hit、原子属性更新已实现；文本/图像不接受新 layers。透明度仍逐 paint，未实现隔离合成、混合/蒙版/阴影/擦除，见 [appearance.md](appearance.md)
-- 视觉布局：可选 `gpui-flow-layout`，固定/内容尺寸 Box/Frame 的行/列、换行、padding/gap、对齐、grow/尺寸范围、隐藏与排除区别、嵌套测量/安排、一次事务/撤销和独立配置持久化。显式pass、编辑+布局事务或opt-in提交前自动派生，具备内容auto-size和嵌套测量固定点；没有全局响应式调度、百分比、shrink 或文字内在测量，见 [flow-layout.md](flow-layout.md)
+- 视觉布局：可选 `gpui-flow-layout`，固定/内容尺寸 Box/Frame 的行/列、换行、padding/gap、对齐、grow/尺寸范围、隐藏与排除区别、嵌套测量/安排、一次事务/撤销和独立配置持久化。显式pass、编辑+布局事务或opt-in提交前自动派生，具备内容auto-size和嵌套测量固定点；已有可选真实文字测量与响应高度；没有全局响应式调度、百分比或shrink，见 [flow-layout.md](flow-layout.md)
 - 新原生示例 `layout_appearance` 将布局输出送入同一 SceneView；编译/模型测试不等于新窗口视觉验收
 - 键盘增量：KeyUp/Space进入同一路由，首按可取消、Up/取消/失焦必清状态、重复键和焦点按实例隔离，见 [keyboard-routing.md](keyboard-routing.md)。没有新增双击/触摸/IME支持
 - 动画增量：1..64段显式关键帧、稀疏字段保持/累计端点预检、跨段seek；显式tick的平移/opacity/实色/自定义数值插值，原子跨元素更新、pause/resume/seek/cancel、旧身份保护及完成一次Undo/取消恢复基线的编辑器播放会话，见 [animation.md](animation.md)。没有完整timeline/运动路径；paint-only状态过渡由interaction呈现层提供
@@ -17,9 +17,10 @@ Status: source research and proposed contracts, **not an implementation/parity c
 - 同步响应布局增量：安装live绑定后普通shape/transform/树编辑在一次提交内派生，严格size/transform白名单、8轮外层固定点、失败与播放历史保护；UndoRedo精确还原且runtime配置不序列化。没有帧合并/局部依赖调度，见[reactive-layout.md](reactive-layout.md)
 - 程序焦点增量：宿主/监听队列请求，选中分离、Blur阶段处理动作、失效目标抑制、256预算及native一次同步；不含Tab/IME/无障碍，见[focus-routing.md](focus-routing.md)
 - 反向布局增量：RowReverse/ColumnReverse逆序遍历后按正常坐标排布，wrap_reverse独立反转完整行/列；原树/paint顺序与runtime身份保持，嵌套auto-size/ownership/reactive单Undo沿用既有管线。未把shrinkContent误当CSS shrink
+- 文字测量增量：字体/字号/字重、同源GPUI shaping/paint、换行/空行、真实尺寸进入响应布局，绑定/动画/Undo边界及显式字体metrics失效后同步reflow；本轮仅纯文本子集，无富文本编辑/IME/百分比/完整文字排版，见[text-measurement.md](text-measurement.md)
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
-## 九类能力当前边界（本轮反向布局后）
+## 九类能力当前边界（本轮真实文字测量后）
 
 这里描述已经落地的行为与仍待实现的契约；下方历史源码差距表保留研究基线。
 
@@ -28,7 +29,7 @@ Status: source research and proposed contracts, **not an implementation/parity c
 | 事件 | 实例持有、捕获/目标/冒泡、once、队列、默认动作前路由、KeyUp、不可取消Blur/Focus及related target | 多指/压力、双击/长按、IME及完整事件族 |
 | 交互 | 选择/拖动/缩放/捕获取消、Space平移、插件策略、程序焦点/有界重定向/native同步 | 专用内外编辑工具生命周期、复杂手势 |
 | 外观 | 多层矢量paint、线性/径向渐变、描边bounds/picking、paint-only状态呈现及实色/opacity过渡 | 隔离透明度、blend、mask、shadow/filter |
-| 布局 | 固定/内容轴、双轴reverse遍历/wrap-reverse、wrap测量、嵌套有界收敛、opt-in提交前自动派生 | 帧合并/局部依赖调度、百分比、shrink、文字内在测量 |
+| 布局 | 固定/内容轴、双轴reverse遍历/wrap-reverse、wrap测量、真实字体文字Natural/AutoHeight、嵌套有界收敛、opt-in提交前自动派生 | 帧合并/局部依赖调度、百分比、shrinkContent、文本baseline/富排版 |
 | 数据 | 类型属性/schema/default、原子变化、dirty分类、JSON | 完整input/computed分离及Leafer导入导出 |
 | 元素 | 主要原语、场景树、变换、裁切、统一几何命中 | 命令式Canvas元素、各类型高级属性完全覆盖 |
 | 自定义元素 | 注册factory/schema、确定性自定义几何/picking、数值动画 | 自定义resize/编辑工具协议、异步资源就绪整合 |

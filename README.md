@@ -28,6 +28,8 @@ cargo run --locked -p flow-studio --bin animations
 cargo run --locked -p flow-studio --bin auto_size
 cargo run --locked -p flow-studio --bin state_styles
 cargo run --locked -p flow-studio --bin reactive_layout
+cargo run --locked -p flow-studio --bin measured_text
+cargo run --locked -p flow-studio --bin text_measure_probe # 无窗口真实字体探针
 python3 scripts/generate-media-fixtures.py
 cargo run --locked -p flow-studio --bin media
 # Linux 无 desktop portal 时，明确指定 Save/Open 路径：
@@ -37,6 +39,7 @@ cargo run --locked -p flow-studio -- --file ./canvas.flow.json
 - **Interactions**：拖拽连线/吸附、有效和无效目标、只读及独立插件开关
 - **Studio**：节点工作流与原生内容编辑、文件 Save/Open、连接/分组、mock runner
 - **Primitives**：通用场景原语、嵌套变换/裁切、点击/拖动/缩放/旋转、捕获事件
+- **Measured text**：真实字体/字重/换行/行高测量，普通文字或容器宽度编辑联动自动高度，一次 Undo；支持中文/emoji 与显式字体缓存刷新
 - **Auto size**：按内容测量容器、换行自动高度、嵌套收敛；输入与布局同一Undo事务
 - **Animations**：真实属性插值、pause/resume/seek和实例销毁保护；完成一个Undo步骤，取消保留原历史
 - **Layout + Appearance**：行列/换行/grow/尺寸约束，一次 Reflow 一次撤销；多层矢量填充和描边，真实渐变叠绘
@@ -89,6 +92,8 @@ cargo +1.98.1 run --locked -p flow-studio
 主 workspace 的默认成员是 core/engine/interaction/layout/animation/runtime/scene/editor/media，`cargo test` 不会自动覆盖原生 UI。
 
 ## 文档导航
+
+- [真实文字测量与响应尺寸](docs/text-measurement.md)
 
 - [Leafer 源码分层、差距与验收契约](docs/leafer-source-map.md)
 - [元素实例、属性变更与事件引擎](docs/engine.md)

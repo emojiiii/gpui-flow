@@ -33,3 +33,6 @@ pub use gpui_flow_engine as engine;
 pub use gpui_flow_layout as layout;
 
 pub use gpui_flow_animation as animation;
+
+mod text_measure;
+pub use text_measure::*;

@@ -5,7 +5,9 @@
 mod arrange;
 mod reactive;
 mod style;
+mod text;
 pub use style::*;
+pub use text::*;
 
 use gpui_flow_editor::SceneEditor;
 use gpui_flow_engine::{ChangeOrigin, ChangeSet, EngineError, SceneEngine};
@@ -19,6 +21,7 @@ pub enum FlowError {
     Scene(SceneError),
     Engine(EngineError),
     Serialization(String),
+    TextMeasurement(String),
     NonConvergent { passes: usize },
 }
 impl std::fmt::Display for FlowError {
@@ -28,6 +31,7 @@ impl std::fmt::Display for FlowError {
             Self::Scene(e) => e.fmt(f),
             Self::Engine(e) => e.fmt(f),
             Self::Serialization(e) => write!(f, "flow document: {e}"),
+            Self::TextMeasurement(e) => write!(f, "text measurement: {e}"),
             Self::NonConvergent { passes } => write!(
                 f,
                 "flow layout did not converge within {passes} measure/arrange passes"
@@ -61,6 +65,8 @@ pub(crate) fn invalid(id: &DisplayId, message: impl Into<String>) -> FlowError {
 pub struct FlowLayout {
     pub containers: BTreeMap<DisplayId, FlowStyle>,
     pub items: BTreeMap<DisplayId, FlowItem>,
+    /// Explicit text dimension ownership, measured by an optional host backend.
+    pub texts: BTreeMap<DisplayId, TextSizing>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -170,6 +176,7 @@ impl FlowLayout {
                 }
             }
         }
+        text::validate(self, scene)?;
         Ok(())
     }
 
@@ -182,7 +189,20 @@ impl FlowLayout {
         scene: &Scene,
         limit: usize,
     ) -> Result<(Scene, FlowReport), FlowError> {
+        self.arranged_measured(scene, limit, None)
+    }
+    fn arranged_measured(
+        &self,
+        scene: &Scene,
+        limit: usize,
+        measurer: Option<&dyn TextMeasurer>,
+    ) -> Result<(Scene, FlowReport), FlowError> {
         self.validate(scene)?;
+        if !self.texts.is_empty() && measurer.is_none() {
+            return Err(FlowError::TextMeasurement(
+                "text sizing requires a measurement backend".into(),
+            ));
+        }
         let mut next = scene.clone();
         let mut order = Vec::new();
         let mut stack: Vec<_> = scene.roots().iter().rev().cloned().collect();
@@ -203,15 +223,17 @@ impl FlowLayout {
         let automatic = self
             .containers
             .values()
-            .any(|style| style.width_sizing.is_content() || style.height_sizing.is_content());
+            .any(|style| style.width_sizing.is_content() || style.height_sizing.is_content())
+            || !self.texts.is_empty();
         let mut report = FlowReport {
             containers: order.len(),
             ..Default::default()
         };
-        if !order.is_empty() {
+        if !order.is_empty() || !self.texts.is_empty() {
             let mut converged = false;
             for pass in 0..if automatic { limit } else { 1 } {
                 let before = next.clone();
+                text::measure(&mut next, &self.texts, measurer)?;
                 if automatic {
                     // Measure nested content before a parent consumes it.
                     for id in order.iter().rev() {
@@ -224,6 +246,9 @@ impl FlowLayout {
                     report.items +=
                         arrange::container(&mut next, id, &self.containers[id], &self.items)?;
                 }
+                // Parent width allocation can change wrapping; settle text again
+                // before measuring the next candidate pass.
+                text::measure(&mut next, &self.texts, measurer)?;
                 report.passes = pass + 1;
                 if !automatic || next == before {
                     converged = true;

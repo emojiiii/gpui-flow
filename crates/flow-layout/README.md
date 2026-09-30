@@ -30,7 +30,7 @@ Position-only layout accepts transformed intrinsic geometry. Resizing supports
 Rect/Ellipse/Text/Image/Box/Frame with positive axis-aligned transforms; other
 resize requests fail atomically. Hidden children retain their slot; set
 `FlowItem.in_flow=false` to exclude a child. Content-sized parents measure with bounded bottom-up/top-down passes. No implicit shrink,
-percentages, baseline/font measurement, stroke-box layout, or layout of Groups.
+percentages, baseline alignment, stroke-box layout, or layout of Groups.
 See `docs/flow-layout.md` for precise semantics and upstream source references.
 
 
@@ -47,3 +47,11 @@ Optional `install_reactive` binds the already arranged configuration to live eng
 Reverse directions visit children last-to-first while retaining normal coordinate
 axes and structural/paint order. `wrap_reverse` independently reverses completed
 line placement. Old JSON defaults to forward order. See docs/flow-layout.md.
+
+Optional `texts` sizing uses `TextMeasurer` through `with_text_measurer`.
+`Natural` owns both axes (wrap=false); `AutoHeight` owns height and accepts fixed
+or parent-allocated width. The native `GpuiTextMeasurer` uses real platform shaping;
+core tests use explicit contract fixtures. No backend is silently substituted.
+Measured edits compose with reactive layout and one Undo; explicit
+`refresh_text_metrics` invalidates cached metrics and actually reflows.
+See [text measurement](../../docs/text-measurement.md).

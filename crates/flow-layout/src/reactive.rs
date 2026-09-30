@@ -1,10 +1,10 @@
 //! Live-instance bindings for the engine's opt-in precommit layout provider.
-use crate::{FlowError, FlowLayout};
+use crate::{FlowError, FlowLayout, MAX_FLOW_LAYOUT_PASSES, TextMeasurer};
 use gpui_flow_engine::{
     ElementHandle, EngineError, InstanceState, LayoutProvider, LayoutProviderId, SceneEngine,
 };
 use gpui_flow_scene::{DisplayId, Scene, Shape};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 struct Binding {
     handle: ElementHandle,
     kind: String,
@@ -12,6 +12,7 @@ struct Binding {
 struct ReactiveFlow {
     layout: FlowLayout,
     bindings: BTreeMap<DisplayId, Binding>,
+    measurer: Option<Arc<dyn TextMeasurer>>,
 }
 fn kind(shape: &Shape) -> String {
     if let Shape::Custom(custom) = shape {
@@ -47,7 +48,10 @@ impl LayoutProvider for ReactiveFlow {
                     .is_some_and(|parent| layout.containers.contains_key(parent))
         });
         layout
-            .arranged(candidate)
+            .texts
+            .retain(|id, _| self.active(engine, candidate, id));
+        layout
+            .arranged_measured(candidate, MAX_FLOW_LAYOUT_PASSES, self.measurer.as_deref())
             .map(|(scene, _)| scene)
             .map_err(|e| EngineError::Layout(e.to_string()))
     }
@@ -61,9 +65,26 @@ impl FlowLayout {
         &self,
         engine: &mut SceneEngine,
     ) -> Result<LayoutProviderId, FlowError> {
+        self.install_reactive_measured(engine, None)
+    }
+    pub(super) fn install_reactive_measured(
+        &self,
+        engine: &mut SceneEngine,
+        measurer: Option<Arc<dyn TextMeasurer>>,
+    ) -> Result<LayoutProviderId, FlowError> {
         self.validate(engine.scene())?;
+        if !self.texts.is_empty() && measurer.is_none() {
+            return Err(FlowError::TextMeasurement(
+                "text sizing requires a measurement backend".into(),
+            ));
+        }
         let mut bindings = BTreeMap::new();
-        for id in self.containers.keys().chain(self.items.keys()) {
+        for id in self
+            .containers
+            .keys()
+            .chain(self.items.keys())
+            .chain(self.texts.keys())
+        {
             let handle = engine
                 .handle(id)
                 .ok_or_else(|| crate::invalid(id, "live instance missing"))?;
@@ -78,6 +99,7 @@ impl FlowLayout {
         Ok(engine.install_layout_provider(ReactiveFlow {
             layout: self.clone(),
             bindings,
+            measurer,
         })?)
     }
 }

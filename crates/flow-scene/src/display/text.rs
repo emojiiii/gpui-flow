@@ -16,6 +16,8 @@ pub struct Text {
     pub size: Size,
     pub font_family: String,
     pub font_size: f32,
+    #[serde(default = "default_font_weight")]
+    pub font_weight: u16,
     pub line_height: f32,
     pub align: TextAlign,
     pub wrap: bool,
@@ -27,6 +29,7 @@ impl Text {
             size,
             font_family: "sans-serif".into(),
             font_size: 14.0,
+            font_weight: default_font_weight(),
             line_height: 1.2,
             align: TextAlign::Start,
             wrap: true,
@@ -35,4 +38,8 @@ impl Text {
     pub fn bounds(&self) -> Bounds {
         Bounds::new(Point::ZERO, self.size)
     }
+}
+
+fn default_font_weight() -> u16 {
+    400
 }
