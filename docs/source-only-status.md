@@ -1,4 +1,4 @@
-# 当前源码批次：实现范围与验证边界
+# 当前批次：实现范围与本地验证边界
 
 日期：2026-09-30。对照基线为远端
 [`bde1142b027dfbd52c9d5fb7f16a9261eff5b17e`](https://github.com/emojiiii/gpui-flow/commit/bde1142b027dfbd52c9d5fb7f16a9261eff5b17e)。
@@ -6,26 +6,28 @@
 
 ## 当前状态
 
-**UNCOMPILED / UNRUN**。本批按要求不执行编译、cargo check/build/test/clippy、
-rustc、原生示例、媒体进程或 CI；不创建用于验证的新 target。
-源读、格式解析/检查、TOML/lockfile核对与回归代码编写不能代替类型检查、测试、
-GUI验收或性能测量。[testing.md](testing.md) 的历史通过数字不适用于这些修改。
+源码批次先备份为`c87c121959c617beb4ab546a7008ba8e88105238`，随后恢复Linux本地验证。
+Taffy trait导入与timing lint修复已备份为`817a68f6e4b014b6897768f1ef75ee5e8545c1dd`。
+562项headless测试、7项真实媒体测试、38项UI库单测和10个可执行文档通过；
+workspace/all-targets check及严格clippy通过。完整命令、后续原生链接/字体探针结果
+见[本地验证记录](local-validation-2026-09-30.md)。CI仍暂停，真实窗口交互、
+Windows/macOS和大规模性能未验；历史通过数字不能替代当前日志。
 
 ## 已接入源码的切片
 
 | 范围 | 真实复用与项目适配边界 | 尚待验证或未覆盖 |
 | --- | --- | --- |
 | 普通控件 | `ControlButton`适配已锁Kit `base::Button`，保留宿主theme、callback和canvas按下隔离 | 键盘/指针/焦点及disabled原生行为尚未重新运行 |
-| 图拓扑 | core/runtime显式依赖petgraph 0.8.3，内部可达性、toposort和DFS；公开Graph/ID/Serde、NodeId启动顺序及EdgeId fan-in保持项目契约 | 编译及拓扑/重试回归未运行；没有分布式或持久恢复能力 |
-| 曲线bounds | Kurbo 0.11.3的QuadBez/CubicBez extrema；保留f64计算到f32边界与有限性检查 | 数值回归未运行；不宣称已验证与旧极值算法等价 |
-| 数值布局 | Taffy 0.13.0私有行内solver负责普通grow/max重分配、间距、安全对齐和stretch；Flow保留分行、reverse、内容测量、flow-text、所有权、事务及极端数值f64 fallback | f32舍入/固定点收敛、性能未测；无CSS shrink、百分比或完整富排版 |
+| 图拓扑 | core/runtime显式依赖petgraph 0.8.3，内部可达性、toposort和DFS；公开Graph/ID/Serde、NodeId启动顺序及EdgeId fan-in保持项目契约 | 拓扑/重试回归通过；没有分布式或持久恢复能力 |
+| 曲线bounds | Kurbo 0.11.3的QuadBez/CubicBez extrema；保留f64计算到f32边界与有限性检查 | 12项path bounds回归通过；不是所有输入上的数值等价证明 |
+| 数值布局 | Taffy 0.13.0私有行内solver负责普通grow/max重分配、间距、安全对齐和stretch；Flow保留分行、reverse、内容测量、flow-text、所有权、事务及极端数值f64 fallback | 13项Taffy兼容回归及现有自动尺寸/响应布局通过；任意输入收敛及大规模性能未证；无CSS shrink、百分比或完整富排版 |
 | 高级stroke | cap/join/miter/dash/offset；Kurbo dash与Lyon 1.0.22 tessellation；受预算限制的共享mesh用于高级stroke绘制/命中，旧solid-round路径保留 | 仅居中local-space；inside/outside、scale-fixed和完整任意路径命令仍缺 |
 | 动画timing | 复用既有纯插值、原子batch和PlaybackToken；整序列delay/repeat delay、有限/无限遍历、正反/交替方向、正有理数speed及AnimationClip | 嵌套timeline、自动时长、逐关键帧timing、motion path、physics仍缺；见[animation-timing.md](animation-timing.md) |
 | 状态扩展 | 复用SceneStateStyles/现有router及动画采样；命名palette、固定框空Text placeholder、父/祖父最近button状态继承 | 仍为fill/opacity呈现；无geometry/custom-property状态、每态transition覆盖或声明式状态序列化；见[named-states.md](named-states.md) |
 | 资源生命周期 | SceneResources用实例/attachment epoch/源generation/owner票据；SceneView复用GPUI公开image asset/cache、既有text shaping，桥接实际结果和paint回执 | 媒体桥接、共享加载硬取消、byte/pixel预算及GPU呈现fence仍缺；见[resource-lifecycle.md](resource-lifecycle.md) |
 
 没有另造图片下载器、解码器、字体引擎或完整Flexbox引擎。也没有把仅仅存在于
-lockfile的库算成某crate已调用的复用。所有新行为仍需后续验证。
+lockfile的库算成某crate已调用的复用。已有自动回归覆盖不替代原生窗口交互或完整行为矩阵验收。
 
 ## 公开API与序列化注意事项
 
@@ -55,7 +57,7 @@ lockfile的库算成某crate已调用的复用。所有新行为仍需后续验�
 `ViewReady`来自实际GPUI paint回执而非GPU呈现fence。默认本地资源策略不是文件系统
 沙箱；任何远端映射/目录授权、凭证及解码预算仍由宿主控制。
 
-## 恢复验证时的验收重点
+## 验证分层与后续验收重点
 
 1. 锁定依赖的两个workspace分别进行类型/所有target检查，确认新增公开API及下游调用
 2. 运行原有回归与新拓扑、path bounds、Taffy兼容、stroke、timing、named-state、resource测试
@@ -64,4 +66,4 @@ lockfile的库算成某crate已调用的复用。所有新行为仍需后续验�
 4. 各桌面平台链接后执行真实按钮输入、图片授权/失败/加载、字体、状态过渡及关闭清理验收
 5. 仅在有当前精确提交日志后更新通过数字；运行失败、未运行和平台未验保持分别报告
 
-以上为待执行计划，本批未执行。
+上述自动检查的实际结果见本地验证记录；第4项真实桌面交互与跨平台验收仍待执行。

@@ -1,9 +1,9 @@
 # Paint-only state styles
 
-Source-only update (2026-09-30): named states, fixed-box Text placeholders and
-parent-button inheritance are implemented in source with authored regressions,
-but are **UNCOMPILED / UNRUN**. Historical state/transition checks do not validate
-this batch. See [named-states.md](named-states.md) for the complete new contract.
+Local Linux validation (2026-09-30): headless regressions and workspace/all-targets
+check/strict clippy pass. See [local validation](local-validation-2026-09-30.md)
+for exact coverage; CI and real-window interaction remain unverified.
+See [named-states.md](named-states.md) for the complete contract.
 
 `SceneStateStyles` is an optional, engine-scoped presentation layer in
 `gpui-flow-interaction::scene`. `SceneView` consumes it directly. Register

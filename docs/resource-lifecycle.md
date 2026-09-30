@@ -1,8 +1,10 @@
 # Native text/image resource lifecycle
 
-Status: implemented source slice, **not compiled or executed**. No test run, native
-example, build, or CI result is claimed. This adds lifecycle wiring for the
-existing GPUI text and image backends; it is not full Leafer resource parity.
+Local Linux validation (2026-09-30): headless regressions and workspace/all-targets
+check/strict clippy pass. See [local validation](local-validation-2026-09-30.md)
+for exact coverage; CI and real-window interaction remain unverified.
+This adds lifecycle wiring for the existing GPUI text and image backends;
+it is not full Leafer resource parity.
 
 ## Reuse and evidence
 
@@ -200,5 +202,7 @@ completion, stale paint receipts, empty scenes, capacity rejection, bounded
 pending counts across source churn, disposal, unchanged document/layout/revision,
 fit/size preservation, canonical text changes and explicit font invalidation.
 `flow-ui/src/resources.rs` includes local/drive/UNC/device policy and canonical text-request
-unit cases; `display/mod.rs` has a legacy struct-literal/wrapper case. These are **authored, not run**. Static source inspection and rustfmt
-parsing/formatting do not establish compilation, platform behavior or test success.
+unit cases; `display/mod.rs` has a legacy struct-literal/wrapper case. The 16 engine
+resource tests and UI adapter unit cases passed locally. They do not establish
+live window loading/paint delivery, GPU presentation fences or cross-platform behavior.
+See [local validation](local-validation-2026-09-30.md).

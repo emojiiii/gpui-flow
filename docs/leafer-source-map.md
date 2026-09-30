@@ -2,7 +2,7 @@
 
 Status: historical source research plus a separately labelled current source map, **not a full parity claim**. Reviewed 2026-09-30. The original research changed no Rust source and executed no upstream code, install, build script or example. Later implementation slices below must not be confused with that original read-only report.
 
-> 当前批次为 **UNCOMPILED / UNRUN**：复用适配、advanced stroke、animation timing、named states/placeholder/button继承和资源生命周期已有源码与待运行回归，未编译、测试、运行示例或执行CI。历史通过记录不验证这些修改，详见[source-only-status.md](source-only-status.md)。
+> 当前批次已恢复Linux本地验证：headless及UI回归、workspace check/严格clippy和可执行文档通过；精确范围见[本地验证记录](local-validation-2026-09-30.md)。CI、真实窗口交互与跨平台仍未验，自动回归不表示完整Leafer能力已经完成。
 
 > 基线说明：下方差距矩阵记录源码研究时的 `43eda10` 状态。后续已实现的引擎身份/生命周期/schema/dirty 缓存及原生事件接入见 [engine.md](engine.md)，不要把历史矩阵的“absent”误读为最新状态。后续批次实现了[多层矢量 paints](appearance.md)和[显式行列布局](flow-layout.md)；另有基础属性动画和编辑器安全播放会话；外观隔离合成、全局响应式布局调度、完整timeline/高级状态过渡/运动路径仍然缺失。
 
@@ -27,7 +27,7 @@ Status: historical source research plus a separately labelled current source map
 
 ## 九类能力当前边界（含待验证源码增量）
 
-这里描述当前源码接入的行为与仍待实现的契约；本批新增项尚未编译/运行，下方历史源码差距表保留原研究基线。
+这里描述当前源码接入的行为与仍待实现的契约；本批新增项已有本地自动回归，下方历史源码差距表保留原研究基线。
 
 | 类别 | 当前实现 | 主要未覆盖契约 |
 |---|---|---|
@@ -41,7 +41,7 @@ Status: historical source research plus a separately labelled current source map
 | 实例 | 独立引擎/代际handle、clone/detach/reparent/destroy | 多层App实例组合与跨层转发 |
 | 生命周期 | 原子结构事件、销毁清理、动画目标/历史保护；新源码桥接原生image/text结果、资源票据和Ready/ViewReady/Complete回执 | 媒体资源桥接、共享后台加载硬取消/字节预算、GPU呈现fence |
 
-动画源码具备基础属性时钟、有界关键帧序列、整序列timing和编辑器播放事务；新timing尚未验证，完整嵌套timeline、每态transition覆盖/geometry状态过渡和运动路径仍待实现。
+动画源码具备基础属性时钟、有界关键帧序列、整序列timing和编辑器播放事务；新timing的21项本地回归已通过，完整嵌套timeline、每态transition覆盖/geometry状态过渡和运动路径仍待实现。
 
 本轮过渡复用纯插值器；按binding配置transition/transitionOut回退，反转从当前显示值开始。文档同通道变化取消旧motion、失败整帧原子、生命周期清理且不改Undo。None/gradient离散切换，未实现每态配置、延迟/循环或geometry transition。
 

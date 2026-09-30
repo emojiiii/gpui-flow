@@ -1,6 +1,6 @@
 # 显式时钟动画底座
 
-> 2026-09-30 源码增量：下述 delay/repeat/direction/speed 接入及新增回归尚未编译、运行或经 CI 验证（UNCOMPILED / UNRUN）。旧测试记录属于此前基线，不能证明当前批次通过。详见 [source-only-status.md](source-only-status.md)。
+> 2026-09-30 本地验证：21项timing回归及既有动画/序列/编辑器测试通过，workspace check与严格clippy通过。原生窗口视觉行为与CI未验，完整覆盖见[本地验证记录](local-validation-2026-09-30.md)。
 
 可选 `gpui-flow-animation` 在已有 SceneEngine 上实现真实属性插值和播放控制。输入定义与运行期状态分离；不启动后台线程、定时器、网络调用或隐式引擎监听器。
 
@@ -13,7 +13,7 @@
 - Linear、三次EaseIn/EaseOut以及smoothstep EaseInOut四种明确easing
 - 显式tick、pause、resume、seek、cancel/keep、remove和目标生命周期保护
 - 1..64段显式时长关键帧序列，每段easing、稀疏字段保持、跨段seek与原子大步tick
-- 新源码的 opt-in `AnimationTiming`：首次delay、遍历间repeat delay、有限/无限总遍历次数、Forward/Reverse/Alternate/AlternateReverse、正有理数speed；仍未运行验证
+- 新源码的 opt-in `AnimationTiming`：首次delay、遍历间repeat delay、有限/无限总遍历次数、Forward/Reverse/Alternate/AlternateReverse、正有理数speed；本地timing回归已通过
 
 `AnimationSpec` 保存duration_ms、easing和目标属性值；开始时捕获当前有效输入作为from。规范可以JSON保存，运行期句柄、控制器ID、时钟、缓存与当前播放状态不进入文档。
 
@@ -95,7 +95,7 @@ cargo run --locked --manifest-path docs/examples/Cargo.toml --bin animation
 cargo test --locked -p gpui-flow-animation
 ```
 
-以上命令仅为恢复验证后的入口；本批没有执行。旧原生适配代码的编译/链接记录不等于当前timing源码的编译结果，更不等于真实窗口视觉验收。paint-only状态样式已作为独立呈现层接入，见[state-styles.md](state-styles.md)；binding级fill/opacity自动hover/pressed过渡已实现；高级过渡、完整timeline、运动路径仍是后续模块。
+本批已运行动画测试及可执行animation文档；原生窗口运行命令仍是待执行的视觉验收入口。编译/链接不能代替真实窗口验收。paint-only状态样式已作为独立呈现层接入，见[state-styles.md](state-styles.md)；binding级fill/opacity自动hover/pressed过渡已实现；高级过渡、完整timeline、运动路径仍是后续模块。
 
 ## 官方源码定位
 

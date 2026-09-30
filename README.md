@@ -6,15 +6,16 @@
 
 ## 当前批次状态（2026-09-30）
 
-本批按要求只推进源码，**UNCOMPILED / UNRUN**：Kit按钮、petgraph拓扑、Kurbo曲线bounds、
-Taffy私有行内solver、高级居中stroke、动画delay/repeat/direction/speed、命名状态/固定框
-placeholder/button继承，以及原生image/text资源生命周期已接入源码，尚未编译、测试、
-运行原生示例或执行CI。新增回归仅已编写；历史通过记录不能当成当前批次结果。
+本批已在Linux云端恢复本地验证：562项headless测试（含doctest）、7项真实媒体测试、
+38项UI库单测及10个可执行文档通过；完整workspace/all-targets check与严格clippy通过。
+Taffy trait导入和动画timing lint已修复并备份。完整命令、原生链接/字体探针结果及
+未验证项见[本地验证记录](docs/local-validation-2026-09-30.md)。CI保持暂停，
+没有把单元测试或链接当成真实窗口交互、跨平台或完整Leafer兼容验收。
 
 主要边界与API迁移见[源码批次状态](docs/source-only-status.md)。特别是旧JSON读取默认
 兼容不等于Rust源码兼容：外部`Stroke`字面量需补字段/default，新增公开枚举变体需更新
 穷尽match。Inside/outside与scale-fixed描边、任意几何状态、完整嵌套timeline、motion
-path及真正隔离合成/mask仍未完成。下方安装/运行命令保留作后续入口，不表示本批已执行。
+path及真正隔离合成/mask仍未完成。下方窗口运行命令保留作人工验收入口，不表示本批已执行窗口交互。
 
 ## 架构层次
 

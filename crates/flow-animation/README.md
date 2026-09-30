@@ -1,7 +1,9 @@
 # gpui-flow-animation
 
-Source-only update (2026-09-30): the new timing APIs and authored regressions are
-**UNCOMPILED / UNRUN**. Earlier test records do not validate this source batch.
+Local Linux validation (2026-09-30): timing regressions and full headless tests pass,
+as do workspace check/strict clippy. See
+[validation details](../../docs/local-validation-2026-09-30.md); CI and real-window
+interaction remain unverified.
 
 Opt-in, deterministic property tweens driven by an explicit host clock. Translation,
 opacity, solid fill color and registered custom numeric properties update through

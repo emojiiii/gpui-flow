@@ -1,10 +1,10 @@
 # 测试、CI 与人工验收
 
-## 当前批次：源码准备，未编译/未运行（2026-09-30）
+## 当前批次：本地Linux验证（2026-09-30）
 
-用户要求本批暂不编译。Kit按钮、petgraph拓扑、Kurbo bounds、Taffy行内适配、高级stroke、动画timing、named state/placeholder/button继承和SceneView资源生命周期均是**UNCOMPILED / UNRUN**的当前源码，新增测试只是已编写。没有为本批执行cargo check/build/test/clippy、rustc、原生示例、媒体进程或CI。源码审阅、rustfmt解析/格式检查或清单/lockfile检查不构成类型检查或行为验证。完整范围和剩余缺口见[source-only-status.md](source-only-status.md)。
+源码备份后已恢复本地验证。当前562项headless测试（含doctest）、7项真实FFmpeg/SDL dummy媒体测试、38项UI库单测及10个可执行文档通过；workspace/all-targets check、严格clippy和两套格式检查通过。完整命令、原生链接/字体探针结果、失败后修复及未运行范围见[本地验证记录](local-validation-2026-09-30.md)。
 
-本页后面的“已执行”“通过”及数字全部保留为**此前批次的历史记录**，不能当作本批或当前工作树的结果；不要在旧aggregate数字上加上新增测试数量后声称新通过数。下面命令和清单是恢复验证后的计划，本批未执行。
+本页后面各增量章节的数字保留为**此前批次历史记录**，不与当前结果相加。CI保持暂停；没有执行本批真实窗口交互、Windows或macOS验收。
 
 ## 原则：区分检查层级
 

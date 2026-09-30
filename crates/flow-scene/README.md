@@ -1,8 +1,9 @@
 # gpui-flow-scene
 
-Source-only update (2026-09-30): Kurbo tight bounds and advanced centered stroke
-styles/mesh integration are **UNCOMPILED / UNRUN**. New regressions are authored,
-not passed. Earlier baseline validation does not cover this source batch.
+Local Linux validation (2026-09-30): Kurbo bounds and advanced-stroke regressions
+pass, alongside the full headless/UI suites and workspace check/strict clippy.
+See [validation details](../../docs/local-validation-2026-09-30.md); real-window
+interaction, cross-platform behavior and CI remain unverified.
 
 A retained vector scene graph that runs without GPUI or a window server. This is
 an independently implemented Rust scene layer with a common display-object
@@ -202,9 +203,9 @@ also apply document-size limits appropriate to their deployment.
 
 ## Verification
 
-The commands below are validation entry points, not checks run for the current
-source-only batch. See `docs/appearance.md` for stroke budgets and
-`docs/source-only-status.md` for the uncompiled/unrun integration scope.
+The scene tests, clippy and format checks are covered by the current local
+workspace validation. See `docs/appearance.md` for stroke budgets and
+`docs/local-validation-2026-09-30.md` for exact commands and remaining limits.
 
 ```sh
 cargo test -p gpui-flow-scene

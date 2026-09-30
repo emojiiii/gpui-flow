@@ -1,8 +1,8 @@
 # Ordered vector paint stacks and centered stroke styles
 
-Source-only update (2026-09-30): cap/join/miter/dash geometry and its renderer/hit
-adapters have authored regressions but are **UNCOMPILED / UNRUN**. Earlier paint
-stack verification does not validate this batch. See [source-only-status.md](source-only-status.md).
+Local Linux validation (2026-09-30): headless regressions and workspace/all-targets
+check/strict clippy pass. See [local validation](local-validation-2026-09-30.md)
+for exact coverage; CI and real-window interaction remain unverified.
 
 This milestone implements a bounded, source-informed appearance contract. It is
 not Leafer API compatibility or its full compositing/effect pipeline.
@@ -136,9 +136,9 @@ There is no isolated temporary surface: overlapping paints/children at opacity
 Box/Frame child drawing and clipping do not imply group isolation or a new
 hierarchical compositor. Advanced blend modes, masks, shadows, filters, stroke
 inside/outside placement and scale-fixed strokes remain absent. Paint-only state
-cascades, including source-only named/placeholder/button extensions, are separate
+cascades, including named/placeholder/button extensions, are separate
 from compositing; see[state-styles.md](state-styles.md). Property animation and
-source-only timing options are described in[animation.md](animation.md).
+timing options are described in[animation.md](animation.md).
 CPU damage preparation is not partial GPU rendering.
 
 ## Verification and source alignment

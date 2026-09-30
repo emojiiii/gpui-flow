@@ -5,9 +5,10 @@
 This is a source implementation of the retained-scene state slice. It adds real
 presentation behavior through `SceneStateStyles::presentation_at`, already
 consumed by `SceneView` rendering. It is **not** a claim of full Leafer state
-parity, nor of executed validation. No compilation, tests, native examples or CI
-were run for this slice. The changed Rust source was parsed/formatted by the
-existing `rustfmt` binary; this is not type checking or a passing test result.
+parity. Its 14 named-state regressions and the full local headless suite now pass,
+as do workspace/all-targets check and strict clippy. See
+[local validation](local-validation-2026-09-30.md) for exact coverage; real-window
+interaction and CI remain unverified.
 
 The upstream reference is the actual Leafer state plugin at
 [`3eb445bf34debb638766615282224b77108bf610`](https://github.com/leaferjs/leafer-in/tree/3eb445bf34debb638766615282224b77108bf610/packages/state/src):
