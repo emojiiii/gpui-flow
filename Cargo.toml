@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = ["crates/flow-core", "crates/flow-runtime", "crates/flow-ui", "examples/studio"]
+default-members = ["crates/flow-core", "crates/flow-runtime"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+gpui = { git = "https://github.com/longbridge/gpui-fast", branch = "main" }
+gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "0067bafcf3160cb871eff2521e98a51e526da175" }
+gpui-flow-core = { path = "crates/flow-core" }
+gpui-flow-runtime = { path = "crates/flow-runtime" }
+gpui-flow = { path = "crates/flow-ui" }
