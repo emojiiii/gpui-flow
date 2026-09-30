@@ -1,0 +1,11 @@
+[package]
+name = "gpui-flow"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+[dependencies]
+gpui.workspace = true
+gpui-flow-core.workspace = true
+gpui-flow-runtime.workspace = true
+serde_json.workspace = true
+gpui-kit.workspace = true
