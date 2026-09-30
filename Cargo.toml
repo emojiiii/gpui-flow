@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["crates/flow-text", "crates/flow-core", "crates/flow-engine", "crates/flow-layout", "crates/flow-animation", "crates/flow-interaction", "crates/flow-runtime", "crates/flow-scene", "crates/flow-editor", "crates/flow-media", "crates/flow-ui", "examples/studio"]
-default-members = ["crates/flow-text", "crates/flow-core", "crates/flow-engine", "crates/flow-layout", "crates/flow-animation", "crates/flow-interaction", "crates/flow-runtime", "crates/flow-scene", "crates/flow-editor", "crates/flow-media"]
+members = ["crates/flow-composite", "crates/flow-text", "crates/flow-core", "crates/flow-engine", "crates/flow-layout", "crates/flow-animation", "crates/flow-interaction", "crates/flow-runtime", "crates/flow-scene", "crates/flow-editor", "crates/flow-media", "crates/flow-ui", "examples/studio"]
+default-members = ["crates/flow-composite", "crates/flow-text", "crates/flow-core", "crates/flow-engine", "crates/flow-layout", "crates/flow-animation", "crates/flow-interaction", "crates/flow-runtime", "crates/flow-scene", "crates/flow-editor", "crates/flow-media"]
 
 [workspace.package]
 version = "0.1.0"
@@ -9,6 +9,7 @@ edition = "2024"
 publish = false
 
 [workspace.dependencies]
+gpui-flow-composite = { path = "crates/flow-composite" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 gpui = { git = "https://github.com/longbridge/gpui-fast", branch = "main" }

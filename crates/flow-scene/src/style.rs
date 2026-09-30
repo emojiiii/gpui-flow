@@ -224,6 +224,18 @@ pub enum FillRule {
     NonZero,
     EvenOdd,
 }
+/// Group isolation and compositing inside a supported renderer domain.
+/// `PassThrough` preserves the parent backdrop; `Normal` isolates children.
+/// Document spellings use snake_case, not a Leafer JSON import schema.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BlendMode {
+    #[default]
+    PassThrough,
+    Normal,
+    Multiply,
+    Screen,
+}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Style {
@@ -237,6 +249,7 @@ pub struct Style {
     pub stroke_layers: Vec<Stroke>,
     pub opacity: f32,
     pub fill_rule: FillRule,
+    pub blend_mode: BlendMode,
 }
 impl Default for Style {
     fn default() -> Self {
@@ -247,6 +260,7 @@ impl Default for Style {
             stroke_layers: Vec::new(),
             opacity: 1.0,
             fill_rule: FillRule::NonZero,
+            blend_mode: BlendMode::PassThrough,
         }
     }
 }

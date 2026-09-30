@@ -1,0 +1,13 @@
+[package]
+name = "gpui-flow-composite"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+gpui-flow-core.workspace = true
+gpui-flow-scene.workspace = true
+tiny-skia = { version = "=0.11.4", default-features = false, features = ["std", "simd"] }
+
+[dev-dependencies]
+serde_json.workspace = true

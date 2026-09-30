@@ -2438,6 +2438,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "gpui-flow-composite"
+version = "0.1.0"
+dependencies = [
+ "gpui-flow-core",
+ "gpui-flow-scene",
+ "serde_json",
+ "tiny-skia",
+]
+
+[[package]]
 name = "gpui-flow-core"
 version = "0.1.0"
 dependencies = [

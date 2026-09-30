@@ -1,0 +1,91 @@
+//! Bounded, toolkit-independent vector isolation using tiny-skia 0.11.4.
+//!
+//! A domain is all-or-nothing: unsupported descendants, unsafe coordinates or
+//! exhausted budgets return an error before an output can be published. Native
+//! text/images/custom renderers must remain outside these vector domains.
+mod plan;
+mod raster;
+mod vector;
+pub use plan::*;
+pub use raster::*;
+
+use gpui_flow_scene::DisplayId;
+use std::fmt;
+
+/// Fixed safety ceilings. Callers may reduce them, never increase them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CompositeLimits {
+    pub max_dimension: u32,
+    pub max_pixels: u64,
+    pub max_surface_bytes: u64,
+    pub max_surface_writes: u64,
+    pub max_nodes: usize,
+    pub max_points: usize,
+    pub max_total_points: usize,
+    pub max_triangles: usize,
+    pub max_depth: usize,
+    pub max_mask_runs: usize,
+}
+impl Default for CompositeLimits {
+    fn default() -> Self {
+        Self {
+            max_dimension: 4096,
+            max_pixels: 4_194_304,
+            max_surface_bytes: 128 * 1024 * 1024,
+            max_surface_writes: 32_000_000,
+            max_nodes: 512,
+            max_points: 65_536,
+            max_total_points: 262_144,
+            max_triangles: 262_144,
+            max_depth: 16,
+            max_mask_runs: 64,
+        }
+    }
+}
+impl CompositeLimits {
+    pub fn bounded(self) -> Self {
+        let ceiling = Self::default();
+        Self {
+            max_dimension: self.max_dimension.min(ceiling.max_dimension),
+            max_pixels: self.max_pixels.min(ceiling.max_pixels),
+            max_surface_bytes: self.max_surface_bytes.min(ceiling.max_surface_bytes),
+            max_surface_writes: self.max_surface_writes.min(ceiling.max_surface_writes),
+            max_nodes: self.max_nodes.min(ceiling.max_nodes),
+            max_points: self.max_points.min(ceiling.max_points),
+            max_total_points: self.max_total_points.min(ceiling.max_total_points),
+            max_triangles: self.max_triangles.min(ceiling.max_triangles),
+            max_depth: self.max_depth.min(ceiling.max_depth),
+            max_mask_runs: self.max_mask_runs.min(ceiling.max_mask_runs),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CompositeError {
+    UnsupportedShape(String),
+    UnsupportedExternalBackdrop,
+    UnsupportedTransform,
+    InvalidGeometry(String),
+    TooLarge,
+    WorkingSetLimit,
+    WorkLimit,
+    InputLimit,
+    NestingLimit,
+    AllocationFailed,
+    Superseded,
+    UploadFailed(String),
+}
+impl fmt::Display for CompositeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+impl std::error::Error for CompositeError {}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CompositeIssue {
+    pub object: DisplayId,
+    pub error: CompositeError,
+}
+
+#[cfg(test)]
+mod tests;

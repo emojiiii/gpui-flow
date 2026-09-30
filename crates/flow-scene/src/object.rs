@@ -37,6 +37,15 @@ pub enum HitPolicy {
     Geometry,
     Bounds,
 }
+/// Alpha masks affect following z-ordered siblings until the next mask.
+/// Only direct Group children may be masks. This changes rendering, not picking.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MaskMode {
+    #[default]
+    None,
+    Alpha,
+}
 fn yes() -> bool {
     true
 }
@@ -66,6 +75,8 @@ pub struct DisplayObject {
     pub hit_policy: HitPolicy,
     #[serde(default = "yes")]
     pub hit_children: bool,
+    #[serde(default)]
+    pub mask: MaskMode,
 }
 impl DisplayObject {
     pub fn new(id: impl Into<DisplayId>, shape: impl Into<Shape>) -> Self {
@@ -82,7 +93,12 @@ impl DisplayObject {
             z_index: 0,
             hit_policy: HitPolicy::Painted,
             hit_children: true,
+            mask: MaskMode::None,
         }
+    }
+    pub fn with_mask(mut self, mask: MaskMode) -> Self {
+        self.mask = mask;
+        self
     }
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         self.name = name.into();

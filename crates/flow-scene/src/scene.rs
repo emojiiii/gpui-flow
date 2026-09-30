@@ -632,6 +632,18 @@ impl Scene {
             if let Err(error) = node.object.validate() {
                 push(path.clone(), error);
             }
+            if node.object.mask != crate::MaskMode::None
+                && !node
+                    .parent
+                    .as_ref()
+                    .and_then(|id| self.nodes.get(id))
+                    .is_some_and(|parent| matches!(parent.object.shape, crate::Shape::Group(_)))
+            {
+                push(
+                    path.clone(),
+                    "alpha masks require a direct Group parent".into(),
+                );
+            }
             if !node.object.shape.allows_children() && !node.children.is_empty() {
                 push(
                     path.clone(),
