@@ -3,6 +3,17 @@
 version = 4
 
 [[package]]
+name = "gpui-flow-animation"
+version = "0.1.0"
+dependencies = [
+ "gpui-flow-editor",
+ "gpui-flow-engine",
+ "gpui-flow-scene",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "gpui-flow-core"
 version = "0.1.0"
 dependencies = [
@@ -14,8 +25,10 @@ dependencies = [
 name = "gpui-flow-doc-examples"
 version = "0.1.0"
 dependencies = [
+ "gpui-flow-animation",
  "gpui-flow-core",
  "gpui-flow-editor",
+ "gpui-flow-engine",
  "gpui-flow-interaction",
  "gpui-flow-layout",
  "gpui-flow-runtime",

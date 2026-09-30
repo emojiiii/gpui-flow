@@ -40,6 +40,7 @@ pub struct SceneEngine {
     scene: Scene,
     registry: ElementRegistry,
     revision: u64,
+    document_epoch: u64,
     layout: LayoutSnapshot,
     instances: Vec<Instance>,
     free: Vec<usize>,
@@ -77,6 +78,7 @@ impl SceneEngine {
             scene,
             registry,
             revision: 0,
+            document_epoch: 0,
             layout,
             instances: vec![],
             free: vec![],
@@ -98,8 +100,16 @@ impl SceneEngine {
     pub fn scene(&self) -> &Scene {
         &self.scene
     }
+    /// Runtime identity shared with ElementHandle::engine_id; never persist it.
+    pub fn engine_id(&self) -> u64 {
+        self.id
+    }
     pub fn registry(&self) -> &ElementRegistry {
         &self.registry
+    }
+    /// Increments only for explicit new-document reset, independent of later edits.
+    pub fn document_epoch(&self) -> u64 {
+        self.document_epoch
     }
     pub fn revision(&self) -> u64 {
         self.revision
@@ -257,25 +267,61 @@ impl SceneEngine {
         handle: ElementHandle,
         properties: impl IntoIterator<Item = (PropertyKey, Value)>,
     ) -> Result<ChangeSet, EngineError> {
-        let id = self.attached_id(handle)?;
+        self.set_properties_batch(
+            ChangeOrigin::Edit,
+            properties
+                .into_iter()
+                .map(|(key, value)| (handle, key, value)),
+        )
+    }
+    /// Validate a multi-instance property batch without committing revisions,
+    /// notifications or lifecycle changes. Definitions remain trusted pure code.
+    pub fn validate_properties_batch(
+        &self,
+        properties: impl IntoIterator<Item = (ElementHandle, PropertyKey, Value)>,
+    ) -> Result<(), EngineError> {
+        self.properties_candidate(properties).map(|_| ())
+    }
+    /// One validated change batch across multiple attached instances, used by
+    /// explicit animation/layout controllers. Invalid input changes no instance.
+    pub fn set_properties_batch(
+        &mut self,
+        origin: ChangeOrigin,
+        properties: impl IntoIterator<Item = (ElementHandle, PropertyKey, Value)>,
+    ) -> Result<ChangeSet, EngineError> {
+        let next = self.properties_candidate(properties)?;
+        self.apply(next, origin, CommitMode::Normal)
+    }
+    fn properties_candidate(
+        &self,
+        properties: impl IntoIterator<Item = (ElementHandle, PropertyKey, Value)>,
+    ) -> Result<Scene, EngineError> {
+        let mut objects = BTreeMap::new();
+        for (handle, key, value) in properties {
+            let id = self.attached_id(handle)?;
+            let object = objects
+                .entry(id.clone())
+                .or_insert_with(|| self.scene.get(&id).expect("attached").object.clone());
+            apply_property(object, &key, value)?;
+        }
         let mut next = self.scene.clone();
-        let mut object = next.get(&id).expect("attached").object.clone();
-        for (key, value) in properties {
-            apply_property(&mut object, &key, value)?;
+        for (id, mut object) in objects {
+            // Normalize once per object after all its properties are applied.
+            if object.shape != next.get(&id).expect("attached").object.shape
+                && let Shape::Custom(custom) = &object.shape
+                && let Some(definition) = self.registry.get(&custom.kind)
+            {
+                object.shape = self
+                    .registry
+                    .create(definition.kind(), id.clone(), custom.data.clone())?
+                    .shape;
+            }
+            next.update_object(&id, |current| *current = object)?;
         }
-        // Registered custom properties may temporarily disagree with old fallback
-        // bounds. Geometry generation runs before complete scene validation.
-        if object.shape != next.get(&id).expect("attached").object.shape
-            && let Shape::Custom(custom) = &object.shape
-            && let Some(def) = self.registry.get(&custom.kind)
-        {
-            let rebuilt = self
-                .registry
-                .create(def.kind(), id.clone(), custom.data.clone())?;
-            object.shape = rebuilt.shape;
-        }
-        next.update_object(&id, |o| *o = object)?;
-        self.apply(next, ChangeOrigin::Edit, CommitMode::Normal)
+        self.registry
+            .prepare_changes(&mut next, Some(&self.scene))?;
+        next.validate()?;
+        Ok(next)
     }
     pub fn reparent(
         &mut self,
@@ -481,6 +527,13 @@ impl SceneEngine {
         if self.scene == next && !matches!(mode, CommitMode::Reset) {
             return Ok(self.no_change(origin));
         }
+        let document_epoch = if matches!(mode, CommitMode::Reset) {
+            self.document_epoch
+                .checked_add(1)
+                .ok_or(EngineError::Exhausted)?
+        } else {
+            self.document_epoch
+        };
         let revision = self.revision.checked_add(1).ok_or(EngineError::Exhausted)?;
         let mut change = diff(
             &self.scene,
@@ -621,6 +674,7 @@ impl SceneEngine {
             CommitMode::Normal | CommitMode::Reset => {}
         }
         self.scene = next;
+        self.document_epoch = document_epoch;
         self.layout = layout;
         self.revision = revision;
         self.publish(&change);

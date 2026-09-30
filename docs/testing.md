@@ -173,3 +173,12 @@ cargo test --locked -p gpui-flow-layout
 - 回归覆盖首按取消、once监听器后的repeat不绕过、Up强制释放、Space平移保持选择、捕获/目标/冒泡顺序、只读队列、失焦/Escape/PointerCancel、实例reset与detach/reattach、回调删除自身即时清理
 - 全workspace/all-targets严格Clippy、文档Clippy、五个文档可执行示例通过
 - 本批未新增窗口手工验收；三平台链接和自动测试仍以本轮提交的Actions为准
+
+## 属性动画与安全播放历史增量（2026-09-30）
+
+- 最终headless aggregate：319项通过（含doctest），另行7项FFmpeg/SDL dummy媒体测试通过；原有梯度性能测量仍明确ignored
+- 动画专项：23项插值/时钟/实例/冲突/容量测试、15项编辑器历史会话测试、1项doctest通过
+- 历史回归覆盖edit→animate→finish/cancel→Undo/Redo、原Redo分支、用户拖动中断、直接engine写入/删除、新文档epoch、外来/陈旧token与控制器丢弃后的基线恢复
+- GPUI library 17项通过；完整workspace/all-targets检查与严格Clippy、六个可执行文档示例通过
+- 新animations示例完成Linux原生链接（本地为节省共享磁盘只去除可重建debug段，不改源码或检查规则）；具备真实帧时钟与Finish/Cancel/Undo/Redo适配，尚未实际打开窗口验收
+- 三平台最新自动结果仍以本轮提交Actions为准；编译/单测不能证明手工GUI操作和不同驱动已通过

@@ -40,9 +40,9 @@ jobs:
           cargo fmt --all -- --check
           cargo fmt --manifest-path docs/examples/Cargo.toml --package gpui-flow-doc-examples -- --check
       - name: Test model and runtime without a display
-        run: cargo test --locked -p gpui-flow-core -p gpui-flow-interaction -p gpui-flow-runtime -p gpui-flow-scene -p gpui-flow-editor -p gpui-flow-engine -p gpui-flow-layout -p gpui-flow-media
+        run: cargo test --locked -p gpui-flow-core -p gpui-flow-interaction -p gpui-flow-runtime -p gpui-flow-scene -p gpui-flow-editor -p gpui-flow-engine -p gpui-flow-layout -p gpui-flow-animation -p gpui-flow-media
       - name: Lint model and runtime
-        run: cargo clippy --locked -p gpui-flow-core -p gpui-flow-interaction -p gpui-flow-runtime -p gpui-flow-scene -p gpui-flow-editor -p gpui-flow-engine -p gpui-flow-layout -p gpui-flow-media --all-targets -- -D warnings
+        run: cargo clippy --locked -p gpui-flow-core -p gpui-flow-interaction -p gpui-flow-runtime -p gpui-flow-scene -p gpui-flow-editor -p gpui-flow-engine -p gpui-flow-layout -p gpui-flow-animation -p gpui-flow-media --all-targets -- -D warnings
       - name: Install FFmpeg for real decode tests
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Test actual media decode and playback lifecycle
@@ -57,6 +57,7 @@ jobs:
           cargo run --locked --manifest-path docs/examples/Cargo.toml --bin workflow
           cargo run --locked --manifest-path docs/examples/Cargo.toml --bin plugins
           cargo run --locked --manifest-path docs/examples/Cargo.toml --bin layout
+          cargo run --locked --manifest-path docs/examples/Cargo.toml --bin animation
 
   native:
     name: Native UI (${{ matrix.os }})

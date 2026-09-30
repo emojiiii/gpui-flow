@@ -2409,6 +2409,7 @@ name = "gpui-flow"
 version = "0.1.0"
 dependencies = [
  "gpui",
+ "gpui-flow-animation",
  "gpui-flow-core",
  "gpui-flow-editor",
  "gpui-flow-engine",
@@ -2420,6 +2421,17 @@ dependencies = [
  "gpui-kit",
  "image",
  "lyon",
+ "serde_json",
+]
+
+[[package]]
+name = "gpui-flow-animation"
+version = "0.1.0"
+dependencies = [
+ "gpui-flow-editor",
+ "gpui-flow-engine",
+ "gpui-flow-scene",
+ "serde",
  "serde_json",
 ]
 

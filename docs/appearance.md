@@ -99,7 +99,8 @@ There is no isolated temporary surface: overlapping paints/children at opacity
 0.5 can accumulate alpha instead of compositing the whole element/group once.
 Box/Frame child drawing and clipping do not imply group isolation or a new
 hierarchical compositor. Advanced blend modes, masks, shadows, filters, stroke
-inside/outside placement, state-style cascades and animation remain absent.
+inside/outside placement and state-style cascades remain absent. Basic property
+animation is now available separately; see [animation](animation.md).
 CPU damage preparation is not partial GPU rendering.
 
 ## Verification and source alignment

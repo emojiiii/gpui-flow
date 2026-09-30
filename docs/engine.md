@@ -18,7 +18,7 @@
 
 `ChangeSet` 包含属性前后值、层级与生命周期变化、dirty 类别、旧/新世界损伤范围和缓存统计。矩阵、bounds、paint/hit 状态按依赖失效；父变换更新后代、子尺寸更新祖先。颜色更新不重新计算矩阵/bounds。当前提交差异和缓存遍历仍为 O(N)，不是大型场景增量复杂度保证。
 
-`SceneEditor::set_property` 把属性更新接入同一 undo/redo；`SceneCommand::SetProperty` 再增加 capability、继承锁定检查。宿主直接访问 engine 属于可信 API，不受编辑插件的只读策略约束。编辑器在下一次操作时检测外部 revision 变化并清除旧历史/手势快照，避免 Undo 或 Cancel 复活已销毁实例；需要保留历史时使用编辑器或命令入口。
+`SceneEditor::set_property` 把属性更新接入同一 undo/redo；`SceneCommand::SetProperty` 再增加 capability、继承锁定检查。宿主直接访问 engine 属于可信 API，不受编辑插件的只读策略约束。编辑器在下一次操作时检测外部 revision 变化并清除旧历史/手势快照，避免 Undo 或 Cancel 复活已销毁实例；需要保留历史时使用编辑器或命令入口。动画使用begin_playback/tick_editor安全会话：完成一个Undo步骤，取消恢复基线，外部编辑中断时保留此前历史。
 
 ## 树事件先于默认交互
 
@@ -36,4 +36,4 @@ Graph 的 `CanvasPlugin` 使用相同输入/能力/生命周期协议，但它�
 
 运行 `cargo run --locked -p flow-studio --bin primitives`。右下角 diamond 来自注册的 CustomDefinition，点击后排队修改 radius，几何、bounds、命中与绘制一起变化；Undo 恢复属性。侧栏显示 engine revision 和 dirty 数量。Reset 是新文档，会销毁旧文档监听器；示例为新的 Custom 实例重新安装点击行为，宿主也必须按新句柄注册自己的监听器。
 
-GPUI 仍整帧绘制；damage 是后端可消费的信息，不等于已经做 GPU 局部重绘。现已增加[显式视觉行列布局](flow-layout.md)及[多层矢量填充/描边](appearance.md)。布局由宿主触发，走普通原子变化通道；多层绘制沿用平面、逐 paint 透明度。隔离组透明度/混合、蒙版、擦除、阴影、自动尺寸测量、响应式布局调度、状态样式、动画/运动路径仍未实现。当前已有渐变和视频帧也不能替代这些契约。详见 [实施顺序](engine-contract-plan.md) 与 [支持边界](limitations.md)。
+GPUI 仍整帧绘制；damage 是后端可消费的信息，不等于已经做 GPU 局部重绘。现已增加[显式视觉行列布局](flow-layout.md)及[多层矢量填充/描边](appearance.md)。布局由宿主触发，走普通原子变化通道；多层绘制沿用平面、逐 paint 透明度。隔离组透明度/混合、蒙版、擦除、阴影、自动尺寸测量、响应式布局调度、状态样式、完整timeline/运动路径仍未实现；[基础属性动画](animation.md)已接入显式tick与编辑器拥有的安全播放会话。当前已有渐变和视频帧也不能替代这些契约。详见 [实施顺序](engine-contract-plan.md) 与 [支持边界](limitations.md)。

@@ -21,3 +21,5 @@ gpui-flow-interaction.workspace = true
 gpui-flow-engine.workspace = true
 
 gpui-flow-layout.workspace = true
+
+gpui-flow-animation.workspace = true

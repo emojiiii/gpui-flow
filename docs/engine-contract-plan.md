@@ -1,6 +1,6 @@
 # 源码对照后的引擎契约计划
 
-状态：A/B 引擎基础和 C 的鼠标/滚轮/KeyDown/KeyUp 事件路由已接入 SceneEditor/SceneView，正在进行完整回归与原生验收。D 的多层矢量 paints 和 E 的显式行列布局已分批实现；隔离合成、自动尺寸/布局调度、状态与动画仍为后续计划，不是完整功能完成清单。实现 API 与准确边界见 [engine.md](engine.md)。完整上游文件对照见 `leafer-source-map.md`。
+状态：A/B 引擎基础和 C 的鼠标/滚轮/KeyDown/KeyUp 事件路由已接入 SceneEditor/SceneView，正在进行完整回归与原生验收。D 的多层矢量 paints 和 E 的显式行列布局已分批实现；基础属性动画及安全播放历史会话已实现；隔离合成、自动尺寸/布局调度、状态样式和完整timeline/运动路径仍为后续计划，不是完整功能完成清单。实现 API 与准确边界见 [engine.md](engine.md)。完整上游文件对照见 `leafer-source-map.md`。
 
 ## 为什么还需要这层
 
@@ -48,7 +48,7 @@ PropertySpec 声明默认值、类型/验证、序列化规则及失效类别。
 
 ### E. 可选自动布局与动画
 
-在上述属性变化与引擎 tick 存在后再实现 FlowLayout/Timeline。布局与动画都应产生普通 mutation，不允许直接旁路改渲染缓存。明确支持的布局测量规则、插值属性、时间步长、取消与销毁行为。
+现有FlowLayout和基础属性动画已实现，完整Timeline仍后续。布局与动画都应产生普通 mutation，不允许直接旁路改渲染缓存。明确支持的布局测量规则、插值属性、时间步长、取消与销毁行为。
 
 测试：固定输入确定布局；父子尺寸依赖环；一次 tick 原子更新；暂停/恢复/取消；销毁元素清理 timeline；属性覆盖/恢复规则；无资源/时钟的确定性 headless 测试。
 

@@ -2,7 +2,7 @@
 
 Status: source research and proposed contracts, **not an implementation/parity claim**. Reviewed 2026-09-30. No upstream code, package install, build script, or example was executed. No Rust source was changed for this report.
 
-> 基线说明：下方差距矩阵记录源码研究时的 `43eda10` 状态。后续已实现的引擎身份/生命周期/schema/dirty 缓存及原生事件接入见 [engine.md](engine.md)，不要把历史矩阵的“absent”误读为最新状态。后续批次实现了[多层矢量 paints](appearance.md)和[显式行列布局](flow-layout.md)；外观隔离合成、自动尺寸/布局调度、动画等仍然缺失。
+> 基线说明：下方差距矩阵记录源码研究时的 `43eda10` 状态。后续已实现的引擎身份/生命周期/schema/dirty 缓存及原生事件接入见 [engine.md](engine.md)，不要把历史矩阵的“absent”误读为最新状态。后续批次实现了[多层矢量 paints](appearance.md)和[显式行列布局](flow-layout.md)；另有基础属性动画和编辑器安全播放会话；外观隔离合成、自动尺寸/布局调度、完整timeline/状态样式/运动路径仍然缺失。
 
 ## 当前增量状态（不覆盖历史基线）
 
@@ -11,6 +11,7 @@ Status: source research and proposed contracts, **not an implementation/parity c
 - 视觉布局：可选 `gpui-flow-layout`，固定 Box/Frame 的行/列、换行、padding/gap、对齐、grow/尺寸范围、隐藏与排除区别、嵌套父先处理、一次事务/撤销和独立配置持久化。显式 pass，不是响应式布局引擎；没有 auto-size、百分比、反向、shrink 或文字内在测量，见 [flow-layout.md](flow-layout.md)
 - 新原生示例 `layout_appearance` 将布局输出送入同一 SceneView；编译/模型测试不等于新窗口视觉验收
 - 键盘增量：KeyUp/Space进入同一路由，首按可取消、Up/取消/失焦必清状态、重复键和焦点按实例隔离，见 [keyboard-routing.md](keyboard-routing.md)。没有新增双击/触摸/IME支持
+- 动画增量：显式tick的平移/opacity/实色/自定义数值插值，原子跨元素更新、pause/resume/seek/cancel、旧身份保护及完成一次Undo/取消恢复基线的编辑器播放会话，见 [animation.md](animation.md)。没有完整timeline/状态样式/运动路径
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
 ## 1. Provenance and license boundary

@@ -1,11 +1,25 @@
 use crate::SceneSelection;
 use gpui_flow_core::{Point, Viewport};
-use gpui_flow_engine::SceneEngine;
+use gpui_flow_engine::{
+    ChangeOrigin, ChangeSet, ElementHandle, EngineError, PropertyKey, SceneEngine,
+};
 use gpui_flow_scene::{Affine, Scene, SceneError};
 #[derive(Clone, PartialEq)]
 struct Snapshot {
     scene: Scene,
     selection: SceneSelection,
+}
+/// Opaque ownership of one editor playback baseline. Never serialize tokens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PlaybackToken {
+    engine: u64,
+    sequence: u64,
+}
+struct Playback {
+    token: PlaybackToken,
+    document_epoch: u64,
+    baseline: Snapshot,
+    last_frame: Snapshot,
 }
 /// Atomic scene editing with bounded snapshot history and explicit gesture lifecycle.
 pub struct SceneEditor {
@@ -15,6 +29,8 @@ pub struct SceneEditor {
     undo: Vec<Snapshot>,
     redo: Vec<Snapshot>,
     pending: Option<Snapshot>,
+    playback: Option<Playback>,
+    playback_sequence: u64,
     history_limit: usize,
     observed_revision: u64,
 }
@@ -32,6 +48,8 @@ impl SceneEditor {
             undo: vec![],
             redo: vec![],
             pending: None,
+            playback: None,
+            playback_sequence: 0,
             history_limit: 100,
         }
     }
@@ -47,6 +65,7 @@ impl SceneEditor {
         self.undo.clear();
         self.redo.clear();
         self.pending = None;
+        self.playback = None;
         Ok(())
     }
     pub fn set_history_limit(&mut self, limit: usize) {
@@ -84,21 +103,115 @@ impl SceneEditor {
         self.selection.retain_existing(self.engine.scene());
         true
     }
+    fn push_undo(&mut self, before: Snapshot) {
+        self.redo.clear();
+        if self.history_limit > 0 {
+            self.undo.push(before);
+            let excess = self.undo.len().saturating_sub(self.history_limit);
+            self.undo.drain(..excess);
+        }
+    }
     fn record(&mut self, before: Snapshot) {
         if before.scene != *self.scene() {
-            self.redo.clear();
-            if self.history_limit > 0 {
-                self.undo.push(before);
-                let excess = self.undo.len().saturating_sub(self.history_limit);
-                self.undo.drain(..excess);
-            }
+            self.push_undo(before);
         }
+    }
+    fn finish_active_playback(&mut self) -> bool {
+        let Some(playback) = self.playback.take() else {
+            return false;
+        };
+        self.record(playback.baseline);
+        true
+    }
+    /// Reserve a playback baseline without changing Undo/Redo. A user gesture
+    /// or another playback must finish first; ownership cannot be stolen.
+    pub fn begin_playback(&mut self) -> Result<PlaybackToken, EngineError> {
+        self.reconcile_external();
+        if self.pending.is_some() || self.playback.is_some() {
+            return Err(EngineError::Property(
+                "an edit or playback is already active".into(),
+            ));
+        }
+        let sequence = self
+            .playback_sequence
+            .checked_add(1)
+            .ok_or(EngineError::Exhausted)?;
+        let token = PlaybackToken {
+            engine: self.engine.engine_id(),
+            sequence,
+        };
+        let baseline = self.snapshot();
+        self.playback = Some(Playback {
+            token,
+            document_epoch: self.engine.document_epoch(),
+            last_frame: baseline.clone(),
+            baseline,
+        });
+        self.playback_sequence = sequence;
+        Ok(token)
+    }
+    /// Also reconciles direct host writes. Such a write ends the session before
+    /// a stale controller can overwrite it.
+    pub fn is_playback_active(&mut self, token: PlaybackToken) -> bool {
+        self.reconcile_external();
+        self.playback
+            .as_ref()
+            .is_some_and(|playback| playback.token == token)
+    }
+    /// Animation-only property batch; records the latest frame but no per-frame
+    /// Undo entry. Invalid batches leave the baseline, clock and history intact.
+    pub fn apply_playback_properties(
+        &mut self,
+        token: PlaybackToken,
+        properties: impl IntoIterator<Item = (ElementHandle, PropertyKey, serde_json::Value)>,
+    ) -> Result<ChangeSet, EngineError> {
+        if !self.is_playback_active(token) {
+            return Err(EngineError::Property(
+                "playback ended or token belongs to another editor".into(),
+            ));
+        }
+        let changes = self
+            .engine
+            .set_properties_batch(ChangeOrigin::Animation, properties)?;
+        self.observed_revision = self.engine.revision();
+        self.selection.retain_existing(self.engine.scene());
+        let last_frame = self.snapshot();
+        self.playback.as_mut().expect("active playback").last_frame = last_frame;
+        Ok(changes)
+    }
+    /// Keep the final pose as exactly one undoable edit, preserving prior edits.
+    pub fn finish_playback(&mut self, token: PlaybackToken) -> bool {
+        if !self.is_playback_active(token) {
+            return false;
+        }
+        self.finish_active_playback()
+    }
+    /// Restore the playback baseline without consuming prior Undo/Redo. External
+    /// edits end ownership first, so cancellation never overwrites them.
+    pub fn cancel_playback(&mut self, token: PlaybackToken) -> bool {
+        if !self.is_playback_active(token) {
+            return false;
+        }
+        let mut before = self
+            .playback
+            .as_ref()
+            .expect("active playback")
+            .baseline
+            .clone();
+        // Selection is host interaction state, not an animated property.
+        before.selection = self.selection.clone();
+        if !self.restore(before) {
+            return false;
+        }
+        self.playback = None;
+        true
     }
     pub fn transaction(
         &mut self,
         edit: impl FnOnce(&mut Scene) -> Result<(), SceneError>,
     ) -> Result<(), SceneError> {
         self.reconcile_external();
+        self.finish_active_playback();
         let before = self.snapshot();
         self.engine.transaction(edit)?;
         self.observed_revision = self.engine.revision();
@@ -116,6 +229,7 @@ impl SceneEditor {
         value: serde_json::Value,
     ) -> Result<(), SceneError> {
         self.reconcile_external();
+        self.finish_active_playback();
         let before = self.snapshot();
         self.engine.set_property(handle, key, value)?;
         self.observed_revision = self.engine.revision();
@@ -125,15 +239,33 @@ impl SceneEditor {
         }
         Ok(())
     }
-    /// Direct host engine writes supersede editor snapshots. Discard stale history
-    /// rather than resurrecting destroyed instances or overwriting external data.
+    /// Direct engine writes outside an owned playback remain a history boundary.
+    /// During playback, preserve its last frame and the external edit separately;
+    /// cancellation must never restore an older frame over that external write.
     pub fn reconcile_external(&mut self) -> bool {
         if self.observed_revision == self.engine.revision() {
             return false;
         }
         self.pending = None;
-        self.undo.clear();
-        self.redo.clear();
+        if let Some(playback) = self.playback.take() {
+            if self.engine.document_epoch() != playback.document_epoch {
+                // An explicit new-document load remains a history boundary.
+                self.undo.clear();
+                self.redo.clear();
+            } else {
+                // Preserve the last owned animation frame and the subsequent
+                // external edit as distinct undo steps, never restore over it.
+                if playback.baseline.scene != playback.last_frame.scene {
+                    self.push_undo(playback.baseline);
+                }
+                if playback.last_frame.scene != *self.scene() {
+                    self.push_undo(playback.last_frame);
+                }
+            }
+        } else {
+            self.undo.clear();
+            self.redo.clear();
+        }
         self.selection.retain_existing(self.engine.scene());
         self.observed_revision = self.engine.revision();
         true
@@ -141,6 +273,7 @@ impl SceneEditor {
     /// Starts one undoable gesture. Returns false if a gesture already exists.
     pub fn begin_edit(&mut self) -> bool {
         self.reconcile_external();
+        self.finish_active_playback();
         if self.pending.is_some() {
             return false;
         }
@@ -170,6 +303,7 @@ impl SceneEditor {
     }
     pub fn undo(&mut self) -> bool {
         self.reconcile_external();
+        self.finish_active_playback();
         if self.editing() {
             return false;
         }
@@ -186,6 +320,7 @@ impl SceneEditor {
     }
     pub fn redo(&mut self) -> bool {
         self.reconcile_external();
+        self.finish_active_playback();
         if self.editing() {
             return false;
         }

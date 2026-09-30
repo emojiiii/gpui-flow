@@ -17,3 +17,6 @@ gpui-flow-interaction = { path = "../../crates/flow-interaction" }
 gpui-flow-layout = { path = "../../crates/flow-layout" }
 gpui-flow-scene = { path = "../../crates/flow-scene" }
 gpui-flow-editor = { path = "../../crates/flow-editor" }
+
+gpui-flow-animation = { path = "../../crates/flow-animation" }
+gpui-flow-engine = { path = "../../crates/flow-engine" }
