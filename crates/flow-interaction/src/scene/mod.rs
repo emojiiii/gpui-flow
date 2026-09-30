@@ -42,7 +42,10 @@ pub type SceneDispatchReport = crate::DispatchReport;
 pub type SceneInteractionError = crate::InteractionError;
 
 mod router;
-pub use router::{RoutedReport, SceneEventRouter};
+pub use router::{RoutedReport, SceneEventRouter, SceneInteractionState};
+
+mod state_style;
+pub use state_style::*;
 
 mod action_queue;
 pub use action_queue::{ActionQueueError, SceneActionSender};

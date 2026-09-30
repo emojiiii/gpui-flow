@@ -3,7 +3,7 @@
 use super::ScenePluginHost;
 use crate::{CanvasEvent, DispatchReport, HitTarget, KeyCode, PointerButton};
 use gpui_flow_editor::SceneEditor;
-use gpui_flow_engine::{ElementHandle, InstanceState};
+use gpui_flow_engine::{ElementHandle, InstanceState, SceneEngine};
 use gpui_flow_scene::{
     DisplayId, EventInput, EventKind, InputModifiers, Point, PointerDevice, SceneEvent,
 };
@@ -14,6 +14,9 @@ pub struct SceneEventRouter {
     pressed: Option<(ElementHandle, Point, u64, Option<PointerButton>)>,
     hover: Option<ElementHandle>,
     focus: Option<ElementHandle>,
+    pressed_epoch: u64,
+    hover_epoch: u64,
+    focus_epoch: u64,
     position: Point,
     sequence: u64,
     held_keys: BTreeSet<KeyCode>,
@@ -26,12 +29,54 @@ pub struct RoutedReport {
     pub events: Vec<SceneEvent>,
     pub errors: Vec<String>,
 }
+/// Derived pointer/focus state. Hover and press include the current target's
+/// ancestors; focus is exact. Detached/replaced/remounted targets are inactive.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct SceneInteractionState {
+    pub hover: bool,
+    pub press: bool,
+    pub focus: bool,
+}
 impl SceneEventRouter {
     pub fn new() -> Self {
         Self::default()
     }
     pub fn action_sender(&self) -> super::SceneActionSender {
         self.actions.sender.clone()
+    }
+    fn current(engine: &SceneEngine, handle: ElementHandle, epoch: u64) -> bool {
+        engine
+            .instance(handle)
+            .is_ok_and(|i| i.state == InstanceState::Attached && i.attachment_epoch == epoch)
+    }
+    fn epoch(engine: &SceneEngine, handle: Option<ElementHandle>) -> u64 {
+        handle
+            .and_then(|h| engine.instance(h).ok())
+            .map_or(0, |i| i.attachment_epoch)
+    }
+    pub fn has_pressed(&self, engine: &SceneEngine) -> bool {
+        self.pressed
+            .is_some_and(|p| Self::current(engine, p.0, self.pressed_epoch))
+    }
+    pub fn state(&self, engine: &SceneEngine, handle: ElementHandle) -> SceneInteractionState {
+        let Ok(instance) = engine.instance(handle) else {
+            return SceneInteractionState::default();
+        };
+        if instance.state != InstanceState::Attached {
+            return SceneInteractionState::default();
+        }
+        let contains = |target: Option<ElementHandle>, epoch| {
+            target
+                .filter(|h| Self::current(engine, *h, epoch))
+                .and_then(|h| engine.instance(h).ok())
+                .and_then(|i| engine.scene().ancestor_path(&i.id).ok())
+                .is_some_and(|path| path.contains(&instance.id))
+        };
+        SceneInteractionState {
+            hover: contains(self.hover, self.hover_epoch),
+            press: contains(self.pressed.map(|p| p.0), self.pressed_epoch),
+            focus: self.focus == Some(handle) && Self::current(engine, handle, self.focus_epoch),
+        }
     }
     /// Accepted Space navigation modifier, scoped to this router. A prevented
     /// initial KeyDown never arms panning; physical release/cancel always clears it.
@@ -89,10 +134,16 @@ impl SceneEventRouter {
         // object with the same public ID. A new click establishes fresh focus.
         if self
             .focus
-            .is_some_and(|handle| Self::id(editor, handle).is_none())
+            .is_some_and(|handle| !Self::current(&editor.engine, handle, self.focus_epoch))
         {
             self.focus = None;
             self.clear_keys();
+        }
+        if self
+            .hover
+            .is_some_and(|handle| !Self::current(&editor.engine, handle, self.hover_epoch))
+        {
+            self.hover = None;
         }
         let repeat = match &event {
             CanvasEvent::KeyDown { key, .. } => !self.held_keys.insert(key.clone()),
@@ -124,7 +175,7 @@ impl SceneEventRouter {
             return out;
         }
         if let Some((handle, _, pointer_id, _)) = self.pressed {
-            if Self::id(editor, handle).is_none() {
+            if !Self::current(&editor.engine, handle, self.pressed_epoch) {
                 self.pressed = None;
                 self.clear_keys();
                 out.default = host.dispatch(editor, CanvasEvent::PointerCancel);
@@ -158,7 +209,14 @@ impl SceneEventRouter {
                 .and_then(|h| editor.engine.handle(&h.id));
         }
         let input = metadata(&event, repeat);
-        if matches!(event, CanvasEvent::PointerMove(_)) && self.hover != hit {
+        if matches!(
+            event,
+            CanvasEvent::PointerMove(_)
+                | CanvasEvent::PointerLeave
+                | CanvasEvent::PointerCancel
+                | CanvasEvent::FocusLost
+        ) && self.hover != hit
+        {
             self.emit(
                 editor,
                 self.hover,
@@ -197,6 +255,7 @@ impl SceneEventRouter {
                 );
             }
             self.hover = hit;
+            self.hover_epoch = Self::epoch(&editor.engine, hit);
         }
         if matches!(event, CanvasEvent::PointerDown(_)) && self.pressed.is_some() {
             let cancelled = self.dispatch(editor, host, CanvasEvent::PointerCancel);
@@ -208,12 +267,15 @@ impl SceneEventRouter {
             CanvasEvent::PointerDown(_) => EventKind::PointerDown,
             CanvasEvent::PointerMove(_) => EventKind::PointerMove,
             CanvasEvent::PointerUp(_) => EventKind::PointerUp,
+            CanvasEvent::PointerLeave => EventKind::PointerLeave,
             CanvasEvent::PointerCancel | CanvasEvent::FocusLost => EventKind::PointerCancel,
             CanvasEvent::Wheel { .. } => EventKind::Wheel,
             CanvasEvent::KeyDown { .. } => EventKind::KeyDown,
             CanvasEvent::KeyUp { .. } => EventKind::KeyUp,
         };
-        let target = if matches!(
+        let target = if matches!(event, CanvasEvent::PointerLeave) {
+            None // The complete leave path was emitted above; do not emit twice.
+        } else if matches!(
             event,
             CanvasEvent::KeyDown { .. } | CanvasEvent::KeyUp { .. }
         ) {
@@ -256,8 +318,10 @@ impl SceneEventRouter {
                 self.emit(editor, self.focus, EventKind::Blur, None, &mut out);
                 self.emit(editor, hit, EventKind::Focus, None, &mut out);
                 self.focus = hit;
+                self.focus_epoch = Self::epoch(&editor.engine, hit);
             }
             self.pressed = hit.map(|h| (h, p.position, p.pointer_id, p.button));
+            self.pressed_epoch = Self::epoch(&editor.engine, hit);
         }
         if matching_up
             && let Some((handle, start, _, button)) = self.pressed.take()
@@ -271,6 +335,9 @@ impl SceneEventRouter {
         if terminal {
             self.pressed = None;
             self.clear_keys();
+        }
+        if matches!(event, CanvasEvent::PointerCancel) {
+            self.hover = None;
         }
         if matches!(event, CanvasEvent::FocusLost) {
             self.emit(editor, self.focus, EventKind::Blur, None, &mut out);

@@ -25,6 +25,9 @@ pub struct InstanceInfo {
     pub handle: ElementHandle,
     pub id: DisplayId,
     pub state: InstanceState,
+    /// Changes on reattachment, even though the live handle is retained. Input
+    /// sessions must not resume across an unmount/mount between input events.
+    pub attachment_epoch: u64,
 }
 /// A managed detached forest. Its immutable document remains owned by its engine.
 /// Dropping this token does not destroy elements; the engine will clean them up

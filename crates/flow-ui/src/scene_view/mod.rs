@@ -27,6 +27,9 @@ pub struct SceneView {
     pub diagnostics: Vec<RenderIssue>,
     pub gradient_diagnostics: Vec<crate::display::GradientRenderIssue>,
     pub renderers: crate::display::DisplayRegistry,
+    /// Opt-in paint-only state presentation; never writes editor documents.
+    pub state_styles: gpui_flow_interaction::scene::SceneStateStyles,
+    pub state_style_error: Option<String>,
     focus: FocusHandle,
     origin: WorldPoint,
     extent: WorldSize,
@@ -43,6 +46,7 @@ impl SceneView {
         ))
     }
     pub fn from_engine(engine: gpui_flow_engine::SceneEngine, cx: &mut Context<Self>) -> Self {
+        let state_styles = gpui_flow_interaction::scene::SceneStateStyles::new(&engine);
         Self {
             editor: SceneEditor::from_engine(engine),
             theme: FlowTheme::default(),
@@ -51,6 +55,8 @@ impl SceneView {
             diagnostics: vec![],
             gradient_diagnostics: vec![],
             renderers: crate::display::DisplayRegistry::default(),
+            state_styles,
+            state_style_error: None,
             focus: cx.focus_handle(),
             origin: WorldPoint::ZERO,
             extent: WorldSize::new(1000., 700.),

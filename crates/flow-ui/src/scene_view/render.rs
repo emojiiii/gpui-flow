@@ -1,5 +1,43 @@
 use super::*;
 use crate::display::DisplayElement;
+fn state_render_objects(
+    editor: &SceneEditor,
+    router: &gpui_flow_interaction::scene::SceneEventRouter,
+    styles: &mut gpui_flow_interaction::scene::SceneStateStyles,
+) -> (Vec<RenderObject>, Option<String>) {
+    let convert = |items: Vec<gpui_flow_scene::PaintItem<'_>>| {
+        items
+            .iter()
+            .map(|item| RenderObject::from_paint_item(item, editor.viewport))
+            .collect::<Vec<_>>()
+    };
+    let canonical = || {
+        editor
+            .engine
+            .paint_list()
+            .map(convert)
+            .map_err(|e| e.to_string())
+    };
+    let presented = styles
+        .presentation(editor, router)
+        .map_err(|e| e.to_string())
+        .and_then(|scene| match scene {
+            std::borrow::Cow::Owned(scene) => {
+                scene.paint_list().map(convert).map_err(|e| e.to_string())
+            }
+            std::borrow::Cow::Borrowed(_) => canonical(),
+        });
+    match presented {
+        Ok(objects) => (objects, None),
+        Err(error) => match canonical() {
+            Ok(objects) => (objects, Some(error)),
+            Err(fallback_error) => (
+                vec![],
+                Some(format!("{error}; canonical render: {fallback_error}")),
+            ),
+        },
+    }
+}
 impl Render for SceneView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.subscribe_input(window, cx);
@@ -61,13 +99,9 @@ impl Render for SceneView {
         .absolute()
         .size_full();
         self.diagnostics.clear();
-        let objects = match self.editor.engine.paint_list() {
-            Ok(items) => items
-                .iter()
-                .map(|item| RenderObject::from_paint_item(item, viewport))
-                .collect::<Vec<_>>(),
-            Err(_) => vec![],
-        };
+        let (objects, state_error) =
+            state_render_objects(&self.editor, &self.router, &mut self.state_styles);
+        self.state_style_error = state_error;
         let corners: Vec<_> = self
             .editor
             .selection
@@ -157,7 +191,11 @@ impl Render for SceneView {
                     )),
             );
         }
-        if let Some(error) = &self.interaction_error {
+        if let Some(error) = self
+            .state_style_error
+            .as_ref()
+            .or(self.interaction_error.as_ref())
+        {
             view = view.child(
                 div()
                     .absolute()
@@ -171,6 +209,11 @@ impl Render for SceneView {
             );
         }
         view.cursor(self.input_cursor())
+            .on_hover(cx.listener(|this, hovered, _, cx| {
+                if !hovered {
+                    this.pointer_leave(cx);
+                }
+            }))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::down))
             .on_mouse_down(MouseButton::Middle, cx.listener(Self::down))
             .on_mouse_down(MouseButton::Right, cx.listener(Self::down))
@@ -210,5 +253,71 @@ impl Render for SceneView {
                     this.key_up(event, cx);
                 }
             }))
+    }
+}
+
+#[cfg(test)]
+mod state_tests {
+    use super::state_render_objects;
+    use gpui_flow_editor::SceneEditor;
+    use gpui_flow_interaction::{CanvasEvent, HitTarget, PointerInput, scene::*};
+    use gpui_flow_scene::{Color, DisplayObject, Point, Scene, display};
+    #[test]
+    fn invalid_overlay_reports_error_and_draws_canonical_then_recovers() {
+        let mut scene = Scene::new();
+        scene
+            .insert(
+                DisplayObject::new("a", display::Rect::new(40., 30.)),
+                None,
+                None,
+            )
+            .unwrap();
+        let mut editor = SceneEditor::new(scene).unwrap();
+        let handle = editor.engine.handle(&"a".into()).unwrap();
+        let mut sheet = SceneStateStyles::new(&editor.engine);
+        sheet
+            .bind(
+                &editor.engine,
+                handle,
+                StateStyles {
+                    hover: StatePaint::fill(Color::WHITE),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let mut router = SceneEventRouter::new();
+        let mut host = ScenePluginHost::new();
+        router.dispatch(
+            &mut editor,
+            &mut host,
+            CanvasEvent::PointerMove(PointerInput::left(
+                Point::new(10., 10.),
+                HitTarget::Object("a".into()),
+            )),
+        );
+        editor
+            .engine
+            .transaction(|scene| {
+                scene.update_object(&"a".into(), |object| {
+                    object.style.fill = None;
+                    object.style.fill_layers = vec![Color::BLACK.into(); 32];
+                })
+            })
+            .unwrap();
+        let canonical = editor.scene().clone();
+        let revision = editor.engine.revision();
+        let (objects, error) = state_render_objects(&editor, &router, &mut sheet);
+        assert!(error.unwrap().contains("paint layers"));
+        assert_eq!(objects.len(), 1);
+        assert_eq!(
+            &objects[0].object,
+            &canonical.get(&"a".into()).unwrap().object
+        );
+        assert_eq!(editor.scene(), &canonical);
+        assert_eq!(editor.engine.revision(), revision);
+        sheet.unbind(handle);
+        let (objects, error) = state_render_objects(&editor, &router, &mut sheet);
+        assert!(error.is_none());
+        assert_eq!(objects.len(), 1);
     }
 }

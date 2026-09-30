@@ -67,3 +67,7 @@
 CI 配置目标为 Ubuntu 24.04、macOS 15 和 Windows（windows-latest / MSVC）的原生编译、单测与示例链接；每个平台的实际结果以对应提交的 Actions 为准。编译成功不能证明桌面交互、GPU、图形驱动或系统剪贴板都正常。Windows 和 macOS 的真实窗口尚未人工验收；移动端和 Web 未列入验证矩阵，不能从底层 GPUI 的能力推导本框架已经支持。
 
 当前 crate 不发布到 crates.io。没有为项目源代码提供开源许可证，第三方依赖按各自许可证使用；“参考设计”不是复制其代码或使用其许可证的声明。公开分发前需审查依赖许可、资产许可和构建产物。
+
+## 状态呈现边界
+
+支持selected/focus/hover/press/disabled的实色base fill与opacity运行时叠加，当前不支持命名states、placeholder、button继承、geometry状态或自动transition。叠加不改Scene/Undo/JSON，hit与fit仍使用canonical geometry；disabled只控制呈现，不代替交互权限。活跃状态采用私有Scene副本绘制，未作大场景增量性能保证。详见[state-styles.md](state-styles.md)

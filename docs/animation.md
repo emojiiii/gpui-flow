@@ -66,7 +66,7 @@ cargo run --locked --manifest-path docs/examples/Cargo.toml --bin animation
 cargo test --locked -p gpui-flow-animation
 ```
 
-原生适配代码的编译/链接不等于已经执行真实窗口视觉验收。状态样式、自动hover/pressed过渡、完整timeline、运动路径仍是独立后续模块。
+原生适配代码的编译/链接不等于已经执行真实窗口视觉验收。paint-only状态样式已作为独立呈现层接入，见[state-styles.md](state-styles.md)；自动hover/pressed过渡、完整timeline、运动路径仍是后续模块。
 
 ## 官方源码定位
 

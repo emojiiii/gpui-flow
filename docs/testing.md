@@ -192,3 +192,12 @@ cargo test --locked -p gpui-flow-layout
 - 全workspace/all-targets check、严格Clippy、文档Clippy、格式检查通过；七个可执行文档示例通过
 - GPUI library17项通过；新auto_size示例完成Linux原生链接，尚未实际打开窗口操作验收
 - 三平台自动结果以本轮提交Actions为准；该增量实现显式编辑事务驱动reflow，没有全局observer或文字内在测量
+
+## Paint-only状态样式增量（2026-09-30）
+
+- 最终headless aggregate：360项通过（含doctest），另行7项FFmpeg/SDL dummy通过；原有梯度性能测量仍ignored
+- 新20项状态回归覆盖字段优先级/disabled屏蔽、祖先hover/press与精确focus、prevented Down/Up、Leave/重入/拖动capture/外部取消、当前文档基线、Redo与播放token保持、卸载重挂载epoch、同ID重建、注册失败与paint上限冲突
+- GPUI library18项通过，新增真实呈现准备路径回归证明状态paint溢出报错时仍画canonical对象、移除绑定后清错；不是以空白画面吞掉错误
+- 完整workspace/all-targets check、严格Clippy、格式检查、文档Clippy及8个可执行文档示例通过
+- state_styles原生示例完成Linux编译链接；本批未进行真实窗口/鼠标/键盘验收。Windows/macOS自动链接与测试以本轮Actions结果为准
+- 本轮仅fill/opacity状态呈现，不包括自动transition、命名state、placeholder、button继承、geometry状态、状态驱动命中或大场景增量性能保证

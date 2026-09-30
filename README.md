@@ -26,6 +26,7 @@ cargo run --locked -p flow-studio --bin gradients
 cargo run --locked -p flow-studio --bin layout_appearance
 cargo run --locked -p flow-studio --bin animations
 cargo run --locked -p flow-studio --bin auto_size
+cargo run --locked -p flow-studio --bin state_styles
 python3 scripts/generate-media-fixtures.py
 cargo run --locked -p flow-studio --bin media
 # Linux 无 desktop portal 时，明确指定 Save/Open 路径：
@@ -115,3 +116,5 @@ cargo +1.98.1 run --locked -p flow-studio
 底层使用 [longbridge/gpui-fast](https://github.com/longbridge/gpui-fast) 的 `main` 分支，实际版本由提交到仓库的 `Cargo.lock` 固定为 `10d005166a9f9e079d55ebfb700035f3860c3e71`。GPUI Kit 固定为 `0067bafcf3160cb871eff2521e98a51e526da175`。构建请使用 `--locked`，不要无意更新 lockfile；升级时应同时验证二者兼容性。
 
 设计参考 [React Flow 的自定义节点思路](https://reactflow.dev/learn/customization/custom-nodes) 和 [Leafer UI 的画布编辑方式](https://github.com/leaferjs/leafer-ui)，本项目是独立 Rust 实现，不是这些项目的移植，也未声明 API 兼容。当前不为本项目源代码授予开源许可证；各第三方依赖保留其各自许可，分发前需独立审查。
+
+状态样式：`SceneView.state_styles` 提供selected/focus/hover/press/disabled的实色与opacity呈现层，不改文档或Undo；优先级、生命周期及剩余边界见[状态样式契约](docs/state-styles.md)

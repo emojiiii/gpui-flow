@@ -69,7 +69,9 @@ impl SceneView {
     }
     pub(super) fn moved(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
         let local = self.local(event.position);
-        if event.pressed_button.is_none() && self.interactions.has_capture() {
+        if event.pressed_button.is_none()
+            && (self.interactions.has_capture() || self.router.has_pressed(&self.editor.engine))
+        {
             self.cancel_input(cx);
         }
         let hit = self.input_hit(local, event.modifiers.control);
@@ -99,6 +101,9 @@ impl SceneView {
     }
     pub(super) fn cancel_input(&mut self, cx: &mut Context<Self>) {
         self.plugin_event(input::CanvasEvent::PointerCancel, cx);
+    }
+    pub(super) fn pointer_leave(&mut self, cx: &mut Context<Self>) {
+        self.plugin_event(input::CanvasEvent::PointerLeave, cx);
     }
     pub(super) fn focus_lost(&mut self, cx: &mut Context<Self>) {
         self.plugin_event(input::CanvasEvent::FocusLost, cx);

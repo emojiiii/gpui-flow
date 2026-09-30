@@ -66,6 +66,9 @@ pub enum CanvasEvent {
     PointerDown(PointerInput),
     PointerMove(PointerInput),
     PointerUp(PointerInput),
+    /// Cursor left the canvas. Clear hover paths, retaining an active press or
+    /// capture until release/cancel so a drag can continue outside the view.
+    PointerLeave,
     PointerCancel,
     FocusLost,
     Wheel {

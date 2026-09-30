@@ -18,6 +18,7 @@ struct Instance {
     id: DisplayId,
     generation: u64,
     state: InstanceState,
+    attachment_epoch: u64,
     disposers: BTreeMap<DisposerId, Box<dyn FnOnce()>>,
 }
 struct Observer {
@@ -177,6 +178,7 @@ impl SceneEngine {
             handle: h,
             id: i.id.clone(),
             state: i.state,
+            attachment_epoch: i.attachment_epoch,
         })
     }
     pub fn object(&self, h: ElementHandle) -> Result<&DisplayObject, EngineError> {
@@ -204,6 +206,7 @@ impl SceneEngine {
                 id: id.clone(),
                 generation,
                 state,
+                attachment_epoch: self.revision,
                 disposers: BTreeMap::new(),
             };
             slot
@@ -213,6 +216,7 @@ impl SceneEngine {
                 id: id.clone(),
                 generation: 1,
                 state,
+                attachment_epoch: self.revision,
                 disposers: BTreeMap::new(),
             });
             slot
@@ -647,6 +651,7 @@ impl SceneEngine {
                 (self.allocate(id.clone(), InstanceState::Attached)?, true)
             };
             let parent = next.get(id).and_then(|n| n.parent.clone());
+            self.instances[handle.slot].attachment_epoch = revision;
             if created {
                 change.lifecycle.push(LifecycleEvent {
                     handle,
