@@ -84,6 +84,7 @@ cargo +1.98.1 run --locked -p flow-studio
 | `gpui-flow-scene` | 保留场景树、显示原语、仿射变换、命中与事件 | 否 |
 | `gpui-flow-engine` | 唯一场景所有者、实例/生命周期、属性/缓存与树事件 | 否 |
 | `gpui-flow-animation` | 显式时钟、属性插值、播放控制、实例保护与编辑器安全会话 | 否 |
+| `gpui-flow-text` | 独立文字测量接口与可选 gpui-fast 后端，无场景/编辑器依赖 | 默认否，`gpui` feature 可选 |
 | `gpui-flow-layout` | 行列布局、content尺寸/换行/grow/约束、原子编辑及配置持久化 | 否 |
 | `gpui-flow-editor` | 通用场景选择、事务、历史与图形编辑 | 否 |
 | `gpui-flow-runtime` | `AgentRunner`、工作流调度、任务状态、事件和取消 | 否 |
@@ -91,7 +92,7 @@ cargo +1.98.1 run --locked -p flow-studio
 | `gpui-flow` | `SceneView`、显示适配器、独立组件、`FlowCanvas` 与节点 | 是 |
 | `flow-studio` | 原生桌面示例程序 | 是 |
 
-主 workspace 的默认成员是 core/engine/interaction/layout/animation/runtime/scene/editor/media，`cargo test` 不会自动覆盖原生 UI。
+主 workspace 的默认成员是 text/core/engine/interaction/layout/animation/runtime/scene/editor/media，`cargo test` 不会自动覆盖原生 UI。
 
 ## 文档导航
 

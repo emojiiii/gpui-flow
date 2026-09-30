@@ -1,11 +1,11 @@
 //! Real native shaping and reactive editor regression, without opening a window.
 use gpui::{FontWeight, font};
 use gpui_flow::{
-    GpuiTextMeasurer,
     editor::SceneEditor,
     layout::*,
     scene::{DisplayObject, Scene, Shape, Size, display},
 };
+use gpui_flow_text::{GpuiTextMeasurer, TextMeasureRequest, TextMeasurer};
 use std::sync::Arc;
 fn request(content: &str, width: Option<f32>) -> TextMeasureRequest {
     TextMeasureRequest {

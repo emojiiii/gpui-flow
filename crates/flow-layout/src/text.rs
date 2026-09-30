@@ -17,66 +17,8 @@ pub enum TextSizing {
     Natural,
     AutoHeight,
 }
-#[derive(Debug, Clone, PartialEq)]
-pub struct TextMeasureRequest {
-    pub content: String,
-    pub font_family: String,
-    pub font_size: f32,
-    pub font_weight: u16,
-    /// Absolute logical line-box height, not a glyph's ink bounds.
-    pub line_height: f32,
-    pub wrap_width: Option<f32>,
-}
-impl TextMeasureRequest {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.content.len() > 65_536 || self.font_family.len() > 512 {
-            return Err(
-                "text measurement allows at most 64KiB UTF-8 content and 512-byte family".into(),
-            );
-        }
-        if self.font_family.trim().is_empty()
-            || !self.font_size.is_finite()
-            || self.font_size <= 0.
-            || !(1..=1000).contains(&self.font_weight)
-            || !self.line_height.is_finite()
-            || self.line_height <= 0.
-            || self.wrap_width.is_some_and(|w| !w.is_finite() || w <= 0.)
-        {
-            return Err("invalid text measurement input".into());
-        }
-        Ok(())
-    }
-}
-#[derive(Debug, Clone, PartialEq)]
-pub struct TextMetrics {
-    /// May be zero for empty text. Scene geometry retains a minimum width of 1.
-    pub width: f32,
-    pub height: f32,
-    pub line_height: f32,
-    pub lines: usize,
-}
-impl TextMetrics {
-    pub fn validate(&self) -> Result<(), String> {
-        if !self.width.is_finite()
-            || self.width < 0.
-            || !self.height.is_finite()
-            || self.height <= 0.
-            || !self.line_height.is_finite()
-            || self.line_height <= 0.
-            || !(1..=65_537).contains(&self.lines)
-        {
-            return Err("backend returned invalid text metrics".into());
-        }
-        Ok(())
-    }
-}
-/// A deterministic host service; the layout/model layer does not depend on GPUI.
-/// Errors and panics abort the complete candidate before document/history writes.
-/// A cache must include all request fields and discard entries on invalidate.
-pub trait TextMeasurer: Send + Sync {
-    fn measure(&self, request: &TextMeasureRequest) -> Result<TextMetrics, String>;
-    fn invalidate(&self) {}
-}
+// Compatibility exports: the measurement contract lives in the standalone crate.
+pub use gpui_flow_text::{TextMeasureRequest, TextMeasurer, TextMetrics};
 
 pub(super) fn validate(layout: &FlowLayout, scene: &Scene) -> Result<(), FlowError> {
     for (id, sizing) in &layout.texts {

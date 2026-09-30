@@ -5,6 +5,7 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
+gpui-flow-text.workspace = true
 gpui-flow-scene.workspace = true
 gpui-flow-engine.workspace = true
 gpui-flow-editor.workspace = true

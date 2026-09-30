@@ -75,6 +75,7 @@ dependencies = [
  "gpui-flow-editor",
  "gpui-flow-engine",
  "gpui-flow-scene",
+ "gpui-flow-text",
  "serde",
  "serde_json",
 ]
@@ -96,6 +97,10 @@ dependencies = [
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "gpui-flow-text"
+version = "0.1.0"
 
 [[package]]
 name = "itoa"

@@ -1,0 +1,12 @@
+[package]
+name = "gpui-flow-text"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[features]
+default = []
+gpui = ["dep:gpui"]
+
+[dependencies]
+gpui = { workspace = true, optional = true }

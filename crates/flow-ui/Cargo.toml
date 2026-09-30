@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 [dependencies]
+gpui-flow-text = { workspace = true, features = ["gpui"] }
 gpui.workspace = true
 gpui-flow-core.workspace = true
 gpui-flow-runtime.workspace = true

@@ -476,3 +476,11 @@ The smallest convincing next milestone is **one registered custom live element**
 [U-ui-event]: https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/event/src/UIEvent.ts#L8-L56
 [U-ui-factory]: https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/UI.ts#L551-L585
 [U-web-interaction]: https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/interaction/interaction-web/src/Interaction.ts#L42-L280
+
+## Text crate extraction (same behavior)
+
+`gpui-flow-text` is a standalone dependency-free measurement contract with an
+optional `gpui` native adapter. Layout and UI preserve their previous public
+exports. Both measurement and painting call the same existing gpui-fast shaper;
+no new typography or layout engine was introduced. See
+[text measurement crate boundaries](text-measurement.md#crate-boundary-and-upstream-reuse).

@@ -32,6 +32,27 @@ glyphs can overhang or be taller than a configured line box; painting clips to t
 explicit text rectangle. Start/Center/End use GPUI's line alignment within that
 same rectangle.
 
+## Crate boundary and upstream reuse
+
+`gpui-flow-text` owns `TextMeasureRequest`, `TextMetrics` and `TextMeasurer`.
+Its default build has no dependencies; optional feature `gpui` adds only the
+existing gpui-fast dependency and `GpuiTextMeasurer` adapter. The adapter shares
+`gpui_backend::shape_text` with scene painting. It has no dependency on the Flow
+scene, layout, editor, animation or media packages, and can be used by another
+GPUI application directly. See [the standalone crate](../crates/flow-text/README.md).
+
+Existing `gpui_flow_layout` measurement types and `gpui_flow::GpuiTextMeasurer`
+are compatibility re-exports of those same types. Layout ownership, reactive
+binding, document updates and Undo stay in `gpui-flow-layout`.
+
+GPUI already lays out ordinary UI elements through Taffy: its
+`crates/gpui/src/window.rs` forwards `request_layout` / `request_measured_layout`
+to `TaffyLayoutEngine`; `taffy.rs` maps flex/grid styles and calls
+`compute_layout_with_measure`. Flow's native UI uses that path. Flow's separate
+scene layout applies Leafer-style rules to persistent canvas geometry, with
+atomic edit/history semantics; it does not replace GPUI's UI layout engine.
+GPUI text shaping and fallback are reused, not reimplemented.
+
 ## Host adapter and reactive edits
 
 The model/layout crate has no GPUI dependency. `TextMeasurer: Send + Sync` accepts
