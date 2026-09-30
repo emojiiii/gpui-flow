@@ -75,3 +75,7 @@ CI 配置目标为 Ubuntu 24.04、macOS 15 和 Windows（windows-latest / MSVC�
 ## 响应布局边界
 
 可选引擎提交前provider已支持普通属性/树编辑自动派生layout；没有全局异步watcher、帧合并、局部依赖调度或input/computed分离。runtime配置不序列化/不随Undo回滚；删除后恢复的新instance需宿主重新绑定。严格size/transform白名单、同一次提交/Undo及动画冲突规则见[reactive-layout.md](reactive-layout.md)
+
+## 动画序列边界
+
+已有1..64段显式正时长/easing关键帧、稀疏字段保持、跨段seek和整段一次Undo；没有自动分配时长、延迟、loop/swing、速度变化、AnimateList/嵌套timeline或motion path。全部属性从序列开始占用，跳跃tick只原子提交采样时刻，不产生逐段回调。见[animation.md](animation.md)

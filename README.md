@@ -118,6 +118,8 @@ cargo +1.98.1 run --locked -p flow-studio
 
 设计参考 [React Flow 的自定义节点思路](https://reactflow.dev/learn/customization/custom-nodes) 和 [Leafer UI 的画布编辑方式](https://github.com/leaferjs/leafer-ui)，本项目是独立 Rust 实现，不是这些项目的移植，也未声明 API 兼容。当前不为本项目源代码授予开源许可证；各第三方依赖保留其各自许可，分发前需独立审查。
 
+关键帧：`AnimationController::animate_sequence`支持有界显式时长/easing序列、稀疏字段保持和跨段seek，继续使用同一编辑器播放事务，见[动画契约](docs/animation.md)
+
 状态样式：`SceneView.state_styles` 提供selected/focus/hover/press/disabled的实色与opacity呈现层及进出平滑过渡/连续反转，不改文档或Undo；优先级、生命周期及剩余边界见[状态样式契约](docs/state-styles.md)
 
 自动响应布局：先排好初始场景，再用`FlowLayout::install_reactive`绑定引擎；普通属性/树编辑自动在同一提交中派生尺寸与位置，保留一次Undo。安装/生命周期/动画所有权边界见[reactive-layout.md](docs/reactive-layout.md)

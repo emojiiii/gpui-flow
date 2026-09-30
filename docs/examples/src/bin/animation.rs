@@ -1,4 +1,4 @@
-use gpui_flow_animation::{AnimationController, AnimationSpec, Tween};
+use gpui_flow_animation::{AnimationController, AnimationSequence, AnimationSpec, Tween};
 use gpui_flow_editor::SceneEditor;
 use gpui_flow_scene::{DisplayObject, Point, Scene, display};
 use std::time::Duration;
@@ -45,8 +45,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert!(editor.undo());
     assert_eq!(editor.engine.object(target)?.transform.tx, 0.);
     assert!(!editor.undo());
+    let token = editor.begin_playback()?;
+    let mut sequence_controller = AnimationController::new(&editor.engine);
+    let sequence = sequence_controller.animate_sequence(
+        &editor.engine,
+        target,
+        AnimationSequence::new(vec![
+            AnimationSpec::new(100, vec![Tween::translation(Point::new(50., 0.))]),
+            AnimationSpec::new(
+                200,
+                vec![
+                    Tween::translation(Point::new(100., 0.)),
+                    Tween::opacity(0.25),
+                ],
+            ),
+        ]),
+    )?;
+    sequence_controller.seek_editor(&mut editor, token, sequence, Duration::from_millis(200))?;
+    assert_eq!(editor.engine.object(target)?.transform.tx, 75.);
+    assert_eq!(editor.engine.object(target)?.style.opacity, 0.625);
+    sequence_controller.cancel_editor(&mut editor, token)?;
+    assert_eq!(editor.engine.object(target)?.transform.tx, 0.);
+    assert!(editor.redo()); // the pre-existing redo branch survives sequence cancellation
+    assert_eq!(editor.engine.object(target)?.transform.tx, 10.);
     println!(
-        "Animation interpolation, playback control and one-step commit preserve prior edit history"
+        "Animation interpolation, keyframe seek and finish/cancel preserve prior edit history"
     );
     Ok(())
 }

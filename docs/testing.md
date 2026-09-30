@@ -220,3 +220,11 @@ cargo test --locked -p gpui-flow-layout
 - 19项UI单测通过，包括实际RenderObject中间色/opacity、endpoint后active=false；workspace所有target check和strict clippy通过
 - 现有`state_styles`原生示例启用180ms进入/320ms退出；本地链接和headless行为验证，不声称人工GUI验收
 - executable `state_styles`文档验证进出/反转且Undo不被污染；发布后的三平台结果仍以精确commit的Actions为准
+
+## 显式关键帧序列增量（2026-09-30）
+
+- `flow-animation/tests/sequences.rs`：13项，覆盖累计稀疏字段/精确边界双向seek、逐段easing、大步tick与分步等价、一次多目标通知、pause/resume/完成后回退、晚段非法端点原子拒绝、64段/32属性/累计时长溢出、极大时长、未来属性归属与外部覆盖、mount epoch、编辑器finish/cancel/Undo/Redo、晚段custom几何失败的文档和时钟回滚、JSON严格解析
+- `flow-layout/tests/reactive.rs`：新增“首段只有paint、晚段抢占layout-owned transform”整序列注册拒绝回归
+- 409项headless aggregate通过（含doctest），状态过渡14项单独复验通过；9个可执行文档通过，animation例实际验证跨段seek和cancel保留旧Redo
+- animation/layout所有target严格clippy与文档严格clippy通过；共享缓存清理后workspace/all-targets原生check通过（缺失build输出自动恢复），无需全面clean
+- 现有`animations`原生示例已改成真实两段、总2秒序列；本批本地为编译验证，新的原生链接/UI及媒体完整回归由精确提交CI执行。不声称人工GUI验收

@@ -93,7 +93,7 @@ impl Lab {
             view.set_editable(false, cx);
             view
         });
-        Self { view, animations, ids: vec![], playback: None, last: Instant::now(), frame_pending: false, message: "Restart begins two 2-second animations; Finish is one Undo step, Cancel restores the baseline".into() }
+        Self { view, animations, ids: vec![], playback: None, last: Instant::now(), frame_pending: false, message: "Restart begins two 2-second keyframe sequences; Finish is one Undo step, Cancel restores the baseline".into() }
     }
     fn restart(&mut self, cx: &mut Context<Self>) {
         self.playback = Some(self.view.update(cx, |view, cx| {
@@ -104,7 +104,7 @@ impl Lab {
         self.animations = AnimationController::new(engine);
         self.ids.clear();
         let mut card = AnimationSpec::new(
-            2000,
+            1000,
             vec![
                 Tween::translation(scene::Point::new(430., 70.)),
                 Tween::opacity(0.3),
@@ -113,17 +113,35 @@ impl Lab {
         );
         card.easing = Easing::EaseInOut;
         let mut disc = AnimationSpec::new(
-            2000,
+            1000,
             vec![
                 Tween::translation(scene::Point::new(390., 280.)),
                 Tween::custom_number("radius", 75.),
             ],
         );
         disc.easing = Easing::EaseOut;
-        for (id, spec) in [("card", card), ("disc", disc)] {
+        let card_back = AnimationSpec::new(
+            1000,
+            vec![
+                Tween::translation(scene::Point::new(200., 70.)),
+                Tween::opacity(0.8),
+                Tween::fill_color(Color::hex(0x4bbfaa)),
+            ],
+        );
+        let disc_back = AnimationSpec::new(
+            1000,
+            vec![
+                Tween::translation(scene::Point::new(220., 280.)),
+                Tween::custom_number("radius", 50.),
+            ],
+        );
+        for (id, sequence) in [
+            ("card", AnimationSequence::new(vec![card, card_back])),
+            ("disc", AnimationSequence::new(vec![disc, disc_back])),
+        ] {
             self.ids.push(
                 self.animations
-                    .animate(engine, engine.handle(&id.into()).unwrap(), spec)
+                    .animate_sequence(engine, engine.handle(&id.into()).unwrap(), sequence)
                     .unwrap(),
             );
         }

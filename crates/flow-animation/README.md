@@ -36,7 +36,11 @@ remain low-level APIs for hosts that manage their own history; cancel keeps valu
 256 records and 32 tweens per record maximum. Drop releases only controller data;
 there are no timers or engine subscriptions left behind.
 
-This is one-interval interpolation, not a full keyframe timeline. No loops, delay,
+`animate_sequence` accepts 1..=64 explicit target keyframes (AnimationSpec), each
+with positive duration and easing. Missing properties hold their cumulative value;
+all endpoints preflight before reserving the union of at most 32 properties.
+The sequence shares ordinary tick/seek/pause and editor history semantics.
+This is a bounded sequence, not a full keyframe timeline. No loops, delay,
 reverse/swing, physics or motion-path animation are
 claimed. Color interpolates encoded RGBA channels. Transform animation currently
 changes translation only, preserving the other affine coefficients. See

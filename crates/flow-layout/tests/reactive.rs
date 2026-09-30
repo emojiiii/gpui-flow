@@ -496,3 +496,23 @@ fn custom_definition_panic_during_tick_preserves_every_scene_value_clock_and_pla
     assert!(e.undo());
     assert!(!e.undo());
 }
+
+#[test]
+fn later_keyframe_cannot_take_layout_owned_geometry_even_when_first_frame_is_paint_only() {
+    let (e, _, _) = setup();
+    let original = e.scene().clone();
+    let revision = e.engine.revision();
+    let mut controller = AnimationController::new(&e.engine);
+    let result = controller.animate_sequence(
+        &e.engine,
+        e.engine.handle(&"a".into()).unwrap(),
+        AnimationSequence::new(vec![
+            AnimationSpec::new(100, vec![Tween::opacity(0.5)]),
+            AnimationSpec::new(100, vec![Tween::translation(Point::new(999., 999.))]),
+        ]),
+    );
+    assert!(result.is_err());
+    assert!(controller.is_empty());
+    assert_eq!(e.scene(), &original);
+    assert_eq!(e.engine.revision(), revision);
+}

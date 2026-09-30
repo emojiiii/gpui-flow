@@ -1,5 +1,7 @@
 //! Deterministic opt-in animation using live instance handles and atomic mutations.
 #![doc = include_str!("../README.md")]
+mod sequence;
+pub use sequence::*;
 mod tween;
 pub use tween::*;
 
@@ -9,10 +11,7 @@ use gpui_flow_engine::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    time::Duration,
-};
+use std::{collections::BTreeMap, time::Duration};
 
 type PropertyUpdates = Vec<(ElementHandle, PropertyKey, Value)>;
 
@@ -104,15 +103,15 @@ pub struct AnimationInfo {
 #[derive(Debug, Clone)]
 struct Track {
     property: TweenProperty,
-    from: TweenValue,
-    to: TweenValue,
+    values: Vec<TweenValue>,
     last: TweenValue,
 }
 #[derive(Debug, Clone)]
 struct Animation {
     info: AnimationInfo,
-    easing: Easing,
+    segments: Vec<Segment>,
     tracks: Vec<Track>,
+    attachment_epoch: u64,
 }
 #[derive(Debug, Clone)]
 pub struct TickReport {
@@ -172,10 +171,10 @@ impl AnimationController {
             .filter(|animation| !matches!(animation.info.status, AnimationStatus::Cancelled(_)))
         {
             let target = animation.info.target;
-            let reason = if !engine
-                .instance(target)
-                .is_ok_and(|instance| instance.state == InstanceState::Attached)
-            {
+            let reason = if !engine.instance(target).is_ok_and(|instance| {
+                instance.state == InstanceState::Attached
+                    && instance.attachment_epoch == animation.attachment_epoch
+            }) {
                 Some(CancelReason::TargetUnavailable)
             } else if animation.info.status.active()
                 && animation.tracks.iter().any(|track| {
@@ -245,41 +244,34 @@ impl AnimationController {
         target: ElementHandle,
         spec: AnimationSpec,
     ) -> Result<AnimationId, AnimationError> {
+        self.animate_sequence(engine, target, AnimationSequence::new(vec![spec]))
+    }
+    /// Capture one initial pose and reserve the union of properties for a bounded
+    /// sequence. Missing properties hold their prior value in each segment.
+    /// All cumulative endpoints validate before registration or document writes.
+    pub fn animate_sequence(
+        &mut self,
+        engine: &SceneEngine,
+        target: ElementHandle,
+        sequence: AnimationSequence,
+    ) -> Result<AnimationId, AnimationError> {
         self.sync(engine)?;
         if self.animations.len() >= MAX_ANIMATIONS {
             return Err(AnimationError::Capacity);
         }
-        if spec.duration_ms == 0
-            || spec.tweens.is_empty()
-            || spec.tweens.len() > MAX_TWEENS_PER_ANIMATION
-        {
-            return Err(AnimationError::InvalidInput(
-                "positive duration and 1..=32 tweens required".into(),
-            ));
-        }
-        if engine.instance(target)?.state != InstanceState::Attached {
+        let instance = engine.instance(target)?;
+        if instance.state != InstanceState::Attached {
             return Err(AnimationError::Engine(EngineError::DetachedHandle));
         }
-        let mut seen = BTreeSet::new();
-        let mut tracks = Vec::new();
-        let mut endpoint = Vec::new();
-        for tween in spec.tweens {
-            if !seen.insert(tween.property.clone()) {
-                return Err(AnimationError::InvalidInput("duplicate property".into()));
-            }
-            let from = tween::read(engine, target, &tween.property)?;
-            tween::validate_pair(&tween.property, &from, &tween.to)?;
-            let (key, value) = tween::update(engine, target, &tween.property, &tween.to)?;
-            endpoint.push((target, key, value));
-            tracks.push(Track {
-                property: tween.property,
-                from: from.clone(),
-                to: tween.to,
-                last: from,
-            });
-        }
-        self.check_conflict(target, &seen.into_iter().collect::<Vec<_>>(), None)?;
-        engine.validate_properties_batch_with_origin(ChangeOrigin::Animation, endpoint)?;
+        let (segments, tracks, duration) = sequence::prepare(engine, target, sequence)?;
+        self.check_conflict(
+            target,
+            &tracks
+                .iter()
+                .map(|t| t.property.clone())
+                .collect::<Vec<_>>(),
+            None,
+        )?;
         let next = self.next.checked_add(1).ok_or(AnimationError::Capacity)?;
         let id = AnimationId {
             engine: self.engine,
@@ -294,10 +286,11 @@ impl AnimationController {
                     target,
                     status: AnimationStatus::Playing,
                     elapsed: Duration::ZERO,
-                    duration: Duration::from_millis(spec.duration_ms),
+                    duration,
                 },
-                easing: spec.easing,
+                segments,
                 tracks,
+                attachment_epoch: instance.attachment_epoch,
             },
         );
         self.next = next;
@@ -554,11 +547,17 @@ fn sample(
     elapsed: Duration,
     updates: &mut PropertyUpdates,
 ) -> Result<(), AnimationError> {
-    let t = animation
-        .easing
-        .sample(elapsed.as_secs_f64() / animation.info.duration.as_secs_f64());
+    let index = animation
+        .segments
+        .iter()
+        .position(|segment| elapsed <= segment.end)
+        .unwrap_or(animation.segments.len() - 1);
+    let segment = &animation.segments[index];
+    let progress = elapsed.saturating_sub(segment.start).as_secs_f64()
+        / (segment.end - segment.start).as_secs_f64();
     for track in &mut animation.tracks {
-        let value = tween::interpolate(&track.from, &track.to, t)?;
+        let value =
+            track.values[index].interpolate(&track.values[index + 1], progress, segment.easing)?;
         if value != tween::read(engine, animation.info.target, &track.property)? {
             let (key, data) =
                 tween::update(engine, animation.info.target, &track.property, &value)?;
