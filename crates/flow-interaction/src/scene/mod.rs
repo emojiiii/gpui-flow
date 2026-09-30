@@ -48,7 +48,7 @@ mod state_style;
 pub use state_style::*;
 
 mod action_queue;
-pub use action_queue::{ActionQueueError, SceneActionSender};
+pub use action_queue::{ActionQueueError, SceneActionSender, SceneFocusRequest};
 
 mod state_transition;
 pub use state_transition::{StateTransition, StateTransitions};

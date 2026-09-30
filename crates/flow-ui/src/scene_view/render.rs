@@ -42,6 +42,7 @@ fn state_render_objects(
 impl Render for SceneView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.subscribe_input(window, cx);
+        self.sync_requested_focus(window, cx);
         let diagnostic_entity = cx.entity().downgrade();
         let diagnostic_window = window.window_handle().window_id().as_u64();
         window.on_next_frame(move |_, cx| {

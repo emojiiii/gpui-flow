@@ -79,3 +79,7 @@ CI 配置目标为 Ubuntu 24.04、macOS 15 和 Windows（windows-latest / MSVC�
 ## 动画序列边界
 
 已有1..64段显式正时长/easing关键帧、稀疏字段保持、跨段seek和整段一次Undo；没有自动分配时长、延迟、loop/swing、速度变化、AnimateList/嵌套timeline或motion path。全部属性从序列开始占用，跳跃tick只原子提交采样时刻，不产生逐段回调。见[animation.md](animation.md)
+
+## 程序焦点边界
+
+已有显式/队列focus、不可取消Blur/Focus通知、related target和GPUI一次同步，不包含Tab遍历、焦点圈规则、IME/可访问性、自动waitLeafer挂载等待或操作系统激活。256动作预算终止监听器焦点循环；详见[focus-routing.md](focus-routing.md)

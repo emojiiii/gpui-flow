@@ -38,3 +38,7 @@
 - [Keyboard](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/event/src/Keyboard.ts) 维护按键状态与Space判断
 
 Rust采用每router隔离的状态与已有捕获/默认动作协议，没有复制上游全局键盘对象、JS before/hold事件命名或完整焦点管理器。双击、触摸/压力、原生时间戳、IME、完整多设备输入仍未接入。本批自动测试不代替真实窗口/键盘验收。
+
+## 程序焦点
+
+宿主和listener队列可更改逻辑键盘目标，Blur→Focus通知不可取消；点击PointerDown仍可preventDefault。转移清除旧Space/repeat状态，实例代际/attachment epoch不复活。GPUI同步、clear与失焦边界见[focus-routing.md](focus-routing.md)，没有实现Tab导航或IME。

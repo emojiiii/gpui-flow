@@ -157,7 +157,10 @@ Inspected pinned `leafer-in` revision
 
 Rust uses a non-mutating presentation layer instead of temporarily assigning
 properties and restoring normalStyle. No upstream implementation was copied.
-Missing: named `states`, placeholder styles, button inheritance, programmatic
-focus transfer, geometry/custom-property state changes, declarative serialization,
+Missing: named `states`, placeholder styles, button inheritance,
+geometry/custom-property state changes, declarative serialization,
 per-state transition overrides, transition delay/repeat, gradient/absent-fill
 interpolation, timeline composition and motion paths.
+
+Programmatic and deferred focus now use the same focus style/transition resolution;
+see [focus-routing.md](focus-routing.md). Focus remains distinct from selection.

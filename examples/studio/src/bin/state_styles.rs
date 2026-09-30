@@ -155,6 +155,24 @@ impl Render for Lab {
             .bg(rgb(theme.panel))
             .child("State styles")
             .child(
+                ControlButton::new("focus", "Focus card").on_click(cx.listener(
+                    |this, _, window, cx| {
+                        this.view.update(cx, |view, cx| {
+                            let handle = view.editor.engine.handle(&"card".into()).unwrap();
+                            view.focus_element(handle, window, cx).unwrap();
+                        });
+                    },
+                )),
+            )
+            .child(
+                ControlButton::new("blur", "Clear focus").on_click(cx.listener(
+                    |this, _, window, cx| {
+                        this.view
+                            .update(cx, |view, cx| view.clear_element_focus(window, cx));
+                    },
+                )),
+            )
+            .child(
                 ControlButton::new("disabled", disabled)
                     .on_click(cx.listener(|this, _, _, cx| this.toggle_disabled(cx))),
             )

@@ -13,18 +13,19 @@ Status: source research and proposed contracts, **not an implementation/parity c
 - 键盘增量：KeyUp/Space进入同一路由，首按可取消、Up/取消/失焦必清状态、重复键和焦点按实例隔离，见 [keyboard-routing.md](keyboard-routing.md)。没有新增双击/触摸/IME支持
 - 动画增量：1..64段显式关键帧、稀疏字段保持/累计端点预检、跨段seek；显式tick的平移/opacity/实色/自定义数值插值，原子跨元素更新、pause/resume/seek/cancel、旧身份保护及完成一次Undo/取消恢复基线的编辑器播放会话，见 [animation.md](animation.md)。没有完整timeline/运动路径；paint-only状态过渡由interaction呈现层提供
 - 自动尺寸增量：固定/内容尺寸、有限min/max、wrap交叉轴测量、底向上测量与顶向下安排、32-pass上限、尺寸所有权冲突拒绝；custom geometry先规范化再测量，编辑+布局一个Undo步骤。不是全局observer调度
-- 状态呈现增量：selected/focus/hover/press/disabled优先级、paint-only填色/opacity叠加、不改文档/Undo、PointerLeave和挂载期隔离已接入SceneView；已有实色/opacity进出过渡、连续反转和逐帧调度；没有命名state、placeholder、button继承或每态transition覆盖，见[state-styles.md](state-styles.md)
+- 状态呈现增量：selected/focus/hover/press/disabled优先级、paint-only填色/opacity叠加、不改文档/Undo、PointerLeave和挂载期隔离已接入SceneView；已有实色/opacity进出过渡、连续反转和逐帧调度；已有宿主程序focus/clear和native同步；没有命名state、placeholder、button继承或每态transition覆盖，见[state-styles.md](state-styles.md)
 - 同步响应布局增量：安装live绑定后普通shape/transform/树编辑在一次提交内派生，严格size/transform白名单、8轮外层固定点、失败与播放历史保护；UndoRedo精确还原且runtime配置不序列化。没有帧合并/局部依赖调度，见[reactive-layout.md](reactive-layout.md)
+- 程序焦点增量：宿主/监听队列请求，选中分离、Blur阶段处理动作、失效目标抑制、256预算及native一次同步；不含Tab/IME/无障碍，见[focus-routing.md](focus-routing.md)
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
-## 九类能力当前边界（本轮关键帧序列后）
+## 九类能力当前边界（本轮程序焦点后）
 
 这里描述已经落地的行为与仍待实现的契约；下方历史源码差距表保留研究基线。
 
 | 类别 | 当前实现 | 主要未覆盖契约 |
 |---|---|---|
-| 事件 | 实例持有、捕获/目标/冒泡、once、队列、默认动作前路由、KeyUp | 多指/压力、双击/长按、IME及完整事件族 |
-| 交互 | 选择/拖动/缩放/捕获取消、Space平移、插件策略 | 专用内外编辑工具生命周期、复杂手势 |
+| 事件 | 实例持有、捕获/目标/冒泡、once、队列、默认动作前路由、KeyUp、不可取消Blur/Focus及related target | 多指/压力、双击/长按、IME及完整事件族 |
+| 交互 | 选择/拖动/缩放/捕获取消、Space平移、插件策略、程序焦点/有界重定向/native同步 | 专用内外编辑工具生命周期、复杂手势 |
 | 外观 | 多层矢量paint、线性/径向渐变、描边bounds/picking、paint-only状态呈现及实色/opacity过渡 | 隔离透明度、blend、mask、shadow/filter |
 | 布局 | 固定/内容轴、wrap测量、嵌套有界收敛、opt-in提交前自动派生 | 帧合并/局部依赖调度、百分比、反向、shrink、文字内在测量 |
 | 数据 | 类型属性/schema/default、原子变化、dirty分类、JSON | 完整input/computed分离及Leafer导入导出 |

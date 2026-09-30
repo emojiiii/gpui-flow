@@ -123,3 +123,5 @@ cargo +1.98.1 run --locked -p flow-studio
 状态样式：`SceneView.state_styles` 提供selected/focus/hover/press/disabled的实色与opacity呈现层及进出平滑过渡/连续反转，不改文档或Undo；优先级、生命周期及剩余边界见[状态样式契约](docs/state-styles.md)
 
 自动响应布局：先排好初始场景，再用`FlowLayout::install_reactive`绑定引擎；普通属性/树编辑自动在同一提交中派生尺寸与位置，保留一次Undo。安装/生命周期/动画所有权边界见[reactive-layout.md](docs/reactive-layout.md)
+
+程序焦点：`SceneView::focus_element/clear_element_focus`与router/deferred listener入口保留selection独立，使用实例身份、Blur→Focus和有界重定向；见[焦点契约](docs/focus-routing.md)

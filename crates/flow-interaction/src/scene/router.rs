@@ -1,6 +1,7 @@
 //! Tree listeners run before default behaviors. Gesture cleanup is mandatory even
 //! when pointer-up is prevented; callbacks cannot strand an editor transaction.
-use super::ScenePluginHost;
+mod focus;
+use super::{ScenePluginHost, action_queue::SceneAction};
 use crate::{CanvasEvent, DispatchReport, HitTarget, KeyCode, PointerButton};
 use gpui_flow_editor::SceneEditor;
 use gpui_flow_engine::{ElementHandle, InstanceState, SceneEngine};
@@ -25,6 +26,9 @@ pub struct SceneEventRouter {
 }
 #[derive(Default)]
 pub struct RoutedReport {
+    /// An explicit host/listener focus request was processed. Native adapters
+    /// should synchronize once to the final live logical target.
+    pub focus_requested: bool,
     pub default: DispatchReport,
     pub events: Vec<SceneEvent>,
     pub errors: Vec<String>,
@@ -127,7 +131,17 @@ impl SceneEventRouter {
         &mut self,
         editor: &mut SceneEditor,
         host: &mut ScenePluginHost,
+        event: CanvasEvent,
+    ) -> RoutedReport {
+        self.actions.begin_operation();
+        self.dispatch_with_budget(editor, host, event, &mut 256)
+    }
+    fn dispatch_with_budget(
+        &mut self,
+        editor: &mut SceneEditor,
+        host: &mut ScenePluginHost,
         mut event: CanvasEvent,
+        action_budget: &mut usize,
     ) -> RoutedReport {
         let mut out = RoutedReport::default();
         // Instance loss cannot leave keyboard defaults armed for a replacement
@@ -258,7 +272,9 @@ impl SceneEventRouter {
             self.hover_epoch = Self::epoch(&editor.engine, hit);
         }
         if matches!(event, CanvasEvent::PointerDown(_)) && self.pressed.is_some() {
-            let cancelled = self.dispatch(editor, host, CanvasEvent::PointerCancel);
+            let cancelled =
+                self.dispatch_with_budget(editor, host, CanvasEvent::PointerCancel, action_budget);
+            out.focus_requested |= cancelled.focus_requested;
             out.events.extend(cancelled.events);
             out.errors.extend(cancelled.errors);
         }
@@ -314,14 +330,13 @@ impl SceneEventRouter {
         if let CanvasEvent::PointerDown(p) = &event
             && !prevented
         {
-            if self.focus != hit {
-                self.emit(editor, self.focus, EventKind::Blur, None, &mut out);
-                self.emit(editor, hit, EventKind::Focus, None, &mut out);
-                self.focus = hit;
-                self.focus_epoch = Self::epoch(&editor.engine, hit);
+            self.transfer_focus(editor, host, hit, false, &mut out, action_budget);
+            // A listener-requested focus transfer may have cancelled the new
+            // default capture. Do not re-arm its press/click after that transfer.
+            if !out.focus_requested {
+                self.pressed = hit.map(|h| (h, p.position, p.pointer_id, p.button));
+                self.pressed_epoch = Self::epoch(&editor.engine, hit);
             }
-            self.pressed = hit.map(|h| (h, p.position, p.pointer_id, p.button));
-            self.pressed_epoch = Self::epoch(&editor.engine, hit);
         }
         if matching_up
             && let Some((handle, start, _, button)) = self.pressed.take()
@@ -340,45 +355,117 @@ impl SceneEventRouter {
             self.hover = None;
         }
         if matches!(event, CanvasEvent::FocusLost) {
-            self.emit(editor, self.focus, EventKind::Blur, None, &mut out);
-            self.focus = None;
+            self.transfer_focus(editor, host, None, false, &mut out, action_budget);
             self.hover = None;
         }
+        self.finish_dispatch(
+            editor,
+            host,
+            &mut out,
+            action_budget,
+            !matches!(event, CanvasEvent::FocusLost),
+        );
+        out
+    }
+    fn finish_dispatch(
+        &mut self,
+        editor: &mut SceneEditor,
+        host: &mut ScenePluginHost,
+        out: &mut RoutedReport,
+        budget: &mut usize,
+        allow_focus: bool,
+    ) {
+        if let Some(target) = self.drain_actions(editor, host, out, budget, allow_focus) {
+            self.transfer_focus(editor, host, target, true, out, budget);
+        }
+        self.retire_invalid(editor, host, out);
+    }
+    fn drain_actions(
+        &mut self,
+        editor: &mut SceneEditor,
+        host: &mut ScenePluginHost,
+        out: &mut RoutedReport,
+        budget: &mut usize,
+        allow_focus: bool,
+    ) -> Option<Option<ElementHandle>> {
         let revision = editor.engine.revision();
         let selection = editor.selection.clone();
         let viewport = editor.viewport;
-        for _ in 0..256 {
-            let Ok((origin, command)) = self.actions.receiver.try_recv() else {
+        let mut focus = None;
+        while *budget > 0 {
+            let Some((origin, action)) = self.actions.next() else {
                 break;
             };
+            *budget -= 1;
             if Self::id(editor, origin).is_none() {
                 out.errors
                     .push("discarded action from a detached or destroyed instance".into());
                 continue;
             }
-            if let Err(error) = host.execute(editor, command) {
-                out.errors.push(error.to_string());
+            match action {
+                SceneAction::Command(command) => {
+                    if let Err(error) = host.execute(editor, *command) {
+                        out.errors.push(error.to_string());
+                    }
+                }
+                SceneAction::Focus(request) => {
+                    if !allow_focus {
+                        out.errors
+                            .push("focus request ignored during explicit focus clearing".into());
+                        continue;
+                    }
+                    match request.validate(&editor.engine) {
+                        Ok(()) => focus = Some(request),
+                        Err(error) => out.errors.push(error.to_string()),
+                    }
+                }
             }
         }
+        if *budget == 0 {
+            let discarded = self.actions.discard_pending_focus();
+            if discarded > 0 || out.focus_requested {
+                let error = "action budget exhausted; remaining focus redirects discarded";
+                if !out.errors.iter().any(|e| e == error) {
+                    out.errors.push(error.into());
+                }
+            }
+        }
+        self.retire_invalid(editor, host, out);
+        out.default.document_changed |= revision != editor.engine.revision();
+        out.default.selection_changed |= selection != editor.selection;
+        out.default.viewport_changed |= viewport != editor.viewport;
+        focus.and_then(|request| match request.validate(&editor.engine) {
+            Ok(()) => Some(request.target()),
+            Err(error) => {
+                out.errors.push(error.to_string());
+                None
+            }
+        })
+    }
+    fn retire_invalid(
+        &mut self,
+        editor: &mut SceneEditor,
+        host: &mut ScenePluginHost,
+        out: &mut RoutedReport,
+    ) {
         // Listener actions and keyboard defaults may remove/reset their own
         // target. Retire focus/Space immediately, not on the next input tick.
         if self
             .focus
-            .is_some_and(|handle| Self::id(editor, handle).is_none())
+            .is_some_and(|handle| !Self::current(&editor.engine, handle, self.focus_epoch))
         {
             self.focus = None;
             self.clear_keys();
         }
         if self
             .hover
-            .is_some_and(|handle| Self::id(editor, handle).is_none())
+            .is_some_and(|handle| !Self::current(&editor.engine, handle, self.hover_epoch))
         {
             self.hover = None;
         }
-        if self
-            .pressed
-            .is_some_and(|(handle, _, _, _)| Self::id(editor, handle).is_none())
-        {
+        if self.pressed.is_some_and(|(handle, _, _, _)| {
+            !Self::current(&editor.engine, handle, self.pressed_epoch)
+        }) {
             self.pressed = None;
             self.clear_keys();
             let cancelled = host.dispatch(editor, CanvasEvent::PointerCancel);
@@ -391,10 +478,6 @@ impl SceneEventRouter {
             out.default.default_prevented |= cancelled.default_prevented;
             out.default.propagation_stopped |= cancelled.propagation_stopped;
         }
-        out.default.document_changed |= revision != editor.engine.revision();
-        out.default.selection_changed |= selection != editor.selection;
-        out.default.viewport_changed |= viewport != editor.viewport;
-        out
     }
 }
 fn mods(m: crate::Modifiers) -> InputModifiers {

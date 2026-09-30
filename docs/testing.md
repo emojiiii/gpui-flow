@@ -228,3 +228,11 @@ cargo test --locked -p gpui-flow-layout
 - 409项headless aggregate通过（含doctest），状态过渡14项单独复验通过；9个可执行文档通过，animation例实际验证跨段seek和cancel保留旧Redo
 - animation/layout所有target严格clippy与文档严格clippy通过；共享缓存清理后workspace/all-targets原生check通过（缺失build输出自动恢复），无需全面clean
 - 现有`animations`原生示例已改成真实两段、总2秒序列；本批本地为编译验证，新的原生链接/UI及媒体完整回归由精确提交CI执行。不声称人工GUI验收
+
+## 程序焦点增量（2026-09-30，本地验收）
+
+- `flow-interaction/tests/focus.rs`：22项，覆盖Blur→Focus/related target/不可取消、selection独立、错误handle不动旧输入、Space/repeat/键路由、capture取消且不重新触发Click、状态过渡与Undo、destroy/reset/attachment epoch、Blur期间删除/重置/重定向、只读策略、失焦禁止监听器再抢焦点、互跳预算及下一输入恢复、普通编辑FIFO、两端mount token过期
+- `scene/action_queue.rs`：2项队列单测，覆盖满256交错队列原子保留所有已接收普通命令、并发focus生产者在预算门关闭后不能补入、容量/关闭和下一operation恢复
+- 本地最终433项模型/文档测试、7项真实FFmpeg/SDL dummy、19项UI单测、10个可执行文档通过；workspace/all-targets check、strict clippy和fmt通过
+- Linux原生`state_styles`已链接，包含真实Focus card/Clear focus控制；没有人工GUI操作验收。清理缓存后依赖自动恢复；最终原生构建使用单job与strip-debug链接，测试均在最终代码上通过
+- 按用户要求后续提交使用`[skip ci]`，GitHub Actions待次日额度/账户恢复后验证；本批不宣称macOS/Windows已验。Workflow保持前批原样，新focus可执行文档本地已运行，现有CI模型测试会包含全部focus回归

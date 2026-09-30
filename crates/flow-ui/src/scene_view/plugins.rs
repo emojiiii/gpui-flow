@@ -98,11 +98,17 @@ impl SceneView {
         }
         self.interaction_window = Some(id);
         self.subscriptions.clear();
-        self.subscriptions.push(
-            cx.on_focus_out(&self.focus.clone(), window, |this, _, _, cx| {
-                this.focus_lost(cx)
-            }),
-        );
+        self.subscriptions.push(cx.on_focus_out(
+            &self.focus.clone(),
+            window,
+            |this, _, window, cx| {
+                // A host can return native focus before an older focus-out
+                // notification is delivered; do not clear that new owner.
+                if !this.focus.is_focused(window) {
+                    this.focus_lost(cx);
+                }
+            },
+        ));
         self.subscriptions
             .push(cx.observe_window_activation(window, |this, window, cx| {
                 if !window.is_window_active() {

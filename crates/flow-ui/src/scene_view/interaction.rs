@@ -38,6 +38,10 @@ impl SceneView {
         let report = self
             .router
             .dispatch(&mut self.editor, &mut self.interactions, event);
+        self.apply_routed_report(report, cx);
+    }
+    fn apply_routed_report(&mut self, report: input::scene::RoutedReport, cx: &mut Context<Self>) {
+        self.pending_native_focus |= report.focus_requested;
         for event in report.events {
             cx.emit(SceneViewEvent::Pointer(Box::new(event)));
         }
@@ -45,6 +49,71 @@ impl SceneView {
             self.interaction_error = Some(error.clone());
         }
         self.apply_input_report(report.default, cx);
+    }
+
+    /// Focus an attached live element without selecting it. Returns false if the
+    /// native window declines focus (for example when focus is disabled), or if
+    /// a queued listener action removes the logical target during notification.
+    /// This does not activate an OS window or implement Tab/IME/accessibility.
+    pub fn focus_element(
+        &mut self,
+        handle: gpui_flow_engine::ElementHandle,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Result<bool, gpui_flow_engine::EngineError> {
+        self.editor.engine.object(handle)?;
+        if self.editor.engine.instance(handle)?.state != gpui_flow_engine::InstanceState::Attached {
+            return Err(gpui_flow_engine::EngineError::DetachedHandle);
+        }
+        window.focus(&self.focus, cx);
+        if !self.focus.is_focused(window) {
+            return Ok(false);
+        }
+        let report =
+            self.router
+                .set_focus(&mut self.editor, &mut self.interactions, Some(handle))?;
+        self.apply_routed_report(report, cx);
+        self.pending_native_focus = false;
+        let accepted = self.router.focused(&self.editor.engine) == Some(handle);
+        if self.router.focused(&self.editor.engine).is_none() && self.focus.is_focused(window) {
+            window.blur(cx);
+        }
+        Ok(accepted)
+    }
+    pub fn focused_element(&self) -> Option<gpui_flow_engine::ElementHandle> {
+        self.router.focused(&self.editor.engine)
+    }
+    /// Clear logical focus and this view's native focus only. Another widget's
+    /// native focus is never blurred by this operation.
+    pub fn clear_element_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let report = self
+            .router
+            .clear_focus(&mut self.editor, &mut self.interactions);
+        self.apply_routed_report(report, cx);
+        self.pending_native_focus = false;
+        if self.focus.is_focused(window) {
+            window.blur(cx);
+        }
+    }
+
+    pub(super) fn sync_requested_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !std::mem::take(&mut self.pending_native_focus) {
+            return;
+        }
+        if self.router.focused(&self.editor.engine).is_some() {
+            window.focus(&self.focus, cx);
+            if !self.focus.is_focused(window) {
+                let report = self
+                    .router
+                    .clear_focus(&mut self.editor, &mut self.interactions);
+                self.apply_routed_report(report, cx);
+                self.pending_native_focus = false;
+                self.interaction_error =
+                    Some("native window declined the queued focus request".into());
+            }
+        } else if self.focus.is_focused(window) {
+            window.blur(cx);
+        }
     }
 
     pub(super) fn down(
@@ -107,6 +176,7 @@ impl SceneView {
     }
     pub(super) fn focus_lost(&mut self, cx: &mut Context<Self>) {
         self.plugin_event(input::CanvasEvent::FocusLost, cx);
+        self.pending_native_focus = false;
     }
     pub(super) fn scroll(&mut self, event: &ScrollWheelEvent, cx: &mut Context<Self>) {
         let delta = match event.delta {
