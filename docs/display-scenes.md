@@ -60,7 +60,7 @@ let scene = Scene::from_json(&json)?;
 
 - 点击 / Shift-click 选择；Ctrl-click 选父级
 - 拖动图形移动；右下选择柄沿本地坐标缩放
-- Shift-drag 空白框选；空白拖动或中键平移
+- 左键拖动空白框选，Shift 追加；Space+左键或中键平移
 - Ctrl/Cmd-wheel 锚点缩放；F 适配
 - R / Shift-R 旋转 ±15°，+ / - 缩放；Delete 删除
 - Ctrl/Cmd-Z、Shift-Z / Y 撤销重做；Esc 取消当前手势
@@ -109,3 +109,6 @@ cargo run --locked -p flow-studio --bin composition
 ```
 
 原语 Gallery 展示独立 scene；Composition 展示独立 UI 组件和 FlowCanvas 宿主组合。两者不依赖付费服务。
+
+
+SceneView 使用 `interaction::scene::ScenePluginHost`，与 FlowCanvas 共用 CanvasPlugin 泛型协议、CanvasEvent、PluginLifecycle 和 AccessPolicy。场景文档命令为 SceneCommand，图文档命令为 CanvasCommand；二者不能混用。set_editable、set_access_policy、install_plugin、uninstall_plugin、replace_plugin、set_plugin_enabled 均经相同的取消/只读规则。SceneSnappingPlugin 可选安装；场景没有图端口，因此不安装 connection 插件。

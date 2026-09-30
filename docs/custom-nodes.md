@@ -152,7 +152,10 @@ canvas.theme = FlowTheme {
     ..FlowTheme::default()
 };
 canvas.show_grid = true;
-canvas.snap_to_grid = true;
+canvas.replace_plugin(
+    gpui_flow::interaction::plugins::SnappingPlugin::default().with_grid(24.),
+    cx,
+)?;
 canvas.options = gpui_flow::FlowOptions::canvas_only();
 ```
 

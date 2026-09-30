@@ -99,7 +99,7 @@ world  = (screen - pan) / zoom
 | API | JSON 内容 | 适用场景 |
 | --- | --- | --- |
 | `Graph::to_json/from_json` | Graph 本身 | 图拓扑与节点数据交换 |
-| `FlowCanvas::export_json/import_json` | Graph 本身 | Studio 快照、Ctrl/Cmd + S、宿主导入 |
+| `FlowCanvas::export_json/import_json` | Graph 本身 | Studio 快照、Ctrl/Cmd + Shift + S、宿主导入 |
 | `FlowDocument::to_json/from_json` | `{ graph, viewport }` | 连同相机保存 |
 | `Editor::to_json/from_json` | FlowDocument | 宿主持久化完整可视文档状态 |
 | `save_document/load_document` | FlowDocument 文件，最多 32 MiB | 带校验的磁盘保存/读取 |
@@ -145,3 +145,6 @@ fn save_and_restore(editor: &mut Editor) -> Result<(), Box<dyn std::error::Error
 ## 通用显示场景层
 
 本页专门描述节点图。通用 DisplayObject/Scene、SceneEditor、SceneView 与逐组件UI属于独立分层，见[显示场景架构](display-scenes.md)与[组件组合](components.md)，不要把节点图 Group 当作通用场景容器。
+
+
+输入行为现在由 [gpui-flow-interaction](plugins.md) 承担。FlowCanvas 与 SceneView 使用相同的泛型插件协议和生命周期/能力模型，由 Graph Editor 与 SceneEditor 的具体命令适配器提交变化；渲染器不持有拖动/连线事务。

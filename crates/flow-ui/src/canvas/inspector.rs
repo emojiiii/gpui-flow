@@ -68,17 +68,19 @@ impl FlowCanvas {
                     if matches!(event, InputEvent::Change) {
                         let value = state.read(cx).value().to_string();
                         let id = node.id.clone();
-                        let result = this.editor.transaction("Edit node payload", |g| {
-                            let n = g
-                                .nodes
-                                .get_mut(&id)
-                                .ok_or_else(|| model::GraphError::MissingNode(id.clone()))?;
-                            if let Some(data) = n.data.as_object_mut() {
-                                data.insert(key.into(), serde_json::Value::String(value));
+                        if let Some(model) = this.editor.graph().node(&id) {
+                            let mut data = model.data.clone();
+                            if let Some(object) = data.as_object_mut() {
+                                object.insert(key.into(), serde_json::Value::String(value));
+                                let _ = this.execute_command(
+                                    gpui_flow_interaction::CanvasCommand::SetNodeData {
+                                        node: id,
+                                        data,
+                                    },
+                                    cx,
+                                );
                             }
-                            Ok(())
-                        });
-                        this.report(result, cx);
+                        }
                     }
                 },
             ));

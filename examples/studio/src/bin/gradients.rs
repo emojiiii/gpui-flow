@@ -209,7 +209,12 @@ impl Render for Gallery {
                 ControlButton::new("rotate", "Rotate +15°").on_click(cx.listener(
                     |this, _, _, cx| {
                         this.view.update(cx, |view, cx| {
-                            let _ = view.editor.rotate_selection(15.0);
+                            let _ = view.execute_command(
+                                gpui_flow::interaction::scene::SceneCommand::RotateSelection {
+                                    degrees: 15.0,
+                                },
+                                cx,
+                            );
                             cx.notify();
                         });
                     },

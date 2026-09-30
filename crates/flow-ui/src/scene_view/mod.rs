@@ -1,5 +1,6 @@
 //! Retained-scene canvas, independent of node graphs, media runners and Studio chrome.
 mod interaction;
+mod plugins;
 mod render;
 use crate::{
     FlowTheme,
@@ -9,7 +10,7 @@ use gpui::{prelude::*, *};
 use gpui_flow_core::{Point as WorldPoint, Size as WorldSize};
 use gpui_flow_editor::SceneEditor;
 use gpui_flow_scene::{
-    Affine, DisplayId, EventDispatcher, EventKind, HitTestOptions, Scene, SceneError, SceneEvent,
+    DisplayId, EventDispatcher, EventKind, HitTestOptions, Scene, SceneError, SceneEvent,
 };
 
 pub enum SceneViewEvent {
@@ -18,26 +19,6 @@ pub enum SceneViewEvent {
     Pointer(SceneEvent),
 }
 impl EventEmitter<SceneViewEvent> for SceneView {}
-#[derive(Clone)]
-enum Gesture {
-    Pan {
-        last: WorldPoint,
-    },
-    Move {
-        last: WorldPoint,
-    },
-    Resize {
-        id: DisplayId,
-        inverse: Affine,
-        original: Affine,
-        bounds: gpui_flow_core::Rect,
-        start_local: WorldPoint,
-    },
-    Marquee {
-        start: WorldPoint,
-        current: WorldPoint,
-    },
-}
 /// Embed this view in any host shell. Attach core event listeners to `dispatcher`.
 /// Actual content lives in `editor.scene`; no demo-specific UI or provider runs occur here.
 pub struct SceneView {
@@ -45,14 +26,18 @@ pub struct SceneView {
     pub theme: FlowTheme,
     pub dispatcher: EventDispatcher,
     pub show_grid: bool,
-    pub editable: bool,
+    pub interactions: gpui_flow_interaction::scene::ScenePluginHost,
     pub diagnostics: Vec<RenderIssue>,
     pub gradient_diagnostics: Vec<crate::display::GradientRenderIssue>,
     pub renderers: crate::display::DisplayRegistry,
     focus: FocusHandle,
     origin: WorldPoint,
     extent: WorldSize,
-    gesture: Option<Gesture>,
+    subscriptions: Vec<Subscription>,
+    interaction_window: Option<u64>,
+    space_held: bool,
+    last_pointer: WorldPoint,
+    pub interaction_error: Option<String>,
     pressed: Option<(DisplayId, WorldPoint)>,
 }
 impl SceneView {
@@ -62,38 +47,51 @@ impl SceneView {
             theme: FlowTheme::default(),
             dispatcher: EventDispatcher::default(),
             show_grid: true,
-            editable: true,
+            interactions: gpui_flow_interaction::scene::ScenePluginHost::with_defaults(),
             diagnostics: vec![],
             gradient_diagnostics: vec![],
             renderers: crate::display::DisplayRegistry::default(),
             focus: cx.focus_handle(),
             origin: WorldPoint::ZERO,
             extent: WorldSize::new(1000., 700.),
-            gesture: None,
+            subscriptions: vec![],
+            interaction_window: None,
+            space_held: false,
+            last_pointer: WorldPoint::ZERO,
+            interaction_error: None,
             pressed: None,
         })
     }
+    pub fn is_editable(&self) -> bool {
+        self.interactions.policy().editable
+    }
     pub fn fit(&mut self) {
-        if let Ok(Some(bounds)) = self.editor.scene.visible_bounds() {
-            self.editor.viewport.fit(bounds, self.extent, 50.);
+        if let Err(error) = self.interactions.execute(
+            &mut self.editor,
+            gpui_flow_interaction::scene::SceneCommand::Fit {
+                canvas: self.extent,
+                padding: 50.,
+            },
+        ) {
+            self.interaction_error = Some(error.to_string());
         }
     }
     pub fn set_editable(&mut self, editable: bool, cx: &mut Context<Self>) {
-        self.editable = editable;
-        if !editable {
-            self.editor.cancel_edit();
-            self.gesture = None;
-            self.pressed = None;
-        }
-        cx.notify();
+        self.cancel_input(cx);
+        let report = self.interactions.set_editable(editable, &mut self.editor);
+        self.apply_input_report(report, cx);
     }
-    pub fn set_scene(&mut self, scene: Scene, cx: &mut Context<Self>) -> Result<(), SceneError> {
-        self.editor = SceneEditor::new(scene)?;
-        self.gesture = None;
-        self.pressed = None;
+    pub fn set_scene(
+        &mut self,
+        scene: Scene,
+        cx: &mut Context<Self>,
+    ) -> Result<(), gpui_flow_interaction::scene::SceneInteractionError> {
+        self.cancel_input(cx);
+        self.execute_command(
+            gpui_flow_interaction::scene::SceneCommand::LoadScene(scene),
+            cx,
+        )?;
         self.dispatcher = EventDispatcher::default();
-        cx.emit(SceneViewEvent::Changed);
-        cx.notify();
         Ok(())
     }
     fn local(&self, p: gpui::Point<Pixels>) -> WorldPoint {
@@ -135,27 +133,27 @@ impl SceneView {
             Err(_) => false,
         }
     }
-    fn finish(&mut self, cx: &mut Context<Self>) {
-        if let Some(Gesture::Marquee { start, current }) = self.gesture.take() {
-            let rect = gpui_flow_core::Rect::from_points(start, current);
-            if let Ok(selection) =
-                gpui_flow_editor::SceneSelection::in_rect(&self.editor.scene, rect)
-            {
-                self.editor.selection = selection;
+    fn resize_target(&self) -> Option<DisplayId> {
+        if !self.is_editable()
+            || !self.interactions.is_enabled("resize")
+            || self.editor.selection.ids.len() != 1
+        {
+            return None;
+        }
+        let id = self.editor.selection.ids.iter().next()?.clone();
+        let mut current = Some(id.clone());
+        while let Some(ancestor) = current {
+            let node = self.editor.scene.get(&ancestor)?;
+            if node.object.locked {
+                return None;
             }
-            cx.emit(SceneViewEvent::SelectionChanged);
+            current = node.parent.clone();
         }
-        if self.editable {
-            self.editor.commit_edit();
-        } else {
-            self.editor.cancel_edit();
-        }
-        cx.emit(SceneViewEvent::Changed);
-        cx.notify();
+        self.selection_corners(&id)?;
+        Some(id)
     }
     fn selection_corners(&self, id: &DisplayId) -> Option<[WorldPoint; 4]> {
-        let node = self.editor.scene.get(id)?;
-        let bounds = node.object.paint_bounds()?;
+        let bounds = self.editor.scene.local_bounds(id).ok()??;
         let transform = self.editor.scene.world_transform(id).ok()?;
         Some(
             [

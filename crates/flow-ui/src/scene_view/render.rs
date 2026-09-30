@@ -2,6 +2,7 @@ use super::*;
 use crate::display::DisplayElement;
 impl Render for SceneView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.subscribe_input(window, cx);
         let diagnostic_entity = cx.entity().downgrade();
         let diagnostic_window = window.window_handle().window_id().as_u64();
         window.on_next_frame(move |_, cx| {
@@ -74,12 +75,8 @@ impl Render for SceneView {
             .iter()
             .filter_map(|id| self.selection_corners(id))
             .collect();
-        let marquee = match self.gesture {
-            Some(Gesture::Marquee { start, current }) => {
-                Some(gpui_flow_core::Rect::from_points(start, current))
-            }
-            _ => None,
-        };
+        let marquee = self.interactions.marquee();
+        let show_resize = self.resize_target().is_some();
         let overlay = canvas(
             |_, _, _| (),
             move |bounds, _, window, _| {
@@ -94,10 +91,15 @@ impl Render for SceneView {
                     if let Ok(path) = path.build() {
                         window.paint_path(path, rgb(theme.accent));
                     }
-                    window.paint_quad(fill(
-                        Bounds::new(p(corners[2]) - point(px(4.), px(4.)), size(px(8.), px(8.))),
-                        rgb(theme.accent),
-                    ));
+                    if show_resize {
+                        window.paint_quad(fill(
+                            Bounds::new(
+                                p(corners[2]) - point(px(4.), px(4.)),
+                                size(px(8.), px(8.)),
+                            ),
+                            rgb(theme.accent),
+                        ));
+                    }
                 }
                 if let Some(rect) = marquee {
                     let r = viewport.world_rect_to_screen(rect);
@@ -155,8 +157,23 @@ impl Render for SceneView {
                     )),
             );
         }
-        view.on_mouse_down(MouseButton::Left, cx.listener(Self::down))
+        if let Some(error) = &self.interaction_error {
+            view = view.child(
+                div()
+                    .absolute()
+                    .bottom_2()
+                    .left_2()
+                    .p_2()
+                    .bg(rgb(theme.panel))
+                    .text_color(rgb(0xf5b971))
+                    .text_xs()
+                    .child(error.clone()),
+            );
+        }
+        view.cursor(self.input_cursor())
+            .on_mouse_down(MouseButton::Left, cx.listener(Self::down))
             .on_mouse_down(MouseButton::Middle, cx.listener(Self::down))
+            .on_mouse_down(MouseButton::Right, cx.listener(Self::down))
             .on_mouse_move(cx.listener(|this, event, _, cx| this.moved(event, cx)))
             .on_mouse_up(
                 MouseButton::Left,
@@ -164,27 +181,30 @@ impl Render for SceneView {
             )
             .on_mouse_up_out(
                 MouseButton::Left,
-                cx.listener(|this, event, _, cx| this.up(event, cx)),
+                cx.listener(|this, _, _, cx| this.cancel_input(cx)),
             )
             .on_mouse_up(
                 MouseButton::Middle,
                 cx.listener(|this, event, _, cx| this.up(event, cx)),
             )
-            .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, _, cx| {
-                let delta = match event.delta {
-                    ScrollDelta::Pixels(p) => WorldPoint::new(p.x.into(), p.y.into()),
-                    ScrollDelta::Lines(p) => WorldPoint::new(p.x * 24., p.y * 24.),
-                };
-                if event.modifiers.control || event.modifiers.platform {
-                    this.editor.viewport.zoom_at(
-                        this.local(event.position),
-                        this.editor.viewport.zoom * (-delta.y * 0.004).exp(),
-                    );
-                } else {
-                    this.editor.viewport.pan_by(delta);
+            .on_mouse_up_out(
+                MouseButton::Middle,
+                cx.listener(|this, _, _, cx| this.cancel_input(cx)),
+            )
+            .on_mouse_up(
+                MouseButton::Right,
+                cx.listener(|this, event, _, cx| this.up(event, cx)),
+            )
+            .on_mouse_up_out(
+                MouseButton::Right,
+                cx.listener(|this, _, _, cx| this.cancel_input(cx)),
+            )
+            .on_scroll_wheel(cx.listener(|this, event, _, cx| this.scroll(event, cx)))
+            .on_key_down(cx.listener(|this, event, window, cx| {
+                if this.focus.is_focused(window) {
+                    this.key(event, cx);
                 }
-                cx.notify();
             }))
-            .on_key_down(cx.listener(|this, event, _, cx| this.key(event, cx)))
+            .on_key_up(cx.listener(|this, event, _, cx| this.key_up(event, cx)))
     }
 }

@@ -79,6 +79,7 @@ impl FlowCanvas {
         let theme = self.theme;
         let id = node.id.clone();
         let resize_id = id.clone();
+        let body_id = id.clone();
         let size = node.size;
         let color = kind_color(&node.kind);
         let mut card = NodeFrame::new(
@@ -92,71 +93,104 @@ impl FlowCanvas {
         .theme(theme)
         .color(color)
         .body(self.node_body(node, window, cx))
+        .header_cursor(if self.interactions.has_capture() {
+            self.canvas_cursor()
+        } else if self.interactions.policy().editable
+            && self.interactions.is_enabled("drag")
+            && !node.locked
+            && (self.interactions.is_enabled("selection")
+                || self
+                    .editor
+                    .selection
+                    .expanded_nodes(self.editor.graph())
+                    .contains(&node.id))
+        {
+            CursorStyle::OpenHand
+        } else {
+            CursorStyle::Arrow
+        })
+        .dragging(self.interactions.capture_owner() == Some("drag") && selected)
         .on_header_mouse_down(
             cx.listener(move |this, event: &MouseDownEvent, window, cx| {
-                cx.stop_propagation();
-                window.focus(&this.focus, cx);
-                if event.modifiers.shift {
-                    if !this.editor.selection.nodes.insert(id.clone()) {
-                        this.editor.selection.nodes.remove(&id);
-                    }
-                } else if !this.editor.selection.nodes.contains(&id)
-                    || !this.editor.selection.groups.is_empty()
-                    || !this.editor.selection.edges.is_empty()
-                {
-                    this.editor.selection.clear();
-                    this.editor.selection.nodes.insert(id.clone());
-                }
-                if this.editor.graph().node(&id).is_some_and(|n| !n.locked) {
-                    this.finish_gesture(cx);
-                    if let Err(e) = this.editor.begin_transaction("Move nodes") {
-                        this.message = e.to_string();
-                        return;
-                    }
-                    let p = this.world(event.position);
-                    this.gesture = Some(Gesture::Move {
-                        last: if this.snap_to_grid { p.snapped(20.) } else { p },
-                    });
-                }
-                cx.emit(FlowEvent::SelectionChanged);
-                cx.notify();
+                this.pointer_down(
+                    gpui_flow_interaction::HitTarget::Node(id.clone()),
+                    event,
+                    window,
+                    cx,
+                );
             }),
         )
-        .on_resize_mouse_down(cx.listener(
-            move |this, event: &MouseDownEvent, window, cx| {
-                cx.stop_propagation();
-                window.focus(&this.focus, cx);
-                this.finish_gesture(cx);
-                if let Err(e) = this.editor.begin_transaction("Resize node") {
-                    this.message = e.to_string();
-                    return;
-                }
-                this.gesture = Some(Gesture::Resize {
-                    node: resize_id.clone(),
-                    start: this.world(event.position),
-                    size,
-                });
-                cx.notify();
-            },
-        ));
+        .on_mouse_down(
+            cx.listener(move |this, event: &MouseDownEvent, window, cx| {
+                this.pointer_down(
+                    gpui_flow_interaction::HitTarget::Node(body_id.clone()),
+                    event,
+                    window,
+                    cx,
+                );
+            }),
+        );
+        if !node.locked
+            && self.interactions.policy().editable
+            && self.interactions.is_enabled("resize")
+        {
+            card = card.on_resize_mouse_down(cx.listener(
+                move |this, event: &MouseDownEvent, window, cx| {
+                    this.pointer_down(
+                        gpui_flow_interaction::HitTarget::ResizeHandle(resize_id.clone()),
+                        event,
+                        window,
+                        cx,
+                    );
+                },
+            ));
+        }
         for port in &node.ports {
             let anchor = node.port_position(&port.id).unwrap() - node.position;
             let port_ref = PortRef::new(node.id.clone(), port.id.clone());
-            let active = self.connecting.as_ref() == Some(&port_ref);
+            let connection = self.interactions.connection();
+            let state = if !self.interactions.policy().editable
+                || !self.interactions.is_enabled("connection")
+            {
+                PortState::Disabled
+            } else if connection.source() == Some(&port_ref) {
+                PortState::Source
+            } else if connection.target() == Some(&port_ref) {
+                PortState::Target
+            } else if connection.active() && connection.hovered() == Some(&port_ref) {
+                PortState::Rejected
+            } else if connection.active()
+                && connection
+                    .validate_target(self.editor.graph(), &port_ref)
+                    .is_ok()
+            {
+                PortState::Compatible
+            } else if connection.active()
+                || model::ConnectionDrag::can_start(self.editor.graph(), &port_ref).is_err()
+            {
+                PortState::Disabled
+            } else {
+                PortState::Idle
+            };
             card = card.child(
                 PortHandle::from_port(
                     SharedString::from(format!("port-{}-{}", node.id, port.id)),
                     port,
                 )
                 .anchor(anchor * z)
-                .active(active)
+                .state(state)
                 .color(color)
                 .theme(theme)
-                .on_connect(cx.listener(move |this, _, window, cx| {
-                    cx.stop_propagation();
-                    window.focus(&this.focus, cx);
-                    this.port_click(port_ref.clone(), cx);
-                })),
+                .on_connect(cx.listener(
+                    move |this, event: &MouseDownEvent, window, cx| {
+                        this.pointer_down(
+                            gpui_flow_interaction::HitTarget::Port(port_ref.clone()),
+                            event,
+                            window,
+                            cx,
+                        );
+                    },
+                )),
             );
         }
         card.into_any_element()

@@ -1,4 +1,5 @@
 use super::*;
+use gpui_flow_interaction::{CanvasCommand, InteractionError};
 
 impl FlowCanvas {
     pub fn is_file_busy(&self) -> bool {
@@ -40,6 +41,11 @@ impl FlowCanvas {
     }
     /// Load an explicit path. Validation finishes before replacing the current document.
     pub fn open_path(&mut self, path: impl Into<std::path::PathBuf>, cx: &mut Context<Self>) {
+        if !self.is_editable() {
+            self.message = "Canvas is read-only".into();
+            cx.notify();
+            return;
+        }
         if !self.begin_file_operation(cx) {
             return;
         }
@@ -53,20 +59,8 @@ impl FlowCanvas {
                 this.file_busy = false;
                 match result {
                     Ok(document) => {
-                        this.finish_gesture(cx);
-                        match this.editor.load_document(document) {
-                            Ok(()) => {
-                                this.runtime = Runtime::default();
-                                this.workflow = None;
-                                this.media_players.clear();
-                                this.connecting = None;
-                                this.input_node = None;
-                                this.input = None;
-                                this.input_subscription = None;
-                                this.message = "Document opened".into();
-                                this.changed(cx);
-                            }
-                            Err(e) => this.message = e.to_string(),
+                        if let Err(error) = this.replace_document(document, cx) {
+                            this.message = error.to_string();
                         }
                     }
                     Err(e) => this.message = format!("Open failed: {e}"),
@@ -116,6 +110,11 @@ impl FlowCanvas {
         .detach();
     }
     pub fn open_file(&mut self, cx: &mut Context<Self>) {
+        if !self.is_editable() {
+            self.message = "Canvas is read-only".into();
+            cx.notify();
+            return;
+        }
         if let Some(path) = self.document_path.clone() {
             self.open_path(path, cx);
             return;
@@ -156,18 +155,8 @@ impl FlowCanvas {
                 let _ = this.update(cx, |this, cx| {
                     match result {
                         Ok(document) => {
-                            this.finish_gesture(cx);
-                            match this.editor.load_document(document) {
-                                Ok(()) => {
-                                    this.input_node = None;
-                                    this.runtime = Runtime::default();
-                                    this.workflow = None;
-                                    this.media_players.clear();
-                                    this.connecting = None;
-                                    this.message = "Document opened".into();
-                                    this.changed(cx);
-                                }
-                                Err(e) => this.message = e.to_string(),
+                            if let Err(error) = this.replace_document(document, cx) {
+                                this.message = error.to_string();
                             }
                         }
                         Err(e) => this.message = format!("Open failed: {e}"),
@@ -185,20 +174,32 @@ impl FlowCanvas {
         &mut self,
         json: &str,
         cx: &mut Context<Self>,
-    ) -> Result<(), model::GraphError> {
+    ) -> Result<(), InteractionError> {
         let graph = Graph::from_json(json)?;
-        self.finish_gesture(cx);
-        self.editor.transaction("Import", |g| {
-            *g = graph;
-            Ok(())
-        })?;
+        self.cancel_interaction(cx);
+        self.execute_command(CanvasCommand::ImportGraph(graph), cx)?;
+        self.reset_document_runtime();
+        self.changed(cx);
+        Ok(())
+    }
+    fn replace_document(
+        &mut self,
+        document: model::FlowDocument,
+        cx: &mut Context<Self>,
+    ) -> Result<(), InteractionError> {
+        self.cancel_interaction(cx);
+        self.execute_command(CanvasCommand::LoadDocument(document), cx)?;
+        self.reset_document_runtime();
+        self.message = "Document opened".into();
+        self.changed(cx);
+        Ok(())
+    }
+    fn reset_document_runtime(&mut self) {
         self.runtime = Runtime::default();
         self.workflow = None;
         self.media_players.clear();
-        self.connecting = None;
         self.input_node = None;
-        self.editor.selection.clear();
-        self.changed(cx);
-        Ok(())
+        self.input = None;
+        self.input_subscription = None;
     }
 }

@@ -36,3 +36,6 @@ pub use model::*;
 
 mod persistence;
 pub use persistence::*;
+
+mod connection;
+pub use connection::*;

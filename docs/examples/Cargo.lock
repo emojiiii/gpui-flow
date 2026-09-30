@@ -15,12 +15,40 @@ name = "gpui-flow-doc-examples"
 version = "0.1.0"
 dependencies = [
  "gpui-flow-core",
+ "gpui-flow-interaction",
  "gpui-flow-runtime",
  "serde_json",
 ]
 
 [[package]]
+name = "gpui-flow-editor"
+version = "0.1.0"
+dependencies = [
+ "gpui-flow-core",
+ "gpui-flow-scene",
+]
+
+[[package]]
+name = "gpui-flow-interaction"
+version = "0.1.0"
+dependencies = [
+ "gpui-flow-core",
+ "gpui-flow-editor",
+ "gpui-flow-scene",
+ "serde_json",
+]
+
+[[package]]
 name = "gpui-flow-runtime"
+version = "0.1.0"
+dependencies = [
+ "gpui-flow-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "gpui-flow-scene"
 version = "0.1.0"
 dependencies = [
  "gpui-flow-core",

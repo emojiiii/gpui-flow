@@ -1796,6 +1796,7 @@ dependencies = [
  "gpui",
  "gpui-flow",
  "gpui-kit",
+ "serde_json",
 ]
 
 [[package]]
@@ -2410,6 +2411,7 @@ dependencies = [
  "gpui",
  "gpui-flow-core",
  "gpui-flow-editor",
+ "gpui-flow-interaction",
  "gpui-flow-media",
  "gpui-flow-runtime",
  "gpui-flow-scene",
@@ -2433,6 +2435,16 @@ version = "0.1.0"
 dependencies = [
  "gpui-flow-core",
  "gpui-flow-scene",
+]
+
+[[package]]
+name = "gpui-flow-interaction"
+version = "0.1.0"
+dependencies = [
+ "gpui-flow-core",
+ "gpui-flow-editor",
+ "gpui-flow-scene",
+ "serde_json",
 ]
 
 [[package]]

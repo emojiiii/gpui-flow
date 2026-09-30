@@ -21,6 +21,7 @@
 cargo run --locked -p flow-studio
 cargo run --locked -p flow-studio --bin primitives
 cargo run --locked -p flow-studio --bin composition
+cargo run --locked -p flow-studio --bin interactions
 cargo run --locked -p flow-studio --bin gradients
 python3 scripts/generate-media-fixtures.py
 cargo run --locked -p flow-studio --bin media
@@ -28,6 +29,7 @@ cargo run --locked -p flow-studio --bin media
 cargo run --locked -p flow-studio -- --file ./canvas.flow.json
 ```
 
+- **Interactions**：拖拽连线/吸附、有效和无效目标、只读及独立插件开关
 - **Studio**：节点工作流与原生内容编辑、文件 Save/Open、连接/分组、mock runner
 - **Primitives**：通用场景原语、嵌套变换/裁切、点击/拖动/缩放/旋转、捕获事件
 - **Gradients**：多色标线性/径向渐变、变换和裁切
@@ -51,12 +53,12 @@ cargo +1.98.1 run --locked -p flow-studio
 ## 第一次操作
 
 1. 点击左侧组件名称添加节点，拖动节点标题栏移动，右下角缩放尺寸
-2. 拖动空白背景平移；按住 Ctrl/Cmd 滚轮缩放；`F` 适配全部内容
-3. Shift + 拖动空白区域框选，Shift + 点击标题栏切换多选
-4. 先点击一个端口，再点击兼容端口连线；`Esc` 取消待连接或当前编辑手势
+2. 中键或 Space+左键拖动平移；按住 Ctrl/Cmd 滚轮缩放；`F` 适配全部内容
+3. 左键拖动空白区域框选，Shift 追加选择，Shift + 点击标题栏切换多选
+4. 从端口按下并拖到兼容端口，近距离自动吸附；松开提交，空白/无效处松开取消；`Esc` 回滚当前手势
 5. `Run · MOCK` 运行选中的 generation/agent 节点；没有选中节点时运行全部此类节点
 6. `Save file` / `Open` 使用原生文件对话框保存/读取含视口的文档；`Save snapshot` 只保存内存快照
-7. `Ctrl/Cmd + S` 复制图 JSON 到系统剪贴板，**不会触发文件保存**
+7. `Ctrl/Cmd + S` 保存文件；`Ctrl/Cmd + Shift + S` 复制图 JSON 到系统剪贴板
 
 完整快捷键及行为边界见 [入门教程](docs/getting-started.md)。
 
@@ -64,6 +66,7 @@ cargo +1.98.1 run --locked -p flow-studio
 
 | crate | 用途 | 需要 GPUI |
 | --- | --- | --- |
+| `gpui-flow-interaction` | 可组合输入插件、捕获生命周期、能力策略与命令验证 | 否 |
 | `gpui-flow-core` | 图模型、几何、校验、编辑事务、历史、文档 | 否 |
 | `gpui-flow-scene` | 保留场景树、显示原语、仿射变换、命中与事件 | 否 |
 | `gpui-flow-editor` | 通用场景选择、事务、历史与图形编辑 | 否 |
@@ -72,10 +75,11 @@ cargo +1.98.1 run --locked -p flow-studio
 | `gpui-flow` | `SceneView`、显示适配器、独立组件、`FlowCanvas` 与节点 | 是 |
 | `flow-studio` | 原生桌面示例程序 | 是 |
 
-主 workspace 的默认成员是 core/runtime/scene/editor/media，`cargo test` 不会自动覆盖原生 UI。
+主 workspace 的默认成员是 core/interaction/runtime/scene/editor/media，`cargo test` 不会自动覆盖原生 UI。
 
 ## 文档导航
 
+- [交互插件、只读策略与自定义行为](docs/plugins.md)
 - [显示对象与场景架构](docs/display-scenes.md)
 - [独立组件与组合开发](docs/components.md)
 - [环境准备与交互教程](docs/getting-started.md)

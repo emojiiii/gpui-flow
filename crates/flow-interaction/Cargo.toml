@@ -1,0 +1,13 @@
+[package]
+name = "gpui-flow-interaction"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Composable capability-gated canvas input plugins and gesture lifecycle"
+[dependencies]
+gpui-flow-core.workspace = true
+serde_json.workspace = true
+
+gpui-flow-editor.workspace = true
+
+gpui-flow-scene.workspace = true

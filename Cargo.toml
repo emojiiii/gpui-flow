@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["crates/flow-core", "crates/flow-runtime", "crates/flow-scene", "crates/flow-editor", "crates/flow-media", "crates/flow-ui", "examples/studio"]
-default-members = ["crates/flow-core", "crates/flow-runtime", "crates/flow-scene", "crates/flow-editor", "crates/flow-media"]
+members = ["crates/flow-core", "crates/flow-interaction", "crates/flow-runtime", "crates/flow-scene", "crates/flow-editor", "crates/flow-media", "crates/flow-ui", "examples/studio"]
+default-members = ["crates/flow-core", "crates/flow-interaction", "crates/flow-runtime", "crates/flow-scene", "crates/flow-editor", "crates/flow-media"]
 
 [workspace.package]
 version = "0.1.0"
@@ -14,6 +14,7 @@ serde_json = "1"
 gpui = { git = "https://github.com/longbridge/gpui-fast", branch = "main" }
 gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "0067bafcf3160cb871eff2521e98a51e526da175" }
 gpui-flow-core = { path = "crates/flow-core" }
+gpui-flow-interaction = { path = "crates/flow-interaction" }
 gpui-flow-runtime = { path = "crates/flow-runtime" }
 gpui-flow = { path = "crates/flow-ui" }
 

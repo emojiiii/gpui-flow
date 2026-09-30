@@ -4,6 +4,18 @@ use crate::FlowTheme;
 use gpui::{prelude::*, *};
 use gpui_flow_core::{DataType, Point as ModelPoint, PortDirection};
 
+/// Pointer feedback is derived from the host's validated connection gesture.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PortState {
+    #[default]
+    Idle,
+    Source,
+    Compatible,
+    Target,
+    Rejected,
+    Disabled,
+}
+
 #[derive(IntoElement)]
 pub struct PortHandle {
     pub id: ElementId,
@@ -15,6 +27,7 @@ pub struct PortHandle {
     pub diameter: f32,
     pub color: u32,
     pub active: bool,
+    pub state: PortState,
     pub show_label: bool,
     pub theme: FlowTheme,
     on_connect: Option<PointerCallback>,
@@ -32,6 +45,7 @@ impl PortHandle {
             diameter: 12.,
             color: 0x9cafc9,
             active: false,
+            state: PortState::Idle,
             show_label: false,
             theme: FlowTheme::default(),
             on_connect: None,
@@ -62,6 +76,10 @@ impl PortHandle {
         self.active = value;
         self
     }
+    pub fn state(mut self, value: PortState) -> Self {
+        self.state = value;
+        self
+    }
     pub fn show_label(mut self, value: bool) -> Self {
         self.show_label = value;
         self
@@ -70,7 +88,7 @@ impl PortHandle {
         self.theme = value;
         self
     }
-    /// The host decides whether a click starts, completes, or rejects a connection.
+    /// The host starts a pointer gesture here and resolves it on pointer release.
     pub fn on_connect(
         mut self,
         callback: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
@@ -81,40 +99,71 @@ impl PortHandle {
 }
 impl RenderOnce for PortHandle {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        let state = if self.active && self.state == PortState::Idle {
+            PortState::Source
+        } else {
+            self.state
+        };
+        let color = match state {
+            PortState::Rejected => 0xf17c88,
+            PortState::Source | PortState::Target | PortState::Compatible => self.theme.accent,
+            PortState::Disabled => self.theme.muted,
+            PortState::Idle => self.color,
+        };
+        let hit = self.diameter.max(22.);
+        let size = if state == PortState::Target {
+            self.diameter + 4.
+        } else {
+            self.diameter
+        };
         let mut handle = div()
             .id(self.id)
             .relative()
-            .size(px(self.diameter))
-            .rounded_full()
-            .bg(rgb(if self.active {
-                self.theme.accent
-            } else {
-                self.color
-            }))
-            .border_2()
-            .border_color(rgb(self.theme.background));
+            .size(px(hit))
+            .cursor(match state {
+                PortState::Rejected | PortState::Disabled => CursorStyle::OperationNotAllowed,
+                PortState::Target => CursorStyle::DragLink,
+                _ => CursorStyle::Crosshair,
+            })
+            .child(
+                div()
+                    .absolute()
+                    .left(px((hit - size) * 0.5))
+                    .top(px((hit - size) * 0.5))
+                    .size(px(size))
+                    .rounded_full()
+                    .bg(rgb(color).alpha(if state == PortState::Compatible {
+                        0.65
+                    } else {
+                        1.
+                    }))
+                    .border_2()
+                    .border_color(rgb(if state == PortState::Target {
+                        self.theme.foreground
+                    } else {
+                        self.theme.background
+                    })),
+            );
         if let Some(anchor) = self.anchor {
             handle = handle
                 .absolute()
-                .left(px(anchor.x - self.diameter * 0.5))
-                .top(px(anchor.y - self.diameter * 0.5));
+                .left(px(anchor.x - hit * 0.5))
+                .top(px(anchor.y - hit * 0.5));
         }
         if self.show_label {
             let label = div()
                 .absolute()
-                .top(px(-2.))
+                .top(px((hit - 12.) * 0.5))
                 .text_xs()
                 .text_color(rgb(self.theme.muted))
                 .child(self.label);
             handle = handle.child(match self.direction {
-                PortDirection::Input => label.left(px(self.diameter + 5.)),
-                PortDirection::Output => label.right(px(self.diameter + 5.)),
+                PortDirection::Input => label.left(px(hit + 5.)),
+                PortDirection::Output => label.right(px(hit + 5.)),
             });
         }
         if let Some(callback) = self.on_connect {
-            handle = handle
-                .cursor_pointer()
-                .on_mouse_down(MouseButton::Left, callback);
+            handle = handle.on_mouse_down(MouseButton::Left, callback);
         }
         handle
     }

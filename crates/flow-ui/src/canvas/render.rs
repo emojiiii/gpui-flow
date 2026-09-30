@@ -1,7 +1,9 @@
 use super::*;
+use gpui_flow_interaction::{CanvasCommand, HitTarget};
 
 impl Render for FlowCanvas {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.subscribe_interaction_lifecycle(window, cx);
         self.sync_input(window, cx);
         self.sync_media(cx);
         let theme = self.theme;
@@ -22,16 +24,18 @@ impl Render for FlowCanvas {
             })
             .collect();
         let pending = self
-            .connecting
-            .as_ref()
-            .and_then(|p| self.editor.graph().port_position(p))
-            .map(|from| (from, self.pointer));
-        let marquee = match self.gesture {
-            Some(Gesture::Marquee { start, current }) => {
-                Some(model::Rect::from_points(start, current))
-            }
-            _ => None,
+            .interactions
+            .connection()
+            .preview(self.editor.graph(), viewport);
+        let pending_color = if self.interactions.connection().hovered().is_some()
+            && self.interactions.connection().target().is_none()
+        {
+            0xf27788
+        } else {
+            theme.accent
         };
+        let marquee = self.interactions.marquee();
+        let guides = self.interactions.guides().to_vec();
         let paint = canvas(
             move |bounds, _, cx| {
                 let _ = entity.update(cx, |this, _| {
@@ -74,7 +78,25 @@ impl Render for FlowCanvas {
                     );
                 }
                 if let Some((from, to)) = pending {
-                    edge_renderer.paint(screen(from), screen(to), rgb(theme.accent), window);
+                    edge_renderer.paint(screen(from), screen(to), rgb(pending_color), window);
+                }
+                for guide in &guides {
+                    let mut line = PathBuilder::stroke(px(1.));
+                    match guide.axis {
+                        gpui_flow_interaction::Axis::X => {
+                            let x = screen(model::Point::new(guide.position, 0.)).x;
+                            line.move_to(point(x, bounds.top()));
+                            line.line_to(point(x, bounds.bottom()));
+                        }
+                        gpui_flow_interaction::Axis::Y => {
+                            let y = screen(model::Point::new(0., guide.position)).y;
+                            line.move_to(point(bounds.left(), y));
+                            line.line_to(point(bounds.right(), y));
+                        }
+                    }
+                    if let Ok(path) = line.build() {
+                        window.paint_path(path, rgb(theme.accent).alpha(0.7));
+                    }
                 }
                 if let Some(rect) = marquee {
                     let r = viewport.world_rect_to_screen(rect);
@@ -98,63 +120,52 @@ impl Render for FlowCanvas {
             .overflow_hidden()
             .bg(rgb(theme.background))
             .child(paint)
+            .cursor(self.canvas_cursor())
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, event: &MouseDownEvent, window, cx| {
-                    window.focus(&this.focus, cx);
-                    if event.modifiers.shift {
-                        this.gesture = Some(Gesture::Marquee {
-                            start: this.world(event.position),
-                            current: this.world(event.position),
-                        });
-                    } else {
-                        this.editor.selection.clear();
-                        this.finish_gesture(cx);
-                        this.gesture = Some(Gesture::Pan {
-                            last: this.local(event.position),
-                        });
-                    }
-                    cx.notify();
+                    let hit = this.hit_at(this.local(event.position));
+                    this.pointer_down(hit, event, window, cx);
                 }),
             )
             .on_mouse_down(
                 MouseButton::Middle,
-                cx.listener(|this, event: &MouseDownEvent, _, cx| {
-                    this.finish_gesture(cx);
-                    this.gesture = Some(Gesture::Pan {
-                        last: this.local(event.position),
-                    });
-                    cx.notify();
+                cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                    this.pointer_down(HitTarget::Background, event, window, cx)
+                }),
+            )
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                    this.pointer_down(HitTarget::Background, event, window, cx)
                 }),
             )
             .on_mouse_move(cx.listener(|this, event, _, cx| this.move_pointer(event, cx)))
             .on_mouse_up(
                 MouseButton::Left,
-                cx.listener(|this, _, _, cx| this.finish_gesture(cx)),
+                cx.listener(|this, event, _, cx| this.release_pointer(event, cx)),
             )
             .on_mouse_up_out(
                 MouseButton::Left,
-                cx.listener(|this, _, _, cx| this.finish_gesture(cx)),
+                cx.listener(|this, _, _, cx| this.cancel_interaction(cx)),
             )
             .on_mouse_up(
                 MouseButton::Middle,
-                cx.listener(|this, _, _, cx| this.finish_gesture(cx)),
+                cx.listener(|this, event, _, cx| this.release_pointer(event, cx)),
             )
-            .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, _, cx| {
-                let delta = match event.delta {
-                    ScrollDelta::Pixels(p) => model::Point::new(p.x.into(), p.y.into()),
-                    ScrollDelta::Lines(p) => model::Point::new(p.x * 24., p.y * 24.),
-                };
-                if event.modifiers.control || event.modifiers.platform {
-                    let zoom = this.editor.viewport.zoom * (-delta.y * 0.004).exp();
-                    this.editor
-                        .viewport
-                        .zoom_at(this.local(event.position), zoom);
-                } else {
-                    this.editor.viewport.pan_by(delta);
-                }
-                cx.notify();
-            }));
+            .on_mouse_up_out(
+                MouseButton::Middle,
+                cx.listener(|this, _, _, cx| this.cancel_interaction(cx)),
+            )
+            .on_mouse_up(
+                MouseButton::Right,
+                cx.listener(|this, event, _, cx| this.release_pointer(event, cx)),
+            )
+            .on_mouse_up_out(
+                MouseButton::Right,
+                cx.listener(|this, _, _, cx| this.cancel_interaction(cx)),
+            )
+            .on_scroll_wheel(cx.listener(|this, event, _, cx| this.scroll(event, cx)));
         for group in self.editor.graph().groups.values() {
             let r = viewport.world_rect_to_screen(group.bounds);
             let group_id = group.id.clone();
@@ -182,20 +193,12 @@ impl Render for FlowCanvas {
                                 cx.listener(move |this, event: &MouseDownEvent, window, cx| {
                                     cx.stop_propagation();
                                     window.focus(&this.focus, cx);
-                                    this.finish_gesture(cx);
-                                    this.editor
-                                        .selection
-                                        .select_group(group_id.clone(), event.modifiers.shift);
-                                    match this.editor.begin_transaction("Move group") {
-                                        Ok(()) => {
-                                            this.gesture = Some(Gesture::Move {
-                                                last: this.world(event.position),
-                                            })
-                                        }
-                                        Err(e) => this.message = e.to_string(),
-                                    }
-                                    cx.emit(FlowEvent::SelectionChanged);
-                                    cx.notify();
+                                    this.pointer_down(
+                                        HitTarget::Group(group_id.clone()),
+                                        event,
+                                        window,
+                                        cx,
+                                    );
                                 }),
                             ),
                     ),
@@ -221,31 +224,46 @@ impl Render for FlowCanvas {
                                 this.extent.width * 0.5,
                                 this.extent.height * 0.5,
                             );
+                            this.cancel_interaction(cx);
                             match action {
                                 ViewportAction::ZoomOut => {
-                                    this.editor
-                                        .viewport
-                                        .zoom_at(center, this.editor.viewport.zoom / 1.2);
+                                    let _ = this.execute_command(
+                                        CanvasCommand::Zoom {
+                                            position: center,
+                                            zoom: this.editor.viewport.zoom / 1.2,
+                                        },
+                                        cx,
+                                    );
                                 }
                                 ViewportAction::Reset => {
-                                    this.editor.viewport.zoom_at(center, 1.);
+                                    let _ = this.execute_command(
+                                        CanvasCommand::Zoom {
+                                            position: center,
+                                            zoom: 1.,
+                                        },
+                                        cx,
+                                    );
                                 }
                                 ViewportAction::ZoomIn => {
-                                    this.editor
-                                        .viewport
-                                        .zoom_at(center, this.editor.viewport.zoom * 1.2);
+                                    let _ = this.execute_command(
+                                        CanvasCommand::Zoom {
+                                            position: center,
+                                            zoom: this.editor.viewport.zoom * 1.2,
+                                        },
+                                        cx,
+                                    );
                                 }
-                                ViewportAction::Fit => this.fit(),
+                                ViewportAction::Fit => this.fit(cx),
                             }
                             cx.notify();
                         })),
                 ),
             );
         }
-        let palette = Palette::new("node-palette").title("COMPONENTS / 组件").theme(theme)
+        let palette = Palette::new("node-palette").disabled(!self.is_editable()).title("COMPONENTS / 组件").theme(theme)
             .entries(BUILTIN_KINDS.iter().map(|kind| PaletteEntry::new(*kind,format!("+  {kind}"),kind_color(kind))))
             .on_select(cx.listener(|this,kind: &str,_,cx| this.add(kind,cx)))
-            .footer(div().mt_4().text_xs().text_color(rgb(theme.muted)).child("Drag background: pan\nCtrl + wheel: zoom\nShift + drag: select\nClick ports: connect\nCtrl + Z: undo\nCtrl + C/V: duplicate\nCtrl + S: copy JSON"));
+            .footer(div().mt_4().text_xs().text_color(rgb(theme.muted)).child("Middle / Space+drag: pan\nCtrl + wheel: zoom\nDrag background: select\nDrag port: connect / release: cancel\nCtrl + Z: undo\nCtrl + C/V: duplicate\nCtrl + S: copy JSON"));
         let mut inspector = crate::Inspector::new("node-inspector")
             .title("INSPECTOR / 属性")
             .theme(theme);
@@ -309,21 +327,20 @@ impl Render for FlowCanvas {
         if let Some(input) = &self.input {
             inspector = inspector
                 .child(panel_title("EDIT CONTENT / 内容", theme))
-                .child(Input::new(input));
+                .child(Input::new(input).disabled(!self.is_editable()));
         }
         inspector = inspector
             .child(self.button("group", "Group selection", cx, |this, cx| {
-                match this.editor.group_selection("Canvas group", 22.) {
-                    Ok(_) => this.changed(cx),
-                    Err(e) => {
-                        this.message = e.to_string();
-                        cx.notify();
-                    }
-                }
+                let _ = this.execute_command(
+                    CanvasCommand::GroupSelection {
+                        title: "Canvas group".into(),
+                        padding: 22.,
+                    },
+                    cx,
+                );
             }))
             .child(self.button("delete", "Delete selection", cx, |this, cx| {
-                let result = this.editor.delete_selection();
-                this.report(result, cx);
+                let _ = this.execute_command(CanvasCommand::DeleteSelection, cx);
             }))
             .child(self.button("cancel", "Cancel runs", cx, |this, cx| {
                 if let Some(workflow) = this.workflow.as_mut() {
@@ -374,6 +391,7 @@ impl Render for FlowCanvas {
                     this.key(event, cx);
                 }
             }))
+            .on_key_up(cx.listener(|this, event, _, cx| this.key_up(event, cx)))
             .when(self.options.show_toolbar, |root| {
                 root.child(
                     Toolbar::new("flow-toolbar")
@@ -391,12 +409,10 @@ impl Render for FlowCanvas {
                                 .flex()
                                 .gap_2()
                                 .child(self.button("undo", "Undo", cx, |this, cx| {
-                                    this.editor.undo();
-                                    this.changed(cx);
+                                    let _ = this.execute_command(CanvasCommand::Undo, cx);
                                 }))
                                 .child(self.button("redo", "Redo", cx, |this, cx| {
-                                    this.editor.redo();
-                                    this.changed(cx);
+                                    let _ = this.execute_command(CanvasCommand::Redo, cx);
                                 }))
                                 .child(self.button("save", "Save snapshot", cx, |this, cx| {
                                     match this.export_json() {
@@ -412,8 +428,10 @@ impl Render for FlowCanvas {
                                 }))
                                 .child(self.button("load", "Load snapshot", cx, |this, cx| {
                                     if let Some(json) = this.snapshot.clone() {
-                                        let result = this.import_json(&json, cx);
-                                        this.report(result, cx);
+                                        if let Err(error) = this.import_json(&json, cx) {
+                                            this.message = error.to_string();
+                                            cx.notify();
+                                        }
                                     } else {
                                         this.message = "Save a snapshot first".into();
                                         cx.notify();

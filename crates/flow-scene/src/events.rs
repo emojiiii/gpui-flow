@@ -9,6 +9,7 @@ pub enum EventKind {
     PointerDown,
     PointerMove,
     PointerUp,
+    PointerCancel,
     Click,
     DoubleClick,
     PointerEnter,

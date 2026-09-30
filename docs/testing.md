@@ -104,7 +104,7 @@ CI 使用 Rust 1.98.1 和 `--locked`，只授予 `contents: read`，不需要供
 
 - [ ] Save file/Open 对话框成功、取消、不可写目录、无效/超大文件；有效文件恢复 viewport
 - [ ] 打开文件清空历史；保存期间继续编辑时明确保存的是点击时快照
-- [ ] 内存 Save/Load snapshot 只影响图；Ctrl/Cmd + S 输出可由 Graph::from_json 解析
+- [ ] 内存 Save/Load snapshot 只影响图；Ctrl/Cmd + Shift + S 输出可由 Graph::from_json 解析；Ctrl/Cmd + S 保存文件
 - [ ] 关闭重开不误以为内存快照是自动保存
 - [ ] 宿主 FlowDocument 保存/恢复含 viewport；非法版本与缺失引用被拒绝
 - [ ] 有效本地图片路径、空路径、不存在路径和不支持的文件类型不破坏界面

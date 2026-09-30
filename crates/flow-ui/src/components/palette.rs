@@ -25,6 +25,7 @@ pub struct Palette {
     pub width: f32,
     pub theme: FlowTheme,
     pub entries: Vec<PaletteEntry>,
+    pub disabled: bool,
     footer: Option<AnyElement>,
     on_select: Option<SelectCallback>,
 }
@@ -36,9 +37,14 @@ impl Palette {
             width: 170.,
             theme: FlowTheme::default(),
             entries: vec![],
+            disabled: false,
             footer: None,
             on_select: None,
         }
+    }
+    pub fn disabled(mut self, value: bool) -> Self {
+        self.disabled = value;
+        self
     }
     pub fn title(mut self, value: impl Into<SharedString>) -> Self {
         self.title = value.into();
@@ -91,9 +97,15 @@ impl RenderOnce for Palette {
                 .border_1()
                 .border_color(rgb(self.theme.border))
                 .text_sm()
-                .text_color(rgb(entry.color))
+                .text_color(rgb(if self.disabled {
+                    self.theme.muted
+                } else {
+                    entry.color
+                }))
                 .child(entry.label);
-            if let Some(callback) = self.on_select.clone() {
+            if !self.disabled
+                && let Some(callback) = self.on_select.clone()
+            {
                 item = item
                     .cursor_pointer()
                     .on_click(move |_, window, cx| callback(entry.kind.as_ref(), window, cx));

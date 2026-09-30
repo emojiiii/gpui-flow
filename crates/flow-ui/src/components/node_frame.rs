@@ -14,6 +14,9 @@ pub struct NodeFrame {
     pub size: model::Size,
     pub zoom: f32,
     pub selected: bool,
+    /// Active drag feedback supplied by the host interaction controller.
+    pub dragging: bool,
+    pub header_cursor: CursorStyle,
     pub theme: FlowTheme,
     pub color: u32,
     pub header_height: f32,
@@ -32,6 +35,8 @@ impl NodeFrame {
             size: model::Size::new(252., 190.),
             zoom: 1.,
             selected: false,
+            dragging: false,
+            header_cursor: CursorStyle::Arrow,
             theme: FlowTheme::default(),
             color: 0x9cafc9,
             header_height: 36.,
@@ -56,6 +61,14 @@ impl NodeFrame {
     }
     pub fn selected(mut self, value: bool) -> Self {
         self.selected = value;
+        self
+    }
+    pub fn dragging(mut self, value: bool) -> Self {
+        self.dragging = value;
+        self
+    }
+    pub fn header_cursor(mut self, value: CursorStyle) -> Self {
+        self.header_cursor = value;
         self
     }
     pub fn theme(mut self, value: FlowTheme) -> Self {
@@ -122,12 +135,21 @@ impl RenderOnce for NodeFrame {
             );
         if let Some(callback) = self.on_header_mouse_down {
             header = header
-                .cursor_grab()
+                .cursor(if self.dragging {
+                    CursorStyle::ClosedHand
+                } else {
+                    self.header_cursor
+                })
                 .on_mouse_down(MouseButton::Left, callback);
         }
         let mut frame = div()
             .id(self.id)
             .relative()
+            .cursor(if self.dragging {
+                CursorStyle::ClosedHand
+            } else {
+                self.header_cursor
+            })
             .w(px(self.size.width * z))
             .h(px(self.size.height * z))
             .bg(rgb(theme.card))
@@ -152,16 +174,33 @@ impl RenderOnce for NodeFrame {
         if let Some(callback) = self.on_mouse_down {
             frame = frame.on_mouse_down(MouseButton::Left, callback);
         }
-        if let Some(callback) = self.on_resize_mouse_down {
+        if self.selected
+            && self.size.width * z >= 36.
+            && self.size.height * z >= 36.
+            && let Some(callback) = self.on_resize_mouse_down
+        {
+            // Fixed screen-pixel hit target, inside the card border. The square
+            // is an actual resize affordance, not a font-dependent corner glyph.
             frame = frame.child(
                 div()
                     .absolute()
-                    .right_0()
-                    .bottom_0()
-                    .size(px(14.))
-                    .cursor_pointer()
-                    .text_color(rgb(theme.muted))
-                    .child("◢")
+                    .right(px(2.))
+                    .bottom(px(2.))
+                    .size(px(20.))
+                    .rounded_sm()
+                    .cursor(CursorStyle::ResizeUpLeftDownRight)
+                    .hover(move |style| style.bg(rgb(theme.accent).alpha(0.12)))
+                    .child(
+                        div()
+                            .absolute()
+                            .right(px(3.))
+                            .bottom(px(3.))
+                            .size(px(8.))
+                            .rounded_sm()
+                            .bg(rgb(theme.panel))
+                            .border_2()
+                            .border_color(rgb(theme.accent)),
+                    )
                     .on_mouse_down(MouseButton::Left, callback),
             );
         }

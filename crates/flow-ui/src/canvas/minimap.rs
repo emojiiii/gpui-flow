@@ -17,10 +17,16 @@ impl FlowCanvas {
                     .theme(self.theme)
                     .on_navigate(cx.listener(|this, world: &model::Point, window, cx| {
                         window.focus(&this.focus, cx);
-                        this.finish_gesture(cx);
-                        this.editor.viewport.pan =
+                        this.cancel_interaction(cx);
+                        let target =
                             model::Point::new(this.extent.width * 0.5, this.extent.height * 0.5)
                                 - *world * this.editor.viewport.zoom;
+                        let _ = this.execute_command(
+                            gpui_flow_interaction::CanvasCommand::Pan {
+                                delta: target - this.editor.viewport.pan,
+                            },
+                            cx,
+                        );
                         cx.notify();
                     })),
             )
