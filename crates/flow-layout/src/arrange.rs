@@ -264,6 +264,35 @@ pub(crate) fn container(
         };
         let mut positions =
             solver::solve(id, &mut line, available_main, &numeric_style, auto_main)?;
+        // Leafer lockRatio scales both intrinsic dimensions from the allocated
+        // main axis. CSS aspect_ratio is not this operation: definite dimensions
+        // suppress it, while cross min/max and stretch transfer different rules.
+        // Keep Taffy's tested allocation, then couple only explicitly locked
+        // items. Validation excludes ambiguous wrap/content-size combinations.
+        for (item, position) in line.items.iter_mut().zip(&mut positions) {
+            if item.input.lock_ratio {
+                crate::ratio::resize(
+                    &mut item.object,
+                    item.bounds,
+                    row,
+                    item.main,
+                    style.item_box,
+                )?;
+                let bounds = linear_bounds(&item.object, style.item_box)?;
+                item.cross = axis(
+                    row,
+                    f64::from(bounds.size.width),
+                    f64::from(bounds.size.height),
+                )
+                .1;
+                let free = (line.cross - item.cross).max(0.0);
+                position.cross = match item.input.align_self.unwrap_or(style.align_items) {
+                    crate::AlignItems::Center => free / 2.0,
+                    crate::AlignItems::End => free,
+                    _ => 0.0,
+                };
+            }
+        }
         if let Some(gap) = automatic_gap {
             // CSS gaps cannot express Leafer's signed Fit spacing. Taffy still
             // owns item sizes/cross alignment; this small f64 policy owns only
@@ -277,7 +306,9 @@ pub(crate) fn container(
         for (mut item, position) in line.items.into_iter().zip(positions) {
             let (width, height) = axis(row, item.main, item.cross);
             let (x, y) = axis(row, origin_main + position.main, cross_at + position.cross);
-            resize(&mut item.object, item.bounds, width, height, style.item_box)?;
+            if !item.input.lock_ratio {
+                resize(&mut item.object, item.bounds, width, height, style.item_box)?;
+            }
             let bounds = linear_bounds(&item.object, style.item_box)?;
             item.object.transform.tx = scalar(&item.object.id, x - bounds.origin.x as f64)?;
             item.object.transform.ty = scalar(&item.object.id, y - bounds.origin.y as f64)?;

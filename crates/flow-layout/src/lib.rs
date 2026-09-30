@@ -3,6 +3,7 @@
 #![doc = include_str!("../README.md")]
 
 mod arrange;
+mod ratio;
 mod reactive;
 mod style;
 mod text;
@@ -136,6 +137,7 @@ impl FlowLayout {
                     &scene.get(child).expect("validated child").object,
                     style.item_box,
                 )?;
+                ratio::validate(self, scene, child, style, &item)?;
                 // Pinned Leafer flowY runs automatic gaps after growY, unlike
                 // flowX's grow-or-gap branch. Do not approximate that ordering
                 // on top of this adapter's existing basis/minimum allocation.

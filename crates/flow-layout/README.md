@@ -73,3 +73,12 @@ and visible native Text/Image strokes fail explicitly; unstroked grow and text
 measurement keep their existing content-size contract. Descendant overflow and
 ancestor clipping never alter a slot. See [stroke item boxes](../../docs/flow-layout.md#stroke-item-boxes)
 for exact limits and pinned upstream sources.
+
+`FlowItem::lock_ratio` opts into main-axis uniform size allocation for
+Rect/Ellipse/Image and fixed Box/Frame in a fixed, non-wrapping parent. Existing
+Taffy allocation is reused; the cross dimension follows the current intrinsic
+ratio. Cross constraints/Stretch, allocated wrapping/content sizing, text/custom
+resize and visible stroke-slot resizing fail atomically. Position-only wrapping
+remains supported. Missing JSON defaults to false; exhaustive `FlowItem` literals
+need the bool or `..Default::default()`. See [ratio resize](../../docs/ratio-layout.md)
+for the precise upstream and CSS differences, reactive behavior and runnable example.

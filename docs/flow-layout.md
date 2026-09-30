@@ -152,7 +152,7 @@ ordered children, separate hidden/excluded participation, per-line allocation,
 and range-constrained grow. This module deliberately uses typed optional input
 and atomic scene changes instead of JavaScript prototype mutation.
 
-Not implemented: global reactive scheduling, grow on the cross axis, ratio locking,
+Not implemented: global reactive scheduling, grow on the cross axis, complete ratio-lock combinations,
 shrink, stroke-box resizing, reactive dependency scheduling, input/computed
 property separation within Scene itself, or Leafer import/export compatibility.
 Percentages and baseline alignment are also unsupported here; the official Flow
@@ -344,8 +344,8 @@ This bounded implementation requires each automatic spacing axis to be fixed-siz
 and rejects content sizing on that same axis rather than inventing a feedback rule.
 A fixed main axis with automatic item gaps may still have a content-sized cross
 axis, provided line gaps stay Fixed. Automatic line gaps have no effect without
-actual wrapping. Stroke slots are covered below; per-axis item weights and ratio
-locking remain separate missing capabilities.
+actual wrapping. Stroke slots are covered below; per-axis item weights remain
+unsupported. The bounded ratio-lock allocation subset is covered separately below.
 
 ### Reuse and validation boundary
 
@@ -433,3 +433,14 @@ for text and advanced stroke meshes. This slice rejects the unsupported resize
 instead of approximating it by subtracting guessed margins or treating stroke
 presentation dimensions as content. Inside/outside/scale-fixed strokes,
 Group slots, stroke-text rendering and full upstream resize parity remain open.
+
+## Ratio-locked main-axis allocation
+
+`FlowItem::lock_ratio = true` preserves the current intrinsic width/height ratio
+when main-axis grow, basis or ranges resize a supported shape. This opt-in subset
+uses Taffy's existing allocation and a separate uniform size coupling module.
+It requires a fixed, non-wrapping parent and a free cross axis; allocated wrapping,
+content sizing, cross constraints/Stretch, text/custom resize and visible
+stroke-slot resizing are explicit errors. Position-only wrapping is allowed.
+See [ratio resize](ratio-layout.md) for exact shape/transform restrictions, the
+upstream wrap-pass-order difference, compatibility and executable validation.

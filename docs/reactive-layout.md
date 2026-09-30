@@ -161,3 +161,10 @@ copying upstream observer/prototype code or claiming the same asynchronous timin
 
 Reverse row/column traversal and reverse wrapped-line placement compose with this
 provider using the same atomic commit, identity and history contracts.
+
+
+The bounded [ratio-lock resize](ratio-layout.md) uses this same provider. Parent
+resize and child shape/transform edits reflow both dimensions in one commit;
+rejected ratio combinations retain playback and Redo. Ratio inputs are current
+geometry, not a hidden saved width/height ratio, and stale live bindings do not
+transfer to a newly created element with the same document ID.

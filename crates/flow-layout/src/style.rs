@@ -219,6 +219,11 @@ pub struct FlowItem {
     pub in_flow: bool,
     /// Weight for positive free main-axis space. No implicit shrinking.
     pub grow: f32,
+    /// Preserve the current intrinsic width/height ratio when the main axis is
+    /// allocated. The supported subset requires a fixed, non-wrapping parent,
+    /// positive axis-aligned transforms, and no competing cross-axis sizing.
+    #[serde(skip_serializing_if = "is_false")]
+    pub lock_ratio: bool,
     /// Main-axis basis. A growing item defaults to zero (then its minimum);
     /// a fixed item defaults to its current measured box size.
     pub basis: Option<f32>,
@@ -233,6 +238,7 @@ impl Default for FlowItem {
         Self {
             in_flow: true,
             grow: 0.0,
+            lock_ratio: false,
             basis: None,
             min_width: None,
             max_width: None,
@@ -241,6 +247,10 @@ impl Default for FlowItem {
             align_self: None,
         }
     }
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 pub(crate) fn validate_style(s: &FlowStyle) -> Result<(), String> {
