@@ -175,7 +175,7 @@ impl Raster<'_> {
         for p in &node.paints {
             self.check()?;
             let a = self.world_to_layer * p.world;
-            if a.inverse().is_none() {
+            if a.inverse().is_none() || transform(a).invert().is_none_or(|t| !t.is_finite()) {
                 return Err(CompositeError::UnsupportedTransform);
             }
             // Check every control point, not just a clipped allocation rectangle.
@@ -284,7 +284,7 @@ impl Raster<'_> {
             let a = self.world_to_layer
                 * clip.world_transform
                 * Affine::translation(clip.local_bounds.origin.x, clip.local_bounds.origin.y);
-            if a.inverse().is_none() {
+            if a.inverse().is_none() || transform(a).invert().is_none_or(|t| !t.is_finite()) {
                 return Err(CompositeError::UnsupportedTransform);
             }
             for p in path.points() {

@@ -1,6 +1,7 @@
 //! GPUI adapter for retained display objects, separate from graph-node UI components.
 //! Vector tessellation supports affine transforms and nested rounded frame clipping.
 mod clip;
+pub(crate) mod composite;
 mod diagnostics;
 mod gradient;
 mod image;
@@ -44,6 +45,14 @@ impl RenderObject {
                 feature,
             })
         };
+        if self.object.style.blend_mode != scene::BlendMode::PassThrough
+            || self.object.mask != scene::MaskMode::None
+            || (self.object.style.opacity < 1.0
+                && (self.object.shape.allows_children()
+                    || self.object.style.fills().count() + self.object.style.strokes().count() > 1))
+        {
+            report(UnsupportedFeature::CompositingDomain);
+        }
         if self.object.style.has_layers()
             && matches!(
                 self.object.shape,
@@ -139,6 +148,7 @@ fn render_display(
         matches!(
             i.feature,
             UnsupportedFeature::LayeredPaint
+                | UnsupportedFeature::CompositingDomain
                 | UnsupportedFeature::StrokeGeometry
                 | UnsupportedFeature::TransformedText
                 | UnsupportedFeature::TransformedImage

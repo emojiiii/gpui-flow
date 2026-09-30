@@ -1,43 +1,54 @@
 use super::*;
 use crate::display::DisplayElement;
+use gpui_flow_composite::{CompositeLimits, SceneUnit};
+struct StateFrame {
+    objects: Vec<RenderObject>,
+    units: Vec<SceneUnit>,
+}
+fn state_render_frame(
+    editor: &SceneEditor,
+    router: &gpui_flow_interaction::scene::SceneEventRouter,
+    styles: &mut gpui_flow_interaction::scene::SceneStateStyles,
+    now: std::time::Duration,
+) -> (StateFrame, Option<String>) {
+    let convert = |scene: &Scene| -> Result<StateFrame, String> {
+        let units = gpui_flow_composite::scene_units(scene, CompositeLimits::default())
+            .map_err(|e| e.to_string())?;
+        let objects = scene
+            .paint_list()
+            .map_err(|e| e.to_string())?
+            .iter()
+            .map(|item| RenderObject::from_paint_item(item, editor.viewport))
+            .collect();
+        Ok(StateFrame { objects, units })
+    };
+    let presented = styles
+        .presentation_at(editor, router, now)
+        .map_err(|e| e.to_string())
+        .and_then(|scene| convert(&scene));
+    match presented {
+        Ok(frame) => (frame, None),
+        Err(error) => match convert(editor.scene()) {
+            Ok(frame) => (frame, Some(error)),
+            Err(fallback) => (
+                StateFrame {
+                    objects: vec![],
+                    units: vec![],
+                },
+                Some(format!("{error}; canonical render: {fallback}")),
+            ),
+        },
+    }
+}
+#[cfg(test)]
 fn state_render_objects(
     editor: &SceneEditor,
     router: &gpui_flow_interaction::scene::SceneEventRouter,
     styles: &mut gpui_flow_interaction::scene::SceneStateStyles,
     now: std::time::Duration,
 ) -> (Vec<RenderObject>, Option<String>) {
-    let convert = |items: Vec<gpui_flow_scene::PaintItem<'_>>| {
-        items
-            .iter()
-            .map(|item| RenderObject::from_paint_item(item, editor.viewport))
-            .collect::<Vec<_>>()
-    };
-    let canonical = || {
-        editor
-            .engine
-            .paint_list()
-            .map(convert)
-            .map_err(|e| e.to_string())
-    };
-    let presented = styles
-        .presentation_at(editor, router, now)
-        .map_err(|e| e.to_string())
-        .and_then(|scene| match scene {
-            std::borrow::Cow::Owned(scene) => {
-                scene.paint_list().map(convert).map_err(|e| e.to_string())
-            }
-            std::borrow::Cow::Borrowed(_) => canonical(),
-        });
-    match presented {
-        Ok(objects) => (objects, None),
-        Err(error) => match canonical() {
-            Ok(objects) => (objects, Some(error)),
-            Err(fallback_error) => (
-                vec![],
-                Some(format!("{error}; canonical render: {fallback_error}")),
-            ),
-        },
-    }
+    let (frame, error) = state_render_frame(editor, router, styles, now);
+    (frame.objects, error)
 }
 impl Render for SceneView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -86,12 +97,25 @@ impl Render for SceneView {
         let show_grid = self.show_grid;
         let entity = cx.entity().downgrade();
         let background = canvas(
-            move |bounds, _, cx| {
-                let _ = entity.update(cx, |this, _| {
-                    this.origin = WorldPoint::new(bounds.origin.x.into(), bounds.origin.y.into());
-                    this.extent =
-                        WorldSize::new(bounds.size.width.into(), bounds.size.height.into());
-                });
+            move |bounds, window, cx| {
+                let actual = super::composite::geometry(bounds, viewport, window);
+                let changed = entity
+                    .update(cx, |this, _| {
+                        this.origin =
+                            WorldPoint::new(bounds.origin.x.into(), bounds.origin.y.into());
+                        this.extent =
+                            WorldSize::new(bounds.size.width.into(), bounds.size.height.into());
+                        let changed = this.composite_geometry != Some(actual);
+                        this.composite_geometry = Some(actual);
+                        changed
+                    })
+                    .unwrap_or(false);
+                if changed {
+                    let entity = entity.clone();
+                    window.on_next_frame(move |_, cx| {
+                        let _ = entity.update(cx, |_, cx| cx.notify());
+                    });
+                }
             },
             move |bounds, _, window, _| {
                 if show_grid {
@@ -119,13 +143,33 @@ impl Render for SceneView {
         .absolute()
         .size_full();
         self.diagnostics.clear();
-        let (objects, state_error) = state_render_objects(
+        let (frame, state_error) = state_render_frame(
             &self.editor,
             &self.router,
             &mut self.state_styles,
             self.state_clock.elapsed(),
         );
         self.state_style_error = state_error;
+        let domains = frame
+            .units
+            .iter()
+            .filter_map(|u| match u {
+                SceneUnit::Domain(d) => Some((**d).clone()),
+                _ => None,
+            })
+            .collect();
+        let composite_key = self.request_composites(domains, window, cx);
+        self.composite_diagnostics = frame
+            .units
+            .iter()
+            .filter_map(|u| match u {
+                SceneUnit::Rejected(e) => Some(e.clone()),
+                _ => None,
+            })
+            .collect();
+        self.composite_diagnostics
+            .extend(self.compositing.diagnostics());
+        self.compositing_pending = self.compositing.pending();
         if self.state_style_error.is_none() && self.state_styles.has_active_transitions() {
             let entity = cx.entity().downgrade();
             window.on_next_frame(move |_, cx| {
@@ -187,7 +231,29 @@ impl Render for SceneView {
             .bg(rgb(theme.background))
             .track_focus(&self.focus)
             .child(background);
-        for object in objects {
+        let mut objects = frame
+            .objects
+            .into_iter()
+            .map(|o| (o.object.id.clone(), o))
+            .collect::<std::collections::BTreeMap<_, _>>();
+        for unit in frame.units {
+            let id = match unit {
+                SceneUnit::Native(id) => id,
+                SceneUnit::Domain(domain) => {
+                    if let Some(key) = &composite_key {
+                        view = view.child(self.composite_element(
+                            domain.root_id().clone(),
+                            key.clone(),
+                            cx,
+                        ));
+                    }
+                    continue;
+                }
+                SceneUnit::Rejected(_) => continue,
+            };
+            let Some(object) = objects.remove(&id) else {
+                continue;
+            };
             self.diagnostics.extend(object.diagnostics());
             if let gpui_flow_scene::Shape::Custom(custom) = &object.object.shape
                 && let Some(renderer) = self.renderers.get(&custom.kind)
@@ -239,6 +305,26 @@ impl Render for SceneView {
                 )
                 .absolute()
                 .size_full(),
+            );
+        }
+        if self.compositing_pending || !self.composite_diagnostics.is_empty() {
+            let message = self
+                .composite_diagnostics
+                .first()
+                .map(|e| format!("Composite {}: {}", e.object, e.error))
+                .unwrap_or_else(|| "Compositing…".into());
+            view = view.child(
+                div()
+                    .absolute()
+                    .top_2()
+                    .left_2()
+                    .px_3()
+                    .py_2()
+                    .rounded_md()
+                    .bg(rgb(theme.panel))
+                    .text_color(rgb(0xf5b971))
+                    .text_xs()
+                    .child(message),
             );
         }
         if !self.diagnostics.is_empty() || !self.gradient_diagnostics.is_empty() {
@@ -462,5 +548,92 @@ mod state_tests {
         assert!(!sheet.has_active_transitions()); // SceneView's next-frame request gate is now false.
         state_render_objects(&editor, &router, &mut sheet, Duration::from_millis(1000));
         assert!(!sheet.has_active_transitions());
+    }
+
+    #[test]
+    fn presented_group_opacity_replaces_whole_subtree_without_native_children() {
+        use gpui_flow_composite::SceneUnit;
+        let mut s = Scene::new();
+        s.insert(DisplayObject::new("g", display::Group::new()), None, None)
+            .unwrap();
+        s.insert(
+            DisplayObject::new("r", display::Rect::new(20., 20.)),
+            Some("g".into()),
+            None,
+        )
+        .unwrap();
+        let mut editor = SceneEditor::new(s).unwrap();
+        let h = editor.engine.handle(&"g".into()).unwrap();
+        let mut styles = SceneStateStyles::new(&editor.engine);
+        styles
+            .bind(
+                &editor.engine,
+                h,
+                StateStyles {
+                    hover: StatePaint {
+                        fill: None,
+                        opacity: Some(0.5),
+                    },
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let mut router = SceneEventRouter::new();
+        router.dispatch(
+            &mut editor,
+            &mut ScenePluginHost::new(),
+            CanvasEvent::PointerMove(PointerInput::left(
+                Point::new(5., 5.),
+                HitTarget::Object("g".into()),
+            )),
+        );
+        let (frame, error) =
+            super::state_render_frame(&editor, &router, &mut styles, std::time::Duration::ZERO);
+        assert!(error.is_none());
+        assert_eq!(frame.units.len(), 1);
+        assert!(matches!(&frame.units[0],SceneUnit::Domain(d) if d.root_id().as_str()=="g"));
+        assert_eq!(
+            editor
+                .scene()
+                .get(&"g".into())
+                .unwrap()
+                .object
+                .style
+                .opacity,
+            1.
+        );
+    }
+    #[test]
+    fn opacity_on_unsupported_frame_rejects_that_entire_boundary() {
+        use gpui_flow_composite::{CompositeError, CompositeIssue, SceneUnit};
+        let mut s = Scene::new();
+        let mut f = DisplayObject::new("f", display::Frame::new(100., 100.));
+        f.style.opacity = 0.5;
+        s.insert(f, None, None).unwrap();
+        s.insert(
+            DisplayObject::new("g", display::Group::new()).with_style(gpui_flow_scene::Style {
+                blend_mode: gpui_flow_scene::BlendMode::Normal,
+                ..Default::default()
+            }),
+            Some("f".into()),
+            None,
+        )
+        .unwrap();
+        let e = SceneEditor::new(s).unwrap();
+        let mut styles = SceneStateStyles::new(&e.engine);
+        let (frame, error) = super::state_render_frame(
+            &e,
+            &SceneEventRouter::new(),
+            &mut styles,
+            std::time::Duration::ZERO,
+        );
+        assert!(error.is_none());
+        assert!(matches!(
+            &frame.units[..],
+            [SceneUnit::Rejected(CompositeIssue {
+                error: CompositeError::UnsupportedShape(_),
+                ..
+            })]
+        ));
     }
 }

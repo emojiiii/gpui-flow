@@ -348,3 +348,84 @@ fn domain_key_equality_sees_child_paint_and_mask_reordering() {
         .unwrap();
     assert_ne!(first, source(&s));
 }
+#[test]
+fn pass_through_mask_group_does_not_fabricate_an_external_blend_backdrop() {
+    let mut s = Scene::new();
+    s.insert(rect("red", 0., Color::hex(0xff0000)), None, None)
+        .unwrap();
+    let mut g = group("g", 1.);
+    g.style.blend_mode = BlendMode::PassThrough;
+    s.insert(g, None, None).unwrap();
+    insert(
+        &mut s,
+        rect("mask", 0., Color::WHITE).with_mask(MaskMode::Alpha),
+        "g",
+    );
+    let mut blue = rect("blue", 0., Color::hex(0x0000ff));
+    blue.style.blend_mode = BlendMode::Multiply;
+    insert(&mut s, blue, "g");
+    let units = scene_units(&s, CompositeLimits::default()).unwrap();
+    assert!(matches!(
+        &units[1],
+        SceneUnit::Rejected(CompositeIssue {
+            error: CompositeError::UnsupportedExternalBackdrop,
+            ..
+        })
+    ));
+    s.update_object(&"mask".into(), |o| o.style.opacity = 0.5)
+        .unwrap();
+    let units = scene_units(&s, CompositeLimits::default()).unwrap();
+    assert!(matches!(&units[1], SceneUnit::Domain(_)));
+}
+#[test]
+fn tiny_skia_rejected_inverse_never_becomes_a_successful_blank_gradient() {
+    use gpui_flow_scene::{GradientStop, Paint};
+    let mut s = Scene::new();
+    s.insert(group("g", 1.), None, None).unwrap();
+    let mut r = DisplayObject::new("r", display::Rect::new(20_000_000., 20_000_000.));
+    r.transform = Affine::new(1e-6, 1e-6, 0., 1e-6, 0., 0.);
+    r.style.fill = Some(Paint::LinearGradient {
+        start: Point::ZERO,
+        end: Point::new(20_000_000., 0.),
+        stops: vec![
+            GradientStop {
+                offset: 0.,
+                color: Color::WHITE,
+            },
+            GradientStop {
+                offset: 1.,
+                color: Color::BLACK,
+            },
+        ],
+    });
+    insert(&mut s, r, "g");
+    let result = rasterize(
+        &source(&s),
+        viewport(),
+        &mut PixelBudget::new(CompositeLimits::default(), 0).unwrap(),
+        &AtomicBool::new(false),
+    );
+    assert!(matches!(result, Err(CompositeError::UnsupportedTransform)));
+}
+#[test]
+fn excess_domains_reject_before_cloning_another_domain_snapshot() {
+    let mut s = Scene::new();
+    for n in 0..9 {
+        s.insert(group(&format!("g{n}"), 1.), None, None).unwrap();
+    }
+    let units = scene_units(&s, CompositeLimits::default()).unwrap();
+    assert_eq!(
+        units
+            .iter()
+            .filter(|u| matches!(u, SceneUnit::Domain(_)))
+            .count(),
+        8
+    );
+    assert!(matches!(
+        &units[8],
+        SceneUnit::Rejected(CompositeIssue {
+            error: CompositeError::InputLimit,
+            ..
+        })
+    ));
+}

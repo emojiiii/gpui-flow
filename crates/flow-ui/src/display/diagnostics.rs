@@ -3,6 +3,8 @@
 pub enum UnsupportedFeature {
     GradientPaint,
     LayeredPaint,
+    /// Requires SceneView's bounded CPU domain, not standalone DisplayElement.
+    CompositingDomain,
     /// Unsupported non-vector stroke, invalid geometry, or a stroke work limit.
     StrokeGeometry,
     TransformedText,

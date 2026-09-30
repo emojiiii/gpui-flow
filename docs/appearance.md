@@ -130,15 +130,7 @@ use the old solid-round defaults, while external Rust `Stroke { paint, width }`
 literals need new fields, a constructor or `..Stroke::default()`. New serializers
 include the stroke fields: backward reading does not mean byte-identical JSON.
 
-Element and inherited group opacity are still multiplied into **each paint**.
-There is no isolated temporary surface: overlapping paints/children at opacity
-0.5 can accumulate alpha instead of compositing the whole element/group once.
-Box/Frame child drawing and clipping do not imply group isolation or a new
-hierarchical compositor. Advanced blend modes, masks, shadows, filters, stroke
-inside/outside placement and scale-fixed strokes remain absent. Paint-only state
-cascades, including named/placeholder/button extensions, are separate
-from compositing; see[state-styles.md](state-styles.md). Property animation and
-timing options are described in[animation.md](animation.md).
+SceneView now routes required vector boundaries through [bounded CPU compositing](compositing.md): complete Group/multi-paint opacity, internal Normal/Multiply/Screen, and sibling alpha masks are real pixel operations. Unsupported Text/Image/Custom/Box/Frame domains fail as a whole, and external blend backdrops are explicitly rejected. Ordinary native objects keep their previous route; standalone DisplayElement reports when SceneView compositing is required. Shadow/filter effects and inside/outside/scale-fixed strokes remain absent. Paint-only states and property animation remain separate inputs to the presented tree.
 CPU damage preparation is not partial GPU rendering.
 
 ## Verification and source alignment

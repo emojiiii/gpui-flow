@@ -22,7 +22,7 @@
 
 - 矢量支持有序多层填充和居中描边，含实色/线性/径向渐变；文本、图像与无几何 Group 的额外 layers 会明确拒绝
 - 新源码已有居中local-space stroke的Butt/Square/Round cap、Bevel/Miter/Round join、miter limit、dash pattern/offset，复用Kurbo dash与Lyon三角化，同一受预算限制的mesh用于高级stroke绘制/命中；headless几何与UI适配器单测通过。Inside/outside、scale-fixed描边及任意SVG/path命令完整覆盖仍未实现
-- 当前仍为逐 paint 的平面透明度；没有隔离组/对象透明度、混合、蒙版、擦除、阴影/模糊。多层 paint 不能替代离屏合成
+- SceneView新增[有界矢量离屏合成](compositing.md)：整体组/多paint透明度、域内Normal/Multiply/Screen和alpha sibling mask；域内Text/Image/Custom/Box/Frame、外部backdrop混合、擦除及阴影/模糊仍不支持，并会整域明确报错
 - 默认 paints 上限32，避免无界三角化/渐变纹理工作；具体边界见 [appearance.md](appearance.md)
 
 ## 媒体

@@ -40,3 +40,6 @@ pub use text_measure::*;
 
 /// Native resource lifecycle adapter and host image authorization.
 pub mod resources;
+
+/// Bounded CPU vector domains used by SceneView.
+pub use gpui_flow_composite as composite;

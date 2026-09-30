@@ -20,6 +20,7 @@ pub struct CompositeLimits {
     pub max_surface_bytes: u64,
     pub max_surface_writes: u64,
     pub max_nodes: usize,
+    pub max_domains: usize,
     pub max_points: usize,
     pub max_total_points: usize,
     pub max_triangles: usize,
@@ -34,6 +35,7 @@ impl Default for CompositeLimits {
             max_surface_bytes: 128 * 1024 * 1024,
             max_surface_writes: 32_000_000,
             max_nodes: 512,
+            max_domains: 8,
             max_points: 65_536,
             max_total_points: 262_144,
             max_triangles: 262_144,
@@ -51,6 +53,7 @@ impl CompositeLimits {
             max_surface_bytes: self.max_surface_bytes.min(ceiling.max_surface_bytes),
             max_surface_writes: self.max_surface_writes.min(ceiling.max_surface_writes),
             max_nodes: self.max_nodes.min(ceiling.max_nodes),
+            max_domains: self.max_domains.min(ceiling.max_domains),
             max_points: self.max_points.min(ceiling.max_points),
             max_total_points: self.max_total_points.min(ceiling.max_total_points),
             max_triangles: self.max_triangles.min(ceiling.max_triangles),
@@ -73,6 +76,8 @@ pub enum CompositeError {
     NestingLimit,
     AllocationFailed,
     Superseded,
+    /// A previous complete frame is temporarily shown at unchanged placement.
+    StaleFrame,
     UploadFailed(String),
 }
 impl fmt::Display for CompositeError {

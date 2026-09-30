@@ -6,16 +6,11 @@
 
 ## 当前批次状态（2026-09-30）
 
-本批已在Linux云端恢复本地验证：562项headless测试（含doctest）、7项真实媒体测试、
-38项UI库单测及10个可执行文档通过；完整workspace/all-targets check与严格clippy通过。
-Taffy trait导入和动画timing lint已修复并备份。完整命令、原生链接/字体探针结果及
-未验证项见[本地验证记录](docs/local-validation-2026-09-30.md)。CI保持暂停，
-没有把单元测试或链接当成真实窗口交互、跨平台或完整Leafer兼容验收。
+新增[有界矢量合成](docs/compositing.md)已接入真实SceneView：整体组/多paint透明度、域内Normal/Multiply/Screen及alpha sibling mask，复用tiny-skia和现有stroke mesh。583项headless测试（含doctest）、45项UI库单测、全workspace/all-targets严格clippy及专用原生示例链接通过。已在Linux云端真实窗口验过透明度/混合/遮罩切换、Undo、pan/zoom及关闭重开；CI保持暂停。
 
-主要边界与API迁移见[源码批次状态](docs/source-only-status.md)。特别是旧JSON读取默认
-兼容不等于Rust源码兼容：外部`Stroke`字面量需补字段/default，新增公开枚举变体需更新
-穷尽match。Inside/outside与scale-fixed描边、任意几何状态、完整嵌套timeline、motion
-path及真正隔离合成/mask仍未完成。下方窗口运行命令保留作人工验收入口，不表示本批已执行窗口交互。
+域内Text/Image/Custom/Box/Frame、外部backdrop混合、shadow/filter仍未覆盖，会整域明确报错。Inside/outside与scale-fixed描边、完整嵌套timeline和motion path仍缺。此次窗口烟测不代替跨平台、大规模性能或所有旧示例交互验收。详细约束与实际操作见[compositing.md](docs/compositing.md)。
+
+此前资源/布局/动画/状态源码批次的媒体、字体、14个二进制及文档记录见[历史本地验证](docs/local-validation-2026-09-30.md)。API迁移见[源码批次状态](docs/source-only-status.md)：旧JSON读取默认兼容不等于Rust穷尽字面量/枚举match源码兼容。
 
 ## 架构层次
 

@@ -1,6 +1,10 @@
 # 测试、CI 与人工验收
 
-## 当前批次：本地Linux验证（2026-09-30）
+## 最新：有界合成与原生窗口验证（2026-09-30）
+
+合成已接入SceneView真实RenderImage上传。583项headless（含doctest，8个既有ignored未在本轮补跑）、45项UI库单测、严格全workspace/all-targets clippy及专用原生窗口控制切换/Undo/pan/zoom的验证范围见[compositing.md](compositing.md)。CI仍暂停，跨平台与性能未验。
+
+## 此前源码批次：本地Linux验证（2026-09-30）
 
 源码备份后已恢复本地验证。当前562项headless测试（含doctest）、7项真实FFmpeg/SDL dummy媒体测试、38项UI库单测及10个可执行文档通过；workspace/all-targets check、严格clippy和两套格式检查通过。完整命令、原生链接/字体探针结果、失败后修复及未运行范围见[本地验证记录](local-validation-2026-09-30.md)。
 

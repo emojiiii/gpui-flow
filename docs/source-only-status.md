@@ -4,7 +4,11 @@
 [`bde1142b027dfbd52c9d5fb7f16a9261eff5b17e`](https://github.com/emojiiii/gpui-flow/commit/bde1142b027dfbd52c9d5fb7f16a9261eff5b17e)。
 本页记录源码接入，不是运行结果或完整 Leafer 兼容声明。
 
-## 当前状态
+## 后续合成增量
+
+[有界矢量合成](compositing.md)已追加真实tiny-skia生产者、SceneView整域替换及RenderImage上传，且完成本地自动回归和专用原生窗口交互烟测。下方原批次数字是之前的独立验证记录。
+
+## 原批次状态
 
 源码批次先备份为`c87c121959c617beb4ab546a7008ba8e88105238`，随后恢复Linux本地验证。
 Taffy trait导入与timing lint修复已备份为`817a68f6e4b014b6897768f1ef75ee5e8545c1dd`。

@@ -2411,6 +2411,7 @@ version = "0.1.0"
 dependencies = [
  "gpui",
  "gpui-flow-animation",
+ "gpui-flow-composite",
  "gpui-flow-core",
  "gpui-flow-editor",
  "gpui-flow-engine",

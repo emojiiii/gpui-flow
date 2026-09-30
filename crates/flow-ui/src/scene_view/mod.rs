@@ -1,4 +1,5 @@
 //! Retained-scene canvas, independent of node graphs, media runners and Studio chrome.
+mod composite;
 mod interaction;
 mod plugins;
 mod render;
@@ -28,6 +29,11 @@ pub struct SceneView {
     pub interactions: gpui_flow_interaction::scene::ScenePluginHost,
     pub diagnostics: Vec<RenderIssue>,
     pub gradient_diagnostics: Vec<crate::display::GradientRenderIssue>,
+    /// CPU-domain rejection, upload failures and explicit stale-frame notices.
+    pub composite_diagnostics: Vec<gpui_flow_composite::CompositeIssue>,
+    pub compositing_pending: bool,
+    pub(crate) compositing: crate::display::composite::CompositeController,
+    composite_geometry: Option<gpui_flow_composite::RasterViewport>,
     resources: Option<crate::resources::SceneResourceAdapter>,
     pub resource_error: Option<String>,
     pub renderers: crate::display::DisplayRegistry,
@@ -58,7 +64,8 @@ impl SceneView {
                 Ok(resources) => (Some(resources), None),
                 Err(error) => (None, Some(error.to_string())),
             };
-        cx.on_release(|this: &mut Self, _| {
+        cx.on_release(|this: &mut Self, cx| {
+            this.compositing.dispose(cx);
             if let Some(resources) = &mut this.resources {
                 let _ = resources.dispose(&mut this.editor.engine);
             }
@@ -71,6 +78,10 @@ impl SceneView {
             interactions: gpui_flow_interaction::scene::ScenePluginHost::with_defaults(),
             diagnostics: vec![],
             gradient_diagnostics: vec![],
+            composite_diagnostics: vec![],
+            compositing_pending: false,
+            compositing: Default::default(),
+            composite_geometry: None,
             resources,
             resource_error,
             renderers: crate::display::DisplayRegistry::default(),

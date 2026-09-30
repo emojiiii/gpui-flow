@@ -31,14 +31,44 @@ pub fn scene_units(scene: &Scene, limits: CompositeLimits) -> Result<Vec<SceneUn
     scene.validate()?;
     let limits = limits.bounded();
     let mut units = Vec::new();
+    let mut domains = 0;
     for id in ordered(scene, scene.roots()) {
-        visit(scene, id, Affine::IDENTITY, &[], &limits, &mut units);
+        visit(
+            scene,
+            id,
+            Affine::IDENTITY,
+            &[],
+            &limits,
+            &mut domains,
+            &mut units,
+        );
     }
     Ok(units)
 }
 impl DomainSource {
     pub fn root_id(&self) -> &DisplayId {
         &self.root.object.id
+    }
+    /// Conservative stale-frame eligibility: paint/opacity-only changes may
+    /// reuse a previous image; geometry, transform, clip, mask and order may not.
+    pub fn placement_eq(&self, other: &Self) -> bool {
+        fn same(a: &DomainNode, b: &DomainNode) -> bool {
+            a.object.id == b.object.id
+                && a.object.shape == b.object.shape
+                && a.world_transform == b.world_transform
+                && a.object.visible == b.object.visible
+                && a.object.mask == b.object.mask
+                && a.object.style.stroke == b.object.style.stroke
+                && a.object.style.stroke_layers == b.object.style.stroke_layers
+                && a.object.style.fills().map(|p| p.is_visible()).eq(b
+                    .object
+                    .style
+                    .fills()
+                    .map(|p| p.is_visible()))
+                && a.children.len() == b.children.len()
+                && a.children.iter().zip(&b.children).all(|(a, b)| same(a, b))
+        }
+        self.clips == other.clips && same(&self.root, &other.root)
     }
     pub fn ids(&self) -> Vec<&DisplayId> {
         fn visit<'a>(node: &'a DomainNode, out: &mut Vec<&'a DisplayId>) {
@@ -78,6 +108,7 @@ fn visit(
     parent: Affine,
     clips: &[ClipRegion],
     limits: &CompositeLimits,
+    domains: &mut usize,
     out: &mut Vec<SceneUnit>,
 ) {
     let Some(node) = scene.get(id) else { return };
@@ -87,12 +118,24 @@ fn visit(
     }
     let world = parent * o.transform;
     if boundary(scene, id) {
+        *domains += 1;
+        if *domains > limits.max_domains {
+            out.push(SceneUnit::Rejected(CompositeIssue {
+                object: id.clone(),
+                error: CompositeError::InputLimit,
+            }));
+            return;
+        }
         let result = if matches!(o.style.blend_mode, BlendMode::Multiply | BlendMode::Screen) {
             Err(CompositeError::UnsupportedExternalBackdrop)
         } else {
             capture(scene, id, parent, limits, &mut Counts::default(), 0)
         };
         out.push(match result {
+            Ok(root) if requires_parent_backdrop(&root) => SceneUnit::Rejected(CompositeIssue {
+                object: id.clone(),
+                error: CompositeError::UnsupportedExternalBackdrop,
+            }),
             Ok(root) => SceneUnit::Domain(Box::new(DomainSource {
                 root,
                 clips: clips.to_vec(),
@@ -114,7 +157,7 @@ fn visit(
         });
     }
     for child in ordered(scene, &node.children) {
-        visit(scene, child, world, &clips, limits, out);
+        visit(scene, child, world, &clips, limits, domains, out);
     }
 }
 #[derive(Default)]
@@ -187,4 +230,30 @@ fn capture(
         world_transform,
         children,
     })
+}
+
+// A mask alone does not isolate a pass-through Group in Leafer. Only blends
+// already protected by a real isolation or a translucent mask run can ignore
+// a native backdrop outside this CPU domain.
+fn requires_parent_backdrop(node: &DomainNode) -> bool {
+    if matches!(
+        node.object.style.blend_mode,
+        BlendMode::Multiply | BlendMode::Screen
+    ) {
+        return true;
+    }
+    if node.object.style.blend_mode == BlendMode::Normal || node.object.style.opacity < 1. {
+        return false;
+    }
+    let mut translucent_run = false;
+    for child in &node.children {
+        if child.object.mask != MaskMode::None {
+            translucent_run = child.object.style.opacity < 1.;
+            continue;
+        }
+        if !translucent_run && requires_parent_backdrop(child) {
+            return true;
+        }
+    }
+    false
 }
