@@ -51,6 +51,7 @@ impl RenderOnce for Inspector {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         div()
             .id(self.id)
+            .overflow_y_scroll()
             .w(px(self.width))
             .flex_shrink_0()
             .bg(rgb(self.theme.panel))
@@ -62,6 +63,10 @@ impl RenderOnce for Inspector {
             .gap_3()
             .text_color(rgb(self.theme.foreground))
             .child(panel_title(self.title, self.theme))
-            .children(self.children)
+            .children(
+                self.children
+                    .into_iter()
+                    .map(|child| div().flex_shrink_0().child(child)),
+            )
     }
 }

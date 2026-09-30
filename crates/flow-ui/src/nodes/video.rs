@@ -1,6 +1,6 @@
-//! Video metadata and optional poster. Playback is supplied by the host callback.
+//! Video node: attach a MediaView for decoded frames/audio, or use metadata/poster callbacks.
 use super::common;
-use crate::{ControlButton, FlowTheme, NodeRenderContext};
+use crate::{ControlButton, FlowTheme, MediaView, NodeRenderContext};
 use gpui::{prelude::*, *};
 use gpui_flow_core::{DataType, Node, NodeId, Point as ModelPoint, Port};
 use serde_json::json;
@@ -16,18 +16,20 @@ pub struct VideoNode {
     pub theme: FlowTheme,
     pub zoom: f32,
     on_open: Option<OpenCallback>,
+    player: Option<Entity<MediaView>>,
 }
 impl VideoNode {
     pub fn new(source: impl Into<SharedString>) -> Self {
         Self {
             id: "video-node".into(),
             source: source.into(),
-            caption: "Video metadata · decoder not bundled".into(),
+            caption: "Set a local video source to enable playback".into(),
             duration: None,
             poster: None,
             theme: FlowTheme::default(),
             zoom: 1.,
             on_open: None,
+            player: None,
         }
     }
     pub fn from_node(node: &Node) -> Self {
@@ -36,7 +38,7 @@ impl VideoNode {
             .caption(common::string(
                 node,
                 "caption",
-                "Video metadata · decoder not bundled",
+                "Set a local video source to enable playback",
             ));
         result.duration = common::number(node, "duration");
         if let Some(poster) = node
@@ -48,6 +50,11 @@ impl VideoNode {
             result.poster = Some(poster.into());
         }
         result
+    }
+    /// Attach a real backend controller through the independently reusable GPUI adapter.
+    pub fn player(mut self, player: Entity<MediaView>) -> Self {
+        self.player = Some(player);
+        self
     }
     pub fn id(mut self, value: impl Into<ElementId>) -> Self {
         self.id = value.into();
@@ -81,6 +88,9 @@ impl VideoNode {
 }
 impl RenderOnce for VideoNode {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        if let Some(player) = self.player {
+            return div().id(self.id).child(player).into_any_element();
+        }
         let z = crate::components::valid_zoom(self.zoom);
         let mut body = common::body(self.theme, z);
         body = if let Some(poster) = self.poster {
@@ -113,7 +123,7 @@ impl RenderOnce for VideoNode {
                     .on_click(move |_, window, cx| callback(source.as_ref(), window, cx)),
             );
         }
-        div().id(self.id).child(body)
+        div().id(self.id).child(body).into_any_element()
     }
 }
 pub fn video_node_body(node: &Node, context: NodeRenderContext) -> AnyElement {
@@ -124,7 +134,8 @@ pub fn video_node_body(node: &Node, context: NodeRenderContext) -> AnyElement {
 }
 pub(super) fn model(id: NodeId, position: ModelPoint) -> Node {
     let mut node = common::model("video", "Video / 视频", id, position);
-    node.data = json!({"source":"","duration":12,"caption":"Video metadata · decoder not bundled"});
+    node.size = gpui_flow_core::Size::new(300., 290.);
+    node.data = json!({"source":"","caption":"Set a local video source to enable playback"});
     node.ports = vec![
         Port::input("in", "Asset", DataType::Named("video".into())),
         Port::output("out", "Asset", DataType::Named("video".into())),

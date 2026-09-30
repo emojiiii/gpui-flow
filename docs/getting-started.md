@@ -29,7 +29,7 @@ sudo apt-get install -y \
 
 ### Windows
 
-使用 MSVC Rust 工具链、Git 和 Visual Studio 2022 Build Tools（“使用 C++ 的桌面开发”工作负载与 Windows SDK）。CI 使用 `windows-latest` 自带的 MSVC/SDK 环境，执行 workspace check/clippy、UI 单测和三个示例链接；查看对应提交的 Actions 结果，不将配置存在当作通过证据。Windows 上尚未进行真实窗口、输入法与文件对话框人工验收。
+使用 MSVC Rust 工具链、Git 和 Visual Studio 2022 Build Tools（“使用 C++ 的桌面开发”工作负载与 Windows SDK）。CI 使用 `windows-latest` 自带的 MSVC/SDK 环境，执行 workspace check/clippy、UI 单测和全部示例链接；查看对应提交的 Actions 结果，不将配置存在当作通过证据。Windows 上尚未进行真实窗口、输入法与文件对话框人工验收。
 
 ### macOS
 
@@ -100,11 +100,11 @@ cargo run --locked -p flow-studio
 
 `Cancel runs` 发出取消请求。取消是合作式的，要等 runner 检查令牌并返回后，界面才会进入取消终态。`Retry selected` 重跑先前任务的同一份输入，不会读取编辑后的节点数据；要使用新输入，应重新调用 `start`。运行中重复启动/重试会被拒绝。
 
-连线不会驱动运行顺序，生成输出不会写回 Graph，也不会流入下游 output 节点。需要真实流程执行时，宿主应实现依赖解析、调度和结果更新。
+`Run workflow` 是独立入口：按依赖执行完整图快照，以三个并发槽传递端口值；失败会跳过后继。Inspector 显示输出，结果不自动覆盖 Graph data。存在 workflow 时 Retry selected 使用局部重试语义，详见[工作流教程](workflows.md)。
 
 ### 编辑节点内容与图片预览
 
-选中节点后，右侧 EDIT CONTENT 输入根据类型编辑一个字段：文本/便签/输出等编辑 `text`，生成/agent 编辑 `prompt`，图片/视频/音频编辑 `source`。变更通过事务写入节点数据。图片 source 可填本地图片文件路径；视频/音频 source 目前只保存元数据。标题、几何和端口列表仍为只读展示。
+选中节点后，右侧 EDIT CONTENT 输入根据类型编辑一个字段：文本/便签/输出等编辑 `text`，生成/agent 编辑 `prompt`，图片/视频/音频编辑 `source`。变更通过事务写入节点数据。图片 source 可填本地图片文件路径；Studio 中视频/音频 source 可填本地文件路径，自动探测后显示播放器；播放需手动点击，依赖本机 FFmpeg/ffplay。宿主自己的 FlowCanvas 默认不启用媒体，需 set_media_backend。标题、几何和端口列表仍为只读展示。
 
 ## 3. 保存、恢复与导入
 

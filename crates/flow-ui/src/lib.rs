@@ -21,3 +21,7 @@ pub use gpui_flow_scene as scene;
 mod scene_view;
 pub use gpui_flow_editor as editor;
 pub use scene_view::*;
+
+pub mod media;
+pub use gpui_flow_media as media_backend;
+pub use media::MediaView;

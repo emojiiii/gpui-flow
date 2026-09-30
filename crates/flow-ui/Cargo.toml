@@ -12,3 +12,6 @@ gpui-kit.workspace = true
 gpui-flow-scene.workspace = true
 gpui-flow-editor.workspace = true
 lyon = "1"
+image.workspace = true
+
+gpui-flow-media.workspace = true

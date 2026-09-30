@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["crates/flow-core", "crates/flow-runtime", "crates/flow-scene", "crates/flow-editor", "crates/flow-ui", "examples/studio"]
-default-members = ["crates/flow-core", "crates/flow-runtime", "crates/flow-scene", "crates/flow-editor"]
+members = ["crates/flow-core", "crates/flow-runtime", "crates/flow-scene", "crates/flow-editor", "crates/flow-media", "crates/flow-ui", "examples/studio"]
+default-members = ["crates/flow-core", "crates/flow-runtime", "crates/flow-scene", "crates/flow-editor", "crates/flow-media"]
 
 [workspace.package]
 version = "0.1.0"
@@ -19,3 +19,11 @@ gpui-flow = { path = "crates/flow-ui" }
 
 gpui-flow-scene = { path = "crates/flow-scene" }
 gpui-flow-editor = { path = "crates/flow-editor" }
+
+gpui-flow-media = { path = "crates/flow-media" }
+
+image = { version = "0.25", default-features = false }
+
+# Gradient rasterization is a per-pixel workload used by interactive dev builds.
+[profile.dev.package.gpui-flow-scene]
+opt-level = 2

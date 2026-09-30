@@ -23,6 +23,7 @@ dependencies = [
 name = "gpui-flow-runtime"
 version = "0.1.0"
 dependencies = [
+ "gpui-flow-core",
  "serde",
  "serde_json",
 ]

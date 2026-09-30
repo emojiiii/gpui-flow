@@ -88,11 +88,11 @@ view.dispatcher.on(
 
 已实现的矢量绘制并非用轴对齐 Div 假装旋转：先在本地空间三角化，再将三角形做仿射变换，最后对祖先 Frame 的凸圆角 mask 做几何裁切。非均匀缩放也改变 stroke 几何。Path/Pen 的曲线有可控精度的线段展开。
 
-- 支持：实色 fill/stroke、opacity、任意仿射矢量变换、嵌套圆角矢量裁切、NonZero/EvenOdd 填充
+- 支持：实色与多色标线性/径向渐变 fill/stroke、opacity、任意仿射矢量变换、嵌套圆角矢量裁切、NonZero/EvenOdd 填充
 - Text：GPUI 原生排版、字体、字号、换行/对齐；正向轴对齐等比缩放可用
 - Image：本地图片资源、Contain/Cover/Fill；从导入场景不会自动发起网络请求
-- 当前 GPUI 后端不绘制：渐变 paint、旋转/斜切/翻转/非等比缩放文字或图片、Frame 裁切内的文字/图片。这些会记录在 `SceneView.diagnostics`，界面给出诊断计数，不静默假装支持
-- scene 数据层可保存线性/径向渐变，但不代表当前 GPUI renderer 已支持
+- 当前 GPUI 后端不绘制：文字/图片的渐变蒙版、旋转/斜切/翻转/非等比缩放文字或图片、Frame 裁切内的文字/图片。这些会记录在 `SceneView.diagnostics`，界面给出诊断计数，不静默假装支持
+- 矢量渐变由真实颜色采样生成设备分辨率纹理；支持硬色标、透明度和局部坐标映射。大小限制、缓存与错误诊断见 [渐变渲染](gradients.md)
 - 未实现：通用 SVG 文件解析、滤镜/混合模式/阴影、动画时间线、自动布局、任意蒙版、文本轮廓化、视频音频解码、协作/CRDT、百万元素性能保证
 
 可以通过独立图形 primitive/Scene APIs 构建自己的 adapter；当前支持矩阵应作为后端契约而非整个框架未来能力上限。

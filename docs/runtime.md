@@ -2,7 +2,7 @@
 
 ## 这层负责什么
 
-`gpui-flow-runtime` 是一个无 GPUI、无网络客户端的任务桥接层。它按节点 ID 启动独立后台线程，把进度、成功输出、失败和取消事件送回调用线程。它不是 DAG 引擎，不自动读取 Graph，也没有内建供应商、API 密钥、队列服务或计费逻辑。
+`gpui-flow-runtime` 是一个无 GPUI、无网络客户端的任务桥接层。它按节点 ID 启动独立后台线程，把进度、成功输出、失败和取消事件送回调用线程。独立 Runtime 不读取 Graph；新增的 Workflow 层负责有并发上限的 DAG 调度、端口数据传递、失败传播和局部重试，见[工作流教程](workflows.md)。二者都没有内建真实供应商、API 密钥、队列服务或计费逻辑。
 
 可运行教程位于 [`docs/examples/src/bin/runner.rs`](examples/src/bin/runner.rs)：
 

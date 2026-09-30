@@ -3,6 +3,7 @@ use super::*;
 impl Render for FlowCanvas {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sync_input(window, cx);
+        self.sync_media(cx);
         let theme = self.theme;
         let viewport = self.editor.viewport;
         let grid = self.show_grid;
@@ -268,6 +269,30 @@ impl Render for FlowCanvas {
                     node.size.height,
                     node.ports.len()
                 )));
+            if let Some(record) = self
+                .workflow
+                .as_ref()
+                .and_then(|w| w.records().get(&node.id))
+            {
+                inspector = inspector
+                    .child(panel_title("WORKFLOW", theme))
+                    .child(format!("{:?} · {}", record.status, record.message));
+                if let Some(output) = &record.outputs {
+                    let preview = serde_json::to_string_pretty(output)
+                        .unwrap_or_default()
+                        .chars()
+                        .take(1600)
+                        .collect::<String>();
+                    inspector = inspector.child(
+                        div()
+                            .id("workflow-output")
+                            .text_xs()
+                            .h(px(150.))
+                            .overflow_y_scroll()
+                            .child(preview),
+                    );
+                }
+            }
             for port in &node.ports {
                 inspector = inspector.child(div().text_xs().text_color(rgb(theme.muted)).child(
                     format!("{:?} {} · {:?}", port.direction, port.label, port.data_type),
@@ -301,6 +326,9 @@ impl Render for FlowCanvas {
                 this.report(result, cx);
             }))
             .child(self.button("cancel", "Cancel runs", cx, |this, cx| {
+                if let Some(workflow) = this.workflow.as_mut() {
+                    workflow.cancel();
+                }
                 let ids: Vec<_> = this.runtime.records.keys().cloned().collect();
                 for id in ids {
                     this.runtime.cancel(&id);
@@ -308,9 +336,27 @@ impl Render for FlowCanvas {
                 cx.notify();
             }))
             .child(self.button("retry", "Retry selected", cx, |this, cx| {
-                for id in &this.editor.selection.nodes {
-                    if let Err(e) = this.runtime.retry(id.as_str()) {
-                        this.message = e;
+                if let Some(workflow) = this.workflow.as_mut() {
+                    let selected = this
+                        .editor
+                        .selection
+                        .nodes
+                        .iter()
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    let result = if selected.is_empty() {
+                        workflow.retry_failed()
+                    } else {
+                        workflow.retry_many(&selected)
+                    };
+                    if let Err(error) = result {
+                        this.message = error;
+                    }
+                } else {
+                    for id in &this.editor.selection.nodes {
+                        if let Err(error) = this.runtime.retry(id.as_str()) {
+                            this.message = error;
+                        }
                     }
                 }
                 cx.notify();
@@ -380,6 +426,17 @@ impl Render for FlowCanvas {
                                     self.run_label.clone(),
                                     cx,
                                     Self::run_selected,
+                                ))
+                                .child(self.button(
+                                    "workflow-run",
+                                    "Run workflow",
+                                    cx,
+                                    |this, cx| {
+                                        if let Err(e) = this.start_workflow(3, cx) {
+                                            this.message = e;
+                                            cx.notify();
+                                        }
+                                    },
                                 )),
                         ),
                 )

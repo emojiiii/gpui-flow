@@ -2410,9 +2410,11 @@ dependencies = [
  "gpui",
  "gpui-flow-core",
  "gpui-flow-editor",
+ "gpui-flow-media",
  "gpui-flow-runtime",
  "gpui-flow-scene",
  "gpui-kit",
+ "image",
  "lyon",
  "serde_json",
 ]
@@ -2434,9 +2436,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "gpui-flow-media"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "gpui-flow-runtime"
 version = "0.1.0"
 dependencies = [
+ "gpui-flow-core",
  "serde",
  "serde_json",
 ]

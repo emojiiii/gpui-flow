@@ -48,13 +48,22 @@ fn transformed_path(
     output
 }
 /// Tessellate in local space, then transform triangles. Non-uniform scales preserve stroke geometry.
-pub(super) fn paint_vector(object: &RenderObject, origin: Point<Pixels>, window: &mut Window) {
+pub(super) fn paint_vector(
+    object: &RenderObject,
+    origin: Point<Pixels>,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    super::gradient::clear_object_issues(
+        window.window_handle().window_id().as_u64(),
+        object.object.id.as_str(),
+    );
     let screen =
         scene::Affine::translation(origin.x.into(), origin.y.into()) * object.screen_transform;
     let contours = object
         .object
         .shape
-        .flatten(0.25 / object.screen_transform.max_scale().max(0.01));
+        .flatten(0.25 / (object.screen_transform.max_scale() * window.scale_factor()).max(0.01));
     let clips: Vec<Vec<scene::Point>> = object
         .clips
         .iter()
@@ -64,7 +73,7 @@ pub(super) fn paint_vector(object: &RenderObject, origin: Point<Pixels>, window:
                 * clip.world_transform;
             scene::display::Rect::new(clip.local_bounds.size.width, clip.local_bounds.size.height)
                 .rounded(clip.corner_radius)
-                .flatten(0.3)
+                .flatten(0.25 / (transform.max_scale() * window.scale_factor()).max(0.01))
                 .points
                 .into_iter()
                 .map(|p| transform.transform_point(p + clip.local_bounds.origin))
@@ -88,13 +97,7 @@ pub(super) fn paint_vector(object: &RenderObject, origin: Point<Pixels>, window:
             .ok()
             .map(|path| transformed_path(path, screen, &clips))
     };
-    if let Some(fill) = object
-        .object
-        .style
-        .fill
-        .as_ref()
-        .and_then(|p| color(p, object.opacity))
-    {
+    if let Some(fill) = &object.object.style.fill {
         let rule = match object.object.style.fill_rule {
             scene::FillRule::NonZero => FillRule::NonZero,
             scene::FillRule::EvenOdd => FillRule::EvenOdd,
@@ -103,11 +106,15 @@ pub(super) fn paint_vector(object: &RenderObject, origin: Point<Pixels>, window:
             PathBuilder::fill()
                 .with_style(PathStyle::Fill(FillOptions::default().with_fill_rule(rule))),
         ) {
-            window.paint_path(path, fill);
+            if let Some(color) = color(fill, object.opacity) {
+                window.paint_path(path, color);
+            } else {
+                super::gradient::paint_gradient(object, origin, path, fill, false, window, cx);
+            }
         }
     }
     if let Some(stroke) = &object.object.style.stroke
-        && let Some(color) = color(&stroke.paint, object.opacity)
+        && stroke.width > 0.0
         && let Some(path) = build(
             PathBuilder::stroke(px(stroke.width)).with_style(PathStyle::Stroke(
                 StrokeOptions::default()
@@ -117,6 +124,10 @@ pub(super) fn paint_vector(object: &RenderObject, origin: Point<Pixels>, window:
             )),
         )
     {
-        window.paint_path(path, color);
+        if let Some(color) = color(&stroke.paint, object.opacity) {
+            window.paint_path(path, color);
+        } else {
+            super::gradient::paint_gradient(object, origin, path, &stroke.paint, true, window, cx);
+        }
     }
 }

@@ -64,7 +64,7 @@ cargo run --locked --manifest-path docs/examples/Cargo.toml --bin runner
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) 包含：
 
 1. Ubuntu 24.04：主 workspace 与文档示例格式检查、core/runtime/scene/editor 测试及 clippy、执行文档示例
-2. Ubuntu 24.04 / macOS 15 / windows-latest（MSVC）：安装平台依赖，完整 workspace check/clippy，UI组件单测，链接全部三个示例
+2. Ubuntu 24.04 / macOS 15 / windows-latest（MSVC）：安装平台依赖，完整 workspace check/clippy，UI组件单测，链接全部示例
 
 CI 使用 Rust 1.98.1 和 `--locked`，只授予 `contents: read`，不需要供应商密钥，不发布 crate、部署应用或上传用户图。并发工作流会取消同一分支的旧 run。native job 不是图形 E2E 测试。
 
@@ -138,3 +138,13 @@ CI 使用 Rust 1.98.1 和 `--locked`，只授予 `contents: read`，不需要供
 - 该 Linux 桌面缺少 `org.freedesktop.portal.Desktop`，默认原生文件选择器显示错误；因此使用并验证了 `--file PATH`。未宣称默认原生对话框成功
 
 未执行的内容仍包括 Windows 原生运行、macOS 实际窗口操作、真实供应商/媒体解码、输入法矩阵、大规模性能、完整所有交互路径。GitHub CI 的最终提交结果以 Actions 页面为准。
+
+## 音视频、渐变与工作流增量验收
+
+- 本地完整 workspace clippy 严格通过；五个原生示例编译链接通过
+- Workflow 26 个回归测试覆盖依赖/传值/并发/失败传播/取消/多失败分支汇合重试
+- Media 9 个测试包含真实 FFmpeg 解码、seek/pause、短音轨长视频、快速重复操作、子进程回收/超时/缺工具。音频设备为 SDL dummy，不证明扬声器可听
+- Gradient 16 个语义/像素测试，另有明确 ignored 的性能测量；GPUI 缓存/窗口诊断测试纳入 UI 单测
+- 云端 Linux 实際媒体窗口已验证：首帧、Play、Pause、seek 到 3 秒、Mute、Stop 归零；渐变 Gallery 的多色标、径向、透明硬边、曲线描边、旋转、嵌套圆角裁切可见，拖动/旋转成功
+- Studio Run workflow 实際按依赖完成，文本/参考先成功、生成随后执行、输出终态成功，Inspector 可查看状态与输出
+- Windows/macOS 增量结果仍以对应提交 Actions 为准；未做这些平台的真实音频设备/窗口验收

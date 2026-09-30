@@ -15,7 +15,24 @@ impl FlowCanvas {
         if let Some(renderer) = self.registry.get(&node.kind) {
             return renderer.render(node, context, window, cx);
         }
-        let mut body = div().child(builtin_node_body(node, context));
+        let rendered = match self.media_players.get(&node.id).map(|(_, player)| player) {
+            Some(Ok(player)) if node.kind == "audio" => AudioNode::from_node(node)
+                .theme(context.theme)
+                .zoom(context.zoom)
+                .player(player.clone())
+                .into_any_element(),
+            Some(Ok(player)) if node.kind == "video" => VideoNode::from_node(node)
+                .theme(context.theme)
+                .zoom(context.zoom)
+                .player(player.clone())
+                .into_any_element(),
+            Some(Err(error)) => div()
+                .child(builtin_node_body(node, context))
+                .child(format!("Media: {error}"))
+                .into_any_element(),
+            _ => builtin_node_body(node, context),
+        };
+        let mut body = div().child(rendered);
         if let Some(run) = self.runtime.records.get(node.id.as_str()) {
             body = body.child(
                 div()
@@ -29,6 +46,23 @@ impl FlowCanvas {
                         (run.progress * 100.) as u32,
                         run.attempt
                     )),
+            );
+        }
+        if let Some(record) = self
+            .workflow
+            .as_ref()
+            .and_then(|w| w.records().get(&node.id))
+        {
+            body = body.child(
+                div()
+                    .px(px(10. * context.zoom))
+                    .text_size(px(10. * context.zoom))
+                    .text_color(rgb(context.theme.muted))
+                    .child(format!(
+                        "Flow {:?} · attempt {}",
+                        record.status, record.attempt
+                    ))
+                    .child(record.message.clone()),
             );
         }
         body.into_any_element()

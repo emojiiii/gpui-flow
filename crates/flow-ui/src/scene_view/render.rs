@@ -2,6 +2,26 @@ use super::*;
 use crate::display::DisplayElement;
 impl Render for SceneView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let diagnostic_entity = cx.entity().downgrade();
+        let diagnostic_window = window.window_handle().window_id().as_u64();
+        window.on_next_frame(move |_, cx| {
+            let issues = crate::display::gradient_render_issues(diagnostic_window);
+            let _ = diagnostic_entity.update(cx, |this, cx| {
+                let issues = issues
+                    .into_iter()
+                    .filter(|issue| {
+                        this.editor
+                            .scene
+                            .get(&issue.object.clone().into())
+                            .is_some()
+                    })
+                    .collect::<Vec<_>>();
+                if this.gradient_diagnostics != issues {
+                    this.gradient_diagnostics = issues;
+                    cx.notify();
+                }
+            });
+        });
         let theme = self.theme;
         let viewport = self.editor.viewport;
         let show_grid = self.show_grid;
@@ -112,7 +132,7 @@ impl Render for SceneView {
             }
         }
         view = view.child(overlay);
-        if !self.diagnostics.is_empty() {
+        if !self.diagnostics.is_empty() || !self.gradient_diagnostics.is_empty() {
             view = view.child(
                 div()
                     .absolute()
@@ -125,8 +145,13 @@ impl Render for SceneView {
                     .text_color(rgb(0xf5b971))
                     .text_xs()
                     .child(format!(
-                        "{} unsupported rendering features · inspect SceneView.diagnostics",
-                        self.diagnostics.len()
+                        "{} unsupported features · {} gradient errors{}",
+                        self.diagnostics.len(),
+                        self.gradient_diagnostics.len(),
+                        self.gradient_diagnostics
+                            .first()
+                            .map(|e| format!(" · {}: {}", e.object, e.message))
+                            .unwrap_or_default()
                     )),
             );
         }

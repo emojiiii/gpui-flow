@@ -57,6 +57,8 @@ impl FlowCanvas {
                         match this.editor.load_document(document) {
                             Ok(()) => {
                                 this.runtime = Runtime::default();
+                                this.workflow = None;
+                                this.media_players.clear();
                                 this.connecting = None;
                                 this.input_node = None;
                                 this.input = None;
@@ -159,6 +161,8 @@ impl FlowCanvas {
                                 Ok(()) => {
                                     this.input_node = None;
                                     this.runtime = Runtime::default();
+                                    this.workflow = None;
+                                    this.media_players.clear();
                                     this.connecting = None;
                                     this.message = "Document opened".into();
                                     this.changed(cx);
@@ -189,6 +193,8 @@ impl FlowCanvas {
             Ok(())
         })?;
         self.runtime = Runtime::default();
+        self.workflow = None;
+        self.media_players.clear();
         self.connecting = None;
         self.input_node = None;
         self.editor.selection.clear();

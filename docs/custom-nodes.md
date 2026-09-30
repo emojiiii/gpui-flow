@@ -139,7 +139,7 @@ canvas.update(cx, |canvas, cx| {
 
 当前 Inspector 的内容输入为图片/音频/视频编辑 `source`，生成/agent 编辑 `prompt`，其他类型编辑 `text`。它不是通用表单 schema。`provider` / `model` 只是元数据，Studio 的 Run 按钮仍固定使用 MockRunner。
 
-图片 `source` 被转为 `PathBuf`，仅代表本地图片路径。`https://...` 不会被当作下载地址。宿主须控制可读取的目录、文件类型和资源大小。视频和音频没有解码器或播放行为。
+图片 `source` 被转为 `PathBuf`，仅代表本地图片路径。`https://...` 不会被当作下载地址。宿主须控制可读取的目录、文件类型和资源大小。视频和音频可通过 `.player(Entity<MediaView>)` 使用真实解码/播放后端；默认 FlowCanvas 不开启，宿主显式配置后才读取媒体文件。工具依赖、资源限制、同步精度和测试见 [媒体后端](media.md)。
 
 ## 5. 主题与画布选项
 

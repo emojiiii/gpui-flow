@@ -1,6 +1,7 @@
-//! Audio metadata. Waveform samples and playback are host supplied, never fabricated.
+//! Audio node: attach a MediaView for real playback, or use metadata/custom callbacks.
+//! Waveform samples are host supplied, never fabricated.
 use super::common;
-use crate::{ControlButton, FlowTheme, NodeRenderContext};
+use crate::{ControlButton, FlowTheme, MediaView, NodeRenderContext};
 use gpui::{prelude::*, *};
 use gpui_flow_core::{DataType, Node, NodeId, Point as ModelPoint, Port};
 use serde_json::json;
@@ -15,18 +16,20 @@ pub struct AudioNode {
     pub theme: FlowTheme,
     pub zoom: f32,
     on_play: Option<PlayCallback>,
+    player: Option<Entity<MediaView>>,
 }
 impl AudioNode {
     pub fn new(source: impl Into<SharedString>) -> Self {
         Self {
             id: "audio-node".into(),
             source: source.into(),
-            caption: "Audio metadata · playback adapter needed".into(),
+            caption: "Set a local audio source to enable playback".into(),
             duration: None,
             waveform: vec![],
             theme: FlowTheme::default(),
             zoom: 1.,
             on_play: None,
+            player: None,
         }
     }
     pub fn from_node(node: &Node) -> Self {
@@ -35,10 +38,15 @@ impl AudioNode {
             .caption(common::string(
                 node,
                 "caption",
-                "Audio metadata · playback adapter needed",
+                "Set a local audio source to enable playback",
             ));
         result.duration = common::number(node, "duration");
         result
+    }
+    /// Attach a real backend controller through the independently reusable GPUI adapter.
+    pub fn player(mut self, player: Entity<MediaView>) -> Self {
+        self.player = Some(player);
+        self
     }
     pub fn id(mut self, value: impl Into<ElementId>) -> Self {
         self.id = value.into();
@@ -81,6 +89,9 @@ impl AudioNode {
 }
 impl RenderOnce for AudioNode {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        if let Some(player) = self.player {
+            return div().id(self.id).child(player).into_any_element();
+        }
         let z = crate::components::valid_zoom(self.zoom);
         let color = super::kind_color("audio");
         let mut body = common::body(self.theme, z);
@@ -120,7 +131,7 @@ impl RenderOnce for AudioNode {
                     .on_click(move |_, window, cx| callback(source.as_ref(), window, cx)),
             );
         }
-        div().id(self.id).child(body)
+        div().id(self.id).child(body).into_any_element()
     }
 }
 pub fn audio_node_body(node: &Node, context: NodeRenderContext) -> AnyElement {
@@ -131,8 +142,8 @@ pub fn audio_node_body(node: &Node, context: NodeRenderContext) -> AnyElement {
 }
 pub(super) fn model(id: NodeId, position: ModelPoint) -> Node {
     let mut node = common::model("audio", "Audio / 音频", id, position);
-    node.data =
-        json!({"source":"","duration":24,"caption":"Audio metadata · playback adapter needed"});
+    node.size = gpui_flow_core::Size::new(300., 225.);
+    node.data = json!({"source":"","caption":"Set a local audio source to enable playback"});
     node.ports = vec![
         Port::input("in", "Asset", DataType::Named("audio".into())),
         Port::output("out", "Asset", DataType::Named("audio".into())),

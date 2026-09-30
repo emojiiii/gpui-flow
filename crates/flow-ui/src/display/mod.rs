@@ -2,7 +2,12 @@
 //! Vector tessellation supports affine transforms and nested rounded frame clipping.
 mod clip;
 mod diagnostics;
+mod gradient;
 mod image;
+pub use gradient::{
+    GradientCacheStats, GradientRenderIssue, clear_gradient_cache, gradient_cache_stats,
+    gradient_render_issues, take_gradient_render_issues,
+};
 mod text;
 mod vector;
 pub use diagnostics::*;
@@ -10,7 +15,7 @@ use gpui::{prelude::*, *};
 use gpui_flow_core::Viewport;
 use gpui_flow_scene::{self as scene, ClipRegion, DisplayObject, Paint, Shape};
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct RenderObject {
     pub object: DisplayObject,
     pub screen_transform: scene::Affine,
@@ -39,13 +44,14 @@ impl RenderObject {
             })
         };
         let unsupported = |p: &Paint| !matches!(p, Paint::Solid { .. });
-        if self.object.style.fill.as_ref().is_some_and(unsupported)
-            || self
-                .object
-                .style
-                .stroke
-                .as_ref()
-                .is_some_and(|s| unsupported(&s.paint))
+        if matches!(self.object.shape, Shape::Text(_) | Shape::Image(_))
+            && (self.object.style.fill.as_ref().is_some_and(unsupported)
+                || self
+                    .object
+                    .style
+                    .stroke
+                    .as_ref()
+                    .is_some_and(|s| unsupported(&s.paint)))
         {
             report(UnsupportedFeature::GradientPaint);
         }
@@ -108,8 +114,8 @@ impl RenderOnce for DisplayElement {
                 let object = self.object;
                 canvas(
                     |_, _, _| (),
-                    move |bounds, _, window, _| {
-                        vector::paint_vector(&object, bounds.origin, window)
+                    move |bounds, _, window, cx| {
+                        vector::paint_vector(&object, bounds.origin, window, cx)
                     },
                 )
                 .absolute()

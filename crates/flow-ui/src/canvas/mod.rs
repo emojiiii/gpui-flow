@@ -41,6 +41,10 @@ pub struct FlowCanvas {
     pub theme: FlowTheme,
     pub edge_renderer: Arc<dyn EdgeRenderer>,
     pub runtime: Runtime,
+    pub workflow: Option<gpui_flow_runtime::Workflow>,
+    pub workflow_runners: gpui_flow_runtime::RunnerRegistry,
+    media_backend: Option<Arc<dyn crate::media_backend::MediaBackend>>,
+    media_players: BTreeMap<NodeId, (String, Result<Entity<MediaView>, String>)>,
     pub options: FlowOptions,
     pub runners: BTreeMap<String, Arc<dyn AgentRunner>>,
     pub run_label: SharedString,
@@ -66,10 +70,12 @@ pub struct FlowCanvas {
 
 mod inspector;
 mod interaction;
+mod media;
 mod minimap;
 mod node;
 mod persistence;
 mod render;
+mod workflow;
 
 impl FlowCanvas {
     pub fn new(graph: Graph, cx: &mut Context<Self>) -> Result<Self, model::GraphError> {
@@ -82,6 +88,23 @@ impl FlowCanvas {
                 if this
                     .update(cx, |this, cx| {
                         let events = this.runtime.poll();
+                        if let Some(workflow) = this.workflow.as_mut()
+                            && !workflow.is_finished()
+                        {
+                            let events = workflow.poll();
+                            for event in events {
+                                cx.emit(FlowEvent::RunChanged(event.node_id));
+                            }
+                            if workflow.is_finished() {
+                                this.message = if workflow.succeeded() {
+                                    "Workflow completed"
+                                } else {
+                                    "Workflow ended with failed, skipped or cancelled nodes"
+                                }
+                                .into();
+                            }
+                            cx.notify();
+                        }
                         if !events.is_empty() {
                             for event in events {
                                 cx.emit(FlowEvent::RunChanged(event.node_id));
@@ -102,6 +125,10 @@ impl FlowCanvas {
             theme: FlowTheme::default(),
             edge_renderer: Arc::new(BezierEdge),
             runtime: Runtime::default(),
+            workflow: None,
+            workflow_runners: BTreeMap::new(),
+            media_backend: None,
+            media_players: BTreeMap::new(),
             options: FlowOptions::default(),
             runners: BTreeMap::new(),
             run_label: "Run selected".into(),
@@ -132,6 +159,10 @@ impl FlowCanvas {
         canvas
             .runners
             .insert("agent".into(), Arc::new(MockRunner::default()));
+        canvas.set_media_backend(Some(Arc::new(
+            crate::media_backend::FfmpegBackend::default(),
+        )));
+        canvas.workflow_runners = workflow::demo_workflow_runners();
         canvas.run_label = "Run · MOCK".into();
         canvas
     }

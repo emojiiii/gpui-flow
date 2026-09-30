@@ -68,8 +68,8 @@ impl Render for PromptCard {
 | --- | --- | --- |
 | TextNode | `new(text)` | `theme`、`zoom` |
 | ImageNode | `new(local_path)` / `empty()` | `alt`、`caption`、`preview_height` |
-| VideoNode | `new(source)` | `duration`、`poster`、`caption`、`on_open` |
-| AudioNode | `new(source)` | `duration`、`waveform`、`caption`、`on_play` |
+| VideoNode | `new(source)` | `player`、`duration`、`poster`、`caption`、`on_open` |
+| AudioNode | `new(source)` | `player`、`duration`、`waveform`、`caption`、`on_play` |
 | GenerationNode | `new(prompt)` | `provider`、`model`、`progress`、`status`、`on_run` |
 | AgentNode | `new(prompt)` | 组合 GenerationNode，提供相同执行状态与回调 |
 | NoteNode | `new(text)` | 无端口便签内容 |
@@ -77,7 +77,7 @@ impl Render for PromptCard {
 
 所有类型都支持 `from_node(&core::Node)`。每个节点模块还提供 `text_node_body`、`image_node_body` 等函数，统一签名为 `(&Node, NodeRenderContext) -> AnyElement`。`builtin_node_body` 是方便的内置分发入口；`FlowCanvas` 先查自定义 `NodeRegistry`，没有命中才调用它。
 
-图片使用 GPUI 图片元素加载本地路径。视频可以显示本地 poster，音频波形只使用宿主传入的数据；默认不会生成假波形。音视频没有打包解码器或播放器：`on_open` / `on_play` 只把 source 交给宿主。`GenerationNode::new` 也不会伪装已经配置供应商；只有 `provider == "mock"` 才显示 MOCK 标识。`builtin_node` 的离线示例数据仍明确使用 mock。
+图片使用 GPUI 图片元素加载本地路径。音视频节点可通过 `.player(Entity<MediaView>)` 接入真实 FFmpeg 解码、FFplay 音频输出和播放/暂停/seek 控件；详见 [媒体后端](media.md)。未接入 player 时，视频显示元数据/本地 poster，音频只显示宿主传入的波形，不生成假波形。原有 `on_open` / `on_play` 回调保留给自定义宿主。`GenerationNode::new` 也不会伪装已经配置供应商；只有 `provider == "mock"` 才显示 MOCK 标识。`builtin_node` 的离线示例数据仍明确使用 mock。
 
 ## 3. 可替换的编辑器周边组件
 
