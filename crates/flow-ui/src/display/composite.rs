@@ -182,6 +182,9 @@ impl CompositeController {
             return vec![];
         }
         self.cancel.store(true, Ordering::Relaxed);
+        // A -> B -> A may return to the same presented values/revision after
+        // A's unaccepted candidate was cleared. Completion is request-local.
+        self.completed = None;
         self.candidates.clear();
         self.errors.clear();
         self.blocked_uploads.clear();
@@ -548,5 +551,61 @@ mod tests {
         assert!(!frame.1);
         assert!(!Arc::ptr_eq(&frame.0.image, &candidate.image));
         assert!(c.held_bytes() <= 128 * 1024 * 1024);
+    }
+
+    #[test]
+    fn returning_to_same_revision_request_after_supersession_starts_fresh_work() {
+        let e = engine();
+        let mut c = CompositeController::default();
+        let a = key(&e);
+        let candidate_a = ready(&mut c, a.clone());
+        assert!(c.accepted.is_empty());
+        let mut other = (*a).clone();
+        other.viewport.world_to_screen.tx = 3.;
+        let b = Arc::new(other);
+        assert_eq!(a.revision, b.revision);
+        c.request(b.clone());
+        let work_b = c.take_work().unwrap();
+        c.request(a.clone());
+        assert!(c.pending());
+        assert!(c.frame(&"g".into()).is_none());
+        assert!(c.take_work().is_none());
+        c.finish(b, work_b.run());
+        let work_a = c
+            .take_work()
+            .expect("return to A must reraster cleared candidates");
+        assert_eq!(work_a.key, a);
+        let result = work_a.run();
+        c.finish(a.clone(), result);
+        let new = c.frame(&"g".into()).unwrap().0;
+        assert!(!Arc::ptr_eq(&candidate_a.image, &new.image));
+        c.accepted(&a, &"g".into(), &new.image);
+        assert!(!c.pending());
+        assert!(c.frame(&"g".into()).is_some());
+    }
+    #[test]
+    fn returning_after_failure_clears_failed_completion_and_upload_block() {
+        let e = engine();
+        let mut c = CompositeController::default();
+        let a = key(&e);
+        let old = ready(&mut c, a.clone());
+        c.accepted(&a, &"g".into(), &old.image);
+        c.upload_failed(&a, &"g".into(), "failure".into());
+        c.block_upload("g".into());
+        assert!(c.frame(&"g".into()).is_none());
+        let mut other = (*a).clone();
+        other.viewport.device_scale = 2.;
+        let b = Arc::new(other);
+        let removed = c.request(b.clone());
+        assert_eq!(removed.len(), 1);
+        c.request(a.clone());
+        assert!(c.errors.is_empty());
+        assert!(c.blocked_uploads.is_empty());
+        let work = c
+            .take_work()
+            .expect("failed A may retry after a changed request");
+        let result = work.run();
+        c.finish(a, result);
+        assert!(c.frame(&"g".into()).unwrap().1);
     }
 }

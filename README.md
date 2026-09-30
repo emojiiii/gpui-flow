@@ -6,7 +6,7 @@
 
 ## 当前批次状态（2026-09-30）
 
-新增[有界矢量合成](docs/compositing.md)已接入真实SceneView：整体组/多paint透明度、域内Normal/Multiply/Screen及alpha sibling mask，复用tiny-skia和现有stroke mesh。583项headless测试（含doctest）、45项UI库单测、全workspace/all-targets严格clippy及专用原生示例链接通过。已在Linux云端真实窗口验过透明度/混合/遮罩切换、Undo、pan/zoom及关闭重开；CI保持暂停。
+新增[有界矢量合成](docs/compositing.md)已接入真实SceneView：整体组/多paint透明度、域内Normal/Multiply/Screen及alpha sibling mask，复用tiny-skia和现有stroke mesh。583项headless测试（含doctest）、47项UI库单测、全workspace/all-targets严格clippy及专用原生示例链接通过。已在Linux云端真实窗口验过透明度/混合/遮罩切换、Undo、pan/zoom及关闭重开；CI保持暂停。
 
 域内Text/Image/Custom/Box/Frame、外部backdrop混合、shadow/filter仍未覆盖，会整域明确报错。Inside/outside与scale-fixed描边、完整嵌套timeline和motion path仍缺。此次窗口烟测不代替跨平台、大规模性能或所有旧示例交互验收。详细约束与实际操作见[compositing.md](docs/compositing.md)。
 
