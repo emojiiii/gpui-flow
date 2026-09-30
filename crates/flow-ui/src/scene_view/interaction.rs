@@ -20,7 +20,7 @@ impl SceneView {
                 .selection_corners(&id)
                 .is_some_and(|corners| corners[2].distance(local) < 10.)
                 && let Some(node) = self.editor.scene.get(&id)
-                && let Some(bounds) = node.object.shape.local_bounds()
+                && let Some(bounds) = node.object.paint_bounds()
                 && let Some(inverse) = self
                     .editor
                     .scene
@@ -34,7 +34,8 @@ impl SceneView {
                     id,
                     inverse,
                     original,
-                    extent: bounds.size,
+                    bounds,
+                    start_local: inverse.transform_point(world),
                 });
                 return;
             }
@@ -71,6 +72,13 @@ impl SceneView {
         cx.notify();
     }
     pub(super) fn moved(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
+        if !self.editable && self.editor.editing() {
+            self.editor.cancel_edit();
+            self.gesture = None;
+            self.pressed = None;
+            cx.notify();
+            return;
+        }
         let world = self.world(event.position);
         let local = self.local(event.position);
         if event.pressed_button.is_none() {
@@ -95,13 +103,29 @@ impl SceneView {
                 id,
                 inverse,
                 original,
-                extent,
+                bounds,
+                start_local,
             }) => {
-                let p = inverse.transform_point(world);
-                let sx = (p.x / extent.width).clamp(0.05, 100.);
-                let sy = (p.y / extent.height).clamp(0.05, 100.);
+                let mut transform = gpui_flow_editor::resize_transform(
+                    original,
+                    bounds,
+                    start_local,
+                    inverse.transform_point(world),
+                );
+                if (event.modifiers.shift
+                    || self.editor.scene.get(&id).is_some_and(|node| {
+                        matches!(
+                            node.object.shape,
+                            gpui_flow_scene::Shape::Text(_) | gpui_flow_scene::Shape::Image(_)
+                        )
+                    }))
+                    && let Some(inverse) = original.inverse() {
+                        let relative = inverse * transform;
+                        let factor = relative.a.max(relative.d);
+                        transform = original * Affine::scale(factor, factor).around(bounds.origin);
+                    }
                 let _ = self.editor.transaction(|scene| {
-                    scene.update_object(&id, |o| o.transform = original * Affine::scale(sx, sy))
+                    scene.update_object(&id, |object| object.transform = transform)
                 });
             }
             Some(Gesture::Marquee { start, .. }) => {
@@ -130,14 +154,14 @@ impl SceneView {
     pub(super) fn key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
         let command = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
         match (command, event.keystroke.key.as_str()) {
-            (true, "z") => {
+            (true, "z") if self.editable => {
                 if event.keystroke.modifiers.shift {
                     self.editor.redo();
                 } else {
                     self.editor.undo();
                 }
             }
-            (true, "y") => {
+            (true, "y") if self.editable => {
                 self.editor.redo();
             }
             (_, "escape") => {

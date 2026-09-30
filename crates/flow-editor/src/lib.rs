@@ -4,3 +4,5 @@ mod selection;
 pub use gpui_flow_core::Editor as GraphEditor;
 pub use history::*;
 pub use selection::*;
+mod resize;
+pub use resize::*;

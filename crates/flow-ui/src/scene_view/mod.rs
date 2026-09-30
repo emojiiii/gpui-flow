@@ -30,7 +30,8 @@ enum Gesture {
         id: DisplayId,
         inverse: Affine,
         original: Affine,
-        extent: WorldSize,
+        bounds: gpui_flow_core::Rect,
+        start_local: WorldPoint,
     },
     Marquee {
         start: WorldPoint,
@@ -71,19 +72,18 @@ impl SceneView {
         })
     }
     pub fn fit(&mut self) {
-        if let Ok(items) = self.editor.scene.paint_list() {
-            let bounds = items
-                .iter()
-                .filter_map(|item| {
-                    item.object
-                        .paint_bounds()
-                        .map(|r| item.world_transform.transform_bounds(r))
-                })
-                .reduce(|a, b| a.union(b));
-            if let Some(bounds) = bounds {
-                self.editor.viewport.fit(bounds, self.extent, 50.);
-            }
+        if let Ok(Some(bounds)) = self.editor.scene.visible_bounds() {
+            self.editor.viewport.fit(bounds, self.extent, 50.);
         }
+    }
+    pub fn set_editable(&mut self, editable: bool, cx: &mut Context<Self>) {
+        self.editable = editable;
+        if !editable {
+            self.editor.cancel_edit();
+            self.gesture = None;
+            self.pressed = None;
+        }
+        cx.notify();
     }
     pub fn set_scene(&mut self, scene: Scene, cx: &mut Context<Self>) -> Result<(), SceneError> {
         self.editor = SceneEditor::new(scene)?;
@@ -136,23 +136,18 @@ impl SceneView {
     fn finish(&mut self, cx: &mut Context<Self>) {
         if let Some(Gesture::Marquee { start, current }) = self.gesture.take() {
             let rect = gpui_flow_core::Rect::from_points(start, current);
-            self.editor.selection.clear();
-            if let Ok(items) = self.editor.scene.paint_list() {
-                self.editor.selection.ids.extend(
-                    items
-                        .into_iter()
-                        .filter(|i| {
-                            !i.locked
-                                && i.object.paint_bounds().is_some_and(|b| {
-                                    rect.intersects(i.world_transform.transform_bounds(b))
-                                })
-                        })
-                        .map(|i| i.object.id.clone()),
-                );
+            if let Ok(selection) =
+                gpui_flow_editor::SceneSelection::in_rect(&self.editor.scene, rect)
+            {
+                self.editor.selection = selection;
             }
             cx.emit(SceneViewEvent::SelectionChanged);
         }
-        self.editor.commit_edit();
+        if self.editable {
+            self.editor.commit_edit();
+        } else {
+            self.editor.cancel_edit();
+        }
         cx.emit(SceneViewEvent::Changed);
         cx.notify();
     }

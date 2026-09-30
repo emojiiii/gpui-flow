@@ -100,3 +100,34 @@ fn deleting_group_is_undoable() {
     assert!(e.undo());
     assert!(e.scene.get(&"rect".into()).is_some());
 }
+#[test]
+fn marquee_excludes_clipped_and_disabled_children() {
+    let mut s = Scene::default();
+    s.insert(DisplayObject::new("f", Frame::new(100., 100.)), None, None)
+        .unwrap();
+    s.insert(
+        DisplayObject::new("outside", Rect::new(30., 30.))
+            .with_transform(Affine::translation(300., 300.)),
+        Some("f".into()),
+        None,
+    )
+    .unwrap();
+    let rect = Bounds::new(Point::new(290., 290.), Size::new(100., 100.));
+    assert!(SceneSelection::in_rect(&s, rect).unwrap().ids.is_empty());
+    s.update_object(&"f".into(), |o| o.hit_children = false)
+        .unwrap();
+    s.update_object(&"outside".into(), |o| {
+        o.transform = Affine::translation(20., 20.)
+    })
+    .unwrap();
+    let selection =
+        SceneSelection::in_rect(&s, Bounds::new(Point::ZERO, Size::new(100., 100.))).unwrap();
+    assert!(!selection.ids.contains(&"outside".into()));
+}
+#[test]
+fn stale_selection_is_pruned_without_panic() {
+    let mut e = SceneEditor::new(Scene::default()).unwrap();
+    e.selection.select("missing".into(), false);
+    e.translate_selection(Point::new(1., 0.)).unwrap();
+    assert!(e.selection.ids.is_empty());
+}

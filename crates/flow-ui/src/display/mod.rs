@@ -50,7 +50,11 @@ impl RenderObject {
             report(UnsupportedFeature::GradientPaint);
         }
         let m = self.screen_transform;
-        let transformed = m.b.abs() > 0.0001 || m.c.abs() > 0.0001 || m.a <= 0. || m.d <= 0.;
+        let transformed = m.b.abs() > 0.0001
+            || m.c.abs() > 0.0001
+            || m.a <= 0.
+            || m.d <= 0.
+            || (m.a - m.d).abs() > 0.0001;
         match self.object.shape {
             Shape::Text(_) => {
                 if transformed {
