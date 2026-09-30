@@ -15,6 +15,8 @@ pub enum SceneViewEvent {
     Changed,
     SelectionChanged,
     Pointer(Box<SceneEvent>),
+    Resource(gpui_flow_engine::ResourceEvent),
+    ResourceView(gpui_flow_engine::ResourceViewEvent),
 }
 impl EventEmitter<SceneViewEvent> for SceneView {}
 /// Embed this view in any host shell. Register scoped element listeners with `on`; the engine owns their lifecycle.
@@ -26,6 +28,8 @@ pub struct SceneView {
     pub interactions: gpui_flow_interaction::scene::ScenePluginHost,
     pub diagnostics: Vec<RenderIssue>,
     pub gradient_diagnostics: Vec<crate::display::GradientRenderIssue>,
+    resources: Option<crate::resources::SceneResourceAdapter>,
+    pub resource_error: Option<String>,
     pub renderers: crate::display::DisplayRegistry,
     /// Opt-in paint-only state presentation; never writes editor documents.
     pub state_styles: gpui_flow_interaction::scene::SceneStateStyles,
@@ -47,8 +51,19 @@ impl SceneView {
             cx,
         ))
     }
-    pub fn from_engine(engine: gpui_flow_engine::SceneEngine, cx: &mut Context<Self>) -> Self {
+    pub fn from_engine(mut engine: gpui_flow_engine::SceneEngine, cx: &mut Context<Self>) -> Self {
         let state_styles = gpui_flow_interaction::scene::SceneStateStyles::new(&engine);
+        let (resources, resource_error) =
+            match crate::resources::SceneResourceAdapter::new(&mut engine) {
+                Ok(resources) => (Some(resources), None),
+                Err(error) => (None, Some(error.to_string())),
+            };
+        cx.on_release(|this: &mut Self, _| {
+            if let Some(resources) = &mut this.resources {
+                let _ = resources.dispose(&mut this.editor.engine);
+            }
+        })
+        .detach();
         Self {
             editor: SceneEditor::from_engine(engine),
             theme: FlowTheme::default(),
@@ -56,6 +71,8 @@ impl SceneView {
             interactions: gpui_flow_interaction::scene::ScenePluginHost::with_defaults(),
             diagnostics: vec![],
             gradient_diagnostics: vec![],
+            resources,
+            resource_error,
             renderers: crate::display::DisplayRegistry::default(),
             state_styles,
             state_style_error: None,
@@ -69,6 +86,46 @@ impl SceneView {
             router: gpui_flow_interaction::scene::SceneEventRouter::new(),
             interaction_error: None,
         }
+    }
+    pub fn resources(&self) -> Option<&crate::resources::SceneResourceAdapter> {
+        self.resources.as_ref()
+    }
+    /// Explicit host authorization for image sources. No scene import may set it.
+    pub fn set_image_resolver(
+        &mut self,
+        resolver: crate::resources::SceneImageResolver,
+        cx: &mut Context<Self>,
+    ) -> Result<(), gpui_flow_engine::ResourceError> {
+        self.resources
+            .as_mut()
+            .ok_or(gpui_flow_engine::ResourceError::Disposed)?
+            .set_image_resolver(&self.editor.engine, resolver)?;
+        cx.notify();
+        Ok(())
+    }
+    pub fn set_image_cache(
+        &mut self,
+        cache: Option<gpui::AnyImageCache>,
+        cx: &mut Context<Self>,
+    ) -> Result<(), gpui_flow_engine::ResourceError> {
+        self.resources
+            .as_mut()
+            .ok_or(gpui_flow_engine::ResourceError::Disposed)?
+            .set_image_cache(&self.editor.engine, cache)?;
+        cx.notify();
+        Ok(())
+    }
+    /// Call after the host changes its installed fonts/fallback resources.
+    pub fn invalidate_text_resources(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> Result<(), gpui_flow_engine::ResourceError> {
+        self.resources
+            .as_mut()
+            .ok_or(gpui_flow_engine::ResourceError::Disposed)?
+            .invalidate_text(&self.editor.engine)?;
+        cx.notify();
+        Ok(())
     }
     pub fn on(
         &mut self,

@@ -1,7 +1,9 @@
 # gpui-flow-core
 
-Renderer-independent graph editing. Its only dependencies are `serde` and
-`serde_json`; it does not link GPUI, a window system, or an execution engine.
+Renderer-independent graph editing. It uses `serde`/`serde_json` for documents
+and `petgraph` for internal directed reachability; it does not link GPUI, a
+window system, or an execution engine. Petgraph indices are query-local and
+never replace public string IDs, deterministic maps, or the serialized schema.
 
 ## Typed graph
 

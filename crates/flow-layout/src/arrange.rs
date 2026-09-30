@@ -1,6 +1,9 @@
-use crate::{AlignContent, AlignItems, FlowError, FlowItem, FlowStyle, JustifyContent, invalid};
+use crate::{AlignContent, FlowError, FlowItem, FlowStyle, invalid};
 use gpui_flow_scene::{Affine, Bounds, DisplayId, DisplayObject, Scene, Shape};
 use std::collections::BTreeMap;
+
+#[path = "taffy_adapter.rs"]
+mod solver;
 
 struct Item {
     object: DisplayObject,
@@ -181,9 +184,6 @@ pub(crate) fn container(
         );
     }
     for line in &mut lines {
-        if !auto_main {
-            grow(line, available_main);
-        }
         if !wrap {
             // One non-wrapped line fills the content cross axis. Oversized
             // fixed children overflow rather than changing the parent's size.
@@ -202,33 +202,11 @@ pub(crate) fn container(
     if wrap && style.wrap_reverse {
         lines.reverse();
     }
-    for line in lines {
-        let free = (available_main - line.main).max(0.0);
-        let mut main_at = origin_main
-            + match style.justify {
-                JustifyContent::Center => free / 2.0,
-                JustifyContent::End => free,
-                _ => 0.0,
-            };
-        let item_gap = gap
-            + if style.justify == JustifyContent::SpaceBetween && line.items.len() > 1 {
-                free / (line.items.len() - 1) as f64
-            } else {
-                0.0
-            };
-        for mut item in line.items {
-            let align = item.input.align_self.unwrap_or(style.align_items);
-            if align == AlignItems::Stretch {
-                item.cross = line.cross.clamp(item.cross_min, item.cross_max);
-            }
-            let cross_free = (line.cross - item.cross).max(0.0);
-            let cross_offset = match align {
-                AlignItems::Center => cross_free / 2.0,
-                AlignItems::End => cross_free,
-                _ => 0.0,
-            };
+    for mut line in lines {
+        let positions = solver::solve(id, &mut line, available_main, style, auto_main)?;
+        for (mut item, position) in line.items.into_iter().zip(positions) {
             let (width, height) = axis(row, item.main, item.cross);
-            let (x, y) = axis(row, main_at, cross_at + cross_offset);
+            let (x, y) = axis(row, origin_main + position.main, cross_at + position.cross);
             resize(&mut item.object, item.bounds, width, height)?;
             let bounds = linear_bounds(&item.object)?;
             item.object.transform.tx = scalar(&item.object.id, x - bounds.origin.x as f64)?;
@@ -237,55 +215,10 @@ pub(crate) fn container(
             if scene.get(&child).expect("child").object != item.object {
                 scene.update_object(&child, |object| *object = item.object)?;
             }
-            main_at += item.main + item_gap;
         }
         cross_at += line.cross + style.line_gap as f64;
     }
     Ok(count)
-}
-
-/// Weighted positive free-space allocation with max constraints. Freeze all
-/// clamped children together, then redistribute their remainder, avoiding
-/// child-order bias and permitting any number of constrained siblings.
-fn grow(line: &mut Line, available: f64) {
-    let mut free = (available - line.main).max(0.0);
-    let mut active: Vec<_> = line
-        .items
-        .iter()
-        .enumerate()
-        .filter(|(_, item)| item.input.grow > 0.0 && item.main < item.main_max)
-        .map(|(index, _)| index)
-        .collect();
-    while free > 0.0 && !active.is_empty() {
-        let weight: f64 = active
-            .iter()
-            .map(|&i| line.items[i].input.grow as f64)
-            .sum();
-        let capped: Vec<_> = active
-            .iter()
-            .copied()
-            .filter(|&i| {
-                let item = &line.items[i];
-                free * item.input.grow as f64 / weight >= item.main_max - item.main
-            })
-            .collect();
-        if capped.is_empty() {
-            for index in active {
-                let item = &mut line.items[index];
-                item.main += free * item.input.grow as f64 / weight;
-            }
-            line.main += free;
-            break;
-        }
-        for &index in &capped {
-            let item = &mut line.items[index];
-            let used = item.main_max - item.main;
-            item.main = item.main_max;
-            free = (free - used).max(0.0);
-            line.main += used;
-        }
-        active.retain(|i| !capped.contains(i));
-    }
 }
 
 fn resize(

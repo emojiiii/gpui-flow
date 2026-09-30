@@ -11,6 +11,8 @@ gpui-flow-engine.workspace = true
 gpui-flow-editor.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+# Headless numeric solver only; GPUI already locks this exact release.
+taffy = { version = "=0.13.0", default-features = false, features = ["std", "taffy_tree", "flexbox"] }
 
 [dev-dependencies]
 gpui-flow-animation.workspace = true

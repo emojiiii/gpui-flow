@@ -1,4 +1,5 @@
 use crate::{Point, Rect, Size};
+use petgraph::{algo::has_path_connecting, graph::DiGraph};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -518,23 +519,24 @@ impl Graph {
         Ok(())
     }
     fn path_exists(&self, start: &NodeId, end: &NodeId, ignore: Option<&EdgeId>) -> bool {
-        let mut stack = vec![start];
-        let mut visited = BTreeSet::new();
-        while let Some(node) = stack.pop() {
-            if node == end {
-                return true;
-            }
-            if visited.insert(node) {
-                for e in self
-                    .edges
-                    .values()
-                    .filter(|e| Some(&e.id) != ignore && &e.source.node == node)
-                {
-                    stack.push(&e.target.node);
-                }
-            }
+        // A query-local index keeps public fields, string IDs, and the document schema
+        // authoritative. Include dangling endpoints too: validation must still report
+        // malformed imports without panicking or silently dropping their paths.
+        let mut topology =
+            DiGraph::<(), (), usize>::with_capacity(self.nodes.len(), self.edges.len());
+        let mut nodes = BTreeMap::new();
+        let start = *nodes.entry(start).or_insert_with(|| topology.add_node(()));
+        let end = *nodes.entry(end).or_insert_with(|| topology.add_node(()));
+        for edge in self.edges.values().filter(|e| Some(&e.id) != ignore) {
+            let source = *nodes
+                .entry(&edge.source.node)
+                .or_insert_with(|| topology.add_node(()));
+            let target = *nodes
+                .entry(&edge.target.node)
+                .or_insert_with(|| topology.add_node(()));
+            topology.add_edge(source, target, ());
         }
-        false
+        has_path_connecting(&topology, start, end, None)
     }
     /// All validation issues, with stable paths suitable for an import UI.
     pub fn validation_issues(&self) -> Vec<ValidationIssue> {

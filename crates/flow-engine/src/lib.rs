@@ -10,6 +10,7 @@ mod instance;
 mod layout;
 mod query;
 mod registry;
+mod resource;
 mod subtree;
 
 pub use change::*;
@@ -18,6 +19,7 @@ pub use engine::*;
 pub use instance::*;
 pub use layout::*;
 pub use registry::*;
+pub use resource::*;
 
 use gpui_flow_scene::SceneError;
 #[derive(Debug, Clone, PartialEq)]

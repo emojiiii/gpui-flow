@@ -50,6 +50,14 @@ fn transformed_path(
     }
     output
 }
+fn mesh_path(mesh: &scene::StrokeMesh) -> Path<Pixels> {
+    let mut path = Path::new(point(px(0.0), px(0.0)));
+    for triangle in mesh.triangles() {
+        let [a, b, c] = triangle.map(|p| point(px(p.x), px(p.y)));
+        path.push_triangle((a, b, c), (point(0., 1.), point(0., 1.), point(0., 1.)));
+    }
+    path
+}
 /// Identifies a paint operation, including width-varying strokes using the same
 /// gradient. A fill/stroke boolean would alias distinct layers in the cache.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,10 +80,18 @@ fn prepare_vector_paints(
 ) -> Vec<VectorPaint<'_>> {
     let screen =
         scene::Affine::translation(origin.x.into(), origin.y.into()) * object.screen_transform;
-    let contours = object
-        .object
-        .shape
-        .flatten(0.25 / (object.screen_transform.max_scale() * scale_factor).max(0.01));
+    let needs_contours = object.object.style.fills().any(|paint| paint.is_visible())
+        || object.object.style.strokes().any(|stroke| {
+            stroke.width > 0.0 && stroke.paint.is_visible() && !stroke.uses_advanced_geometry()
+        });
+    let contours = if needs_contours {
+        object
+            .object
+            .shape
+            .flatten(0.25 / (object.screen_transform.max_scale() * scale_factor).max(0.01))
+    } else {
+        Vec::new()
+    };
     let clips: Vec<Vec<scene::Point>> = object
         .clips
         .iter()
@@ -133,14 +149,25 @@ fn prepare_vector_paints(
         if stroke.width <= 0.0 || !stroke.paint.is_visible() {
             continue;
         }
-        if let Some(path) = build(
-            PathBuilder::stroke(px(stroke.width)).with_style(PathStyle::Stroke(
-                StrokeOptions::default()
-                    .with_line_width(stroke.width)
-                    .with_line_cap(lyon::path::LineCap::Round)
-                    .with_line_join(lyon::path::LineJoin::Round),
-            )),
-        ) {
+        let path = if stroke.uses_advanced_geometry() {
+            object
+                .object
+                .shape
+                .stroke_mesh(stroke)
+                .ok()
+                .map(|mesh| transformed_path(mesh_path(&mesh), screen, &clips))
+        } else {
+            // Preserve the pre-existing adaptive solid round renderer exactly.
+            build(
+                PathBuilder::stroke(px(stroke.width)).with_style(PathStyle::Stroke(
+                    StrokeOptions::default()
+                        .with_line_width(stroke.width)
+                        .with_line_cap(lyon::path::LineCap::Round)
+                        .with_line_join(lyon::path::LineJoin::Round),
+                )),
+            )
+        };
+        if let Some(path) = path {
             paints.push(VectorPaint {
                 path,
                 paint: &stroke.paint,
@@ -247,6 +274,7 @@ mod tests {
             stroke_layers: vec![Stroke {
                 paint: linear(Color::WHITE),
                 width: 2.0,
+                ..Stroke::default()
             }],
             ..Style::default()
         });
@@ -349,6 +377,7 @@ mod tests {
                 Stroke {
                     paint: linear(Color::WHITE),
                     width: 2.0,
+                    ..Stroke::default()
                 },
             ],
             ..Style::default()
@@ -447,6 +476,144 @@ mod tests {
             )
             .a,
             128
+        );
+    }
+    #[test]
+    fn advanced_renderer_uses_exact_headless_mesh_at_all_device_scales() {
+        let stroke = Stroke::new(Color::BLACK, 4.0)
+            .with_cap(scene::StrokeCap::Square)
+            .with_join(scene::StrokeJoin::Miter)
+            .with_dashes(vec![6.0, 4.0, 2.0], -3.0);
+        let mut obj = object(Style {
+            fill: None,
+            stroke: Some(stroke.clone()),
+            ..Style::default()
+        });
+        obj.object.shape = scene::display::Pen::new()
+            .move_to(ScenePoint::ZERO)
+            .cubic_to(
+                ScenePoint::new(10.0, 30.0),
+                ScenePoint::new(25.0, -10.0),
+                ScenePoint::new(40.0, 10.0),
+            )
+            .into();
+        obj.screen_transform =
+            Affine::translation(10.0, 20.0) * Affine::rotation(20.0) * Affine::scale(2.0, 0.7);
+        let mesh = obj.object.shape.stroke_mesh(&stroke).unwrap();
+        let origin = point(px(5.0), px(7.0));
+        let screen = Affine::translation(5.0, 7.0) * obj.screen_transform;
+        let expected: Vec<_> = mesh
+            .triangles()
+            .iter()
+            .map(|triangle| triangle.map(|p| screen.transform_point(p)))
+            .collect();
+        for device_scale in [1.0, 2.0, 4.0] {
+            let paints = prepare_vector_paints(&obj, origin, device_scale);
+            assert_eq!(paints.len(), 1);
+            assert_eq!(paints[0].layer, PaintLayer::Stroke(0));
+            assert_eq!(triangles(&paints[0].path), expected);
+        }
+    }
+    #[test]
+    fn advanced_gradient_dash_gaps_and_nested_clips_match_scene_picking() {
+        let mut stroke = Stroke::new(Color::WHITE, 4.0)
+            .with_cap(scene::StrokeCap::Butt)
+            .with_dashes(vec![6.0, 4.0], 0.0);
+        stroke.paint = linear(Color::WHITE);
+        let mut obj = object(Style {
+            fill: None,
+            stroke: Some(stroke),
+            ..Style::default()
+        });
+        obj.object.shape =
+            scene::display::Line::new(ScenePoint::ZERO, ScenePoint::new(40.0, 0.0)).into();
+        obj.screen_transform = Affine::translation(10.0, 10.0) * Affine::scale(2.0, 3.0);
+        obj.clips = vec![
+            scene::ClipRegion {
+                local_bounds: scene::Bounds::from_points(
+                    ScenePoint::new(12.0, 4.0),
+                    ScenePoint::new(60.0, 16.0),
+                ),
+                corner_radius: 1.0,
+                world_transform: Affine::IDENTITY,
+            },
+            scene::ClipRegion {
+                local_bounds: scene::Bounds::from_points(
+                    ScenePoint::new(14.0, 5.0),
+                    ScenePoint::new(55.0, 15.0),
+                ),
+                corner_radius: 0.0,
+                world_transform: Affine::IDENTITY,
+            },
+        ];
+        let paints = prepare_vector_paints(&obj, point(px(0.0), px(0.0)), 2.0);
+        assert_eq!(paints.len(), 1);
+        for p in triangles(&paints[0].path).iter().flatten() {
+            assert!(p.x >= 14.0 - 0.001 && p.x <= 55.0 + 0.001);
+            assert!(p.y >= 5.0 - 0.001 && p.y <= 15.0 + 0.001);
+        }
+        let inverse = obj.screen_transform.inverse().unwrap();
+        for (point, visible) in [
+            (ScenePoint::new(17.5, 10.5), true),
+            (ScenePoint::new(26.5, 10.5), false),
+        ] {
+            let local = inverse.transform_point(point);
+            assert_eq!(
+                obj.object.shape.hit_test(local, &obj.object.style, 0.0),
+                visible
+            );
+            assert_eq!(
+                sample(&paints[0], obj.screen_transform, point, 1.0).a > 0,
+                visible
+            );
+        }
+        assert_eq!(
+            sample(
+                &paints[0],
+                obj.screen_transform,
+                ScenePoint::new(12.5, 10.5),
+                1.0
+            )
+            .a,
+            0
+        );
+    }
+    #[test]
+    fn advanced_stroke_layer_order_and_failures_are_explicit() {
+        let dashed = Stroke::new(Color::BLACK, 4.0)
+            .with_cap(scene::StrokeCap::Butt)
+            .with_dashes(vec![6.0, 4.0], 0.0);
+        let mut obj = object(Style {
+            fill_layers: vec![linear(Color::WHITE)],
+            stroke: Some(dashed.clone()),
+            stroke_layers: vec![Stroke::new(Color::WHITE, 1.0)],
+            ..Style::default()
+        });
+        let paints = prepare_vector_paints(&obj, point(px(0.0), px(0.0)), 1.0);
+        assert_eq!(
+            paints.iter().map(|p| p.layer).collect::<Vec<_>>(),
+            vec![
+                PaintLayer::Fill(0),
+                PaintLayer::Fill(1),
+                PaintLayer::Stroke(0),
+                PaintLayer::Stroke(1)
+            ]
+        );
+        obj.object.style.stroke.as_mut().unwrap().dash_pattern = vec![f32::MIN_POSITIVE, 1.0];
+        assert!(
+            obj.diagnostics()
+                .iter()
+                .any(|issue| issue.feature == super::super::UnsupportedFeature::StrokeGeometry)
+        );
+        obj.object.shape = scene::display::Text::new("text", scene::Size::new(20.0, 10.0)).into();
+        obj.object.style = Style {
+            stroke: Some(dashed),
+            ..Style::default()
+        };
+        assert!(
+            obj.diagnostics()
+                .iter()
+                .any(|issue| issue.feature == super::super::UnsupportedFeature::StrokeGeometry)
         );
     }
 }

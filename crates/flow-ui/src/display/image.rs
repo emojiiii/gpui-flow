@@ -33,7 +33,11 @@ fn native_fit(fit: ImageFit) -> ObjectFit {
         ImageFit::Fill => ObjectFit::Fill,
     }
 }
-pub(super) fn image_element(image: &Image, object: &RenderObject) -> AnyElement {
+pub(super) fn image_element(
+    image: &Image,
+    object: &RenderObject,
+    prepared: Option<crate::resources::SceneImagePresentation>,
+) -> AnyElement {
     let Some(plan) = image_box(image, object) else {
         return div().into_any_element();
     };
@@ -46,20 +50,33 @@ pub(super) fn image_element(image: &Image, object: &RenderObject) -> AnyElement 
         .h(px(plan.layout.size.height))
         .overflow_hidden()
         .opacity(object.opacity);
-    // Local resource references only: loading a scene never initiates requests.
-    let content = if image.source.starts_with("http:") || image.source.starts_with("https:") {
-        content
+    use crate::resources::SceneImagePresentation;
+    let content = match prepared {
+        Some(SceneImagePresentation::Loaded(image)) => content
+            .child(img(image).size_full().object_fit(fit))
+            .into_any_element(),
+        Some(SceneImagePresentation::Pending) => content.child("Loading image…").into_any_element(),
+        Some(SceneImagePresentation::Failed(error)) => content
             .text_color(rgb(0xf5b971))
-            .child("Remote image: provide a host asset loader")
-            .into_any_element()
-    } else {
-        content
-            .child(
-                img(std::path::PathBuf::from(&image.source))
-                    .size_full()
-                    .object_fit(fit),
-            )
-            .into_any_element()
+            .child(format!("Image failed: {error}"))
+            .into_any_element(),
+        Some(SceneImagePresentation::Cancelled) => content
+            .text_color(rgb(0xf5b971))
+            .child("Image not authorized by host")
+            .into_any_element(),
+        None => match crate::resources::local_image_resource(&image.source) {
+            Some(resource) => content
+                .child(
+                    img(ImageSource::Resource(resource))
+                        .size_full()
+                        .object_fit(fit),
+                )
+                .into_any_element(),
+            None => content
+                .text_color(rgb(0xf5b971))
+                .child("Remote image: provide a host asset loader")
+                .into_any_element(),
+        },
     };
     div()
         .absolute()

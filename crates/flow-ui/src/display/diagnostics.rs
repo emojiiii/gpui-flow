@@ -3,6 +3,8 @@
 pub enum UnsupportedFeature {
     GradientPaint,
     LayeredPaint,
+    /// Unsupported non-vector stroke, invalid geometry, or a stroke work limit.
+    StrokeGeometry,
     TransformedText,
     TransformedImage,
     ClippedText,

@@ -1,5 +1,9 @@
 # gpui-flow-scene
 
+Source-only update (2026-09-30): Kurbo tight bounds and advanced centered stroke
+styles/mesh integration are **UNCOMPILED / UNRUN**. New regressions are authored,
+not passed. Earlier baseline validation does not cover this source batch.
+
 A retained vector scene graph that runs without GPUI or a window server. This is
 an independently implemented Rust scene layer with a common display-object
 model, not a graph-node alias or a collection of canvas demo callbacks.
@@ -27,7 +31,7 @@ responsibility of the separate flow-core/runtime layers.
 
 - `Rect`: rectangle with optional rounded corners
 - `Ellipse`: ellipse/circle geometry with analytical fill picking
-- `Line`: two endpoints, with stroke picking using round caps
+- `Line`: two endpoints; default round strokes or opt-in cap/join/dash mesh picking
 - `Polygon`: closed polygon or open polyline
 - `Star`: configurable point count, radii, center, and angle
 - `Path`: absolute move/line/quadratic/cubic/close commands; analytical Bézier
@@ -104,8 +108,10 @@ stacking position. Invisible or zero-opacity subtrees are excluded. Group
 entries are present but have no geometry of their own.
 
 `Style` supports solid color, linear gradients, radial gradients, optional
-stroke, opacity, and nonzero/even-odd fill rules. Strokes use centered widths and
-round caps/joins. The rendering adapter must explicitly declare unsupported
+stroke, additional ordered fill/stroke layers, opacity, and nonzero/even-odd fill
+rules. Strokes are centered in local space, with solid-round defaults. New source
+supports Butt/Square/Round caps, Bevel/Miter/Round joins, miter limits and signed
+dash offsets/patterns. Inside/outside and scale-fixed strokes remain unsupported. The rendering adapter must explicitly declare unsupported
 paint/clip features; it must not silently replace them with an unrelated fill.
 
 `local_bounds` and `world_bounds` describe a subtree, including strokes and
@@ -130,10 +136,13 @@ front-to-back hits with IDs, local/world points, and root-to-target paths.
 - Nested clips use inverse world transforms and rounded-corner tests
 
 Rectangles and ellipses have analytical fill tests. Polygon/path fills use
-winding tests, with adaptive path flattening at 0.1 local-unit precision. Stroke
-picking uses distance to flattened segments and round joins/endcaps. Nonzero
-world-space hit tolerance is converted conservatively under anisotropic
-transforms. It is a pick convenience, not exact stroked-outline tessellation.
+winding tests, with adaptive path flattening at 0.1 local-unit precision. Default
+solid-round stroke picking retains distance-to-segment tests. Advanced strokes
+reuse Kurbo 0.11.3 dashing and Lyon 1.0.22 tessellation; the bounded local
+`StrokeMesh` triangle union is shared with the native renderer. Its fixed
+0.1-local-unit approximation and actual dash gaps/cap/join shapes also define
+advanced picking. Nonzero world-space hit tolerance is converted conservatively
+under anisotropic transforms and dilates picking only; it is not extra paint.
 
 ## Events
 
@@ -172,7 +181,11 @@ custom application callbacks belong in the host layer, never in deserialization.
 Use `Scene::to_json/from_json` for validated, versioned persistence. Unknown
 versions, missing references, conflicting parent/child links, duplicate children,
 cycles, invalid geometry/styles, excessive depth, and overflow are rejected.
-Bare serde deserialization alone does not perform semantic validation.
+Bare serde deserialization alone does not perform semantic validation. Missing
+advanced Stroke JSON fields retain the previous solid-round defaults. External
+Rust Stroke literals need the new fields or `..Stroke::default()`; constructors
+remain available. New serializer output includes these fields, so backward
+reading compatibility does not promise byte-identical JSON.
 
 ## Deliberate boundaries
 
@@ -188,6 +201,10 @@ or retained GPU cache. Applications accepting untrusted large documents should
 also apply document-size limits appropriate to their deployment.
 
 ## Verification
+
+The commands below are validation entry points, not checks run for the current
+source-only batch. See `docs/appearance.md` for stroke budgets and
+`docs/source-only-status.md` for the uncompiled/unrun integration scope.
 
 ```sh
 cargo test -p gpui-flow-scene

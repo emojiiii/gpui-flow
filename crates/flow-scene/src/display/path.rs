@@ -1,5 +1,6 @@
-use crate::geometry::{cubic, flatten_cubic, flatten_quadratic, point_bounds, quadratic};
+use crate::geometry::{flatten_cubic, flatten_quadratic, point_bounds};
 use crate::{Bounds, Contour, FlattenOptions, Point};
+use kurbo::{CubicBez, ParamCurveExtrema, QuadBez};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -68,15 +69,38 @@ impl Path {
         })
     }
     pub fn flatten_with(&self, options: FlattenOptions) -> Vec<Contour> {
+        self.flatten_impl(options, None)
+            .expect("unbounded flattening cannot exhaust its point budget")
+    }
+    /// Advanced-stroke adapter entry point. Checks between commands; the
+    /// existing depth bound limits temporary overshoot to one curve (2^12
+    /// points with the default options), never a partially accepted contour.
+    pub(crate) fn flatten_bounded(
+        &self,
+        options: FlattenOptions,
+        max_points: usize,
+    ) -> Result<Vec<Contour>, String> {
+        if self.commands.len() > max_points {
+            return Err("stroke path command budget exceeded".into());
+        }
+        self.flatten_impl(options, Some(max_points))
+    }
+    fn flatten_impl(
+        &self,
+        options: FlattenOptions,
+        max_points: Option<usize>,
+    ) -> Result<Vec<Contour>, String> {
         let options = options.normalized();
         let mut result = Vec::new();
         let mut contour = Contour::default();
+        let mut completed_points = 0usize;
         let mut current = Point::ZERO;
         let mut start = Point::ZERO;
         for command in &self.commands {
             match *command {
                 PathCommand::MoveTo { to } => {
                     if !contour.points.is_empty() {
+                        completed_points += contour.points.len();
                         result.push(contour);
                     }
                     contour = Contour {
@@ -122,17 +146,21 @@ impl Path {
                 PathCommand::Close => {
                     if !contour.points.is_empty() {
                         contour.closed = true;
+                        completed_points += contour.points.len();
                         result.push(contour);
                         contour = Contour::default();
                     }
                     current = start;
                 }
             }
+            if max_points.is_some_and(|limit| completed_points + contour.points.len() > limit) {
+                return Err("stroke flattened point budget exceeded".into());
+            }
         }
         if !contour.points.is_empty() {
             result.push(contour);
         }
-        result
+        Ok(result)
     }
     /// Tight local axis-aligned bounds from analytic Bézier extrema; not just
     /// the control-point hull or a sampling approximation.
@@ -152,16 +180,15 @@ impl Path {
                     current = to;
                 }
                 PathCommand::QuadraticTo { control, to } => {
-                    points.extend([current, to]);
-                    for (a, b, c) in [(current.x, control.x, to.x), (current.y, control.y, to.y)] {
-                        let denominator = a as f64 - 2.0 * b as f64 + c as f64;
-                        if denominator != 0.0 {
-                            let t = (a as f64 - b as f64) / denominator;
-                            if t > 0.0 && t < 1.0 {
-                                points.push(quadratic(current, control, to, t as f32));
-                            }
-                        }
+                    let controls = [current, control, to];
+                    if controls.iter().any(|p| !p.is_finite()) {
+                        return point_bounds(controls);
                     }
+                    let [from, control, end] = controls.map(curve_point);
+                    extend_curve_bounds(
+                        &mut points,
+                        QuadBez::new(from, control, end).bounding_box(),
+                    );
                     current = to;
                 }
                 PathCommand::CubicTo {
@@ -169,24 +196,15 @@ impl Path {
                     control2,
                     to,
                 } => {
-                    points.extend([current, to]);
-                    for (p0, p1, p2, p3) in [
-                        (current.x, control1.x, control2.x, to.x),
-                        (current.y, control1.y, control2.y, to.y),
-                    ] {
-                        let p0 = p0 as f64;
-                        let p1 = p1 as f64;
-                        let p2 = p2 as f64;
-                        let p3 = p3 as f64;
-                        let a = -p0 + 3.0 * p1 - 3.0 * p2 + p3;
-                        let b = 2.0 * (p0 - 2.0 * p1 + p2);
-                        let c = p1 - p0;
-                        for t in roots(a, b, c) {
-                            if t > 0.0 && t < 1.0 {
-                                points.push(cubic(current, control1, control2, to, t as f32));
-                            }
-                        }
+                    let controls = [current, control1, control2, to];
+                    if controls.iter().any(|p| !p.is_finite()) {
+                        return point_bounds(controls);
                     }
+                    let [from, control1, control2, end] = controls.map(curve_point);
+                    extend_curve_bounds(
+                        &mut points,
+                        CubicBez::new(from, control1, control2, end).bounding_box(),
+                    );
                     current = to;
                 }
                 PathCommand::Close => {
@@ -198,18 +216,17 @@ impl Path {
         point_bounds(points)
     }
 }
-fn roots(a: f64, b: f64, c: f64) -> Vec<f64> {
-    if a.abs() <= f64::EPSILON * (b.abs() + c.abs()).max(1.0) {
-        return if b == 0.0 { vec![] } else { vec![-c / b] };
-    }
-    let discriminant = b * b - 4.0 * a * c;
-    if discriminant < 0.0 {
-        return vec![];
-    }
-    let q = -0.5 * (b + discriminant.sqrt().copysign(b));
-    if q == 0.0 {
-        vec![-b / (2.0 * a)]
-    } else {
-        vec![q / a, c / q]
-    }
+// Keep curve arithmetic wide until the scene boundary: finite f32 controls can
+// overflow f32 derivative coefficients even when the curve bounds are valid.
+fn curve_point(point: Point) -> kurbo::Point {
+    kurbo::Point::new(point.x as f64, point.y as f64)
+}
+
+fn extend_curve_bounds(points: &mut Vec<Point>, bounds: kurbo::Rect) {
+    // Use the same scene-coordinate conversion and final point_bounds check as
+    // lines and moves, including rejection of unrepresentable f32 extents.
+    points.extend([
+        Point::new(bounds.x0 as f32, bounds.y0 as f32),
+        Point::new(bounds.x1 as f32, bounds.y1 as f32),
+    ]);
 }

@@ -29,6 +29,7 @@ mod geometry;
 mod gradient;
 mod object;
 mod scene;
+mod stroke;
 mod style;
 
 pub use affine::*;
@@ -38,4 +39,5 @@ pub use geometry::{Contour, FlattenOptions};
 pub use gradient::*;
 pub use object::*;
 pub use scene::*;
+pub use stroke::*;
 pub use style::*;

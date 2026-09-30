@@ -1,5 +1,7 @@
 # 显式时钟动画底座
 
+> 2026-09-30 源码增量：下述 delay/repeat/direction/speed 接入及新增回归尚未编译、运行或经 CI 验证（UNCOMPILED / UNRUN）。旧测试记录属于此前基线，不能证明当前批次通过。详见 [source-only-status.md](source-only-status.md)。
+
 可选 `gpui-flow-animation` 在已有 SceneEngine 上实现真实属性插值和播放控制。输入定义与运行期状态分离；不启动后台线程、定时器、网络调用或隐式引擎监听器。
 
 ## 实际支持
@@ -11,6 +13,7 @@
 - Linear、三次EaseIn/EaseOut以及smoothstep EaseInOut四种明确easing
 - 显式tick、pause、resume、seek、cancel/keep、remove和目标生命周期保护
 - 1..64段显式时长关键帧序列，每段easing、稀疏字段保持、跨段seek与原子大步tick
+- 新源码的 opt-in `AnimationTiming`：首次delay、遍历间repeat delay、有限/无限总遍历次数、Forward/Reverse/Alternate/AlternateReverse、正有理数speed；仍未运行验证
 
 `AnimationSpec` 保存duration_ms、easing和目标属性值；开始时捕获当前有效输入作为from。规范可以JSON保存，运行期句柄、控制器ID、时钟、缓存与当前播放状态不进入文档。
 
@@ -34,8 +37,8 @@
 
 这对齐上游`Animate.create/setBefore/animate/seek`的累计样式、段内时间与补缺属性契约，
 但这里明确从当前姿态开始每个正时长目标序列。没有上游默认的零时长起始pose/自动分配
-时长、delay、loop/swing、speed、ending策略、AnimateList或嵌套timeline。不是完整
-Leafer关键帧API兼容声明。
+时长、ending策略、AnimateList或嵌套timeline。整条序列的delay、repeat、方向和speed已由
+独立 `AnimationTiming` 接入源码；并非逐关键帧选项，也不是完整Leafer关键帧API兼容声明。
 
 ## 原子更新
 
@@ -43,18 +46,20 @@ Leafer关键帧API兼容声明。
 
 `validate_properties_batch` 用于开始时验证终点，且不提交事件/revision。用户定义的工厂必须保持纯函数；它们对外部世界的副作用仍不是引擎能够回滚的事务。正常引擎校验和候选文档复制仍存在，不宣称O(变化节点)复杂度或大规模性能。
 
-零delta和相同有效值不产生文档变化。捕获的隐式Custom默认值在零进度时不会被无意义地写入输入。每次成功提交后重新读取规范化的数值，避免f32 opacity舍入被误判为宿主覆盖。
+相同有效值不产生文档变化。默认正向入口的零delta保持初始姿态；新timing的反向且无delay播放可在首次tick（包括零delta）或seek时应用序列末端，因为注册本身不写初始反向姿态。捕获的隐式Custom默认值在正向零进度时不会被无意义地写入输入。每次成功提交后重新读取规范化的数值，避免f32 opacity舍入被误判为宿主覆盖。
 
 ## 播放状态
 
-- Playing：tick累计正Duration并限制到duration；到终点进入Completed
+- Playing：tick按speed推进逻辑Duration，含delay和遍历间隙；有限播放在总时长终点进入Completed，无限播放不自然完成
 - Paused：tick不累计时间，seek仍实际修改属性；resume恢复
-- seek作用于Playing/Paused/Completed记录；完成后seek回区间内变为Paused，需resume继续；seek到终点进入Completed
+- seek作用于Playing/Paused/Completed记录，参数是含delay/repeat的绝对逻辑位置，不乘speed；有限播放完成后seek回区间内变为Paused，需resume继续；seek到总终点进入Completed
 - 裸engine的cancel保持当前输入；编辑器cancel_editor按下方会话规则恢复基线。已取消记录不能seek/resume复活
 - remove释放记录；完成和取消记录最多共保留256项，每项最多32个属性，达到上限明确报错
 - Duration为类型化非负时长；零duration定义被拒绝，大delta安全停在终点
 
-没有延迟、循环、反向/swing、速度变化、自动时长分配、动画列表编排、弹簧/物理插值或运动路径。`seek`是给单个动画的原子操作，批量seek多个记录需要宿主协调。
+新源码通过 `animate_with_timing` / `animate_sequence_with_timing` / `animate_clip` 提供整序列delay/repeat/方向/speed；旧入口默认一次正向、无delay、1×速度。`IterationCount::Finite(n)`是总遍历次数；`AnimationInfo.duration`仍为一次遍历，完整长度查看 `timing_sample().total_duration`。首次delay保持捕获姿态（反向也如此），repeat delay保持刚结束的端点；`set_playback_rate`不移动当前逻辑位置。边界、反向easing、溢出与纳秒余数见[animation-timing.md](animation-timing.md)。
+
+仍没有自动时长分配、逐关键帧delay/repeat、AnimateList/嵌套timeline、弹簧/物理插值或运动路径。`seek`是给单个动画的原子操作，批量seek多个记录需要宿主协调。
 
 ## 目标与属性归属
 
@@ -90,7 +95,7 @@ cargo run --locked --manifest-path docs/examples/Cargo.toml --bin animation
 cargo test --locked -p gpui-flow-animation
 ```
 
-原生适配代码的编译/链接不等于已经执行真实窗口视觉验收。paint-only状态样式已作为独立呈现层接入，见[state-styles.md](state-styles.md)；binding级fill/opacity自动hover/pressed过渡已实现；高级过渡、完整timeline、运动路径仍是后续模块。
+以上命令仅为恢复验证后的入口；本批没有执行。旧原生适配代码的编译/链接记录不等于当前timing源码的编译结果，更不等于真实窗口视觉验收。paint-only状态样式已作为独立呈现层接入，见[state-styles.md](state-styles.md)；binding级fill/opacity自动hover/pressed过渡已实现；高级过渡、完整timeline、运动路径仍是后续模块。
 
 ## 官方源码定位
 

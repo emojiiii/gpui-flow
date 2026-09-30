@@ -4,6 +4,8 @@ mod sequence;
 pub use sequence::*;
 mod tween;
 pub use tween::*;
+mod timing;
+pub use timing::*;
 
 use gpui_flow_editor::{PlaybackToken, SceneEditor};
 use gpui_flow_engine::{
@@ -97,7 +99,9 @@ pub struct AnimationInfo {
     pub id: AnimationId,
     pub target: ElementHandle,
     pub status: AnimationStatus,
+    /// Logical timeline position, including delay/repetition and scaled by rate.
     pub elapsed: Duration,
+    /// One sequence traversal; use timing_sample for the full finite duration.
     pub duration: Duration,
 }
 #[derive(Debug, Clone)]
@@ -112,6 +116,8 @@ struct Animation {
     segments: Vec<Segment>,
     tracks: Vec<Track>,
     attachment_epoch: u64,
+    schedule: timing::Schedule,
+    subnanosecond_remainder: u32,
 }
 #[derive(Debug, Clone)]
 pub struct TickReport {
@@ -255,6 +261,41 @@ impl AnimationController {
         target: ElementHandle,
         sequence: AnimationSequence,
     ) -> Result<AnimationId, AnimationError> {
+        self.animate_sequence_with_timing(engine, target, sequence, AnimationTiming::default())
+    }
+    /// Opt-in timing around a single tween. Default timing has exactly the same
+    /// behavior as animate; registering still never writes the document.
+    pub fn animate_with_timing(
+        &mut self,
+        engine: &SceneEngine,
+        target: ElementHandle,
+        spec: AnimationSpec,
+        timing: AnimationTiming,
+    ) -> Result<AnimationId, AnimationError> {
+        self.animate_sequence_with_timing(
+            engine,
+            target,
+            AnimationSequence::new(vec![spec]),
+            timing,
+        )
+    }
+    pub fn animate_clip(
+        &mut self,
+        engine: &SceneEngine,
+        target: ElementHandle,
+        clip: AnimationClip,
+    ) -> Result<AnimationId, AnimationError> {
+        self.animate_sequence_with_timing(engine, target, clip.sequence, clip.timing)
+    }
+    /// Reserve all sequence properties through delay, pause and repeat gaps.
+    /// Invalid timing/endpoints reserve nothing. Finite totals must fit Duration.
+    pub fn animate_sequence_with_timing(
+        &mut self,
+        engine: &SceneEngine,
+        target: ElementHandle,
+        sequence: AnimationSequence,
+        timing: AnimationTiming,
+    ) -> Result<AnimationId, AnimationError> {
         self.sync(engine)?;
         if self.animations.len() >= MAX_ANIMATIONS {
             return Err(AnimationError::Capacity);
@@ -264,6 +305,7 @@ impl AnimationController {
             return Err(AnimationError::Engine(EngineError::DetachedHandle));
         }
         let (segments, tracks, duration) = sequence::prepare(engine, target, sequence)?;
+        let schedule = timing.compile(duration)?;
         self.check_conflict(
             target,
             &tracks
@@ -291,10 +333,59 @@ impl AnimationController {
                 segments,
                 tracks,
                 attachment_epoch: instance.attachment_epoch,
+                schedule,
+                subnanosecond_remainder: 0,
             },
         );
         self.next = next;
         Ok(id)
+    }
+    /// Inspect the timing policy without mutating the captured keyframes.
+    pub fn timing(
+        &mut self,
+        engine: &SceneEngine,
+        id: AnimationId,
+    ) -> Result<AnimationTiming, AnimationError> {
+        self.sync(engine)?;
+        self.animations
+            .get(&id)
+            .map(|animation| animation.schedule.timing)
+            .ok_or(AnimationError::UnknownAnimation)
+    }
+    /// Inspect the current phase and exact sequence position. This describes the
+    /// clock even for a paused/cancelled record; info reports lifecycle status.
+    pub fn timing_sample(
+        &mut self,
+        engine: &SceneEngine,
+        id: AnimationId,
+    ) -> Result<TimingSample, AnimationError> {
+        self.sync(engine)?;
+        self.animations
+            .get(&id)
+            .map(|animation| animation.schedule.sample(animation.info.elapsed))
+            .ok_or(AnimationError::UnknownAnimation)
+    }
+    /// Change speed without moving the current logical position. This explicit
+    /// clock boundary discards any pending fraction smaller than one nanosecond.
+    /// Pause/resume alone preserves that fraction. Completed records must first
+    /// be rewound with seek, and cancelled records cannot be restarted.
+    pub fn set_playback_rate(
+        &mut self,
+        engine: &SceneEngine,
+        id: AnimationId,
+        speed: PlaybackRate,
+    ) -> Result<(), AnimationError> {
+        self.sync(engine)?;
+        let animation = self
+            .animations
+            .get_mut(&id)
+            .ok_or(AnimationError::UnknownAnimation)?;
+        if !animation.info.status.active() {
+            return Err(AnimationError::InvalidState);
+        }
+        animation.schedule.timing.speed = speed;
+        animation.subnanosecond_remainder = 0;
+        Ok(())
     }
     pub fn pause(&mut self, engine: &SceneEngine, id: AnimationId) -> Result<(), AnimationError> {
         self.sync(engine)?;
@@ -361,16 +452,18 @@ impl AnimationController {
             .values_mut()
             .filter(|animation| animation.info.status == AnimationStatus::Playing)
         {
-            let elapsed = animation
-                .info
-                .elapsed
-                .saturating_add(delta)
-                .min(animation.info.duration);
+            let (elapsed, remainder) = animation.schedule.advance(
+                animation.info.elapsed,
+                animation.subnanosecond_remainder,
+                delta,
+            )?;
             if elapsed != animation.info.elapsed {
                 advanced.push(animation.info.id);
             }
-            sample(engine, animation, elapsed, &mut updates)?;
-            if elapsed == animation.info.duration {
+            let timing = animation.schedule.sample(elapsed);
+            sample(engine, animation, timing, &mut updates)?;
+            animation.subnanosecond_remainder = remainder;
+            if timing.phase == TimingPhase::Completed {
                 animation.info.status = AnimationStatus::Completed;
                 completed.push(animation.info.id);
             }
@@ -438,7 +531,10 @@ impl AnimationController {
         let changes = editor.apply_playback_properties(token, std::mem::take(&mut plan.updates))?;
         Ok(self.commit_tick(&editor.engine, plan, changes))
     }
-    /// Seek a low-level engine animation. Editor hosts should use seek_editor.
+    /// Seek an absolute logical timeline position including delay and repeats;
+    /// playback speed is not applied to this argument. A finite position clamps
+    /// to its total duration. Seeking resets subnanosecond clock carry and a
+    /// completed rewind pauses. Editor hosts should use seek_editor.
     pub fn seek(
         &mut self,
         engine: &mut SceneEngine,
@@ -489,10 +585,11 @@ impl AnimationController {
                 .collect::<Vec<_>>(),
             Some(id),
         )?;
-        let position = position.min(animation.info.duration);
+        let timing = animation.schedule.sample(position);
         let mut updates = Vec::new();
-        sample(engine, &mut animation, position, &mut updates)?;
-        animation.info.status = if position == animation.info.duration {
+        sample(engine, &mut animation, timing, &mut updates)?;
+        animation.subnanosecond_remainder = 0;
+        animation.info.status = if timing.phase == TimingPhase::Completed {
             AnimationStatus::Completed
         } else if animation.info.status == AnimationStatus::Completed {
             AnimationStatus::Paused
@@ -544,9 +641,10 @@ impl AnimationController {
 fn sample(
     engine: &SceneEngine,
     animation: &mut Animation,
-    elapsed: Duration,
+    timing: TimingSample,
     updates: &mut PropertyUpdates,
 ) -> Result<(), AnimationError> {
+    let elapsed = timing.cycle_position;
     let index = animation
         .segments
         .iter()
@@ -556,8 +654,15 @@ fn sample(
     let progress = elapsed.saturating_sub(segment.start).as_secs_f64()
         / (segment.end - segment.start).as_secs_f64();
     for track in &mut animation.tracks {
-        let value =
-            track.values[index].interpolate(&track.values[index + 1], progress, segment.easing)?;
+        let value = if timing.reversed {
+            track.values[index + 1].interpolate(
+                &track.values[index],
+                1. - progress,
+                segment.easing,
+            )?
+        } else {
+            track.values[index].interpolate(&track.values[index + 1], progress, segment.easing)?
+        };
         if value != tween::read(engine, animation.info.target, &track.property)? {
             let (key, data) =
                 tween::update(engine, animation.info.target, &track.property, &value)?;
@@ -565,7 +670,7 @@ fn sample(
             track.last = value;
         }
     }
-    animation.info.elapsed = elapsed;
+    animation.info.elapsed = timing.elapsed;
     Ok(())
 }
 

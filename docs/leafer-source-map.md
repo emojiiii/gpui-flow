@@ -1,43 +1,47 @@
 # Leafer source architecture map and Rust alignment plan
 
-Status: source research and proposed contracts, **not an implementation/parity claim**. Reviewed 2026-09-30. No upstream code, package install, build script, or example was executed. No Rust source was changed for this report.
+Status: historical source research plus a separately labelled current source map, **not a full parity claim**. Reviewed 2026-09-30. The original research changed no Rust source and executed no upstream code, install, build script or example. Later implementation slices below must not be confused with that original read-only report.
+
+> 当前批次为 **UNCOMPILED / UNRUN**：复用适配、advanced stroke、animation timing、named states/placeholder/button继承和资源生命周期已有源码与待运行回归，未编译、测试、运行示例或执行CI。历史通过记录不验证这些修改，详见[source-only-status.md](source-only-status.md)。
 
 > 基线说明：下方差距矩阵记录源码研究时的 `43eda10` 状态。后续已实现的引擎身份/生命周期/schema/dirty 缓存及原生事件接入见 [engine.md](engine.md)，不要把历史矩阵的“absent”误读为最新状态。后续批次实现了[多层矢量 paints](appearance.md)和[显式行列布局](flow-layout.md)；另有基础属性动画和编辑器安全播放会话；外观隔离合成、全局响应式布局调度、完整timeline/高级状态过渡/运动路径仍然缺失。
 
-## 当前增量状态（不覆盖历史基线）
+## 当前增量状态（源码能力，不覆盖历史基线）
 
 - 引擎实例、生命周期、registry/schema、dirty 缓存、默认动作前事件路由：已实现，见 [engine.md](engine.md)
-- 外观：有序多层矢量 fill/stroke、渐变纹理逐层缓存、可见描边 bounds/hit、原子属性更新已实现；文本/图像不接受新 layers。透明度仍逐 paint，未实现隔离合成、混合/蒙版/阴影/擦除，见 [appearance.md](appearance.md)
+- 外观：有序多层矢量 fill/stroke、渐变纹理逐层缓存、可见描边 bounds/hit、原子属性更新；新源码增加居中local-space cap/join/miter/dash，Kurbo负责dash、Lyon负责stroke mesh，并用于绘制/命中。文本/图像不接受新layers；inside/outside、scale-fixed仍缺。透明度仍逐paint，隔离合成/混合/蒙版/阴影/擦除仍未实现，见[appearance.md](appearance.md)
 - 视觉布局：可选 `gpui-flow-layout`，固定/内容尺寸 Box/Frame 的行/列、换行、padding/gap、对齐、grow/尺寸范围、隐藏与排除区别、嵌套测量/安排、一次事务/撤销和独立配置持久化。显式pass、编辑+布局事务或opt-in提交前自动派生，具备内容auto-size和嵌套测量固定点；已有可选真实文字测量与响应高度；没有全局响应式调度、百分比或shrink，见 [flow-layout.md](flow-layout.md)
 - 新原生示例 `layout_appearance` 将布局输出送入同一 SceneView；编译/模型测试不等于新窗口视觉验收
 - 键盘增量：KeyUp/Space进入同一路由，首按可取消、Up/取消/失焦必清状态、重复键和焦点按实例隔离，见 [keyboard-routing.md](keyboard-routing.md)。没有新增双击/触摸/IME支持
-- 动画增量：1..64段显式关键帧、稀疏字段保持/累计端点预检、跨段seek；显式tick的平移/opacity/实色/自定义数值插值，原子跨元素更新、pause/resume/seek/cancel、旧身份保护及完成一次Undo/取消恢复基线的编辑器播放会话，见 [animation.md](animation.md)。没有完整timeline/运动路径；paint-only状态过渡由interaction呈现层提供
+- 动画增量：1..64段显式关键帧、稀疏字段保持/累计端点预检、跨段seek；显式tick的平移/opacity/实色/自定义数值插值，原子跨元素更新、pause/resume/seek/cancel、旧身份保护及完成一次Undo/取消恢复基线的编辑器播放会话，见 [animation.md](animation.md)。新源码还有整序列delay/repeat delay、有限/无限遍历、正反/交替方向、正有理数speed和AnimationClip组合；没有自动时长/嵌套timeline/运动路径，见[animation-timing.md](animation-timing.md)；paint-only状态过渡由interaction呈现层提供
 - 自动尺寸增量：固定/内容尺寸、有限min/max、wrap交叉轴测量、底向上测量与顶向下安排、32-pass上限、尺寸所有权冲突拒绝；custom geometry先规范化再测量，编辑+布局一个Undo步骤。不是全局observer调度
-- 状态呈现增量：selected/focus/hover/press/disabled优先级、paint-only填色/opacity叠加、不改文档/Undo、PointerLeave和挂载期隔离已接入SceneView；已有实色/opacity进出过渡、连续反转和逐帧调度；已有宿主程序focus/clear和native同步；没有命名state、placeholder、button继承或每态transition覆盖，见[state-styles.md](state-styles.md)
+- 状态呈现增量：selected/focus/hover/press/disabled优先级、paint-only填色/opacity叠加、不改文档/Undo、PointerLeave和挂载期隔离已接入SceneView；已有实色/opacity进出过渡、连续反转和逐帧调度；已有宿主程序focus/clear和native同步；新源码增加命名palette、固定框空Text placeholder和父/祖父最近button继承；每态transition覆盖、geometry状态仍缺，见[state-styles.md](state-styles.md)与[named-states.md](named-states.md)
 - 同步响应布局增量：安装live绑定后普通shape/transform/树编辑在一次提交内派生，严格size/transform白名单、8轮外层固定点、失败与播放历史保护；UndoRedo精确还原且runtime配置不序列化。没有帧合并/局部依赖调度，见[reactive-layout.md](reactive-layout.md)
 - 程序焦点增量：宿主/监听队列请求，选中分离、Blur阶段处理动作、失效目标抑制、256预算及native一次同步；不含Tab/IME/无障碍，见[focus-routing.md](focus-routing.md)
 - 反向布局增量：RowReverse/ColumnReverse逆序遍历后按正常坐标排布，wrap_reverse独立反转完整行/列；原树/paint顺序与runtime身份保持，嵌套auto-size/ownership/reactive单Undo沿用既有管线。未把shrinkContent误当CSS shrink
 - 文字测量增量：字体/字号/字重、同源GPUI shaping/paint、换行/空行、真实尺寸进入响应布局，绑定/动画/Undo边界及显式字体metrics失效后同步reflow；本轮仅纯文本子集，无富文本编辑/IME/百分比/完整文字排版，见[text-measurement.md](text-measurement.md)
 - 原生裁切增量：Text/Image共享矩形clip链，嵌套Frame/Box、平移与正等比缩放，Text保留完整对齐框、Image保留fit框并负偏移裁切；空交集不paint不hit，矢量圆角/仿射裁切保持。原生圆角/任意路径mask仍缺，见[native-clipping.md](native-clipping.md)
+- 复用增量：Kit Button负责外围控制激活；petgraph 0.8.3负责图可达/拓扑遍历；Kurbo 0.11.3负责tight curve bounds；Taffy 0.13.0私有适配器处理普通行内数值分配，Flow仍保留分行/内容测量/reverse/事务及极端数值f64 fallback。均待编译/运行验证
+- 资源增量：新SceneResources身份/attachment epoch/源generation票据与SceneView原生image/text结果、资源事件、Ready/ViewReady/Complete receipt已接入源码。Complete含失败/取消，ViewReady为GPUI paint回执，不是GPU呈现fence；媒体桥接、共享加载硬取消和字节预算仍缺，见[resource-lifecycle.md](resource-lifecycle.md)
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
-## 九类能力当前边界（本轮原生矩形裁切后）
+## 九类能力当前边界（含待验证源码增量）
 
-这里描述已经落地的行为与仍待实现的契约；下方历史源码差距表保留研究基线。
+这里描述当前源码接入的行为与仍待实现的契约；本批新增项尚未编译/运行，下方历史源码差距表保留原研究基线。
 
 | 类别 | 当前实现 | 主要未覆盖契约 |
 |---|---|---|
 | 事件 | 实例持有、捕获/目标/冒泡、once、队列、默认动作前路由、KeyUp、不可取消Blur/Focus及related target | 多指/压力、双击/长按、IME及完整事件族 |
 | 交互 | 选择/拖动/缩放/捕获取消、Space平移、插件策略、程序焦点/有界重定向/native同步 | 专用内外编辑工具生命周期、复杂手势 |
-| 外观 | 多层矢量paint、线性/径向渐变、描边bounds/picking、paint-only状态呈现及实色/opacity过渡、Text/Image矩形祖先clip链 | 隔离透明度、blend、mask、shadow/filter |
+| 外观 | 多层矢量paint、线性/径向渐变、共享mesh的cap/join/dash描边、named/placeholder/button状态及fill/opacity过渡、Text/Image矩形祖先clip链 | inside/outside与scale-fixed stroke、geometry状态、隔离透明度、blend、mask、shadow/filter |
 | 布局 | 固定/内容轴、双轴reverse遍历/wrap-reverse、wrap测量、真实字体文字Natural/AutoHeight、嵌套有界收敛、opt-in提交前自动派生 | 帧合并/局部依赖调度、百分比、shrinkContent、文本baseline/富排版 |
 | 数据 | 类型属性/schema/default、原子变化、dirty分类、JSON | 完整input/computed分离及Leafer导入导出 |
 | 元素 | 主要原语、场景树、变换、矢量完整裁切及原生矩形clip、统一几何命中 | 命令式Canvas元素、各类型高级属性完全覆盖 |
 | 自定义元素 | 注册factory/schema、确定性自定义几何/picking、数值动画 | 自定义resize/编辑工具协议、异步资源就绪整合 |
 | 实例 | 独立引擎/代际handle、clone/detach/reparent/destroy | 多层App实例组合与跨层转发 |
-| 生命周期 | 原子结构事件、销毁监听清理、动画目标失效/编辑历史保护 | Ready/ViewReady/Complete分阶段资源管线 |
+| 生命周期 | 原子结构事件、销毁清理、动画目标/历史保护；新源码桥接原生image/text结果、资源票据和Ready/ViewReady/Complete回执 | 媒体资源桥接、共享后台加载硬取消/字节预算、GPU呈现fence |
 
-动画为可用的基础属性时钟、有界关键帧序列与编辑器播放事务；完整timeline、高级状态过渡和运动路径仍待实现。
+动画源码具备基础属性时钟、有界关键帧序列、整序列timing和编辑器播放事务；新timing尚未验证，完整嵌套timeline、每态transition覆盖/geometry状态过渡和运动路径仍待实现。
 
 本轮过渡复用纯插值器；按binding配置transition/transitionOut回退，反转从当前显示值开始。文档同通道变化取消旧motion、失败整帧原子、生命周期清理且不改Undo。None/gradient离散切换，未实现每态配置、延迟/循环或geometry transition。
 

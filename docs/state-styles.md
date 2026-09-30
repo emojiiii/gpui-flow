@@ -1,5 +1,10 @@
 # Paint-only state styles
 
+Source-only update (2026-09-30): named states, fixed-box Text placeholders and
+parent-button inheritance are implemented in source with authored regressions,
+but are **UNCOMPILED / UNRUN**. Historical state/transition checks do not validate
+this batch. See [named-states.md](named-states.md) for the complete new contract.
+
 `SceneStateStyles` is an optional, engine-scoped presentation layer in
 `gpui-flow-interaction::scene`. `SceneView` consumes it directly. Register
 `StateStyles` against a live `ElementHandle`, then routed input and editor
@@ -11,18 +16,26 @@ use the existing animation sampler and the same non-mutating presentation layer.
 
 The supported layers merge property by property in this order:
 
-`document style < selected < focus < hover < press`
+`document style < named state < selected < placeholder < focus < hover < press`
 
-When disabled, the order is `document style < selected < disabled`; focus, hover,
+When disabled, the order is
+`document style < named state < selected < placeholder < disabled`; focus, hover,
 and press patches are omitted even if the disabled patch is empty. An omitted
 field inherits the lower layer. Focus is an exact target; hover and press include
-the target's ancestors. There is no implicit parent-button inheritance.
+the target's ancestors. New source optionally adds a nearest registered button
+among the parent/grandparent: a non-button binding defaults to
+`StateInheritance::ParentButton`, while `None` disables this extra inheritance.
+Flags are OR-ed and the inherited name selects the child's own palette; parent
+paints and placeholder content are never copied. A button does not inherit
+an outer button's state.
 
 - `StatePaint.fill` replaces a vector/text/custom element base fill with a solid color; Image and Group reject fill patches and support opacity only
 - `StatePaint.opacity` replaces local opacity; normal ancestor multiplication
   still applies to children in the real paint pipeline
 - Additional fill layers, stroke layers, geometry, transforms, clipping, visibility,
-  order and document data are unchanged
+  order and document data are unchanged. An active Text placeholder substitutes
+  content only in the fixed-box presentation copy, never in canonical text or
+  intrinsic measurement
 - The host supplies `disabled` through `set_disabled`; it is a visual state, not
   editing permission or automatic command/listener suppression. Use access
   policies and listener cancellation for those separate contracts
@@ -60,7 +73,8 @@ this is not an incremental or large-scene performance claim.
 ## Registration and lifetime
 
 `bind` validates all patches, including inactive ones, before replacing a binding.
-Replacement preserves the existing disabled flag. Invalid opacity (NaN/infinity
+Replacement preserves the disabled flag, named palette/selection, placeholder,
+button/inheritance settings, timing and in-flight motion. Invalid opacity (NaN/infinity
 or outside `[0,1]`), unsupported style combinations and foreign handles fail
 without replacing the prior binding. There are at most 1024 bindings per sheet.
 `unbind` and `clear` remove them explicitly. No listeners, observers, timers or
@@ -157,8 +171,9 @@ Inspected pinned `leafer-in` revision
 
 Rust uses a non-mutating presentation layer instead of temporarily assigning
 properties and restoring normalStyle. No upstream implementation was copied.
-Missing: named `states`, placeholder styles, button inheritance,
-geometry/custom-property state changes, declarative serialization,
+Named palettes, fixed-box Text placeholders and bounded parent-button inheritance
+are now source implementations; see [named-states.md](named-states.md).
+Missing: geometry/custom-property state changes, declarative serialization,
 per-state transition overrides, transition delay/repeat, gradient/absent-fill
 interpolation, timeline composition and motion paths.
 

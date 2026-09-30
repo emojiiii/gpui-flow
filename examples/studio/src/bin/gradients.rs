@@ -127,6 +127,7 @@ fn scene() -> Scene {
             stroke: Some(Stroke {
                 paint: linear(270.0),
                 width: 22.0,
+                ..Stroke::default()
             }),
             ..Default::default()
         }));

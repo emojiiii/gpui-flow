@@ -907,3 +907,190 @@ fn cancelled_converging_branches_retry_all() {
     assert!(workflow.retry_many(&[]).is_err());
     assert!(workflow.retry_failed().is_err());
 }
+
+#[test]
+fn parallel_port_edges_keep_each_value_and_edge_id_fanin_order() {
+    let mut graph = graph([
+        source("source", "source", DataType::Number).with_port(Port::output(
+            "other",
+            "Other",
+            DataType::Number,
+        )),
+        transform("sink", "sink", DataType::Number).with_port(Port::input(
+            "separate",
+            "Separate",
+            DataType::Number,
+        )),
+    ]);
+    connect(&mut graph, "z-edge", "source", "sink");
+    graph
+        .connect(
+            "a-edge",
+            PortRef::new("source", "other"),
+            PortRef::new("sink", "in"),
+        )
+        .unwrap();
+    graph
+        .connect(
+            "m-edge",
+            PortRef::new("source", "out"),
+            PortRef::new("sink", "separate"),
+        )
+        .unwrap();
+    let mut workflow = Workflow::new(
+        graph,
+        registry([
+            ("source", runner(|_, _| Ok(json!({"out": 10, "other": 20})))),
+            (
+                "sink",
+                runner(|input, _| {
+                    assert_eq!(input["inputs"], json!({"in": [20, 10], "separate": [10]}));
+                    Ok(json!({"out": 40}))
+                }),
+            ),
+        ]),
+        1,
+    )
+    .unwrap();
+    terminal(&mut workflow);
+    assert!(workflow.succeeded());
+    assert_eq!(workflow.graph().edges.len(), 3);
+    assert_eq!(workflow.records()[&"sink".into()].attempt, 1);
+}
+
+#[test]
+fn newly_ready_child_competes_with_existing_roots_in_node_id_order() {
+    let order = Arc::new(Mutex::new(Vec::new()));
+    let capture = order.clone();
+    let mut graph = graph([
+        source("z-root", "record", DataType::Number),
+        transform("a-child", "record", DataType::Number),
+        source("b-root", "record", DataType::Number),
+    ]);
+    connect(&mut graph, "dependency", "b-root", "a-child");
+    let mut workflow = Workflow::new(
+        graph,
+        registry([(
+            "record",
+            runner(move |input, _| {
+                capture
+                    .lock()
+                    .unwrap()
+                    .push(input["node"]["id"].as_str().unwrap().to_owned());
+                Ok(json!({"out": 1}))
+            }),
+        )]),
+        1,
+    )
+    .unwrap();
+    terminal(&mut workflow);
+    assert!(workflow.succeeded());
+    assert_eq!(*order.lock().unwrap(), vec!["b-root", "a-child", "z-root"]);
+}
+
+#[test]
+fn failure_reaches_reverse_id_chain_before_same_poll_schedules_more_work() {
+    let ids: Vec<_> = (0..64)
+        .rev()
+        .map(|index| format!("node-{index:02}"))
+        .collect();
+    let mut graph = graph(ids.iter().map(|id| transform(id, "fail", DataType::Number)));
+    for (index, pair) in ids.windows(2).enumerate() {
+        connect(&mut graph, &format!("edge-{index:02}"), &pair[0], &pair[1]);
+    }
+    let calls = Arc::new(AtomicUsize::new(0));
+    let counter = calls.clone();
+    let mut workflow = Workflow::new(
+        graph,
+        registry([(
+            "fail",
+            runner(move |_, _| {
+                counter.fetch_add(1, Ordering::SeqCst);
+                Err("expected failure".into())
+            }),
+        )]),
+        4,
+    )
+    .unwrap();
+    poll_until(&mut workflow, |workflow| {
+        status(workflow, &ids[0]) == WorkflowStatus::Failed
+    });
+    assert!(workflow.is_finished());
+    for id in &ids[1..] {
+        assert_eq!(status(&workflow, id), WorkflowStatus::Skipped);
+        assert_eq!(workflow.records()[&NodeId::from(id.clone())].attempt, 0);
+    }
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn retry_closure_handles_duplicate_and_overlapping_roots_without_unrelated_restarts() {
+    let mut graph = graph([
+        source("root", "ok", DataType::Number),
+        transform("child", "ok", DataType::Number),
+        transform("leaf", "ok", DataType::Number),
+        source("unrelated", "ok", DataType::Number),
+    ]);
+    connect(&mut graph, "root-child", "root", "child");
+    connect(&mut graph, "child-leaf", "child", "leaf");
+    let mut workflow = Workflow::new(
+        graph,
+        registry([("ok", runner(|_, _| Ok(json!({"out": 1}))))]),
+        2,
+    )
+    .unwrap();
+    workflow.cancel();
+    workflow
+        .retry_many(&["child".into(), "root".into(), "root".into()])
+        .unwrap();
+    for id in ["root", "child", "leaf"] {
+        assert_eq!(status(&workflow, id), WorkflowStatus::Pending);
+    }
+    assert_eq!(status(&workflow, "unrelated"), WorkflowStatus::Cancelled);
+    terminal(&mut workflow);
+    for id in ["root", "child", "leaf"] {
+        assert_eq!(status(&workflow, id), WorkflowStatus::Succeeded);
+        assert_eq!(workflow.records()[&NodeId::from(id)].attempt, 1);
+    }
+    assert_eq!(workflow.records()[&"unrelated".into()].attempt, 0);
+    assert!(!workflow.succeeded());
+}
+
+#[test]
+fn construction_error_precedence_remains_validation_concurrency_runner_then_cycle() {
+    let mut graph = graph([
+        transform("a", "missing", DataType::Number),
+        transform("b", "missing", DataType::Number),
+    ]);
+    connect(&mut graph, "ab", "a", "b");
+    connect(&mut graph, "ba", "b", "a");
+    assert_eq!(
+        Workflow::new(graph.clone(), RunnerRegistry::new(), 0)
+            .err()
+            .unwrap(),
+        "concurrency must be positive"
+    );
+    assert_eq!(
+        Workflow::new(graph.clone(), RunnerRegistry::new(), 1)
+            .err()
+            .unwrap(),
+        "no workflow runner for kind missing (node a)"
+    );
+    assert_eq!(
+        Workflow::new(
+            graph.clone(),
+            registry([("missing", runner(|_, _| Ok(json!({}))))]),
+            1
+        )
+        .err()
+        .unwrap(),
+        "workflow requires an acyclic graph"
+    );
+    graph.nodes.get_mut(&"a".into()).unwrap().position.x = f32::NAN;
+    assert!(
+        Workflow::new(graph, RunnerRegistry::new(), 0)
+            .err()
+            .unwrap()
+            .contains("finite")
+    );
+}

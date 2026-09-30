@@ -94,19 +94,127 @@ impl Paint {
         Ok(())
     }
 }
-/// Strokes use round caps and joins in geometric picking. Render adapters should
-/// use the same convention; dash patterns are deliberately not part of this model.
+/// Shape of both ends of an open stroke or dash.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StrokeCap {
+    Butt,
+    Square,
+    #[default]
+    Round,
+}
+/// Connection between consecutive segments of a stroke.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StrokeJoin {
+    Bevel,
+    Miter,
+    #[default]
+    Round,
+}
+fn default_miter_limit() -> f32 {
+    4.0
+}
+/// Maximum dash entries before odd patterns are repeated to form an even period.
+pub const MAX_STROKE_DASH_ENTRIES: usize = 256;
+/// Centered local-space stroke. Missing style fields retain the original solid,
+/// round-cap, round-join appearance. Inside/outside and scale-fixed strokes are
+/// not supported. Advanced geometry has the budgets documented on `StrokeMesh`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Stroke {
     pub paint: Paint,
     pub width: f32,
+    #[serde(default)]
+    pub cap: StrokeCap,
+    #[serde(default)]
+    pub join: StrokeJoin,
+    #[serde(default = "default_miter_limit")]
+    pub miter_limit: f32,
+    /// Alternating positive on/off lengths, in local units. Empty means solid.
+    /// Odd-length patterns repeat twice; zero and negative entries are rejected.
+    #[serde(default)]
+    pub dash_pattern: Vec<f32>,
+    /// Signed distance into the pattern at each subpath start, in local units.
+    #[serde(default)]
+    pub dash_offset: f32,
+}
+impl Default for Stroke {
+    fn default() -> Self {
+        Self::new(Color::BLACK, 1.0)
+    }
 }
 impl Stroke {
     pub fn new(color: Color, width: f32) -> Self {
         Self {
             paint: color.into(),
             width,
+            cap: StrokeCap::Round,
+            join: StrokeJoin::Round,
+            miter_limit: default_miter_limit(),
+            dash_pattern: Vec::new(),
+            dash_offset: 0.0,
         }
+    }
+    pub fn with_cap(mut self, cap: StrokeCap) -> Self {
+        self.cap = cap;
+        self
+    }
+    pub fn with_join(mut self, join: StrokeJoin) -> Self {
+        self.join = join;
+        self
+    }
+    pub fn with_miter_limit(mut self, limit: f32) -> Self {
+        self.miter_limit = limit;
+        self
+    }
+    pub fn with_dashes(mut self, pattern: Vec<f32>, offset: f32) -> Self {
+        self.dash_pattern = pattern;
+        self.dash_offset = offset;
+        self
+    }
+    /// Whether rendering and picking require the shared advanced-stroke mesh.
+    /// An unused miter limit or dash offset does not change solid round geometry.
+    pub fn uses_advanced_geometry(&self) -> bool {
+        self.cap != StrokeCap::Round
+            || self.join != StrokeJoin::Round
+            || !self.dash_pattern.is_empty()
+    }
+    pub(crate) fn extent(&self) -> f32 {
+        let mut factor = 0.5f64;
+        if self.cap == StrokeCap::Square {
+            factor = std::f64::consts::SQRT_2 * 0.5;
+        }
+        if self.join == StrokeJoin::Miter {
+            // Lyon 1.0.22 limits normal length to 2 * miter_limit. With
+            // half-width extrusion, width * limit is a conservative reach.
+            factor = factor.max(self.miter_limit as f64);
+        }
+        (self.width as f64 * factor) as f32
+    }
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        if !self.width.is_finite() || self.width < 0.0 {
+            return Err("stroke width must be finite and non-negative".into());
+        }
+        if !self.miter_limit.is_finite() || !(1.0..=10_000.0).contains(&self.miter_limit) {
+            return Err("stroke miter limit must be in [1,10000]".into());
+        }
+        if !self.dash_offset.is_finite() {
+            return Err("stroke dash offset must be finite".into());
+        }
+        if self.dash_pattern.len() > MAX_STROKE_DASH_ENTRIES
+            || self
+                .dash_pattern
+                .iter()
+                .any(|d| !d.is_finite() || *d <= 0.0)
+        {
+            return Err(format!(
+                "stroke dash pattern requires at most {MAX_STROKE_DASH_ENTRIES} finite positive entries"
+            ));
+        }
+        if !self.extent().is_finite() {
+            return Err("stroke extent overflow".into());
+        }
+        self.paint.validate()
     }
 }
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -160,7 +268,7 @@ impl Style {
     pub fn stroke_extent(&self) -> f32 {
         self.strokes()
             .filter(|stroke| stroke.paint.is_visible())
-            .map(|stroke| stroke.width * 0.5)
+            .map(Stroke::extent)
             .fold(0.0, f32::max)
     }
     pub fn has_layers(&self) -> bool {
@@ -192,10 +300,7 @@ impl Style {
             fill.validate()?;
         }
         for stroke in self.strokes() {
-            if !stroke.width.is_finite() || stroke.width < 0.0 {
-                return Err("stroke width must be finite and non-negative".into());
-            }
-            stroke.paint.validate()?;
+            stroke.validate()?;
         }
         Ok(())
     }

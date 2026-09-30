@@ -65,6 +65,7 @@ fn stacks_preserve_order_and_gradient_data_across_scene_roundtrip() {
         stroke_layers: vec![Stroke {
             paint: linear(Color::WHITE),
             width: 2.0,
+            ..Stroke::default()
         }],
         ..Style::default()
     };
@@ -94,6 +95,7 @@ fn bounds_and_picking_use_widest_visible_stroke_and_every_fill() {
             Stroke {
                 paint: linear(Color::TRANSPARENT),
                 width: 200.0,
+                ..Stroke::default()
             },
             Stroke::new(Color::WHITE, 0.0),
             Stroke::new(Color::WHITE, 2.0),

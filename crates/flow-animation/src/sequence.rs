@@ -8,7 +8,8 @@ pub const MAX_SEQUENCE_KEYFRAMES: usize = 64;
 /// Explicit, positive-duration target keyframes. The first segment starts at the
 /// current pose; each following segment starts at the previous cumulative pose.
 /// A property omitted from a segment holds its last value. There is no implicit
-/// zero-duration first pose, delay, repeat, reverse, or nested timeline.
+/// zero-duration first pose or nested timeline. AnimationTiming can wrap the
+/// whole sequence with delay, repetition and playback direction.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AnimationSequence {

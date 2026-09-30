@@ -1,5 +1,8 @@
 # gpui-flow-animation
 
+Source-only update (2026-09-30): the new timing APIs and authored regressions are
+**UNCOMPILED / UNRUN**. Earlier test records do not validate this source batch.
+
 Opt-in, deterministic property tweens driven by an explicit host clock. Translation,
 opacity, solid fill color and registered custom numeric properties update through
 one engine transaction per tick. No GPUI, thread, timer, provider or implicit callback.
@@ -40,9 +43,15 @@ there are no timers or engine subscriptions left behind.
 with positive duration and easing. Missing properties hold their cumulative value;
 all endpoints preflight before reserving the union of at most 32 properties.
 The sequence shares ordinary tick/seek/pause and editor history semantics.
-This is a bounded sequence, not a full keyframe timeline. No loops, delay,
-reverse/swing, physics or motion-path animation are
-claimed. Color interpolates encoded RGBA channels. Transform animation currently
+Opt-in `AnimationTiming` adds initial/repeat delay, finite or infinite total
+traversals, forward/reverse/alternate direction and positive rational playback
+rate. `animate_with_timing`, `animate_sequence_with_timing` and `animate_clip`
+reuse the same lifecycle, atomic tick and history paths. `seek` uses absolute
+logical time including delays; `AnimationInfo.duration` remains one traversal.
+Default `animate`/`animate_sequence` retain one forward pass at 1× with no delay.
+This is a bounded sequence plus timing policy, not a nested timeline. Automatic
+duration allocation, per-keyframe timing options, physics and motion paths remain
+unimplemented. See `docs/animation-timing.md` for boundaries and pending validation. Color interpolates encoded RGBA channels. Transform animation currently
 changes translation only, preserving the other affine coefficients. See
 `docs/animation.md` for lifecycle, conflicts, editor history, and source references.
 

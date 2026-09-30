@@ -1,5 +1,6 @@
-use super::VisualState;
+use super::ResolvedVisualState;
 use gpui_flow_animation::{Easing, TweenValue};
+use gpui_flow_engine::ElementHandle;
 use gpui_flow_scene::{Paint, Style};
 use std::time::Duration;
 
@@ -26,14 +27,16 @@ pub struct StateTransitions {
     pub transition_out: Option<StateTransition>,
 }
 impl StateTransitions {
-    fn choose(self, old: VisualState, new: VisualState) -> StateTransition {
-        let entering = if new.disabled != old.disabled {
-            new.disabled
+    fn choose(self, old: &ResolvedVisualState, new: &ResolvedVisualState) -> StateTransition {
+        let entering = if new.visual.disabled != old.visual.disabled {
+            new.visual.disabled
         } else {
-            (new.selected && !old.selected)
-                || (new.focus && !old.focus)
-                || (new.hover && !old.hover)
-                || (new.press && !old.press)
+            (new.visual.selected && !old.visual.selected)
+                || (new.visual.focus && !old.visual.focus)
+                || (new.visual.hover && !old.visual.hover)
+                || (new.visual.press && !old.visual.press)
+                || (new.placeholder && !old.placeholder)
+                || (new.named.is_some() && new.named != old.named)
                 || new == old // changing an active patch is an entry retarget
         };
         if entering {
@@ -135,15 +138,17 @@ impl<T: Value> Channel<T> {
 #[derive(Clone)]
 pub(super) struct TransitionFrame {
     pub epoch: u64,
-    state: VisualState,
+    pub button: Option<(ElementHandle, u64)>,
+    state: ResolvedVisualState,
     fill: Channel<Option<Paint>>,
     opacity: Channel<f32>,
 }
 impl TransitionFrame {
-    pub fn new(epoch: u64, base: &Style) -> Self {
+    pub fn new(epoch: u64, button: Option<(ElementHandle, u64)>, base: &Style) -> Self {
         Self {
             epoch,
-            state: VisualState::default(),
+            button,
+            state: ResolvedVisualState::default(),
             fill: Channel::new(base.fill.clone()),
             opacity: Channel::new(base.opacity),
         }
@@ -152,11 +157,11 @@ impl TransitionFrame {
         &mut self,
         base: &Style,
         mut target: Style,
-        state: VisualState,
+        state: ResolvedVisualState,
         transitions: StateTransitions,
         now: Duration,
     ) -> Style {
-        let spec = transitions.choose(self.state, state);
+        let spec = transitions.choose(&self.state, &state);
         target.fill = self.fill.update(&base.fill, target.fill, spec, now);
         target.opacity = self
             .opacity

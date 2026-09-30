@@ -1,6 +1,8 @@
 # 支持边界、安全与待实现项
 
-本项目是早期、可扩展的 Rust 原型，不承诺 React Flow/Leafer UI API 兼容、生产稳定性或任意规模性能。以下边界是当前实现事实，不是已经完成的功能。
+本项目是早期、可扩展的 Rust 原型，不承诺 React Flow/Leafer UI API 兼容、生产稳定性或任意规模性能。以下区分已落入源码的子集与仍待实现的契约，不代表全部功能已经完成。
+
+> 2026-09-30 当前复用、stroke、动画timing、扩展状态及资源生命周期批次仅完成源码实现/审阅；编译、测试、原生运行和CI全部待验证（UNCOMPILED / UNRUN）。历史通过记录不能套用于这些改动，见[source-only-status.md](source-only-status.md)。
 
 ## UI 与交互
 
@@ -19,12 +21,13 @@
 ## 场景外观
 
 - 矢量支持有序多层填充和居中描边，含实色/线性/径向渐变；文本、图像与无几何 Group 的额外 layers 会明确拒绝
+- 新源码已有居中local-space stroke的Butt/Square/Round cap、Bevel/Miter/Round join、miter limit、dash pattern/offset，复用Kurbo dash与Lyon三角化，同一受预算限制的mesh用于高级stroke绘制/命中；仍未编译/运行。Inside/outside、scale-fixed描边及任意SVG/path命令完整覆盖仍未实现
 - 当前仍为逐 paint 的平面透明度；没有隔离组/对象透明度、混合、蒙版、擦除、阴影/模糊。多层 paint 不能替代离屏合成
 - 默认 paints 上限32，避免无界三角化/渐变纹理工作；具体边界见 [appearance.md](appearance.md)
 
 ## 媒体
 
-- image 的 `source` 使用本地 `PathBuf` 预览；不内建 URL 下载、上传、文件选择、缓存策略或错误重试界面
+- image默认将本地路径交给GPUI；新源码的SceneView资源适配器复用GPUI公开asset/cache API，只有宿主显式resolver授权后才可映射URI。没有另建下载器、解码器、上传或文件选择器；默认策略不是目录沙箱。资源观察/失败/就绪事件已接入源码，详见[resource-lifecycle.md](resource-lifecycle.md)，尚未运行验证
 - video/audio 可通过显式启用的 FFmpeg/FFplay 后端实际解码、播放、暂停和点击时间轴 seek；需要宿主安装工具，音频需要系统设备。音频波形只显示宿主提供的采样数据，不伪造波形
 - 当前为有界预览后端，使用共用位置/单调时钟与独立音频设备时钟；没有采样级 A/V 同步、无缝 seek、录制或导出保证；详见 [媒体后端](media.md)
 - 只支持允许封装的普通本地文件，不支持网络/直播/播放列表。FlowCanvas 普通构造默认关闭媒体后端，启用后最多同时创建 8 个播放器
@@ -70,7 +73,7 @@ CI 配置目标为 Ubuntu 24.04、macOS 15 和 Windows（windows-latest / MSVC�
 
 ## 状态呈现边界
 
-支持selected/focus/hover/press/disabled的实色base fill与opacity运行时叠加，当前不支持命名states、placeholder、button继承、geometry状态。已有binding级实色/opacity自动transition，未覆盖每态设置、延迟/重复及gradient/None插值。叠加不改Scene/Undo/JSON，hit与fit仍使用canonical geometry；disabled只控制呈现，不代替交互权限。活跃状态采用私有Scene副本绘制，未作大场景增量性能保证。详见[state-styles.md](state-styles.md)
+支持selected/focus/hover/press/disabled的实色base fill与opacity运行时叠加；新源码增加本地命名palette、空Text固定框placeholder及父/祖父最近button状态继承，仍未编译/运行。Geometry/custom-property状态和任意几何变化仍未实现。已有binding级实色/opacity自动transition，未覆盖每态设置、延迟/重复及gradient/None插值。叠加不改Scene/Undo/JSON，hit与fit仍使用canonical geometry；disabled只控制呈现，不代替交互权限。活跃状态采用私有Scene副本绘制，未作大场景增量性能保证。详见[state-styles.md](state-styles.md)
 
 ## 响应布局边界
 
@@ -78,10 +81,10 @@ CI 配置目标为 Ubuntu 24.04、macOS 15 和 Windows（windows-latest / MSVC�
 
 ## 动画序列边界
 
-已有1..64段显式正时长/easing关键帧、稀疏字段保持、跨段seek和整段一次Undo；没有自动分配时长、延迟、loop/swing、速度变化、AnimateList/嵌套timeline或motion path。全部属性从序列开始占用，跳跃tick只原子提交采样时刻，不产生逐段回调。见[animation.md](animation.md)
+已有1..64段显式正时长/easing关键帧、稀疏字段保持、跨段seek和整段一次Undo；新源码增加整序列delay/repeat delay、有限/无限遍历、正反/交替方向和正有理数speed，尚未编译/运行。没有自动分配时长、逐关键帧独立timing、AnimateList/嵌套timeline或motion path。全部属性从序列开始占用，跳跃tick只原子提交采样时刻，不产生逐段回调。见[animation.md](animation.md)
 
 ## 程序焦点边界
 
 已有显式/队列focus、不可取消Blur/Focus通知、related target和GPUI一次同步，不包含Tab遍历、焦点圈规则、IME/可访问性、自动waitLeafer挂载等待或操作系统激活。256动作预算终止监听器焦点循环；详见[focus-routing.md](focus-routing.md)
 
-反向行/列与反向换行已支持；其语义是遍历/行序反转，坐标轴起点仍由正常justify/align决定。仍没有CSS flex-shrink、百分比尺寸或文字内在测量，upstream shrinkContent指padding内容bounds处理。
+反向行/列与反向换行已支持；其语义是遍历/行序反转，坐标轴起点仍由正常justify/align决定。已有独立flow-text/GPUI纯文本内在测量；新Taffy 0.13.0私有适配器处理普通行内grow/间距/安全对齐/stretch，保留Flow分行、reverse、所有权/事务及f64数值域fallback。它尚未编译/运行，f32分配的收敛/舍入兼容仍需验证。仍没有CSS flex-shrink、百分比尺寸或完整富文本排版；upstream shrinkContent指padding内容bounds处理。

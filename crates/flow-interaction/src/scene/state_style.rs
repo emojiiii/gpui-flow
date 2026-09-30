@@ -1,9 +1,12 @@
-//! Paint-only state overlays. The canonical document, caches, and edit history
-//! are never overwritten by transient hover/press/focus presentation.
+//! Paint-only state overlays and fixed-box text placeholders. The canonical
+//! document, caches, and edit history are never overwritten by presentation.
+mod named;
+pub use named::*;
+
 use super::{SceneEventRouter, StateTransitions, state_transition::TransitionFrame};
 use gpui_flow_editor::SceneEditor;
 use gpui_flow_engine::{ElementHandle, EngineError, InstanceState, SceneEngine};
-use gpui_flow_scene::{Color, Scene, SceneError, Shape, Style};
+use gpui_flow_scene::{Color, DisplayObject, Scene, SceneError, Shape, Style};
 use std::{borrow::Cow, collections::BTreeMap, time::Duration};
 
 pub const MAX_STATE_STYLE_BINDINGS: usize = 1024;
@@ -62,9 +65,24 @@ impl StateStyles {
     /// Lower states supply fields that higher states do not override. Disabled
     /// suppresses focus/hover/press even if its own patch is empty.
     pub fn resolve(&self, base: &Style, state: VisualState) -> Style {
+        self.resolve_layers(base, state, None, None)
+    }
+    fn resolve_layers(
+        &self,
+        base: &Style,
+        state: VisualState,
+        named: Option<&StatePaint>,
+        placeholder: Option<&StatePaint>,
+    ) -> Style {
         let mut next = base.clone();
+        if let Some(paint) = named {
+            paint.apply(&mut next);
+        }
         if state.selected {
             self.selected.apply(&mut next);
+        }
+        if let Some(paint) = placeholder {
+            paint.apply(&mut next);
         }
         if state.disabled {
             self.disabled.apply(&mut next);
@@ -99,6 +117,7 @@ pub enum StateStyleError {
     Unbound,
     Capacity,
     InvalidStyle(String),
+    MissingState(String),
     TimeWentBackwards,
 }
 impl From<EngineError> for StateStyleError {
@@ -121,6 +140,7 @@ impl std::fmt::Display for StateStyleError {
             Self::Unbound => write!(f, "instance has no state style binding"),
             Self::Capacity => write!(f, "state style binding capacity exhausted"),
             Self::InvalidStyle(error) => write!(f, "invalid state style: {error}"),
+            Self::MissingState(name) => write!(f, "state style has no named state: {name}"),
         }
     }
 }
@@ -130,6 +150,11 @@ struct Binding {
     disabled: bool,
     transitions: StateTransitions,
     frame: Option<TransitionFrame>,
+    named: BTreeMap<String, StatePaint>,
+    state: Option<String>,
+    placeholder: Option<TextPlaceholder>,
+    button: bool,
+    inheritance: StateInheritance,
 }
 /// Opt-in, engine-scoped registrations. No listener closures or timers are
 /// installed. Explicit unbind/clear release registrations; dead generations are
@@ -177,7 +202,8 @@ impl SceneStateStyles {
         Ok(before - self.bindings.len())
     }
     /// Validate every state, including currently inactive ones, before replacing
-    /// a registration. Replacement preserves its host-controlled disabled flag.
+    /// a registration. Replacement preserves named/placeholder/button settings,
+    /// the disabled flag and any in-flight transition.
     pub fn bind(
         &mut self,
         engine: &SceneEngine,
@@ -187,35 +213,30 @@ impl SceneStateStyles {
         self.check(engine)?;
         let object = engine.object(handle)?;
         for paint in styles.paints() {
-            paint.validate()?;
-            if paint.fill.is_some() && matches!(object.shape, Shape::Image(_) | Shape::Group(_)) {
-                return Err(StateStyleError::InvalidStyle(
-                    "base fill states require a vector/text/custom element; Image and Group support opacity only".into(),
-                ));
-            }
-            let mut probe = object.clone();
-            paint.apply(&mut probe.style);
-            probe.validate().map_err(StateStyleError::InvalidStyle)?;
+            validate_paint(object, paint)?;
         }
         self.prune(engine)?;
         if !self.bindings.contains_key(&handle) && self.bindings.len() >= MAX_STATE_STYLE_BINDINGS {
             return Err(StateStyleError::Capacity);
         }
-        let disabled = self.bindings.get(&handle).is_some_and(|b| b.disabled);
-        let (transitions, frame) = self
-            .bindings
-            .get(&handle)
-            .map(|binding| (binding.transitions, binding.frame.clone()))
-            .unwrap_or_default();
-        self.bindings.insert(
-            handle,
-            Binding {
-                styles,
-                disabled,
-                transitions,
-                frame,
-            },
-        );
+        if let Some(binding) = self.bindings.get_mut(&handle) {
+            binding.styles = styles;
+        } else {
+            self.bindings.insert(
+                handle,
+                Binding {
+                    styles,
+                    disabled: false,
+                    transitions: StateTransitions::default(),
+                    frame: None,
+                    named: BTreeMap::new(),
+                    state: None,
+                    placeholder: None,
+                    button: false,
+                    inheritance: StateInheritance::default(),
+                },
+            );
+        }
         Ok(())
     }
     /// Visual state only. Editing/hit/command authorization stays in the host's
@@ -283,7 +304,8 @@ impl SceneStateStyles {
     /// Resolve against the current canonical style at a monotonic host time.
     /// Entry/exit retarget from the interpolated display value. A canonical fill
     /// or opacity edit cancels motion on that channel; the current state patch
-    /// still takes precedence. Other fields always come from the document.
+    /// still takes precedence. Only active fixed-box placeholder content may
+    /// replace canonical text in the returned copy; geometry stays canonical.
     /// Invalid presentation leaves the accepted clock and all motion unchanged.
     pub fn presentation_at<'a>(
         &mut self,
@@ -304,26 +326,42 @@ impl SceneStateStyles {
                 frames.push((*handle, None));
                 continue;
             }
-            let input = router.state(&editor.engine, *handle);
             let object = editor.engine.object(*handle)?;
-            let state = VisualState {
-                selected: editor.selection.ids.contains(&info.id),
-                focus: input.focus,
-                hover: input.hover,
-                press: input.press,
-                disabled: binding.disabled,
-            };
-            let target = binding.styles.resolve(&object.style, state);
+            let state = self.resolved_state(editor, router, *handle)?;
+            let named = state
+                .named
+                .as_ref()
+                .and_then(|name| binding.named.get(name));
+            let placeholder = binding.placeholder.as_ref().filter(|_| state.placeholder);
+            let target = binding.styles.resolve_layers(
+                &object.style,
+                state.visual,
+                named,
+                placeholder.map(|p| &p.paint),
+            );
+            let source = state.button.and_then(|button| {
+                editor
+                    .engine
+                    .instance(button)
+                    .ok()
+                    .map(|i| (button, i.attachment_epoch))
+            });
             let mut frame = binding
                 .frame
                 .clone()
-                .filter(|frame| frame.epoch == info.attachment_epoch)
-                .unwrap_or_else(|| TransitionFrame::new(info.attachment_epoch, &object.style));
+                .filter(|frame| frame.epoch == info.attachment_epoch && frame.button == source)
+                .unwrap_or_else(|| {
+                    TransitionFrame::new(info.attachment_epoch, source, &object.style)
+                });
             let next = frame.resolve(&object.style, target, state, binding.transitions, now);
-            if next != object.style {
-                scene
-                    .to_mut()
-                    .update_object(&info.id, |object| object.style = next)?;
+            if next != object.style || placeholder.is_some() {
+                scene.to_mut().update_object(&info.id, |object| {
+                    object.style = next;
+                    if let (Some(placeholder), Shape::Text(text)) = (placeholder, &mut object.shape)
+                    {
+                        text.content.clone_from(&placeholder.content);
+                    }
+                })?;
             }
             frames.push((*handle, Some(frame)));
         }
@@ -336,4 +374,16 @@ impl SceneStateStyles {
         self.time = now;
         Ok(scene)
     }
+}
+
+fn validate_paint(object: &DisplayObject, paint: &StatePaint) -> Result<(), StateStyleError> {
+    paint.validate()?;
+    if paint.fill.is_some() && matches!(object.shape, Shape::Image(_) | Shape::Group(_)) {
+        return Err(StateStyleError::InvalidStyle(
+            "base fill states require a vector/text/custom element; Image and Group support opacity only".into(),
+        ));
+    }
+    let mut probe = object.clone();
+    paint.apply(&mut probe.style);
+    probe.validate().map_err(StateStyleError::InvalidStyle)
 }

@@ -37,3 +37,6 @@ pub use gpui_flow_animation as animation;
 
 mod text_measure;
 pub use text_measure::*;
+
+/// Native resource lifecycle adapter and host image authorization.
+pub mod resources;

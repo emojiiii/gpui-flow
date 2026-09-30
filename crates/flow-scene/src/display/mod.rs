@@ -126,7 +126,8 @@ impl Shape {
             _ => crate::geometry::fill_hit(&self.flatten(0.1), point, rule),
         }
     }
-    /// Painted picking uses fill winding and round-cap stroke distance. Text is
+    /// Painted picking uses fill winding and the same advanced-stroke mesh as
+    /// rendering. Legacy solid round strokes retain distance picking. Text is
     /// picked by its layout box, images by content bounds (no alpha sampling).
     pub fn hit_test(&self, point: Point, style: &Style, tolerance: f32) -> bool {
         if !point.is_finite() || !tolerance.is_finite() || tolerance < 0.0 {
@@ -139,13 +140,23 @@ impl Shape {
         if fill && self.contains_geometry(point, style.fill_rule) {
             return true;
         }
-        let extent = style.stroke_extent();
+        let extent = style
+            .strokes()
+            .filter(|s| s.paint.is_visible() && !s.uses_advanced_geometry())
+            .map(|s| s.width * 0.5)
+            .fold(0.0, f32::max);
         if extent > 0.0
             && crate::geometry::stroke_hit(&self.flatten(0.1), point, extent + tolerance)
         {
             return true;
         }
-        false
+        style
+            .strokes()
+            .filter(|s| s.width > 0.0 && s.paint.is_visible() && s.uses_advanced_geometry())
+            .any(|stroke| {
+                self.stroke_mesh(stroke)
+                    .is_ok_and(|mesh| mesh.hit_test(point, tolerance))
+            })
     }
     pub fn validate(&self) -> Result<(), String> {
         fn size(s: crate::Size) -> Result<(), String> {

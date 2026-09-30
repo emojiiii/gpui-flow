@@ -193,12 +193,6 @@ pub(crate) fn lerp(a: Point, b: Point, t: f32) -> Point {
         (a.y as f64 + (b.y as f64 - a.y as f64) * t as f64) as f32,
     )
 }
-pub(crate) fn quadratic(a: Point, b: Point, c: Point, t: f32) -> Point {
-    lerp(lerp(a, b, t), lerp(b, c, t), t)
-}
-pub(crate) fn cubic(a: Point, b: Point, c: Point, d: Point, t: f32) -> Point {
-    lerp(quadratic(a, b, c, t), quadratic(b, c, d, t), t)
-}
 pub(crate) fn flatten_quadratic(
     a: Point,
     b: Point,

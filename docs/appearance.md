@@ -1,4 +1,8 @@
-# Ordered vector paint stacks
+# Ordered vector paint stacks and centered stroke styles
+
+Source-only update (2026-09-30): cap/join/miter/dash geometry and its renderer/hit
+adapters have authored regressions but are **UNCOMPILED / UNRUN**. Earlier paint
+stack verification does not validate this batch. See [source-only-status.md](source-only-status.md).
 
 This milestone implements a bounded, source-informed appearance contract. It is
 not Leafer API compatibility or its full compositing/effect pipeline.
@@ -12,7 +16,9 @@ not Leafer API compatibility or its full compositing/effect pipeline.
 
 The precise order for one vector object is **base fill → fill layers → base
 stroke → stroke layers**. Each fill uses the object's `fill_rule`. Each stroke
-has its own paint and width, with round caps and joins. Every layer supports the
+has its own paint, width and centered local-space stroke style. The defaults
+remain solid with round caps/joins; opt-in cap/join/miter/dash options are
+described below. Every layer supports the
 existing solid, multi-stop linear and radial paints. Coordinates remain local
 to the same geometry, then follow the object's affine transform and ancestor
 clips. Later source-over paints may cover earlier paints.
@@ -48,17 +54,20 @@ the same validation as the singular fields. Invalid mutations are atomic.
 
 ## Bounds, picking, and engine changes
 
-`Style::stroke_extent()` is half the largest positive width among visible base
-and extra stroke paints. Transparent solid paints, gradients whose stops are
-all transparent, and zero-width strokes do not extend bounds or create stroke
+`Style::stroke_extent()` conservatively accounts for visible centered stroke
+widths, square caps and miter limits; default round strokes retain half-width
+extent. `DisplayObject::paint_bounds()` also unions the advanced mesh bounds
+so finite-precision extrusion cannot fall outside the conservative box.
+Transparent solid paints, gradients whose stops are all transparent, and zero-width strokes do not extend bounds or create stroke
 hits. `DisplayObject::paint_bounds()` expands intrinsic geometry by this extent;
 these remain conservative geometric bounds, including intrinsic content even
 when all paints are transparent. Parent aggregate bounds, transformed bounds,
 clips and damage planning consume the same result.
 
 Painted hit testing considers every fill and the union of active centered
-strokes. It shares the existing winding rule, flattened stroke geometry and
-round-cap distance test. It is geometric paint-presence picking: a gradient with
+strokes. Fills keep the existing winding rule. Default solid-round strokes keep
+the existing flattened distance test; advanced styles use the same bounded local
+triangle union as rendering, including actual dash gaps and cap/join geometry. It is geometric paint-presence picking: a gradient with
 any visible stop counts as active across its geometry; this is not per-pixel
 alpha picking. Text/image legacy hit policies are unchanged. Nonzero hit
 tolerance is still a picking convenience rather than a rendered extension.
@@ -85,6 +94,30 @@ on the same object cannot alias, including two differently sized strokes using
 the same gradient. Existing cache allocation, upload and retirement limits and
 explicit diagnostics still apply; adding a stack does not enlarge those budgets.
 
+## Centered cap/join/dash source implementation
+
+`Stroke` now exposes `StrokeCap::{Butt, Square, Round}`,
+`StrokeJoin::{Bevel, Miter, Round}`, `miter_limit`, `dash_pattern` and
+`dash_offset`, with matching `with_*` builders. Old input defaults are Round,
+Round, miter limit 4, empty dashes and offset zero. A dash pattern alternates
+positive on/off local lengths; odd patterns repeat twice. Signed offsets reset
+at each subpath. Zero/nonfinite/negative dash entries are rejected rather than
+silently normalized; miter limits must be finite and in 1..=10,000.
+
+The headless adapter uses existing Kurbo 0.11.3 dashing and Lyon 1.0.22 stroke
+tessellation. It owns shape conversion, finite checks and bounded mesh output,
+not another stroke expansion engine. Advanced render and hit share a fixed
+0.1-local-unit approximation; zoom/DPI do not rebuild a different picking mesh.
+The old solid-round renderer retains adaptive screen-space flattening.
+
+Limits per stroke are 256 input dash entries, 65,536 source/flattened points,
+262,144 dash work/events, and 262,144 vertices/triangles each. Over-budget or
+nonfinite visible advanced geometry rejects scene commits atomically. Text,
+Image and Group reject advanced stroke styles. Direct unsupported render inputs
+report `UnsupportedFeature::StrokeGeometry`; no partial stroke is advertised.
+This source has not been compiled or executed, and repeated tessellation work
+has not been benchmarked.
+
 ## Compatibility and boundaries
 
 Old JSON documents omit the new fields and deserialize to empty vectors. Scene
@@ -92,27 +125,34 @@ roundtrips preserve new layer order, paint data and widths. The new serializer
 writes the arrays even when empty so engine diffs can observe empty-to-populated
 changes. This is backward-reading compatibility, not a promise that an older
 binary can display new stacks. Rust exhaustive struct literals require the new
-fields or `..Style::default()`.
+fields or `..Style::default()`. Similarly, missing advanced `Stroke` JSON fields
+use the old solid-round defaults, while external Rust `Stroke { paint, width }`
+literals need new fields, a constructor or `..Stroke::default()`. New serializers
+include the stroke fields: backward reading does not mean byte-identical JSON.
 
 Element and inherited group opacity are still multiplied into **each paint**.
 There is no isolated temporary surface: overlapping paints/children at opacity
 0.5 can accumulate alpha instead of compositing the whole element/group once.
 Box/Frame child drawing and clipping do not imply group isolation or a new
 hierarchical compositor. Advanced blend modes, masks, shadows, filters, stroke
-inside/outside placement and state-style cascades remain absent. Basic property
-animation is now available separately; see [animation](animation.md).
+inside/outside placement and scale-fixed strokes remain absent. Paint-only state
+cascades, including source-only named/placeholder/button extensions, are separate
+from compositing; see[state-styles.md](state-styles.md). Property animation and
+source-only timing options are described in[animation.md](animation.md).
 CPU damage preparation is not partial GPU rendering.
 
 ## Verification and source alignment
 
-Focused tests exercise legacy serde defaults, stack roundtrips/order, invalid
+Existing paint-stack tests target legacy serde defaults, stack roundtrips/order, invalid
 and over-budget atomic updates, unsupported shapes, transparent stroke bounds,
 layer-aware picking, affine/clip behavior, typed setters, closure edits, no-op
 updates, parent cache invalidation and old/new damage. Native unit tests exercise
 the actual renderer paint-preparation path and raster samples, even-odd holes,
 width-dependent strokes, transparent skipping, and non-aliasing texture keys.
 Native window evidence is a separate integration check, not inferred from these
-pure tests.
+pure tests. New `flow-scene/tests/stroke_styles.rs` and native vector-preparation
+cases target cap/join/dash geometry, bounds/hit/clips, defaults and budgets; they
+are authored only. No current-batch test execution or native validation occurred.
 
 The contract is independently implemented from these official pinned sources:
 

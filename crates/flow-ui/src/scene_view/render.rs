@@ -43,6 +43,24 @@ impl Render for SceneView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.subscribe_input(window, cx);
         self.sync_requested_focus(window, cx);
+        if let Some(resources) = &mut self.resources {
+            match resources.prepare(&mut self.editor.engine, window, cx) {
+                Ok(events) => {
+                    self.resource_error = None;
+                    for event in events {
+                        cx.emit(SceneViewEvent::Resource(event));
+                    }
+                    if let Some(event) = resources.layout_ready(&self.editor.engine) {
+                        cx.emit(SceneViewEvent::ResourceView(event));
+                    }
+                }
+                Err(error) => self.resource_error = Some(error.to_string()),
+            }
+        }
+        let resource_frame = self
+            .resources
+            .as_ref()
+            .and_then(|resources| resources.frame(&self.editor.engine));
         let diagnostic_entity = cx.entity().downgrade();
         let diagnostic_window = window.window_handle().window_id().as_u64();
         window.on_next_frame(move |_, cx| {
@@ -176,10 +194,53 @@ impl Render for SceneView {
             {
                 view = view.child(renderer.render(&object, window, cx));
             } else {
-                view = view.child(DisplayElement::new(object));
+                let image = if matches!(object.object.shape, gpui_flow_scene::Shape::Image(_)) {
+                    Some(
+                        self.editor
+                            .engine
+                            .handle(&object.object.id)
+                            .and_then(|handle| {
+                                self.resources
+                                    .as_ref()
+                                    .map(|resources| resources.image(&self.editor.engine, handle))
+                            })
+                            .unwrap_or(crate::resources::SceneImagePresentation::Cancelled),
+                    )
+                } else {
+                    None
+                };
+                let element = DisplayElement::new(object);
+                view = match image {
+                    Some(image) => view.child(element.with_image(image)),
+                    None => view.child(element),
+                };
             }
         }
         view = view.child(overlay);
+        if let Some(frame) = resource_frame {
+            let entity = cx.entity().downgrade();
+            // This callback is a real GPUI paint boundary, not a timer that
+            // guesses rendering succeeded. Defer entity notification until the
+            // current effect cycle has returned all borrowed entities.
+            view = view.child(
+                canvas(
+                    |_, _, _| (),
+                    move |_, _, _, cx| {
+                        cx.defer(move |cx| {
+                            let _ = entity.update(cx, |this, cx| {
+                                if let Some(resources) = &mut this.resources {
+                                    for event in resources.frame_drawn(&this.editor.engine, frame) {
+                                        cx.emit(SceneViewEvent::ResourceView(event));
+                                    }
+                                }
+                            });
+                        });
+                    },
+                )
+                .absolute()
+                .size_full(),
+            );
+        }
         if !self.diagnostics.is_empty() || !self.gradient_diagnostics.is_empty() {
             view = view.child(
                 div()
@@ -207,6 +268,7 @@ impl Render for SceneView {
             .state_style_error
             .as_ref()
             .or(self.interaction_error.as_ref())
+            .or(self.resource_error.as_ref())
         {
             view = view.child(
                 div()

@@ -1,5 +1,11 @@
 # 测试、CI 与人工验收
 
+## 当前批次：源码准备，未编译/未运行（2026-09-30）
+
+用户要求本批暂不编译。Kit按钮、petgraph拓扑、Kurbo bounds、Taffy行内适配、高级stroke、动画timing、named state/placeholder/button继承和SceneView资源生命周期均是**UNCOMPILED / UNRUN**的当前源码，新增测试只是已编写。没有为本批执行cargo check/build/test/clippy、rustc、原生示例、媒体进程或CI。源码审阅、rustfmt解析/格式检查或清单/lockfile检查不构成类型检查或行为验证。完整范围和剩余缺口见[source-only-status.md](source-only-status.md)。
+
+本页后面的“已执行”“通过”及数字全部保留为**此前批次的历史记录**，不能当作本批或当前工作树的结果；不要在旧aggregate数字上加上新增测试数量后声称新通过数。下面命令和清单是恢复验证后的计划，本批未执行。
+
 ## 原则：区分检查层级
 
 - `cargo check` 验证类型与编译路径，**不验证最终链接或窗口运行**
@@ -125,7 +131,7 @@ CI 使用 Rust 1.98.1 和 `--locked`，只授予 `contents: read`，不需要供
 优先补充 GPUI 事件驱动交互测试与截图基准、runtime 取消/旧事件/线程退出的确定性测试、属性/模糊测试覆盖大量图变更序列，以及大图性能基准。新增测试应描述可证明的行为，不以“可渲染”代替全部功能完成。
 
 
-## 2026-09-30 已执行的本地验收
+## 历史基线：2026-09-30 已执行的本地验收
 
 独立于上面的待测清单，以下有实际执行结果：
 
@@ -200,7 +206,7 @@ cargo test --locked -p gpui-flow-layout
 - GPUI library18项通过，新增真实呈现准备路径回归证明状态paint溢出报错时仍画canonical对象、移除绑定后清错；不是以空白画面吞掉错误
 - 完整workspace/all-targets check、严格Clippy、格式检查、文档Clippy及8个可执行文档示例通过
 - state_styles原生示例完成Linux编译链接；本批未进行真实窗口/鼠标/键盘验收。Windows/macOS自动链接与测试以本轮Actions结果为准
-- 本轮仅fill/opacity状态呈现，不包括自动transition、命名state、placeholder、button继承、geometry状态、状态驱动命中或大场景增量性能保证
+- 该历史批次仅fill/opacity状态呈现，当时不包括自动transition、命名state、placeholder、button继承、geometry状态或状态驱动命中。后续源码能力见[state-styles.md](state-styles.md)，不要把新增能力算入这批历史通过记录
 
 ## 同步响应布局增量（2026-09-30）
 

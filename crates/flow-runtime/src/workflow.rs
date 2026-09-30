@@ -4,6 +4,12 @@
 //! `{<output_port>: value}`. Fan-in follows edge-ID order. Credentials stay in runners.
 use crate::{AgentRunner, Event, RunStatus, Runtime};
 use gpui_flow_core::{DataType, Graph, NodeId, PortDirection};
+use petgraph::{
+    Incoming,
+    algo::toposort,
+    graph::{DiGraph, NodeIndex},
+    visit::Dfs,
+};
 use serde_json::{Map, Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -11,6 +17,54 @@ use std::{
 };
 
 pub type RunnerRegistry = BTreeMap<String, Arc<dyn AgentRunner>>;
+
+/// Private index of the frozen, validated document. Parallel port edges are kept;
+/// these indices never escape the workflow or replace document IDs/serialization.
+struct WorkflowTopology {
+    graph: DiGraph<NodeId, (), usize>,
+    nodes: BTreeMap<NodeId, NodeIndex<usize>>,
+    order: Vec<NodeIndex<usize>>,
+}
+impl WorkflowTopology {
+    fn new(document: &Graph) -> Result<Self, String> {
+        let mut graph = DiGraph::with_capacity(document.nodes.len(), document.edges.len());
+        let nodes: BTreeMap<_, _> = document
+            .nodes
+            .keys()
+            .map(|id| (id.clone(), graph.add_node(id.clone())))
+            .collect();
+        for edge in document.edges.values() {
+            graph.add_edge(nodes[&edge.source.node], nodes[&edge.target.node], ());
+        }
+        let order =
+            toposort(&graph, None).map_err(|_| "workflow requires an acyclic graph".to_string())?;
+        Ok(Self {
+            graph,
+            nodes,
+            order,
+        })
+    }
+
+    fn predecessors(&self, node: &NodeId) -> impl Iterator<Item = &NodeId> {
+        self.graph
+            .neighbors_directed(self.nodes[node], Incoming)
+            .map(move |index| &self.graph[index])
+    }
+
+    fn descendants_including(&self, roots: &[NodeId]) -> BTreeSet<NodeId> {
+        let mut affected = BTreeSet::new();
+        let mut dfs = Dfs::empty(&self.graph);
+        for root in roots {
+            // Retain the visitor map so converging or repeated roots are visited once.
+            dfs.move_to(self.nodes[root]);
+            while let Some(index) = dfs.next(&self.graph) {
+                affected.insert(self.graph[index].clone());
+            }
+        }
+        affected
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WorkflowStatus {
     Pending,
@@ -44,6 +98,7 @@ impl Default for WorkflowRecord {
 /// can delay completion. Retry is allowed only after all workers have reached terminal state.
 pub struct Workflow {
     graph: Graph,
+    topology: WorkflowTopology,
     runners: RunnerRegistry,
     runtime: Runtime,
     records: BTreeMap<NodeId, WorkflowRecord>,
@@ -64,29 +119,7 @@ impl Workflow {
                 ));
             }
         }
-        let mut seen = BTreeSet::new();
-        loop {
-            let ready: Vec<_> = graph
-                .nodes
-                .keys()
-                .filter(|id| {
-                    !seen.contains(*id)
-                        && graph
-                            .edges
-                            .values()
-                            .filter(|e| &e.target.node == *id)
-                            .all(|e| seen.contains(&e.source.node))
-                })
-                .cloned()
-                .collect();
-            if ready.is_empty() {
-                break;
-            }
-            seen.extend(ready);
-        }
-        if seen.len() != graph.nodes.len() {
-            return Err("workflow requires an acyclic graph".into());
-        }
+        let topology = WorkflowTopology::new(&graph)?;
         let records = graph
             .nodes
             .keys()
@@ -95,6 +128,7 @@ impl Workflow {
             .collect();
         Ok(Self {
             graph,
+            topology,
             runners,
             runtime: Runtime::default(),
             records,
@@ -163,22 +197,12 @@ impl Workflow {
                 return Err("retry requires failed, cancelled or skipped nodes".into());
             }
         }
-        let mut affected: BTreeSet<_> = nodes.iter().cloned().collect();
-        loop {
-            let before = affected.len();
-            for edge in self.graph.edges.values() {
-                if affected.contains(&edge.source.node) {
-                    affected.insert(edge.target.node.clone());
-                }
-            }
-            if before == affected.len() {
-                break;
-            }
-        }
-        if self.graph.edges.values().any(|e| {
-            affected.contains(&e.target.node)
-                && !affected.contains(&e.source.node)
-                && self.records[&e.source.node].status != WorkflowStatus::Succeeded
+        let affected = self.topology.descendants_including(nodes);
+        if affected.iter().any(|id| {
+            self.topology.predecessors(id).any(|predecessor| {
+                !affected.contains(predecessor)
+                    && self.records[predecessor].status != WorkflowStatus::Succeeded
+            })
         }) {
             return Err(
                 "include all unsuccessful predecessors in retry_many or use retry_failed".into(),
@@ -293,34 +317,21 @@ impl Workflow {
         if self.cancelled {
             return events;
         }
-        // Propagate transitively before deciding which ready nodes can start.
-        loop {
-            let skipped: Vec<_> = self
-                .records
-                .iter()
-                .filter(|(id, r)| {
-                    r.status == WorkflowStatus::Pending
-                        && self
-                            .graph
-                            .edges
-                            .values()
-                            .filter(|e| &e.target.node == *id)
-                            .any(|e| {
-                                matches!(
-                                    self.records[&e.source.node].status,
-                                    WorkflowStatus::Failed
-                                        | WorkflowStatus::Skipped
-                                        | WorkflowStatus::Cancelled
-                                )
-                            })
+        // One topological pass propagates failures transitively before scheduling.
+        // Its ordering is internal only: ready jobs still launch in NodeId order below.
+        for &index in &self.topology.order {
+            let id = &self.topology.graph[index];
+            if self.records[id].status == WorkflowStatus::Pending
+                && self.topology.predecessors(id).any(|predecessor| {
+                    matches!(
+                        self.records[predecessor].status,
+                        WorkflowStatus::Failed
+                            | WorkflowStatus::Skipped
+                            | WorkflowStatus::Cancelled
+                    )
                 })
-                .map(|(id, _)| id.clone())
-                .collect();
-            if skipped.is_empty() {
-                break;
-            }
-            for id in skipped {
-                let r = self.records.get_mut(&id).unwrap();
+            {
+                let r = self.records.get_mut(id).unwrap();
                 r.status = WorkflowStatus::Skipped;
                 r.message = "Upstream did not succeed".into();
             }
@@ -335,12 +346,9 @@ impl Workflow {
             .iter()
             .filter(|(id, r)| {
                 r.status == WorkflowStatus::Pending
-                    && self
-                        .graph
-                        .edges
-                        .values()
-                        .filter(|e| &e.target.node == *id)
-                        .all(|e| self.records[&e.source.node].status == WorkflowStatus::Succeeded)
+                    && self.topology.predecessors(id).all(|predecessor| {
+                        self.records[predecessor].status == WorkflowStatus::Succeeded
+                    })
             })
             .take(self.concurrency.saturating_sub(active))
             .map(|(id, _)| id.clone())

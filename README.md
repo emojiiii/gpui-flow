@@ -4,6 +4,18 @@
 
 私有早期开发版本，API 尚未承诺稳定。以 Leafer 的显示对象/容器分层和 React Flow 的节点扩展思路为参考，独立实现；不宣称完整 Leafer 功能或 API 兼容。
 
+## 当前批次状态（2026-09-30）
+
+本批按要求只推进源码，**UNCOMPILED / UNRUN**：Kit按钮、petgraph拓扑、Kurbo曲线bounds、
+Taffy私有行内solver、高级居中stroke、动画delay/repeat/direction/speed、命名状态/固定框
+placeholder/button继承，以及原生image/text资源生命周期已接入源码，尚未编译、测试、
+运行原生示例或执行CI。新增回归仅已编写；历史通过记录不能当成当前批次结果。
+
+主要边界与API迁移见[源码批次状态](docs/source-only-status.md)。特别是旧JSON读取默认
+兼容不等于Rust源码兼容：外部`Stroke`字面量需补字段/default，新增公开枚举变体需更新
+穷尽match。Inside/outside与scale-fixed描边、任意几何状态、完整嵌套timeline、motion
+path及真正隔离合成/mask仍未完成。下方安装/运行命令保留作后续入口，不表示本批已执行。
+
 ## 架构层次
 
 1. **display / scene**：Rect、Ellipse、Line、Polygon、Star、Path、Pen、Text、Image、Group、Box、Frame 独立文件；统一 identity、style、affine transform、层级、命中、事件、JSON
@@ -96,6 +108,11 @@ cargo +1.98.1 run --locked -p flow-studio
 
 ## 文档导航
 
+- [当前源码批次与未验证范围](docs/source-only-status.md)
+- [动画delay/repeat/direction/speed契约](docs/animation-timing.md)
+- [命名状态、Text placeholder与button继承](docs/named-states.md)
+- [原生资源结果、生命周期与就绪回执](docs/resource-lifecycle.md)
+
 - [原生 Text/Image 矩形裁切链](docs/native-clipping.md)
 - [真实文字测量与响应尺寸](docs/text-measurement.md)
 
@@ -123,7 +140,7 @@ cargo +1.98.1 run --locked -p flow-studio
 
 ## 依赖与实现来源
 
-底层使用 [longbridge/gpui-fast](https://github.com/longbridge/gpui-fast) 的 `main` 分支，实际版本由提交到仓库的 `Cargo.lock` 固定为 `10d005166a9f9e079d55ebfb700035f3860c3e71`。GPUI Kit 固定为 `0067bafcf3160cb871eff2521e98a51e526da175`。构建请使用 `--locked`，不要无意更新 lockfile；升级时应同时验证二者兼容性。
+底层使用 [longbridge/gpui-fast](https://github.com/longbridge/gpui-fast) 的 `main` 分支，实际版本由提交到仓库的 `Cargo.lock` 固定为 `10d005166a9f9e079d55ebfb700035f3860c3e71`。GPUI Kit 固定为 `0067bafcf3160cb871eff2521e98a51e526da175`。本批新增直接复用petgraph 0.8.3、Kurbo 0.11.3、Taffy 0.13.0和Lyon tessellation 1.0.22；headless crate仍不依赖GPUI，数值库不替代本项目文档/身份/事务契约。构建请使用 `--locked`，不要无意更新 lockfile；升级时应同时验证二者兼容性。
 
 设计参考 [React Flow 的自定义节点思路](https://reactflow.dev/learn/customization/custom-nodes) 和 [Leafer UI 的画布编辑方式](https://github.com/leaferjs/leafer-ui)，本项目是独立 Rust 实现，不是这些项目的移植，也未声明 API 兼容。当前不为本项目源代码授予开源许可证；各第三方依赖保留其各自许可，分发前需独立审查。
 

@@ -105,9 +105,31 @@ impl DisplayObject {
         self
     }
     pub fn paint_bounds(&self) -> Option<Bounds> {
-        self.shape
+        let mut bounds = self
+            .shape
             .local_bounds()
-            .map(|b| b.expanded(self.style.stroke_extent()))
+            .map(|b| b.expanded(self.style.stroke_extent()));
+        for stroke in self.style.strokes().filter(|stroke| {
+            stroke.width > 0.0 && stroke.paint.is_visible() && stroke.uses_advanced_geometry()
+        }) {
+            // Retain conservative local geometry bounds, including unpainted
+            // dash gaps. Union the actual mesh as well, so f32 rounding of an
+            // expanded AABB can never clip a square cap or miter tip.
+            match self.shape.stroke_mesh(stroke) {
+                Ok(mesh) => {
+                    if let Some(mesh_bounds) = mesh.bounds() {
+                        bounds = Some(bounds.map_or(mesh_bounds, |b| b.union(mesh_bounds)));
+                    }
+                }
+                Err(_) => {
+                    return Some(Bounds::new(
+                        crate::Point::new(f32::NAN, f32::NAN),
+                        crate::Size::new(f32::NAN, f32::NAN),
+                    ));
+                }
+            }
+        }
+        bounds
     }
     pub fn validate(&self) -> Result<(), String> {
         if self.id.as_str().trim().is_empty() {
@@ -129,6 +151,23 @@ impl DisplayObject {
             );
         }
         self.shape.validate()?;
+        for stroke in self
+            .style
+            .strokes()
+            .filter(|stroke| stroke.uses_advanced_geometry())
+        {
+            if matches!(
+                self.shape,
+                Shape::Text(_) | Shape::Image(_) | Shape::Group(_)
+            ) {
+                return Err("advanced strokes require vector geometry".into());
+            }
+            if stroke.width > 0.0 && stroke.paint.is_visible() {
+                // Scene insert/update/deserialization validate candidates before
+                // committing, including all geometry budgets and finite output.
+                self.shape.stroke_mesh(stroke)?;
+            }
+        }
         if self.paint_bounds().is_some_and(|b| !b.is_valid()) {
             return Err("paint bounds overflow".into());
         }
