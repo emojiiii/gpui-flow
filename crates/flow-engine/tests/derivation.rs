@@ -359,3 +359,120 @@ fn text_and_image_size_changes_are_allowed_without_rewriting_content_or_resource
         }
     }
 }
+
+struct StrokeDependency {
+    enabled: bool,
+    calls: Arc<AtomicUsize>,
+    declarations: Arc<AtomicUsize>,
+}
+impl LayoutProvider for StrokeDependency {
+    fn uses_stroke_bounds(&self) -> bool {
+        self.declarations.fetch_add(1, Ordering::SeqCst);
+        self.enabled
+    }
+    fn derive(&self, _: &SceneEngine, scene: &Scene) -> Result<Scene, EngineError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(scene.clone())
+    }
+}
+
+#[test]
+fn stroke_dependencies_are_opt_in_and_queried_once_per_installation() {
+    use gpui_flow_scene::{Color, Stroke, StrokeCap};
+    for enabled in [false, true] {
+        let mut e = engine();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let declarations = Arc::new(AtomicUsize::new(0));
+        e.install_layout_provider(StrokeDependency {
+            enabled,
+            calls: calls.clone(),
+            declarations: declarations.clone(),
+        })
+        .unwrap();
+        let initial = calls.load(Ordering::SeqCst);
+        let a = e.handle(&"a".into()).unwrap();
+        for (key, value) in [
+            (
+                PropertyKey::Stroke,
+                serde_json::to_value(Stroke::new(Color::BLACK, 4.)).unwrap(),
+            ),
+            (
+                PropertyKey::StrokeLayers,
+                serde_json::to_value(vec![Stroke::new(Color::BLACK, 8.)]).unwrap(),
+            ),
+            (
+                PropertyKey::Stroke,
+                serde_json::to_value(Stroke::new(Color::BLACK, 4.).with_cap(StrokeCap::Square))
+                    .unwrap(),
+            ),
+            (
+                PropertyKey::Stroke,
+                serde_json::to_value(Stroke::new(Color::TRANSPARENT, 4.)).unwrap(),
+            ),
+        ] {
+            e.set_property(a, key, value).unwrap();
+        }
+        if enabled {
+            // Public property writes may prepare both validation and commit.
+            assert!(calls.load(Ordering::SeqCst) >= initial + 4);
+        } else {
+            assert_eq!(calls.load(Ordering::SeqCst), initial);
+        }
+        let after_strokes = calls.load(Ordering::SeqCst);
+        for (key, value) in [
+            (
+                PropertyKey::Fill,
+                serde_json::to_value(gpui_flow_scene::Paint::from(Color::WHITE)).unwrap(),
+            ),
+            (PropertyKey::Opacity, json!(0.5)),
+            (PropertyKey::Visible, json!(false)),
+            (PropertyKey::Name, json!("metadata")),
+        ] {
+            e.set_property(a, key, value).unwrap();
+        }
+        assert_eq!(calls.load(Ordering::SeqCst), after_strokes);
+        assert_eq!(declarations.load(Ordering::SeqCst), 1);
+    }
+}
+
+#[test]
+fn default_provider_still_skips_stroke_edits() {
+    let mut e = engine();
+    let (provider, _, calls) = provider("fixed");
+    e.install_layout_provider(provider).unwrap();
+    let initial = calls.load(Ordering::SeqCst);
+    e.set_property(
+        e.handle(&"a".into()).unwrap(),
+        PropertyKey::Stroke,
+        serde_json::to_value(gpui_flow_scene::Stroke::default()).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), initial);
+}
+
+#[test]
+fn panicking_dependency_declaration_retains_previous_provider_and_document() {
+    struct Panic;
+    impl LayoutProvider for Panic {
+        fn uses_stroke_bounds(&self) -> bool {
+            panic!("invalid dependency declaration")
+        }
+        fn derive(&self, _: &SceneEngine, candidate: &Scene) -> Result<Scene, EngineError> {
+            Ok(candidate.clone())
+        }
+    }
+    let mut e = engine();
+    let (provider, _, _) = provider("fixed");
+    let token = e.install_layout_provider(provider).unwrap();
+    let before = e.scene().clone();
+    let revision = e.revision();
+    assert!(
+        e.install_layout_provider(Panic)
+            .unwrap_err()
+            .to_string()
+            .contains("dependency declaration")
+    );
+    assert_eq!(e.layout_provider(), Some(token));
+    assert_eq!(e.scene(), &before);
+    assert_eq!(e.revision(), revision);
+}

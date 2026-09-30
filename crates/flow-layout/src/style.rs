@@ -160,6 +160,24 @@ impl GapMode {
     }
 }
 
+/// Bounds used for each direct child's layout slot, before its translation.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ItemBox {
+    /// The intrinsic shape box; keeps the original layout behavior.
+    #[default]
+    Box,
+    /// The object's own conservative stroke bounds, excluding descendants and
+    /// ancestor clipping. Visibly stroked items support position-only layout;
+    /// native Text/Image strokes and stroke-box resizing are not supported.
+    Stroke,
+}
+impl ItemBox {
+    pub(crate) fn is_box(&self) -> bool {
+        *self == Self::Box
+    }
+}
+
 /// Box/Frame content layout, in the container's intrinsic local units.
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -167,6 +185,9 @@ pub struct FlowStyle {
     pub width_sizing: AxisSizing,
     pub height_sizing: AxisSizing,
     pub direction: FlowDirection,
+    /// Missing JSON uses geometric boxes. Stroke mode reuses scene paint bounds.
+    #[serde(skip_serializing_if = "ItemBox::is_box")]
+    pub item_box: ItemBox,
     pub padding: Insets,
     /// Minimum gap between items on the main axis, when gap_mode is Fixed.
     pub gap: f32,

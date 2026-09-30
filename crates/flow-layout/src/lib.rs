@@ -132,6 +132,10 @@ impl FlowLayout {
                 if !item.in_flow {
                     continue;
                 }
+                arrange::validate_item_box(
+                    &scene.get(child).expect("validated child").object,
+                    style.item_box,
+                )?;
                 // Pinned Leafer flowY runs automatic gaps after growY, unlike
                 // flowX's grow-or-gap branch. Do not approximate that ordering
                 // on top of this adapter's existing basis/minimum allocation.

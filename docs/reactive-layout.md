@@ -53,9 +53,15 @@ For ordinary geometry/structure changes, the engine performs:
 5. Commit once and notify observers once
 
 Shape input, affine transforms, parent/child membership and child order trigger
-layout. Paint, opacity, names, classes, application data, locks and visibility
-alone do not. Flow measurement continues to use intrinsic boxes; paint extents
-and hidden/collapsed policy do not silently become new size inputs.
+layout. Providers default to geometry-only invalidation. A provider can opt into
+stroke-property changes with `LayoutProvider::uses_stroke_bounds()`, queried once
+at installation. Flow enables it when any configured container uses
+`ItemBox::Stroke`, so base/additional stroke changes (including paint visibility,
+cap/join/dash) reflow atomically. Box-only layouts preserve the old trigger rules.
+Fill, object opacity, names, classes, application data, locks and visibility alone
+do not trigger layout. Stroke invalidation is conservative across the bound scene;
+this is not per-node dependency scheduling. Dependency-declaration panics reject
+installation without replacing the previous provider.
 
 `ChangeOrigin` remains the original edit/animation/lifecycle origin. Derived sizes
 and positions appear in the same net `ChangeSet`, not a second Layout-origin

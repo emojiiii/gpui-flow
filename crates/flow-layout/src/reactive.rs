@@ -1,5 +1,5 @@
 //! Live-instance bindings for the engine's opt-in precommit layout provider.
-use crate::{FlowError, FlowLayout, MAX_FLOW_LAYOUT_PASSES, TextMeasurer};
+use crate::{FlowError, FlowLayout, ItemBox, MAX_FLOW_LAYOUT_PASSES, TextMeasurer};
 use gpui_flow_engine::{
     ElementHandle, EngineError, InstanceState, LayoutProvider, LayoutProviderId, SceneEngine,
 };
@@ -35,6 +35,12 @@ impl ReactiveFlow {
     }
 }
 impl LayoutProvider for ReactiveFlow {
+    fn uses_stroke_bounds(&self) -> bool {
+        self.layout
+            .containers
+            .values()
+            .any(|style| style.item_box == ItemBox::Stroke)
+    }
     fn derive(&self, engine: &SceneEngine, candidate: &Scene) -> Result<Scene, EngineError> {
         let mut layout = self.layout.clone();
         layout

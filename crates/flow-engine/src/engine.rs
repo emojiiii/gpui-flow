@@ -130,6 +130,8 @@ impl SceneEngine {
         &mut self,
         provider: impl LayoutProvider,
     ) -> Result<LayoutProviderId, EngineError> {
+        let stroke_bounds = catch_unwind(AssertUnwindSafe(|| provider.uses_stroke_bounds()))
+            .map_err(|_| EngineError::Layout("provider dependency declaration panicked".into()))?;
         let next = crate::derive::run(&provider, self, self.scene.clone())?;
         if next != self.scene {
             return Err(EngineError::Layout(
@@ -143,6 +145,7 @@ impl SceneEngine {
         self.layout_provider = Some(crate::derive::InstalledLayout {
             id,
             provider: std::sync::Arc::new(provider),
+            stroke_bounds,
         });
         Ok(id)
     }
@@ -163,8 +166,8 @@ impl SceneEngine {
         origin: ChangeOrigin,
     ) -> Result<Scene, EngineError> {
         if !matches!(origin, ChangeOrigin::UndoRedo | ChangeOrigin::Import)
-            && crate::derive::geometry_changed(&self.scene, &candidate)
             && let Some(installed) = &self.layout_provider
+            && crate::derive::inputs_changed(&self.scene, &candidate, installed.stroke_bounds)
         {
             return crate::derive::run(installed.provider.as_ref(), self, candidate);
         }

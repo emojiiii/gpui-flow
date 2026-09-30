@@ -64,9 +64,12 @@ Each participating child is measured by its intrinsic geometric bounds after its
 local affine linear transform. Existing translation is ignored for measurement
 and replaced with the layout position. Negative geometry origins and rotated,
 skewed, or reflected shapes work for position-only arrangement. The container's
-own transform is untouched, including when its ancestors are transformed. Strokes,
-effects, descendant overflow, and font glyph measurements do not influence slots.
-Group has no intrinsic box and must be excluded using `in_flow=false`.
+own transform is untouched, including when its ancestors are transformed.
+`FlowStyle::item_box` defaults to `ItemBox::Box`, preserving stroke-agnostic slots.
+Opt-in `ItemBox::Stroke` includes the object's own conservative stroke bounds;
+see [stroke item boxes](#stroke-item-boxes). Effects, descendant overflow, and
+font glyph ink bounds do not influence slots. Group has no intrinsic box and
+must be excluded using `in_flow=false`.
 
 `visible=false` remains a paint visibility setting: a hidden child consumes a
 layout slot. `FlowItem.in_flow=false` excludes a child and retains its geometry and
@@ -99,7 +102,7 @@ measured geometry. Keeping the basis separate from output geometry makes repeate
 grow/wrap passes stable and permits shrinking a previously grown container.
 
 `min_width`, `max_width`, `min_height`, and `max_height` constrain parent-local
-geometric box dimensions. They must be finite and strictly positive; min cannot
+selected item-box dimensions. They must be finite and strictly positive; min cannot
 exceed max. Minimums can force overflow and are never silently reduced. Stretch is
 also subject to cross-axis min/max.
 
@@ -150,7 +153,7 @@ and range-constrained grow. This module deliberately uses typed optional input
 and atomic scene changes instead of JavaScript prototype mutation.
 
 Not implemented: global reactive scheduling, grow on the cross axis, ratio locking,
-shrink, stroke-box measurement, reactive dependency scheduling, input/computed
+shrink, stroke-box resizing, reactive dependency scheduling, input/computed
 property separation within Scene itself, or Leafer import/export compatibility.
 Percentages and baseline alignment are also unsupported here; the official Flow
 reference labels these future support, so they are not claimed existing Leafer gaps.
@@ -341,8 +344,8 @@ This bounded implementation requires each automatic spacing axis to be fixed-siz
 and rejects content sizing on that same axis rather than inventing a feedback rule.
 A fixed main axis with automatic item gaps may still have a content-sized cross
 axis, provided line gaps stay Fixed. Automatic line gaps have no effect without
-actual wrapping. Stroke-box measurement, per-axis item weights, and ratio locking
-remain separate missing capabilities.
+actual wrapping. Stroke slots are covered below; per-axis item weights and ratio
+locking remain separate missing capabilities.
 
 ### Reuse and validation boundary
 
@@ -362,3 +365,71 @@ old JSON defaults, repeat stability, and reactive resize/undo. Run
 `cargo test -p gpui-flow-layout --test gap_modes` plus the crate's existing suites.
 These fixtures are independent expected-output contracts from the pinned upstream
 policy; they are not a claim of full Leafer import/export or browser parity.
+
+
+## Stroke item boxes
+
+Set `FlowStyle { item_box: ItemBox::Stroke, ..Default::default() }` to measure
+visible vector strokes as part of each direct child's slot. JSON uses
+`"item_box": "stroke"`; omitted or `"box"` retains the previous behavior, and the
+default is omitted on serialization. This is a Rust configuration field, not
+support for importing Leafer's `itemBox` property or complete Leafer JSON.
+Exhaustive Rust `FlowStyle` literals must add `item_box` or use
+`..Default::default()`; serde defaults preserve existing documents.
+
+The mode reuses `DisplayObject::paint_bounds()` and the existing Taffy adapter;
+there is no new stroke geometry or flex solver. It transforms that local bound
+through the child's affine linear matrix, then compensates its origin during
+placement. Existing translations never enlarge the slot. Centered solid round
+Rect strokes have the expected width/height plus stroke width. Layered strokes
+use the largest visible extent. Cap/join meshes are included conservatively;
+dash gaps remain in the bound. This is **not pixel-tight stroke measurement** and
+does not claim exact upstream bounds for arbitrary paths, caps or miters.
+
+- Row/Column, both reverse directions, wrap/wrap-reverse, all non-resizing
+  alignment, fixed/Auto/Fit gaps, and content-sized parents consume the selected
+  slot consistently
+- Box/Frame use their own shape/stroke, never descendant overflow or ancestor
+  clipping. Their intrinsic content dimensions remain separate from their own
+  exterior stroke. Nested content measurement adds each stroke at its own level
+- Zero-width and fully transparent stroke paints contribute no extent. Object
+  opacity and `visible=false` do not collapse slots. `in_flow=false` skips the
+  child entirely; Group still needs this exclusion
+- A visibly stroked child may be positioned but cannot be resized through a
+  stroke slot in this slice. Grow, basis, constraints or Stretch succeed only
+  when their allocation leaves that stroke box unchanged. Otherwise the entire
+  pass/edit fails atomically. Unstroked siblings can still grow or stretch into
+  the remaining space through the existing positive-axis-aligned resize path
+- Visible Text/Image strokes are rejected in Stroke mode because the native
+  backends do not draw them. Unstroked `Natural` and `AutoHeight` text retain
+  their existing content-size ownership and wrap widths. No stroke extent is
+  ever written into a font measurement request or intrinsic text dimensions
+- A reactive stroke-box layout opts into base/additional stroke invalidation.
+  Width, cap, join, dash and stroke-paint edits derive before one commit and one
+  Undo entry. Default box-only providers retain their old invalidation behavior
+
+For example, a 20×10 Rect with a centered 4-unit stroke consumes 24×14. With
+10-unit left/top padding its intrinsic origin becomes (12,12), placing the outer
+stroke at (10,10); a following item with gap 5 starts at outer x=39. These are
+source-derived golden fixture expectations, not a claim of running the full
+upstream JavaScript engine.
+
+### Pinned upstream boundary
+
+The independently implemented selector/placement contract comes from
+[Leafer bounds selection](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/flow/src/layout/common/bounds.ts)
+and the horizontal/vertical passes linked above. Upstream defaults `itemBox` to
+`box` and chooses `localStrokeBounds` for the alternate mode.
+[Core local stroke transformation](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/display-module/display-module/src/LeafBounds.ts)
+transforms inner stroke bounds, and
+[Box](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/Box.ts)
+uses Rect-like stroke bounds separately from child render overflow.
+
+Upstream [grow](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/flow/src/layout/x/grow.ts)
+feeds a stroke-box ratio into
+[scaleResize](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/resize/src/resize.ts).
+That differs from this adapter's intrinsic-size allocation contract, especially
+for text and advanced stroke meshes. This slice rejects the unsupported resize
+instead of approximating it by subtracting guessed margins or treating stroke
+presentation dimensions as content. Inside/outside/scale-fixed strokes,
+Group slots, stroke-text rendering and full upstream resize parity remain open.

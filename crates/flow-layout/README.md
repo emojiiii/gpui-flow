@@ -30,7 +30,7 @@ Position-only layout accepts transformed intrinsic geometry. Resizing supports
 Rect/Ellipse/Text/Image/Box/Frame with positive axis-aligned transforms; other
 resize requests fail atomically. Hidden children retain their slot; set
 `FlowItem.in_flow=false` to exclude a child. Content-sized parents measure with bounded bottom-up/top-down passes. No implicit shrink,
-percentages, baseline alignment, stroke-box layout, or layout of Groups.
+percentages, baseline alignment, stroke-box resizing, or layout of Groups.
 See `docs/flow-layout.md` for precise semantics and upstream source references.
 
 
@@ -63,3 +63,13 @@ existing numeric `gap`/`line_gap` behavior and JSON. Automatic spacing requires 
 fixed-size axis. Row grow takes precedence; column grow supports Auto but its
 combination with Fit is explicitly unsupported. Singleton slots keep their normal
 alignment. See [spacing rules](../../docs/flow-layout.md#automatic-and-fit-spacing).
+
+
+`FlowStyle::item_box = ItemBox::Stroke` opts into conservative, own-object stroke
+slots using scene bounds. The default `ItemBox::Box` and old JSON are unchanged.
+Position-only vector strokes compose with affine transforms, wrapping/reverse,
+gaps, nested content sizing and atomic reactive stroke edits. Stroked resizing
+and visible native Text/Image strokes fail explicitly; unstroked grow and text
+measurement keep their existing content-size contract. Descendant overflow and
+ancestor clipping never alter a slot. See [stroke item boxes](../../docs/flow-layout.md#stroke-item-boxes)
+for exact limits and pinned upstream sources.

@@ -1,4 +1,4 @@
-use crate::{AlignContent, FlowError, FlowItem, FlowStyle, JustifyContent, invalid};
+use crate::{AlignContent, FlowError, FlowItem, FlowStyle, ItemBox, JustifyContent, invalid};
 use gpui_flow_scene::{Affine, Bounds, DisplayId, DisplayObject, Scene, Shape};
 use std::collections::BTreeMap;
 
@@ -22,13 +22,41 @@ struct Line {
     cross: f64,
 }
 
-fn linear_bounds(object: &DisplayObject) -> Result<Bounds, FlowError> {
+fn has_visible_stroke(object: &DisplayObject) -> bool {
+    object
+        .style
+        .strokes()
+        .any(|stroke| stroke.width > 0.0 && stroke.paint.is_visible())
+}
+
+pub(crate) fn validate_item_box(object: &DisplayObject, mode: ItemBox) -> Result<(), FlowError> {
+    if mode == ItemBox::Stroke
+        && has_visible_stroke(object)
+        && matches!(object.shape, Shape::Text(_) | Shape::Image(_))
+    {
+        return Err(invalid(
+            &object.id,
+            "stroke item boxes with visible Text/Image strokes are unsupported by the native renderer",
+        ));
+    }
+    Ok(())
+}
+
+fn linear_bounds(object: &DisplayObject, mode: ItemBox) -> Result<Bounds, FlowError> {
     let local = object.shape.local_bounds().ok_or_else(|| {
         invalid(
             &object.id,
             "participating child has no intrinsic box; exclude Groups with in_flow=false",
         )
     })?;
+    // Leafer getItemBounds selects the child's own local stroke bounds. Box's
+    // stroke calculation is Rect-like, not the subtree/render bound. Reuse our
+    // existing conservative geometry (including mesh cap/join tips and dash
+    // gaps), never Scene::local_bounds or a second stroke expansion algorithm.
+    let local = match mode {
+        ItemBox::Box => local,
+        ItemBox::Stroke => object.paint_bounds().expect("intrinsic box"),
+    };
     let bounds = Affine {
         tx: 0.0,
         ty: 0.0,
@@ -111,7 +139,7 @@ pub(crate) fn container(
         }
         // Visibility is a painting policy, not the collapsed layout sentinel.
         let object = scene.get(&child).expect("validated child").object.clone();
-        let bounds = linear_bounds(&object)?;
+        let bounds = linear_bounds(&object, style.item_box)?;
         let (current_main, current_cross) =
             axis(row, bounds.size.width as f64, bounds.size.height as f64);
         let (width_min, width_max) = constraints(input.min_width, input.max_width);
@@ -249,8 +277,8 @@ pub(crate) fn container(
         for (mut item, position) in line.items.into_iter().zip(positions) {
             let (width, height) = axis(row, item.main, item.cross);
             let (x, y) = axis(row, origin_main + position.main, cross_at + position.cross);
-            resize(&mut item.object, item.bounds, width, height)?;
-            let bounds = linear_bounds(&item.object)?;
+            resize(&mut item.object, item.bounds, width, height, style.item_box)?;
+            let bounds = linear_bounds(&item.object, style.item_box)?;
             item.object.transform.tx = scalar(&item.object.id, x - bounds.origin.x as f64)?;
             item.object.transform.ty = scalar(&item.object.id, y - bounds.origin.y as f64)?;
             let child = item.object.id.clone();
@@ -268,11 +296,22 @@ fn resize(
     old: Bounds,
     width: f64,
     height: f64,
+    mode: ItemBox,
 ) -> Result<(), FlowError> {
     let width = scalar(&object.id, width)?;
     let height = scalar(&object.id, height)?;
     if old.size.width == width && old.size.height == height {
         return Ok(());
+    }
+    // Allocation is in slot units; assigning a stroke slot directly to shape
+    // size would grow content by the stroke extent on every subsequent pass.
+    // Upstream scaleResize is a different contract. Keep this first slice
+    // position-only instead of inventing stroke subtraction or mesh inversion.
+    if mode == ItemBox::Stroke && has_visible_stroke(object) {
+        return Err(invalid(
+            &object.id,
+            "resizing visible stroke item boxes is unsupported; use box mode or remove the size allocation",
+        ));
     }
     let transform = object.transform;
     if transform.a <= 0.0 || transform.d <= 0.0 || transform.b != 0.0 || transform.c != 0.0 {

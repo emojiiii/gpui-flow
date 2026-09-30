@@ -98,3 +98,10 @@ shape sizes; recursion, scope violations, panic and nonconvergence reject the
 candidate. Undo/Redo restores snapshots without derivation. See
 [reactive layout](../../docs/reactive-layout.md) for the concrete flow adapter,
 live-binding lifecycle and animation ownership.
+
+
+Layout providers may opt into stroke-property invalidation with
+`uses_stroke_bounds()`. The default is false, preserving geometry-only providers.
+The declaration is captured once on successful installation; a panic preserves
+the previous provider. This changes input scheduling only, never the strict
+transform/size output whitelist or Undo/Redo snapshot behavior.

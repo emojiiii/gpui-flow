@@ -20,14 +20,21 @@ pub struct LayoutProviderId {
 /// externally visible work belongs here; preparation can run more than once.
 pub trait LayoutProvider: Send + Sync + 'static {
     fn derive(&self, engine: &SceneEngine, candidate: &Scene) -> Result<Scene, EngineError>;
+    /// Opt into derivation after changes to base/additional stroke properties.
+    /// Queried once when installed. Existing providers keep geometry-only
+    /// invalidation; fill, opacity, visibility and metadata are unaffected.
+    fn uses_stroke_bounds(&self) -> bool {
+        false
+    }
 }
 pub(crate) struct InstalledLayout {
     pub id: LayoutProviderId,
     pub provider: Arc<dyn LayoutProvider>,
+    pub stroke_bounds: bool,
 }
-/// Current flow measurement ignores paint/visibility/metadata. Input geometry and
-/// child ordering trigger derivation; style-only edits retain the cached path.
-pub(crate) fn geometry_changed(old: &Scene, next: &Scene) -> bool {
+/// Geometry/order always invalidate. Providers using stroke boxes additionally
+/// depend on stroke properties, including paint visibility and advanced styles.
+pub(crate) fn inputs_changed(old: &Scene, next: &Scene, stroke_bounds: bool) -> bool {
     old.roots() != next.roots()
         || old.len() != next.len()
         || old.nodes().zip(next.nodes()).any(|(a, b)| {
@@ -36,6 +43,9 @@ pub(crate) fn geometry_changed(old: &Scene, next: &Scene) -> bool {
                 || a.children != b.children
                 || a.object.shape != b.object.shape
                 || a.object.transform != b.object.transform
+                || (stroke_bounds
+                    && (a.object.style.stroke != b.object.style.stroke
+                        || a.object.style.stroke_layers != b.object.style.stroke_layers))
         })
 }
 fn validate_scope(before: &Scene, after: &Scene) -> Result<(), EngineError> {
