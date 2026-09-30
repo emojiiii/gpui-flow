@@ -138,7 +138,7 @@ an edit. The executable headless example asserts resulting wrap heights and exac
 Undo boundaries. Compilation/linking is separate from manual GUI verification.
 
 Missing: frame-level coalescing, partial dependency scheduling, serialized runtime
-configuration/history, full input/computed separation, percentage/reverse/shrink
+configuration/history, full input/computed separation, percentage/shrink
 layout, font intrinsic measurement and complete Leafer API compatibility. Active
 layout still uses private scene copies and repeated validation; there is no new
 large-scene performance guarantee.
@@ -152,3 +152,6 @@ Source grounding uses the pinned official sources already recorded in the
 
 Rust implements these change/derivation/commit boundaries directly, without
 copying upstream observer/prototype code or claiming the same asynchronous timing.
+
+Reverse row/column traversal and reverse wrapped-line placement compose with this
+provider using the same atomic commit, identity and history contracts.

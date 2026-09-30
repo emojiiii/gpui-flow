@@ -34,8 +34,22 @@ fn document() -> (Scene, FlowLayout) {
     let mut scene = Scene::new();
     let mut layout = FlowLayout::default();
     for (id, title, x, y, w, h) in [
-        ("wrap", "ROW / WRAP / GAP", 35., 55., 830., 225.),
-        ("column", "COLUMN / SPACE BETWEEN", 35., 340., 250., 275.),
+        (
+            "wrap",
+            "ROW REVERSE / WRAP REVERSE / GAP",
+            35.,
+            55.,
+            830.,
+            225.,
+        ),
+        (
+            "column",
+            "COLUMN REVERSE / SPACE BETWEEN",
+            35.,
+            340.,
+            250.,
+            275.,
+        ),
         ("grow", "GROW / MIN / MAX", 320., 340., 545., 275.),
     ] {
         scene
@@ -63,6 +77,8 @@ fn document() -> (Scene, FlowLayout) {
     layout.containers.insert(
         "wrap".into(),
         FlowStyle {
+            direction: FlowDirection::RowReverse,
+            wrap_reverse: true,
             padding: Insets::all(22.),
             gap: 16.,
             line_gap: 18.,
@@ -74,7 +90,7 @@ fn document() -> (Scene, FlowLayout) {
     layout.containers.insert(
         "column".into(),
         FlowStyle {
-            direction: FlowDirection::Column,
+            direction: FlowDirection::ColumnReverse,
             padding: Insets::all(20.),
             gap: 12.,
             justify: JustifyContent::SpaceBetween,

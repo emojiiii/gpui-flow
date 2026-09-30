@@ -125,3 +125,5 @@ cargo +1.98.1 run --locked -p flow-studio
 自动响应布局：先排好初始场景，再用`FlowLayout::install_reactive`绑定引擎；普通属性/树编辑自动在同一提交中派生尺寸与位置，保留一次Undo。安装/生命周期/动画所有权边界见[reactive-layout.md](docs/reactive-layout.md)
 
 程序焦点：`SceneView::focus_element/clear_element_focus`与router/deferred listener入口保留selection独立，使用实例身份、Blur→Focus和有界重定向；见[焦点契约](docs/focus-routing.md)
+
+反向布局：`RowReverse/ColumnReverse`与`wrap_reverse`按Leafer遍历/行序契约工作，保持场景树与绘制顺序，支持内容尺寸与响应布局。详见[布局契约](docs/flow-layout.md)

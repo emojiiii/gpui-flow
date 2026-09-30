@@ -236,3 +236,9 @@ cargo test --locked -p gpui-flow-layout
 - 本地最终433项模型/文档测试、7项真实FFmpeg/SDL dummy、19项UI单测、10个可执行文档通过；workspace/all-targets check、strict clippy和fmt通过
 - Linux原生`state_styles`已链接，包含真实Focus card/Clear focus控制；没有人工GUI操作验收。清理缓存后依赖自动恢复；最终原生构建使用单job与strip-debug链接，测试均在最终代码上通过
 - 按用户要求后续提交使用`[skip ci]`，GitHub Actions待次日额度/账户恢复后验证；本批不宣称macOS/Windows已验。Workflow保持前批原样，新focus可执行文档本地已运行，现有CI模型测试会包含全部focus回归
+
+## 反向布局增量（2026-09-30，本地验收）
+
+- `flow-layout/tests/reverse.rs`：11项，覆盖双轴方向/换行四组合的精确异尺寸行几何、正常起点坐标语义、grow/min/max、隐藏与排除、变换保持、tree/paint/hit顺序、不同反向分组的auto-size、主轴auto禁wrap、nested双轴parent allocation所有权、reactive树编辑/custom数据单Undo、旧JSON默认兼容
+- 本地444项模型/文档测试、7项真实媒体、19项UI、10个可执行文档通过；workspace/all-targets check、strict clippy、fmt及Linux `layout_appearance`原生链接通过
+- 测试与链接串行/单job，复用现有target；没有新增CI运行、没有修改workflow、没有手工GUI验收。本批按用户要求`[skip ci]`发布，三OS CI待次日验证

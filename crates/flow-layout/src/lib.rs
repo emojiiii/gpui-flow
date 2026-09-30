@@ -109,13 +109,13 @@ impl FlowLayout {
         // feed back through grow/stretch or another parent's allocation.
         for (id, style) in &self.containers {
             let node = scene.get(id).expect("validated container");
-            let auto_main = if style.direction == FlowDirection::Row {
+            let auto_main = if style.direction.is_row() {
                 style.width_sizing
             } else {
                 style.height_sizing
             }
             .is_content();
-            let auto_cross = if style.direction == FlowDirection::Row {
+            let auto_cross = if style.direction.is_row() {
                 style.height_sizing
             } else {
                 style.width_sizing
@@ -150,12 +150,11 @@ impl FlowLayout {
                     let main_allocated = item.grow > 0.0 || item.basis.is_some();
                     let cross_allocated =
                         item.align_self.unwrap_or(parent_style.align_items) == AlignItems::Stretch;
-                    let (width_allocated, height_allocated) =
-                        if parent_style.direction == FlowDirection::Row {
-                            (main_allocated, cross_allocated)
-                        } else {
-                            (cross_allocated, main_allocated)
-                        };
+                    let (width_allocated, height_allocated) = if parent_style.direction.is_row() {
+                        (main_allocated, cross_allocated)
+                    } else {
+                        (cross_allocated, main_allocated)
+                    };
                     let width_allocated =
                         width_allocated || item.min_width.is_some() || item.max_width.is_some();
                     let height_allocated =

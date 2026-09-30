@@ -56,7 +56,8 @@ restoring an undo snapshot.
 The default direction is `Row`; `Column` swaps the main/cross axes. Padding has
 four non-negative local-unit sides; content width/height saturate at zero when
 padding exceeds the container. `gap` is main-axis spacing; `line_gap` separates
-wrapped lines. Children are considered in the scene's structural child order,
+wrapped lines. Children are considered in structural child order (or reversed traversal for
+RowReverse/ColumnReverse),
 not sorted by ID or paint `z_index`.
 
 Each participating child is measured by its intrinsic geometric bounds after its
@@ -147,7 +148,7 @@ ordered children, separate hidden/excluded participation, per-line allocation,
 and range-constrained grow. This module deliberately uses typed optional input
 and atomic scene changes instead of JavaScript prototype mutation.
 
-Not implemented: global reactive scheduling, reverse direction/wrap, percentages, baseline
+Not implemented: global reactive scheduling, percentages, baseline
 alignment, automatic/fit gap strings, grow on the cross axis, ratio locking,
 shrink, stroke-box measurement, reactive dependency scheduling, input/computed
 property separation within Scene itself, or Leafer import/export compatibility.
@@ -237,3 +238,44 @@ instead of copying prototype/decorator or global watcher behavior.
 ## Optional engine precommit integration
 
 The standalone calls above remain explicit. After initial arrangement, `install_reactive` opts into automatic derivation on ordinary engine/editor geometry and tree edits. This synchronous mode preserves one commit/history step and uses live instance bindings. It does not add global watchers or serialize runtime ownership. See [reactive-layout.md](reactive-layout.md) for exact installation, lifetime, Undo and animation contracts.
+
+
+## Reverse traversal and wrapped line placement
+
+`FlowDirection::RowReverse` corresponds to Leafer `x-reverse`, and
+`ColumnReverse` to `y-reverse`. The layout visits participating children
+last-to-first before measuring and packing lines. Placement still advances from
+the normal left/top content edge; justify/align determine the block's offset.
+This follows Leafer's traversal contract, not CSS's reversed main-axis start edge.
+The scene's children, paint order, event ancestry and stable instance handles are
+never reordered. Hit testing uses the resulting positions through the normal
+engine geometry/cache path.
+
+`wrap_reverse: true` reverses the placement order of completed rows/columns on the
+cross axis. It does not reverse the items inside each line. Combine it with a
+reverse direction to reverse both independently. All line gaps, different line
+heights/widths, content alignment, grow/min/max and item alignment still apply.
+This flag only matters when wrapping is enabled; a content-sized main axis still
+disables wrapping. Missing wrap_reverse in older JSON defaults to false, and old
+row/column direction values keep their existing meaning.
+
+Auto-size measures the actual reverse packing groups before placement. Reversing
+heterogeneous children can change line membership and therefore intrinsic cross
+size; reversing only the line placement order leaves that measured size unchanged.
+Both reverse directions use the same axis-ownership validation as their forward
+counterparts, including nested parent allocations and content-sized children.
+
+This composes with explicit layout transactions and the opt-in reactive provider:
+ordinary tree/shape edits derive reverse positions within the same commit/Undo.
+No new observers or history rules are introduced. The `layout_appearance` native
+example now includes reversed wrapped rows and a reversed column; its real scene
+uses the same renderer and picking pipeline.
+
+Official pinned sources: [flow dispatch](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/flow/src/index.ts),
+[flowX](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/flow/src/layout/flowX.ts),
+[row placement](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/flow/src/layout/x/layout.ts)
+and [column placement](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/flow/src/layout/y/layout.ts).
+Upstream shrinkContent/shrinkContentCancel separates padded content bounds from
+box bounds; it is not a CSS flex-shrink implementation. This milestone adds no
+implicit negative-free-space shrinking, percentages, text intrinsic measurement,
+frame scheduler or global input/computed property system.

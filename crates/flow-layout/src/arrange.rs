@@ -1,7 +1,4 @@
-use crate::{
-    AlignContent, AlignItems, FlowDirection, FlowError, FlowItem, FlowStyle, JustifyContent,
-    invalid,
-};
+use crate::{AlignContent, AlignItems, FlowError, FlowItem, FlowStyle, JustifyContent, invalid};
 use gpui_flow_scene::{Affine, Bounds, DisplayId, DisplayObject, Scene, Shape};
 use std::collections::BTreeMap;
 
@@ -70,8 +67,11 @@ pub(crate) fn container(
 ) -> Result<usize, FlowError> {
     let parent = scene.get(id).expect("validated container");
     let size = parent.object.shape.local_bounds().expect("Box/Frame").size;
-    let children = parent.children.clone();
-    let row = style.direction == FlowDirection::Row;
+    let mut children = parent.children.clone();
+    if style.direction.is_reverse() {
+        children.reverse();
+    }
+    let row = style.direction.is_row();
     let auto_main = if row {
         style.width_sizing
     } else {
@@ -199,6 +199,9 @@ pub(crate) fn container(
             AlignContent::Center => cross_free / 2.0,
             AlignContent::End => cross_free,
         };
+    if wrap && style.wrap_reverse {
+        lines.reverse();
+    }
     for line in lines {
         let free = (available_main - line.main).max(0.0);
         let mut main_at = origin_main

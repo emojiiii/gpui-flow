@@ -6,6 +6,18 @@ pub enum FlowDirection {
     #[default]
     Row,
     Column,
+    /// Visit children last-to-first, then place from the normal left edge.
+    RowReverse,
+    /// Visit children last-to-first, then place from the normal top edge.
+    ColumnReverse,
+}
+impl FlowDirection {
+    pub(crate) fn is_row(self) -> bool {
+        matches!(self, Self::Row | Self::RowReverse)
+    }
+    pub(crate) fn is_reverse(self) -> bool {
+        matches!(self, Self::RowReverse | Self::ColumnReverse)
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -129,6 +141,9 @@ pub struct FlowStyle {
     /// Gap between wrapped rows/columns on the cross axis.
     pub line_gap: f32,
     pub wrap: bool,
+    /// Reverse completed line placement on the cross axis. Ignored when actual
+    /// wrapping is disabled; does not reverse children within a line.
+    pub wrap_reverse: bool,
     pub justify: JustifyContent,
     pub align_items: AlignItems,
     /// Placement of the complete wrapped line block on the cross axis.

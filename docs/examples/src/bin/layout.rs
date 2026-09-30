@@ -1,6 +1,6 @@
 //! Headless, executable layout contract and persistence example.
 use gpui_flow_editor::SceneEditor;
-use gpui_flow_layout::{FlowDocument, FlowItem, FlowLayout, FlowStyle, Insets};
+use gpui_flow_layout::{FlowDirection, FlowDocument, FlowItem, FlowLayout, FlowStyle, Insets};
 use gpui_flow_scene::{Affine, DisplayObject, Scene, Shape, display};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut scene = Scene::new();
@@ -54,11 +54,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(editor.scene(), &before);
     assert!(!editor.undo());
     assert!(editor.redo());
+    layout.containers.get_mut(&"row".into()).unwrap().direction = FlowDirection::RowReverse;
+    layout.apply_to_editor(&mut editor)?;
+    assert_eq!(
+        editor.scene().get(&"c".into()).unwrap().object.transform.tx,
+        10.
+    );
+    assert_eq!(
+        editor.scene().get(&"a".into()).unwrap().object.transform.tx,
+        310.
+    );
+    assert_eq!(
+        editor.scene().get(&"row".into()).unwrap().children,
+        vec!["a".into(), "b".into(), "c".into()]
+    );
     let document = FlowDocument {
         scene: editor.scene().clone(),
         layout,
     };
     assert_eq!(FlowDocument::from_json(&document.to_json()?)?, document);
-    println!("layout: row/grow geometry, stable instances, single undo and persistence verified");
+    println!(
+        "layout: row/reverse/grow geometry, stable tree, single undo and persistence verified"
+    );
     Ok(())
 }

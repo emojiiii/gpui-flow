@@ -1,7 +1,8 @@
 # gpui-flow-layout
 
 Pure Rust, opt-in row/column flow layout for fixed and content-sized scene Box/Frame containers.
-Padding, item/line gaps, wrapping, alignment, weighted grow, and min/max sizes
+Padding, item/line gaps, wrapping (including reverse line placement),
+row/column reverse traversal, alignment, weighted grow, and min/max sizes
 produce normal scene geometry and transform changes. No GPUI dependency or clock.
 
 ```rust
@@ -28,7 +29,7 @@ This is an explicit layout pass, not reactive scheduling or Leafer API parity.
 Position-only layout accepts transformed intrinsic geometry. Resizing supports
 Rect/Ellipse/Text/Image/Box/Frame with positive axis-aligned transforms; other
 resize requests fail atomically. Hidden children retain their slot; set
-`FlowItem.in_flow=false` to exclude a child. Content-sized parents measure with bounded bottom-up/top-down passes. No shrink, reverse,
+`FlowItem.in_flow=false` to exclude a child. Content-sized parents measure with bounded bottom-up/top-down passes. No implicit shrink,
 percentages, baseline/font measurement, stroke-box layout, or layout of Groups.
 See `docs/flow-layout.md` for precise semantics and upstream source references.
 
@@ -42,3 +43,7 @@ undoable transaction, normalizing registered custom geometry before measuring.
 It is an explicit host entry point, not a global reactive watcher.
 
 Optional `install_reactive` binds the already arranged configuration to live engine instances. Relevant ordinary edits derive layout before commit; Undo/Redo restores exact snapshots and runtime configuration stays host-owned. See [reactive layout](../../docs/reactive-layout.md) for lifecycle and animation ownership.
+
+Reverse directions visit children last-to-first while retaining normal coordinate
+axes and structural/paint order. `wrap_reverse` independently reverses completed
+line placement. Old JSON defaults to forward order. See docs/flow-layout.md.
