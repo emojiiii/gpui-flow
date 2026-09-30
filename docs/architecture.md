@@ -90,7 +90,7 @@ world  = (screen - pan) / zoom
 
 `pan` 单位是屏幕像素，`zoom` 是每世界单位对应的屏幕像素。GPUI 指针事件使用窗口坐标，FlowCanvas 先减画布原点，再交给 Viewport 转换；不要额外重复减侧栏宽度。
 
-`zoom_at(anchor, zoom)` 保持鼠标下世界点不动。默认缩放范围为 0.1–3.0；`fit` 也遵守该范围，极大图可能无法在最小缩放下完全塞进视口。MiniMap 使用相同变换生成缩略图几何，当前 UI 仅显示概览，不支持拖动导航。
+`zoom_at(anchor, zoom)` 保持鼠标下世界点不动。默认缩放范围为 0.1–3.0；`fit` 也遵守该范围，极大图可能无法在最小缩放下完全塞进视口。MiniMap 使用相同变换生成缩略图几何，当前 UI 支持点击缩略图重新居中，不支持拖动导航。
 
 ## 持久化格式与边界
 
@@ -141,3 +141,7 @@ fn save_and_restore(editor: &mut Editor) -> Result<(), Box<dyn std::error::Error
 `FlowCanvas` 绘制网格、所有边、组、可见节点和概览。节点 body 由 `NodeRegistry` 中的 `NodeRenderer` 渲染，标题栏、端口、选择外框、移动和缩放由画布管理。`EdgeRenderer` 只决定绘制，不提供点击命中或图编辑行为。
 
 画布约每 40ms 非阻塞轮询一次 Runtime，收到已应用事件后发出 `RunChanged(node_id)` 并通知重绘。事件不等于 Graph 自动发生变化。宿主直接变更公共字段后需按 GPUI 实体更新流程调用 `cx.notify()`，必要时自行 `cx.emit(...)`。
+
+## 通用显示场景层
+
+本页专门描述节点图。通用 DisplayObject/Scene、SceneEditor、SceneView 与逐组件UI属于独立分层，见[显示场景架构](display-scenes.md)与[组件组合](components.md)，不要把节点图 Group 当作通用场景容器。

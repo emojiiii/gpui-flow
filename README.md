@@ -21,6 +21,8 @@
 cargo run --locked -p flow-studio
 cargo run --locked -p flow-studio --bin primitives
 cargo run --locked -p flow-studio --bin composition
+# Linux 无 desktop portal 时，明确指定 Save/Open 路径：
+cargo run --locked -p flow-studio -- --file ./canvas.flow.json
 ```
 
 - **Studio**：节点工作流与原生内容编辑、文件 Save/Open、连接/分组、mock runner

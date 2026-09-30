@@ -46,6 +46,9 @@ pub struct FlowCanvas {
     pub run_label: SharedString,
     pub snap_to_grid: bool,
     pub show_grid: bool,
+    /// Optional host-owned path used by Save/Open instead of native dialogs.
+    pub document_path: Option<std::path::PathBuf>,
+    file_busy: bool,
     focus: FocusHandle,
     origin: model::Point,
     extent: model::Size,
@@ -104,6 +107,8 @@ impl FlowCanvas {
             run_label: "Run selected".into(),
             snap_to_grid: false,
             show_grid: true,
+            document_path: None,
+            file_busy: false,
             focus: cx.focus_handle(),
             origin: model::Point::ZERO,
             extent: model::Size::new(1000., 700.),

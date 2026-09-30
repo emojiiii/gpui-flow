@@ -34,7 +34,7 @@
 
 ## 持久化与模型
 
-- Studio Save file/Open 可读写含视口文档；Save/Load snapshot 仅为内存快照，Ctrl/Cmd + S 复制 Graph JSON，不触发文件保存
+- Studio Save file/Open 可读写含视口文档；无系统文件选择器时用 `--file PATH` 或宿主 `document_path`，异步文件任务串行；Save/Load snapshot 仅为内存快照，Ctrl/Cmd + S 复制 Graph JSON，不触发文件保存
 - Graph 与 FlowDocument 格式不同；前者没有 viewport，二者都不含历史、选择、任务和媒体字节
 - 文件读写限制 32 MiB，采用临时文件+sync+rename；没有自动保存、脏状态/覆盖提示、备份、多实例冲突保护或跨平台断电恢复保证
 - Open 会清空原图选择、历史和运行记录；保存捕获点击时的快照，不包含文件对话框等待期间的后续编辑

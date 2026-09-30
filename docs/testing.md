@@ -15,8 +15,8 @@ CI 文件存在不等于 CI 已执行或通过。以目标提交的 Actions 日�
 
 ```bash
 cargo fmt --all -- --check
-cargo test --locked -p gpui-flow-core -p gpui-flow-runtime
-cargo clippy --locked -p gpui-flow-core -p gpui-flow-runtime --all-targets -- -D warnings
+cargo test --locked -p gpui-flow-core -p gpui-flow-runtime -p gpui-flow-scene -p gpui-flow-editor
+cargo clippy --locked -p gpui-flow-core -p gpui-flow-runtime -p gpui-flow-scene -p gpui-flow-editor --all-targets -- -D warnings
 cargo check --locked --workspace --all-targets
 cargo clippy --locked --workspace --all-targets -- -D warnings
 cargo build --locked -p flow-studio
@@ -63,8 +63,8 @@ cargo run --locked --manifest-path docs/examples/Cargo.toml --bin runner
 
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) 包含：
 
-1. Ubuntu 24.04：主 workspace 与文档示例格式检查、core/runtime 测试及 clippy、执行文档示例
-2. Ubuntu 24.04 / macOS 15：安装平台依赖，完整 workspace check/clippy，链接 Studio
+1. Ubuntu 24.04：主 workspace 与文档示例格式检查、core/runtime/scene/editor 测试及 clippy、执行文档示例
+2. Ubuntu 24.04 / macOS 15：安装平台依赖，完整 workspace check/clippy，UI组件单测，链接全部三个示例
 
 CI 使用 Rust 1.98.1 和 `--locked`，只授予 `contents: read`，不需要供应商密钥，不发布 crate、部署应用或上传用户图。并发工作流会取消同一分支的旧 run。native job 不是图形 E2E 测试。
 
@@ -123,3 +123,18 @@ CI 使用 Rust 1.98.1 和 `--locked`，只授予 `contents: read`，不需要供
 ## 后续测试建设建议
 
 优先补充 GPUI 事件驱动交互测试与截图基准、runtime 取消/旧事件/线程退出的确定性测试、属性/模糊测试覆盖大量图变更序列，以及大图性能基准。新增测试应描述可证明的行为，不以“可渲染”代替全部功能完成。
+
+
+## 2026-09-30 已执行的本地验收
+
+独立于上面的待测清单，以下有实际执行结果：
+
+- 纯 Rust：core 39、scene 31、editor 10、runtime 7 项测试通过；另 2 项 doctest 通过
+- GPUI library：5 项组件/裁切测试通过；全部 workspace/all-targets check 与 Clippy `-D warnings` 通过
+- 三个示例均完成 Linux 链接并在 dot 云桌面真实打开
+- Gallery：实际显示实色原语、PNG、路径、嵌套圆角裁切、继承透明度；拖动、Undo、旋转及子元素→Frame 捕获事件通过
+- Composition：独立 NodeFrame 选中回调、Handle 请求计数、宿主状态重置、canvas-only 嵌入与 Fit 通过
+- Studio：Fit、选择、MOCK 到 100% 终态通过；指定路径模式 Save 后添加第 8 节点，再 Open 恢复 7 节点；磁盘 JSON 含 viewport；损坏 JSON 导入报错且保持原图
+- 该 Linux 桌面缺少 `org.freedesktop.portal.Desktop`，默认原生文件选择器显示错误；因此使用并验证了 `--file PATH`。未宣称默认原生对话框成功
+
+未执行的内容仍包括 Windows 原生运行、macOS 实际窗口操作、真实供应商/媒体解码、输入法矩阵、大规模性能、完整所有交互路径。GitHub CI 的最终提交结果以 Actions 页面为准。

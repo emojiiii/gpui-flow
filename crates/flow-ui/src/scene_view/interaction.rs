@@ -119,11 +119,12 @@ impl SceneView {
                             gpui_flow_scene::Shape::Text(_) | gpui_flow_scene::Shape::Image(_)
                         )
                     }))
-                    && let Some(inverse) = original.inverse() {
-                        let relative = inverse * transform;
-                        let factor = relative.a.max(relative.d);
-                        transform = original * Affine::scale(factor, factor).around(bounds.origin);
-                    }
+                    && let Some(inverse) = original.inverse()
+                {
+                    let relative = inverse * transform;
+                    let factor = relative.a.max(relative.d);
+                    transform = original * Affine::scale(factor, factor).around(bounds.origin);
+                }
                 let _ = self.editor.transaction(|scene| {
                     scene.update_object(&id, |object| object.transform = transform)
                 });

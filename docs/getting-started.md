@@ -117,6 +117,16 @@ cargo run --locked -p flow-studio
 
 文件对话框取消后不加载/保存。打开成功会替换当前图，不能用原来的 undo 历史恢复，先保存要保留的修改。Linux 的原生对话框依赖实际桌面/portal 环境，单纯 native 编译通过不能证明文件选择器可用。
 
+### 没有桌面 portal 时的明确文件路径模式
+
+```bash
+cargo run --locked -p flow-studio -- --file ./canvas.flow.json
+```
+
+此模式下 Save file/Open 使用指定路径，不弹对话框；只在用户点击按钮时读写。文件存在时 Save 会原子替换它，Open 会替换当前文档。父目录需存在。没有提供 `--file` 时仍使用系统选择器。
+
+宿主也可设置 `canvas.document_path = Some(path)`，或直接调用异步 `save_to_path(path, cx)` / `open_path(path, cx)`。`is_file_busy()` 表示当前有文件任务；同一 view 同时只允许一个文件任务，避免重复点击产生竞态覆盖。底层没有跨进程锁。
+
 宿主可使用 `FlowCanvas::save_file(cx)` / `open_file(cx)` 触发这些异步对话框。`export_json` / `import_json` 则处理 Graph-only JSON。需要自行存储含视口 JSON 时用 `canvas.editor.to_json()` 与 `Editor::from_json()` / `load_document()`。两种 JSON 顶层结构不同，不应混用，详见[架构](architecture.md#持久化格式与边界)。
 
 ## 4. 嵌入现有 GPUI 应用
