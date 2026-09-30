@@ -79,6 +79,9 @@ cargo +1.98.1 run --locked -p flow-studio
 
 ## 文档导航
 
+- [Leafer 源码分层、差距与验收契约](docs/leafer-source-map.md)
+- [引擎基础契约实施顺序](docs/engine-contract-plan.md)
+
 - [交互插件、只读策略与自定义行为](docs/plugins.md)
 - [显示对象与场景架构](docs/display-scenes.md)
 - [独立组件与组合开发](docs/components.md)
