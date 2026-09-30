@@ -2,7 +2,15 @@
 
 Status: source research and proposed contracts, **not an implementation/parity claim**. Reviewed 2026-09-30. No upstream code, package install, build script, or example was executed. No Rust source was changed for this report.
 
-> 基线说明：下方差距矩阵记录源码研究时的 `43eda10` 状态。后续已实现的引擎身份/生命周期/schema/dirty 缓存及原生事件接入见 [engine.md](engine.md)，不要把历史矩阵的“absent”误读为最新状态。外观合成、自动布局、动画等仍然缺失。
+> 基线说明：下方差距矩阵记录源码研究时的 `43eda10` 状态。后续已实现的引擎身份/生命周期/schema/dirty 缓存及原生事件接入见 [engine.md](engine.md)，不要把历史矩阵的“absent”误读为最新状态。后续批次实现了[多层矢量 paints](appearance.md)和[显式行列布局](flow-layout.md)；外观隔离合成、自动尺寸/布局调度、动画等仍然缺失。
+
+## 当前增量状态（不覆盖历史基线）
+
+- 引擎实例、生命周期、registry/schema、dirty 缓存、默认动作前事件路由：已实现，见 [engine.md](engine.md)
+- 外观：有序多层矢量 fill/stroke、渐变纹理逐层缓存、可见描边 bounds/hit、原子属性更新已实现；文本/图像不接受新 layers。透明度仍逐 paint，未实现隔离合成、混合/蒙版/阴影/擦除，见 [appearance.md](appearance.md)
+- 视觉布局：可选 `gpui-flow-layout`，固定 Box/Frame 的行/列、换行、padding/gap、对齐、grow/尺寸范围、隐藏与排除区别、嵌套父先处理、一次事务/撤销和独立配置持久化。显式 pass，不是响应式布局引擎；没有 auto-size、百分比、反向、shrink 或文字内在测量，见 [flow-layout.md](flow-layout.md)
+- 新原生示例 `layout_appearance` 将布局输出送入同一 SceneView；编译/模型测试不等于新窗口视觉验收
+- 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
 ## 1. Provenance and license boundary
 

@@ -29,3 +29,5 @@ pub use media::MediaView;
 pub use gpui_flow_interaction as interaction;
 
 pub use gpui_flow_engine as engine;
+
+pub use gpui_flow_layout as layout;

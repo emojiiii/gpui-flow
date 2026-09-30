@@ -3,7 +3,7 @@
 //! GPUI's Background shader exposes only two-stop linear gradients. This path
 //! samples arbitrary linear/radial stops with the same transformed/clipped
 //! tessellation as solid vectors, rather than substituting a solid paint.
-use super::RenderObject;
+use super::{RenderObject, vector::PaintLayer};
 use gpui::{App, Bounds, Corners, Path, Pixels, Point, RenderImage, Window, point, px, size};
 use gpui_flow_scene::{self as scene, Paint};
 use std::{cell::RefCell, collections::VecDeque, sync::Arc};
@@ -32,7 +32,7 @@ struct CacheKey {
     origin: scene::Point,
     window_id: u64,
     options: scene::RasterOptions,
-    stroke: bool,
+    layer: PaintLayer,
 }
 struct Entry {
     key: CacheKey,
@@ -158,7 +158,7 @@ pub(super) fn paint_gradient(
     origin: Point<Pixels>,
     path: Path<Pixels>,
     paint: &Paint,
-    stroke: bool,
+    layer: PaintLayer,
     window: &mut Window,
     cx: &mut App,
 ) {
@@ -179,7 +179,7 @@ pub(super) fn paint_gradient(
         origin,
         window_id,
         options,
-        stroke,
+        layer,
     };
     let cached = CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();
@@ -297,7 +297,7 @@ mod tests {
                 origin: scene::Point::new(index as f32, 0.0),
                 window_id: 1,
                 options: scene::RasterOptions::default(),
-                stroke: false,
+                layer: PaintLayer::Fill(0),
             },
             image,
             bounds: scene::Bounds::new(scene::Point::ZERO, scene::Size::new(1.0, 1.0)),
@@ -338,6 +338,24 @@ mod tests {
             world_transform: scene::Affine::IDENTITY,
         });
         assert!(changed != key);
+    }
+    #[test]
+    fn cache_keys_never_alias_distinct_fill_or_stroke_layers() {
+        let key = entry(0, 4).key;
+        for layer in [
+            PaintLayer::Fill(1),
+            PaintLayer::Stroke(0),
+            PaintLayer::Stroke(1),
+        ] {
+            let mut changed = key.clone();
+            changed.layer = layer;
+            assert!(changed != key);
+        }
+        let mut thick = key.clone();
+        thick.layer = PaintLayer::Stroke(0);
+        let mut thin = thick.clone();
+        thin.layer = PaintLayer::Stroke(1);
+        assert!(thick != thin);
     }
     #[test]
     fn diagnostics_are_window_scoped_non_destructive_and_clear_on_repaint() {

@@ -135,18 +135,13 @@ impl Shape {
         if let Self::Image(image) = self {
             return image.bounds().contains(point) && image.content_bounds().contains(point);
         }
-        let fill = style.fill.as_ref().is_some_and(|p| p.is_visible());
+        let fill = style.fills().any(|paint| paint.is_visible());
         if fill && self.contains_geometry(point, style.fill_rule) {
             return true;
         }
-        if let Some(stroke) = &style.stroke
-            && stroke.width > 0.0
-            && stroke.paint.is_visible()
-            && crate::geometry::stroke_hit(
-                &self.flatten(0.1),
-                point,
-                stroke.width * 0.5 + tolerance,
-            )
+        let extent = style.stroke_extent();
+        if extent > 0.0
+            && crate::geometry::stroke_hit(&self.flatten(0.1), point, extent + tolerance)
         {
             return true;
         }

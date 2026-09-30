@@ -7,7 +7,7 @@
 ## 架构层次
 
 1. **display / scene**：Rect、Ellipse、Line、Polygon、Star、Path、Pen、Text、Image、Group、Box、Frame 独立文件；统一 identity、style、affine transform、层级、命中、事件、JSON
-2. **editor**：独立 SceneEditor，原子编辑、父子坐标变换、选择、缩放/旋转/移动与手势级 undo/redo
+2. **engine / layout / editor**：唯一 Scene 所有权、带世代实例、生命周期、属性 schema、dirty 缓存，以及可选确定性行列布局；独立 SceneEditor，原子编辑、父子坐标变换、选择、缩放/旋转/移动与手势级 undo/redo
 3. **GPUI adapter**：SceneView + DisplayElement，真正的矢量三角化、任意仿射变换、嵌套圆角 Frame 裁切；渲染能力不足时明确 diagnostics
 4. **components / nodes**：NodeFrame、PortHandle、MiniMap、ViewportControls、Toolbar、Palette、Inspector 可单独使用；八类节点逐文件实现
 5. **flow / runtime**：类型化图、连接校验、分组、复制粘贴、文件持久化；独立 runner、进度/取消/重试、受控并发 DAG 调度与端口数据传递
@@ -23,6 +23,7 @@ cargo run --locked -p flow-studio --bin primitives
 cargo run --locked -p flow-studio --bin composition
 cargo run --locked -p flow-studio --bin interactions
 cargo run --locked -p flow-studio --bin gradients
+cargo run --locked -p flow-studio --bin layout_appearance
 python3 scripts/generate-media-fixtures.py
 cargo run --locked -p flow-studio --bin media
 # Linux 无 desktop portal 时，明确指定 Save/Open 路径：
@@ -32,6 +33,7 @@ cargo run --locked -p flow-studio -- --file ./canvas.flow.json
 - **Interactions**：拖拽连线/吸附、有效和无效目标、只读及独立插件开关
 - **Studio**：节点工作流与原生内容编辑、文件 Save/Open、连接/分组、mock runner
 - **Primitives**：通用场景原语、嵌套变换/裁切、点击/拖动/缩放/旋转、捕获事件
+- **Layout + Appearance**：行列/换行/grow/尺寸约束，一次 Reflow 一次撤销；多层矢量填充和描边，真实渐变叠绘
 - **Gradients**：多色标线性/径向渐变、变换和裁切
 - **Media**：真实本地视频帧与音频播放控制，需本机 FFmpeg 工具
 - **Composition**：独立 NodeFrame/Handle 与宿主 Toolbar/Inspector，嵌入 canvas-only 画布并注册自定义节点
@@ -69,18 +71,22 @@ cargo +1.98.1 run --locked -p flow-studio
 | `gpui-flow-interaction` | 可组合输入插件、捕获生命周期、能力策略与命令验证 | 否 |
 | `gpui-flow-core` | 图模型、几何、校验、编辑事务、历史、文档 | 否 |
 | `gpui-flow-scene` | 保留场景树、显示原语、仿射变换、命中与事件 | 否 |
+| `gpui-flow-engine` | 唯一场景所有者、实例/生命周期、属性/缓存与树事件 | 否 |
+| `gpui-flow-layout` | 显式行列布局、换行/grow/约束、原子编辑及配置持久化 | 否 |
 | `gpui-flow-editor` | 通用场景选择、事务、历史与图形编辑 | 否 |
 | `gpui-flow-runtime` | `AgentRunner`、工作流调度、任务状态、事件和取消 | 否 |
 | `gpui-flow-media` | 媒体后端接口、FFmpeg 解码与播放控制 | 否 |
 | `gpui-flow` | `SceneView`、显示适配器、独立组件、`FlowCanvas` 与节点 | 是 |
 | `flow-studio` | 原生桌面示例程序 | 是 |
 
-主 workspace 的默认成员是 core/interaction/runtime/scene/editor/media，`cargo test` 不会自动覆盖原生 UI。
+主 workspace 的默认成员是 core/engine/interaction/layout/runtime/scene/editor/media，`cargo test` 不会自动覆盖原生 UI。
 
 ## 文档导航
 
 - [Leafer 源码分层、差距与验收契约](docs/leafer-source-map.md)
 - [元素实例、属性变更与事件引擎](docs/engine.md)
+- [视觉行列布局与边界](docs/flow-layout.md)
+- [多层填充、描边与外观边界](docs/appearance.md)
 - [引擎基础契约实施顺序](docs/engine-contract-plan.md)
 
 - [交互插件、只读策略与自定义行为](docs/plugins.md)

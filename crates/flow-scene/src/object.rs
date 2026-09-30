@@ -107,7 +107,7 @@ impl DisplayObject {
     pub fn paint_bounds(&self) -> Option<Bounds> {
         self.shape
             .local_bounds()
-            .map(|b| b.expanded(self.style.stroke.as_ref().map_or(0.0, |s| s.width * 0.5)))
+            .map(|b| b.expanded(self.style.stroke_extent()))
     }
     pub fn validate(&self) -> Result<(), String> {
         if self.id.as_str().trim().is_empty() {
@@ -117,6 +117,17 @@ impl DisplayObject {
             return Err("transform must be finite".into());
         }
         self.style.validate()?;
+        if self.style.has_layers()
+            && matches!(
+                self.shape,
+                Shape::Text(_) | Shape::Image(_) | Shape::Group(_)
+            )
+        {
+            return Err(
+                "layered paints require vector geometry; text, image and group are unsupported"
+                    .into(),
+            );
+        }
         self.shape.validate()?;
         if self.paint_bounds().is_some_and(|b| !b.is_valid()) {
             return Err("paint bounds overflow".into());

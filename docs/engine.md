@@ -36,4 +36,4 @@ Graph 的 `CanvasPlugin` 使用相同输入/能力/生命周期协议，但它�
 
 运行 `cargo run --locked -p flow-studio --bin primitives`。右下角 diamond 来自注册的 CustomDefinition，点击后排队修改 radius，几何、bounds、命中与绘制一起变化；Undo 恢复属性。侧栏显示 engine revision 和 dirty 数量。Reset 是新文档，会销毁旧文档监听器；示例为新的 Custom 实例重新安装点击行为，宿主也必须按新句柄注册自己的监听器。
 
-GPUI 仍整帧绘制；damage 是后端可消费的信息，不等于已经做 GPU 局部重绘。隔离组透明度/混合、蒙版、擦除、阴影、自动布局、状态样式、动画/运动路径仍未实现。当前已有渐变和视频帧也不能替代这些契约。详见 [实施顺序](engine-contract-plan.md) 与 [支持边界](limitations.md)。
+GPUI 仍整帧绘制；damage 是后端可消费的信息，不等于已经做 GPU 局部重绘。现已增加[显式视觉行列布局](flow-layout.md)及[多层矢量填充/描边](appearance.md)。布局由宿主触发，走普通原子变化通道；多层绘制沿用平面、逐 paint 透明度。隔离组透明度/混合、蒙版、擦除、阴影、自动尺寸测量、响应式布局调度、状态样式、动画/运动路径仍未实现。当前已有渐变和视频帧也不能替代这些契约。详见 [实施顺序](engine-contract-plan.md) 与 [支持边界](limitations.md)。

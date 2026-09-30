@@ -15,8 +15,11 @@ name = "gpui-flow-doc-examples"
 version = "0.1.0"
 dependencies = [
  "gpui-flow-core",
+ "gpui-flow-editor",
  "gpui-flow-interaction",
+ "gpui-flow-layout",
  "gpui-flow-runtime",
+ "gpui-flow-scene",
  "serde_json",
 ]
 
@@ -48,6 +51,17 @@ dependencies = [
  "gpui-flow-editor",
  "gpui-flow-engine",
  "gpui-flow-scene",
+ "serde_json",
+]
+
+[[package]]
+name = "gpui-flow-layout"
+version = "0.1.0"
+dependencies = [
+ "gpui-flow-editor",
+ "gpui-flow-engine",
+ "gpui-flow-scene",
+ "serde",
  "serde_json",
 ]
 

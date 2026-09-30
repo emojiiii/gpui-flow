@@ -359,6 +359,8 @@ pub enum PropertyKey {
     HitChildren,
     Fill,
     Stroke,
+    FillLayers,
+    StrokeLayers,
     Opacity,
     FillRule,
     Shape,
@@ -379,6 +381,8 @@ impl PropertyKey {
             Self::HitChildren => "hit_children".into(),
             Self::Fill => "style.fill".into(),
             Self::Stroke => "style.stroke".into(),
+            Self::FillLayers => "style.fill_layers".into(),
+            Self::StrokeLayers => "style.stroke_layers".into(),
             Self::Opacity => "style.opacity".into(),
             Self::FillRule => "style.fill_rule".into(),
             Self::Shape => "shape".into(),
@@ -418,9 +422,13 @@ pub(crate) fn property_dirty(name: &str) -> DirtyFlags {
     match name {
         "transform" => DirtyFlags::TRANSFORM | DirtyFlags::HIT,
         "shape" => DirtyFlags::GEOMETRY | DirtyFlags::PAINT | DirtyFlags::HIT,
-        "style.stroke" => DirtyFlags::GEOMETRY | DirtyFlags::PAINT | DirtyFlags::HIT,
+        "style.stroke" | "style.stroke_layers" => {
+            DirtyFlags::GEOMETRY | DirtyFlags::PAINT | DirtyFlags::HIT
+        }
         "style.opacity" | "visible" => DirtyFlags::OPACITY | DirtyFlags::PAINT | DirtyFlags::HIT,
-        "style.fill" | "style.fill_rule" => DirtyFlags::PAINT | DirtyFlags::HIT,
+        "style.fill" | "style.fill_layers" | "style.fill_rule" => {
+            DirtyFlags::PAINT | DirtyFlags::HIT
+        }
         "locked" | "hit_policy" | "hit_children" => DirtyFlags::HIT,
         "z_index" => DirtyFlags::ORDER | DirtyFlags::PAINT | DirtyFlags::HIT,
         _ => DirtyFlags::DATA,
@@ -433,7 +441,9 @@ impl PropertyKey {
     pub fn descriptor(&self) -> Option<PropertyDescriptor> {
         let (value_type, default) = match self {
             Self::Name => (PropertyType::String, Some(json!(""))),
-            Self::Classes => (PropertyType::Array, Some(json!([]))),
+            Self::Classes | Self::FillLayers | Self::StrokeLayers => {
+                (PropertyType::Array, Some(json!([])))
+            }
             Self::Visible | Self::HitChildren => (PropertyType::Boolean, Some(json!(true))),
             Self::Locked => (PropertyType::Boolean, Some(json!(false))),
             Self::Opacity => (

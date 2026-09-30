@@ -119,8 +119,14 @@ pub enum FillRule {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Style {
+    /// Legacy/base fill, painted before `fill_layers`.
     pub fill: Option<Paint>,
+    /// Legacy/base stroke, painted before `stroke_layers` and after all fills.
     pub stroke: Option<Stroke>,
+    /// Additional vector fills in back-to-front order. Empty in older documents.
+    pub fill_layers: Vec<Paint>,
+    /// Additional centered vector strokes in back-to-front order.
+    pub stroke_layers: Vec<Stroke>,
     pub opacity: f32,
     pub fill_rule: FillRule,
 }
@@ -129,12 +135,37 @@ impl Default for Style {
         Self {
             fill: Some(Color::BLACK.into()),
             stroke: None,
+            fill_layers: Vec::new(),
+            stroke_layers: Vec::new(),
             opacity: 1.0,
             fill_rule: FillRule::NonZero,
         }
     }
 }
+/// Maximum combined base and additional fill/stroke paints per object.
+/// This bounds tessellation and texture work without truncating user input.
+pub const MAX_PAINT_LAYERS: usize = 32;
+
 impl Style {
+    /// Base fill followed by additional fills, in painter order.
+    pub fn fills(&self) -> impl Iterator<Item = &Paint> {
+        self.fill.iter().chain(self.fill_layers.iter())
+    }
+    /// Base stroke followed by additional strokes, in painter order.
+    pub fn strokes(&self) -> impl Iterator<Item = &Stroke> {
+        self.stroke.iter().chain(self.stroke_layers.iter())
+    }
+    /// Conservative centered-stroke extent. Fully transparent paints and zero
+    /// widths neither render nor enlarge painted bounds or stroke picking.
+    pub fn stroke_extent(&self) -> f32 {
+        self.strokes()
+            .filter(|stroke| stroke.paint.is_visible())
+            .map(|stroke| stroke.width * 0.5)
+            .fold(0.0, f32::max)
+    }
+    pub fn has_layers(&self) -> bool {
+        !self.fill_layers.is_empty() || !self.stroke_layers.is_empty()
+    }
     pub fn fill(color: Color) -> Self {
         Self {
             fill: Some(color.into()),
@@ -152,10 +183,15 @@ impl Style {
         if !self.opacity.is_finite() || self.opacity < 0.0 || self.opacity > 1.0 {
             return Err("opacity must be in [0,1]".into());
         }
-        if let Some(fill) = &self.fill {
+        if self.fills().count() + self.strokes().count() > MAX_PAINT_LAYERS {
+            return Err(format!(
+                "appearance exceeds {MAX_PAINT_LAYERS} paint layers"
+            ));
+        }
+        for fill in self.fills() {
             fill.validate()?;
         }
-        if let Some(stroke) = &self.stroke {
+        for stroke in self.strokes() {
             if !stroke.width.is_finite() || stroke.width < 0.0 {
                 return Err("stroke width must be finite and non-negative".into());
             }

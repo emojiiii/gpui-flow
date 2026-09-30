@@ -1,6 +1,6 @@
 # 源码对照后的引擎契约计划
 
-状态：A/B 引擎基础和 C 的鼠标/滚轮/KeyDown 事件路由已接入 SceneEditor/SceneView，正在进行完整回归与原生验收。D/E 仍为后续计划，不是功能完成清单。实现 API 与准确边界见 [engine.md](engine.md)。完整上游文件对照见 `leafer-source-map.md`。
+状态：A/B 引擎基础和 C 的鼠标/滚轮/KeyDown 事件路由已接入 SceneEditor/SceneView，正在进行完整回归与原生验收。D 的多层矢量 paints 和 E 的显式行列布局已分批实现；隔离合成、自动尺寸/布局调度、状态与动画仍为后续计划，不是完整功能完成清单。实现 API 与准确边界见 [engine.md](engine.md)。完整上游文件对照见 `leafer-source-map.md`。
 
 ## 为什么还需要这层
 

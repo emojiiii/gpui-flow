@@ -2,6 +2,7 @@
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum UnsupportedFeature {
     GradientPaint,
+    LayeredPaint,
     TransformedText,
     TransformedImage,
     ClippedText,

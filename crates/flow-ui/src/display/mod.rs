@@ -43,6 +43,14 @@ impl RenderObject {
                 feature,
             })
         };
+        if self.object.style.has_layers()
+            && matches!(
+                self.object.shape,
+                Shape::Text(_) | Shape::Image(_) | Shape::Group(_)
+            )
+        {
+            report(UnsupportedFeature::LayeredPaint);
+        }
         let unsupported = |p: &Paint| !matches!(p, Paint::Solid { .. });
         if matches!(self.object.shape, Shape::Text(_) | Shape::Image(_))
             && (self.object.style.fill.as_ref().is_some_and(unsupported)
@@ -99,7 +107,8 @@ impl RenderOnce for DisplayElement {
         if issues.iter().any(|i| {
             matches!(
                 i.feature,
-                UnsupportedFeature::TransformedText
+                UnsupportedFeature::LayeredPaint
+                    | UnsupportedFeature::TransformedText
                     | UnsupportedFeature::TransformedImage
                     | UnsupportedFeature::ClippedText
                     | UnsupportedFeature::ClippedImage

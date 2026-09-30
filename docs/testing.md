@@ -148,3 +148,20 @@ CI 使用 Rust 1.98.1 和 `--locked`，只授予 `contents: read`，不需要供
 - 云端 Linux 实際媒体窗口已验证：首帧、Play、Pause、seek 到 3 秒、Mute、Stop 归零；渐变 Gallery 的多色标、径向、透明硬边、曲线描边、旋转、嵌套圆角裁切可见，拖动/旋转成功
 - Studio Run workflow 实際按依赖完成，文本/参考先成功、生成随后执行、输出终态成功，Inspector 可查看状态与输出
 - Windows/macOS 增量结果仍以对应提交 Actions 为准；未做这些平台的真实音频设备/窗口验收
+
+## 视觉布局与多层外观增量（2026-09-30）
+
+- 最终纯 Rust aggregate：268 项通过（含 doctest），常规运行中忽略8项；另行运行7项实际 FFmpeg/SDL dummy 媒体测试全部通过，剩余1项为原有梯度性能测量
+- GPUI library：16项通过，其中6项新增测试覆盖真实矢量 paint 准备顺序、透明层跳过、不同宽度渐变描边缓存、非均匀变换/嵌套裁切、even-odd空洞和逐paint透明度
+- 可选 layout：22项集成测试和1项doctest，覆盖行列/换行/grow/约束、嵌套、身份/监听器保持、原子失败和一次撤销
+- 全 workspace/all-targets check、Clippy `-D warnings`、格式检查通过；五个可执行文档示例通过
+- 新 `layout_appearance` 示例已完成Linux原生编译与链接；当前批次未重新执行真实窗口/鼠标/键盘验收，不能将旧 Gallery 的交互记录视为新功能验收
+- 三平台最新结果以本轮提交的Actions为准；本地上述测试不替代Windows/macOS运行验收
+
+新增入口：
+
+```bash
+cargo run --locked -p flow-studio --bin layout_appearance
+cargo run --locked --manifest-path docs/examples/Cargo.toml --bin layout
+cargo test --locked -p gpui-flow-layout
+```
