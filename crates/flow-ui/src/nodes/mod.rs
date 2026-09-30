@@ -119,8 +119,12 @@ mod tests {
     fn bodies_parse_payloads_and_media_is_explicitly_host_owned() {
         let image = ImageNode::from_node(&builtin_node("image", "image", Point::ZERO));
         assert!(image.source.is_none());
-        let video = VideoNode::from_node(&builtin_node("video", "video", Point::ZERO));
-        assert_eq!(video.duration, Some(12.));
+        let mut video_model = builtin_node("video", "video", Point::ZERO);
+        assert_eq!(VideoNode::from_node(&video_model).duration, None);
+        video_model.data["duration"] = serde_json::json!(12.);
+        assert_eq!(VideoNode::from_node(&video_model).duration, Some(12.));
+        let audio_model = builtin_node("audio", "audio", Point::ZERO);
+        assert_eq!(AudioNode::from_node(&audio_model).duration, None);
         let audio = AudioNode::new("track.wav").waveform([f32::NAN, -0.5, 2.]);
         assert_eq!(audio.waveform, vec![0., 0.5, 1.]);
         assert!(GenerationNode::new("Host configured").provider.is_empty());
