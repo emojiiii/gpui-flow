@@ -71,3 +71,7 @@ CI 配置目标为 Ubuntu 24.04、macOS 15 和 Windows（windows-latest / MSVC�
 ## 状态呈现边界
 
 支持selected/focus/hover/press/disabled的实色base fill与opacity运行时叠加，当前不支持命名states、placeholder、button继承、geometry状态或自动transition。叠加不改Scene/Undo/JSON，hit与fit仍使用canonical geometry；disabled只控制呈现，不代替交互权限。活跃状态采用私有Scene副本绘制，未作大场景增量性能保证。详见[state-styles.md](state-styles.md)
+
+## 响应布局边界
+
+可选引擎提交前provider已支持普通属性/树编辑自动派生layout；没有全局异步watcher、帧合并、局部依赖调度或input/computed分离。runtime配置不序列化/不随Undo回滚；删除后恢复的新instance需宿主重新绑定。严格size/transform白名单、同一次提交/Undo及动画冲突规则见[reactive-layout.md](reactive-layout.md)

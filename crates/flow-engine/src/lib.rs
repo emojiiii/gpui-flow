@@ -4,6 +4,7 @@
 #![doc = include_str!("../README.md")]
 
 mod change;
+mod derive;
 mod engine;
 mod instance;
 mod layout;
@@ -12,6 +13,7 @@ mod registry;
 mod subtree;
 
 pub use change::*;
+pub use derive::{LayoutProvider, LayoutProviderId, MAX_LAYOUT_DERIVATION_PASSES};
 pub use engine::*;
 pub use instance::*;
 pub use layout::*;
@@ -26,6 +28,7 @@ pub enum EngineError {
     InvalidSubtree,
     Registry(String),
     Property(String),
+    Layout(String),
     Exhausted,
 }
 impl std::fmt::Display for EngineError {
@@ -37,6 +40,7 @@ impl std::fmt::Display for EngineError {
             Self::InvalidSubtree => write!(f, "stale or foreign detached subtree"),
             Self::Registry(e) => write!(f, "element registry: {e}"),
             Self::Property(e) => write!(f, "property: {e}"),
+            Self::Layout(e) => write!(f, "layout: {e}"),
             Self::Exhausted => write!(f, "runtime identifier space exhausted"),
         }
     }

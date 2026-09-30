@@ -224,6 +224,18 @@ impl ElementRegistry {
         Ok(object)
     }
     fn build(&self, d: &dyn ElementDefinition, input: &Value) -> Result<Shape, EngineError> {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.build_checked(d, input)
+        }))
+        .map_err(|_| {
+            EngineError::Registry("element definition panicked; candidate discarded".into())
+        })?
+    }
+    fn build_checked(
+        &self,
+        d: &dyn ElementDefinition,
+        input: &Value,
+    ) -> Result<Shape, EngineError> {
         if let Some(v) = input.get("$version")
             && v.as_u64() != Some(d.version() as u64)
         {

@@ -6,8 +6,9 @@ shape geometry and local transforms, so existing GPUI drawing, picking, engine
 bounds, damage, JSON, and editor undo/redo see the same result.
 
 This is a bounded implementation milestone, not Leafer API compatibility or a
-reactive auto-layout scheduler. No layout happens merely because configuration is
-deserialized or a scene size changes. Call an explicit pass after relevant edits.
+asynchronous auto-layout scheduler. Deserialization alone installs no behavior.
+Use explicit passes, or install the optional engine precommit provider described
+in [reactive-layout.md](reactive-layout.md) after initial arrangement.
 
 ## API and transaction boundary
 
@@ -232,3 +233,7 @@ Additional official-source grounding at the same pinned leafer-in revision:
 
 The Rust implementation keeps explicit configuration and atomic snapshots,
 instead of copying prototype/decorator or global watcher behavior.
+
+## Optional engine precommit integration
+
+The standalone calls above remain explicit. After initial arrangement, `install_reactive` opts into automatic derivation on ordinary engine/editor geometry and tree edits. This synchronous mode preserves one commit/history step and uses live instance bindings. It does not add global watchers or serialize runtime ownership. See [reactive-layout.md](reactive-layout.md) for exact installation, lifetime, Undo and animation contracts.

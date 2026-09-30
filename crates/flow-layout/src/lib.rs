@@ -3,6 +3,7 @@
 #![doc = include_str!("../README.md")]
 
 mod arrange;
+mod reactive;
 mod style;
 pub use style::*;
 
@@ -52,8 +53,9 @@ pub(crate) fn invalid(id: &DisplayId, message: impl Into<String>) -> FlowError {
     }
 }
 
-/// Serializable optional layout input. An explicit pass is required after input
-/// changes; this value installs no observers, global plugins, or frame callbacks.
+/// Serializable optional layout input. Explicit passes work independently; opt-in
+/// install_reactive binds engine precommit derivation. This value alone installs
+/// no observers, global plugins, or frame callbacks.
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct FlowLayout {

@@ -60,6 +60,7 @@ jobs:
           cargo run --locked --manifest-path docs/examples/Cargo.toml --bin animation
           cargo run --locked --manifest-path docs/examples/Cargo.toml --bin auto_size
           cargo run --locked --manifest-path docs/examples/Cargo.toml --bin state_styles
+          cargo run --locked --manifest-path docs/examples/Cargo.toml --bin reactive_layout
 
   native:
     name: Native UI (${{ matrix.os }})

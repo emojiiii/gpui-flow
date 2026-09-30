@@ -90,3 +90,11 @@ Native input routing/default-action policy is a separate layer. Direct engine mu
 - `tests/engine.rs`, `tests/layout.rs`, `tests/registry.rs`: identity/lifecycle, incremental/full equivalence, custom schemas and behavior
 
 Run `cargo test -p gpui-flow-engine` and `cargo clippy -p gpui-flow-engine --all-targets -- -D warnings`.
+
+An optional `LayoutProvider` derives relevant geometry/tree edits before their
+single atomic commit. Installation requires a stable initial scene and changes
+runtime configuration only. Providers may write affine transforms and supported
+shape sizes; recursion, scope violations, panic and nonconvergence reject the
+candidate. Undo/Redo restores snapshots without derivation. See
+[reactive layout](../../docs/reactive-layout.md) for the concrete flow adapter,
+live-binding lifecycle and animation ownership.

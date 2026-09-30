@@ -27,6 +27,7 @@ cargo run --locked -p flow-studio --bin layout_appearance
 cargo run --locked -p flow-studio --bin animations
 cargo run --locked -p flow-studio --bin auto_size
 cargo run --locked -p flow-studio --bin state_styles
+cargo run --locked -p flow-studio --bin reactive_layout
 python3 scripts/generate-media-fixtures.py
 cargo run --locked -p flow-studio --bin media
 # Linux 无 desktop portal 时，明确指定 Save/Open 路径：
@@ -118,3 +119,5 @@ cargo +1.98.1 run --locked -p flow-studio
 设计参考 [React Flow 的自定义节点思路](https://reactflow.dev/learn/customization/custom-nodes) 和 [Leafer UI 的画布编辑方式](https://github.com/leaferjs/leafer-ui)，本项目是独立 Rust 实现，不是这些项目的移植，也未声明 API 兼容。当前不为本项目源代码授予开源许可证；各第三方依赖保留其各自许可，分发前需独立审查。
 
 状态样式：`SceneView.state_styles` 提供selected/focus/hover/press/disabled的实色与opacity呈现层，不改文档或Undo；优先级、生命周期及剩余边界见[状态样式契约](docs/state-styles.md)
+
+自动响应布局：先排好初始场景，再用`FlowLayout::install_reactive`绑定引擎；普通属性/树编辑自动在同一提交中派生尺寸与位置，保留一次Undo。安装/生命周期/动画所有权边界见[reactive-layout.md](docs/reactive-layout.md)

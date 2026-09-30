@@ -43,6 +43,8 @@ pub struct SceneEngine {
     revision: u64,
     document_epoch: u64,
     layout: LayoutSnapshot,
+    layout_provider: Option<crate::derive::InstalledLayout>,
+    pub(crate) deriving_layout: std::cell::Cell<bool>,
     instances: Vec<Instance>,
     free: Vec<usize>,
     ids: BTreeMap<DisplayId, usize>,
@@ -91,6 +93,8 @@ impl SceneEngine {
             observers: BTreeMap::new(),
             last_change: ChangeSet::default(),
             callback_panics: 0,
+            layout_provider: None,
+            deriving_layout: std::cell::Cell::new(false),
         };
         let ids = tree_ids(&engine.scene);
         for id in ids {
@@ -118,6 +122,53 @@ impl SceneEngine {
     }
     pub fn registry(&self) -> &ElementRegistry {
         &self.registry
+    }
+    /// Install/replace runtime configuration without changing the document or
+    /// history. The current scene must already be a fixed point of this provider;
+    /// perform an explicit undoable initial layout before installing it.
+    pub fn install_layout_provider(
+        &mut self,
+        provider: impl LayoutProvider,
+    ) -> Result<LayoutProviderId, EngineError> {
+        let next = crate::derive::run(&provider, self, self.scene.clone())?;
+        if next != self.scene {
+            return Err(EngineError::Layout(
+                "arrange the initial scene before installing a reactive provider".into(),
+            ));
+        }
+        let id = LayoutProviderId {
+            engine: self.id,
+            sequence: self.sequence()?,
+        };
+        self.layout_provider = Some(crate::derive::InstalledLayout {
+            id,
+            provider: std::sync::Arc::new(provider),
+        });
+        Ok(id)
+    }
+    pub fn layout_provider(&self) -> Option<LayoutProviderId> {
+        self.layout_provider.as_ref().map(|p| p.id)
+    }
+    /// Stale/foreign tokens cannot remove a replacement. No document mutation.
+    pub fn remove_layout_provider(&mut self, id: LayoutProviderId) -> bool {
+        if self.layout_provider() != Some(id) {
+            return false;
+        }
+        self.layout_provider = None;
+        true
+    }
+    fn derive_candidate(
+        &self,
+        candidate: Scene,
+        origin: ChangeOrigin,
+    ) -> Result<Scene, EngineError> {
+        if !matches!(origin, ChangeOrigin::UndoRedo | ChangeOrigin::Import)
+            && crate::derive::geometry_changed(&self.scene, &candidate)
+            && let Some(installed) = &self.layout_provider
+        {
+            return crate::derive::run(installed.provider.as_ref(), self, candidate);
+        }
+        Ok(candidate)
     }
     /// Increments only for explicit new-document reset, independent of later edits.
     pub fn document_epoch(&self) -> u64 {
@@ -295,7 +346,14 @@ impl SceneEngine {
         &self,
         properties: impl IntoIterator<Item = (ElementHandle, PropertyKey, Value)>,
     ) -> Result<(), EngineError> {
-        self.properties_candidate(properties).map(|_| ())
+        self.validate_properties_batch_with_origin(ChangeOrigin::Edit, properties)
+    }
+    pub fn validate_properties_batch_with_origin(
+        &self,
+        origin: ChangeOrigin,
+        properties: impl IntoIterator<Item = (ElementHandle, PropertyKey, Value)>,
+    ) -> Result<(), EngineError> {
+        self.properties_candidate(origin, properties).map(|_| ())
     }
     /// One validated change batch across multiple attached instances, used by
     /// explicit animation/layout controllers. Invalid input changes no instance.
@@ -304,20 +362,27 @@ impl SceneEngine {
         origin: ChangeOrigin,
         properties: impl IntoIterator<Item = (ElementHandle, PropertyKey, Value)>,
     ) -> Result<ChangeSet, EngineError> {
-        let next = self.properties_candidate(properties)?;
+        let next = self.properties_candidate(origin, properties)?;
         self.apply(next, origin, CommitMode::Normal)
     }
     fn properties_candidate(
         &self,
+        origin: ChangeOrigin,
         properties: impl IntoIterator<Item = (ElementHandle, PropertyKey, Value)>,
     ) -> Result<Scene, EngineError> {
         let mut objects = BTreeMap::new();
+        let mut animated_geometry = Vec::new();
         for (handle, key, value) in properties {
             let id = self.attached_id(handle)?;
             let object = objects
                 .entry(id.clone())
                 .or_insert_with(|| self.scene.get(&id).expect("attached").object.clone());
             apply_property(object, &key, value)?;
+            if origin == ChangeOrigin::Animation
+                && matches!(key, PropertyKey::Transform | PropertyKey::Shape)
+            {
+                animated_geometry.push((id, key));
+            }
         }
         let mut next = self.scene.clone();
         for (id, mut object) in objects {
@@ -336,7 +401,23 @@ impl SceneEngine {
         self.registry
             .prepare_changes(&mut next, Some(&self.scene))?;
         next.validate()?;
-        Ok(next)
+        let derived = self.derive_candidate(next.clone(), origin)?;
+        for (id, key) in animated_geometry {
+            let expected = &next.get(&id).expect("attached").object;
+            let actual = &derived
+                .get(&id)
+                .expect("provider preserves topology")
+                .object;
+            if (key == PropertyKey::Transform && expected.transform != actual.transform)
+                || (key == PropertyKey::Shape && expected.shape != actual.shape)
+            {
+                return Err(EngineError::Layout(format!(
+                    "layout owns animated {} on {id}",
+                    key.name()
+                )));
+            }
+        }
+        Ok(derived)
     }
     pub fn reparent(
         &mut self,
@@ -518,6 +599,9 @@ impl SceneEngine {
     ) -> Result<ChangeSet, EngineError> {
         self.registry
             .prepare_changes(&mut next, Some(&self.scene))?;
+        if !matches!(mode, CommitMode::Reset) {
+            next = self.derive_candidate(next, origin)?;
+        }
         // Detached IDs remain reserved. Only the matching attach operation may
         // reuse them; ordinary history/import cannot alias retained instances.
         let attaching = match &mode {
@@ -679,6 +763,9 @@ impl SceneEngine {
                     new_parent: structural.new_parent.clone(),
                 });
             }
+        }
+        if matches!(mode, CommitMode::Reset) {
+            self.layout_provider = None;
         }
         match mode {
             CommitMode::Detach(token, subtree) => {

@@ -40,3 +40,5 @@ measurement rule. Contradictory grow/stretch ownership is rejected, not guessed.
 `transaction_editor` combines a host input edit and dependent measurement in one
 undoable transaction, normalizing registered custom geometry before measuring.
 It is an explicit host entry point, not a global reactive watcher.
+
+Optional `install_reactive` binds the already arranged configuration to live engine instances. Relevant ordinary edits derive layout before commit; Undo/Redo restores exact snapshots and runtime configuration stays host-owned. See [reactive layout](../../docs/reactive-layout.md) for lifecycle and animation ownership.

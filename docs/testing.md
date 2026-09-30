@@ -201,3 +201,13 @@ cargo test --locked -p gpui-flow-layout
 - 完整workspace/all-targets check、严格Clippy、格式检查、文档Clippy及8个可执行文档示例通过
 - state_styles原生示例完成Linux编译链接；本批未进行真实窗口/鼠标/键盘验收。Windows/macOS自动链接与测试以本轮Actions结果为准
 - 本轮仅fill/opacity状态呈现，不包括自动transition、命名state、placeholder、button继承、geometry状态、状态驱动命中或大场景增量性能保证
+
+## 同步响应布局增量（2026-09-30）
+
+- 最终headless aggregate：381项通过（含doctest），另行7项FFmpeg/SDL dummy通过；唯一未执行的既有项仍为梯度性能测量
+- 新增8项engine provider防护测试及13项reactive flow集成测试，覆盖提交前一次通知/Undo、插入删除/reorder/reparent、挂载/销毁/ID复用、runtime配置与精确Undo、paint/metadata跳过、循环/递归/panic失败原子性
+- 独立审查发现同tag shape篡改风险后收紧为显式size/transform白名单；回归覆盖13类Text/Image/Frame/Polygon/Path非法字段修改、合法Text/Image尺寸修改且保留内容/资源
+- 动画回归包含布局拥有的transform拒绝、custom geometry自动更新父尺寸、中间帧definition panic保持所有数据/时钟/播放token，以及失败普通编辑保留原Redo/播放基线
+- 全workspace/all-targets check、严格Clippy、格式检查、文档Clippy、9个可执行文档示例及18项UI测试通过
+- reactive_layout完成Linux原生链接，控件调用普通SceneEditor::transaction，由已安装provider自动重排；本批未实际打开窗口验收。三平台自动结果以精确提交的Actions为准
+- 没有宣称异步全局watcher、帧合并、局部依赖调度、序列化runtime配置或完整input/computed分离

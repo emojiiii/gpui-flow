@@ -123,6 +123,13 @@ impl SceneEditor {
         self.record(playback.baseline);
         true
     }
+    fn finish_playback_before_edit(&mut self, before: &Snapshot) {
+        if let Some(playback) = self.playback.take()
+            && playback.baseline.scene != before.scene
+        {
+            self.push_undo(playback.baseline);
+        }
+    }
     /// Reserve a playback baseline without changing Undo/Redo. A user gesture
     /// or another playback must finish first; ownership cannot be stolen.
     pub fn begin_playback(&mut self) -> Result<PlaybackToken, EngineError> {
@@ -211,9 +218,11 @@ impl SceneEditor {
         edit: impl FnOnce(&mut Scene) -> Result<(), SceneError>,
     ) -> Result<(), SceneError> {
         self.reconcile_external();
-        self.finish_active_playback();
         let before = self.snapshot();
         self.engine.transaction(edit)?;
+        // A failed input/derived-layout commit must not end playback or discard
+        // its Redo branch. On success, record its last frame before the edit.
+        self.finish_playback_before_edit(&before);
         self.observed_revision = self.engine.revision();
         self.selection.retain_existing(self.engine.scene());
         if self.pending.is_none() {
@@ -229,9 +238,9 @@ impl SceneEditor {
         value: serde_json::Value,
     ) -> Result<(), SceneError> {
         self.reconcile_external();
-        self.finish_active_playback();
         let before = self.snapshot();
         self.engine.set_property(handle, key, value)?;
+        self.finish_playback_before_edit(&before);
         self.observed_revision = self.engine.revision();
         self.selection.retain_existing(self.engine.scene());
         if self.pending.is_none() {

@@ -279,7 +279,7 @@ impl AnimationController {
             });
         }
         self.check_conflict(target, &seen.into_iter().collect::<Vec<_>>(), None)?;
-        engine.validate_properties_batch(endpoint)?;
+        engine.validate_properties_batch_with_origin(ChangeOrigin::Animation, endpoint)?;
         let next = self.next.checked_add(1).ok_or(AnimationError::Capacity)?;
         let id = AnimationId {
             engine: self.engine,
