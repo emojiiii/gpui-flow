@@ -91,9 +91,10 @@ view.on(
 - 支持：实色与多色标线性/径向渐变 fill/stroke、opacity、任意仿射矢量变换、嵌套圆角矢量裁切、NonZero/EvenOdd 填充
 - Text：GPUI 原生排版、字体、字号、换行/对齐；正向轴对齐等比缩放可用
 - Image：本地图片资源、Contain/Cover/Fill；从导入场景不会自动发起网络请求
-- 当前 GPUI 后端不绘制：文字/图片的渐变蒙版、旋转/斜切/翻转/非等比缩放文字或图片、Frame 裁切内的文字/图片。这些会记录在 `SceneView.diagnostics`，界面给出诊断计数，不静默假装支持
+- 当前 GPUI 后端不绘制：文字/图片的渐变蒙版、旋转/斜切/翻转/非等比缩放文字或图片、圆角/旋转/斜切/非等比变换的 Frame 裁切内文字/图片。这些会记录在 `SceneView.diagnostics`，界面给出诊断计数，不静默假装支持
 - 矢量渐变由真实颜色采样生成设备分辨率纹理；支持硬色标、透明度和局部坐标映射。大小限制、缓存与错误诊断见 [渐变渲染](gradients.md)
-- 未实现：通用 SVG 文件解析、滤镜/混合模式/阴影、动画时间线、自动布局、任意蒙版、文本轮廓化、视频音频解码、协作/CRDT、百万元素性能保证
+- 另有可选[行列/内容与响应布局](flow-layout.md)、[基础属性动画及有界关键帧序列](animation.md)、[真实文字测量](text-measurement.md)，以及可替换 FFmpeg 媒体解码/播放后端
+- 未实现：通用 SVG 文件解析、滤镜/混合模式/阴影、完整动画时间线、任意蒙版、文本轮廓化、协作/CRDT、百万元素性能保证
 
 可以通过独立图形 primitive/Scene APIs 构建自己的 adapter；当前支持矩阵应作为后端契约而非整个框架未来能力上限。
 
@@ -112,3 +113,5 @@ cargo run --locked -p flow-studio --bin composition
 
 
 SceneView 使用 `interaction::scene::ScenePluginHost`，与 FlowCanvas 共用 CanvasPlugin 泛型协议、CanvasEvent、PluginLifecycle 和 AccessPolicy。场景文档命令为 SceneCommand，图文档命令为 CanvasCommand；二者不能混用。set_editable、set_access_policy、install_plugin、uninstall_plugin、replace_plugin、set_plugin_enabled 均经相同的取消/只读规则。SceneSnappingPlugin 可选安装；场景没有图端口，因此不安装 connection 插件。
+
+Text/Image 已支持平移与正等比缩放下的嵌套矩形 Frame/Box 裁切，图片 fit 和文本对齐使用原完整尺寸；空交集不绘制、不命中。见 [原生矩形裁切](native-clipping.md)。

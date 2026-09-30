@@ -36,6 +36,20 @@ impl TextPaintPlan {
     }
 }
 
+fn native_mask(
+    visible: gpui_flow_scene::Bounds,
+    model_origin: Point<Pixels>,
+    actual_bounds: Bounds<Pixels>,
+) -> ContentMask<Pixels> {
+    let offset = actual_bounds.origin - model_origin;
+    ContentMask {
+        bounds: Bounds::new(
+            point(px(visible.origin.x), px(visible.origin.y)) + offset,
+            size(px(visible.size.width), px(visible.size.height)),
+        ),
+    }
+}
+
 pub(super) fn text_element(text: &Text, object: &RenderObject) -> AnyElement {
     let m = object.screen_transform;
     let color = match &object.object.style.fill {
@@ -52,6 +66,19 @@ pub(super) fn text_element(text: &Text, object: &RenderObject) -> AnyElement {
         align,
         bounds: model_bounds,
     } = TextPaintPlan::new(text, m);
+    let own_bounds = gpui_flow_scene::Bounds::new(
+        gpui_flow_scene::Point::new(m.tx, m.ty),
+        gpui_flow_scene::Size::new(
+            model_bounds.size.width.into(),
+            model_bounds.size.height.into(),
+        ),
+    );
+    let Ok(clip) = super::rect_clip::plan(object) else {
+        return div().into_any_element();
+    };
+    let Some(visible) = clip.visible(own_bounds) else {
+        return div().into_any_element();
+    };
     canvas(
         move |_, window, _| {
             catch_unwind(AssertUnwindSafe(|| {
@@ -68,7 +95,11 @@ pub(super) fn text_element(text: &Text, object: &RenderObject) -> AnyElement {
                     return;
                 }
             };
-            window.with_content_mask(Some(ContentMask { bounds }), |window| {
+            // canvas bounds includes the host's origin; clip plans are viewport
+            // relative. Translate both by the same origin before intersection.
+            let mask = native_mask(visible, model_bounds.origin, bounds);
+            // GPUI intersects this with the existing host content mask.
+            window.with_content_mask(Some(mask), |window| {
                 let mut origin = bounds.origin;
                 for line in lines {
                     if let Err(error) =
@@ -125,6 +156,29 @@ mod tests {
                 .request
                 .wrap_width,
             None
+        );
+    }
+    #[::core::prelude::v1::test]
+    fn native_mask_translates_host_origin_and_intersects_existing_occlusion() {
+        let visible = gpui_flow_scene::Bounds::new(
+            gpui_flow_scene::Point::new(20., 30.),
+            Size::new(40., 20.),
+        );
+        let original = Bounds::new(point(px(310.), px(420.)), size(px(100.), px(50.)));
+        let mask = native_mask(visible, point(px(10.), px(20.)), original);
+        assert_eq!(
+            mask.bounds,
+            Bounds::new(point(px(320.), px(430.)), size(px(40.), px(20.)))
+        );
+        let host = ContentMask {
+            bounds: Bounds::new(point(px(330.), px(435.)), size(px(10.), px(5.))),
+        };
+        assert_eq!(host.intersect(&mask), host);
+        assert_eq!(mask.intersect(&host), host);
+        assert_eq!(
+            original.size,
+            size(px(100.), px(50.)),
+            "clip does not change text alignment box"
         );
     }
 }

@@ -85,9 +85,7 @@ No available usable font is an error, including for empty text.
 Metrics are in model units. Viewport zoom and device pixel ratio never rewrite
 text dimensions or enter the model cache. The painter scales font size, wrap
 width, line height and clip rectangle together. Existing renderer limits remain:
-positive uniform text transforms and its own rectangular overflow clip are
-supported; skew/rotation/nonuniform transforms and ancestor vector Frame clipping
-continue to report unsupported diagnostics.
+positive uniform text transforms, its own overflow rectangle and nested rectangular Frame clips are supported; skew/rotation/nonuniform transforms and rounded/affine native clips continue to report unsupported diagnostics. See [native clipping](native-clipping.md).
 
 Successful metric requests are cached by all inputs, at most 128 entries and
 1 MiB of text/family bytes. Errors are not cached. Resource invalidation clears

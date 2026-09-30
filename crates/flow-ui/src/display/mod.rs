@@ -4,6 +4,7 @@ mod clip;
 mod diagnostics;
 mod gradient;
 mod image;
+mod rect_clip;
 pub use gradient::{
     GradientCacheStats, GradientRenderIssue, clear_gradient_cache, gradient_cache_stats,
     gradient_render_issues, take_gradient_render_issues,
@@ -63,18 +64,13 @@ impl RenderObject {
         {
             report(UnsupportedFeature::GradientPaint);
         }
-        let m = self.screen_transform;
-        let transformed = m.b.abs() > 0.0001
-            || m.c.abs() > 0.0001
-            || m.a <= 0.
-            || m.d <= 0.
-            || (m.a - m.d).abs() > 0.0001;
+        let transformed = !rect_clip::supports_transform(self.screen_transform);
         match self.object.shape {
             Shape::Text(_) => {
                 if transformed {
                     report(UnsupportedFeature::TransformedText);
                 }
-                if !self.clips.is_empty() {
+                if rect_clip::plan(self).is_err() {
                     report(UnsupportedFeature::ClippedText);
                 }
             }
@@ -82,7 +78,7 @@ impl RenderObject {
                 if transformed {
                     report(UnsupportedFeature::TransformedImage);
                 }
-                if !self.clips.is_empty() {
+                if rect_clip::plan(self).is_err() {
                     report(UnsupportedFeature::ClippedImage);
                 }
             }

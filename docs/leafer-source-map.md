@@ -18,9 +18,10 @@ Status: source research and proposed contracts, **not an implementation/parity c
 - 程序焦点增量：宿主/监听队列请求，选中分离、Blur阶段处理动作、失效目标抑制、256预算及native一次同步；不含Tab/IME/无障碍，见[focus-routing.md](focus-routing.md)
 - 反向布局增量：RowReverse/ColumnReverse逆序遍历后按正常坐标排布，wrap_reverse独立反转完整行/列；原树/paint顺序与runtime身份保持，嵌套auto-size/ownership/reactive单Undo沿用既有管线。未把shrinkContent误当CSS shrink
 - 文字测量增量：字体/字号/字重、同源GPUI shaping/paint、换行/空行、真实尺寸进入响应布局，绑定/动画/Undo边界及显式字体metrics失效后同步reflow；本轮仅纯文本子集，无富文本编辑/IME/百分比/完整文字排版，见[text-measurement.md](text-measurement.md)
+- 原生裁切增量：Text/Image共享矩形clip链，嵌套Frame/Box、平移与正等比缩放，Text保留完整对齐框、Image保留fit框并负偏移裁切；空交集不paint不hit，矢量圆角/仿射裁切保持。原生圆角/任意路径mask仍缺，见[native-clipping.md](native-clipping.md)
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
-## 九类能力当前边界（本轮真实文字测量后）
+## 九类能力当前边界（本轮原生矩形裁切后）
 
 这里描述已经落地的行为与仍待实现的契约；下方历史源码差距表保留研究基线。
 
@@ -28,10 +29,10 @@ Status: source research and proposed contracts, **not an implementation/parity c
 |---|---|---|
 | 事件 | 实例持有、捕获/目标/冒泡、once、队列、默认动作前路由、KeyUp、不可取消Blur/Focus及related target | 多指/压力、双击/长按、IME及完整事件族 |
 | 交互 | 选择/拖动/缩放/捕获取消、Space平移、插件策略、程序焦点/有界重定向/native同步 | 专用内外编辑工具生命周期、复杂手势 |
-| 外观 | 多层矢量paint、线性/径向渐变、描边bounds/picking、paint-only状态呈现及实色/opacity过渡 | 隔离透明度、blend、mask、shadow/filter |
+| 外观 | 多层矢量paint、线性/径向渐变、描边bounds/picking、paint-only状态呈现及实色/opacity过渡、Text/Image矩形祖先clip链 | 隔离透明度、blend、mask、shadow/filter |
 | 布局 | 固定/内容轴、双轴reverse遍历/wrap-reverse、wrap测量、真实字体文字Natural/AutoHeight、嵌套有界收敛、opt-in提交前自动派生 | 帧合并/局部依赖调度、百分比、shrinkContent、文本baseline/富排版 |
 | 数据 | 类型属性/schema/default、原子变化、dirty分类、JSON | 完整input/computed分离及Leafer导入导出 |
-| 元素 | 主要原语、场景树、变换、裁切、统一几何命中 | 命令式Canvas元素、各类型高级属性完全覆盖 |
+| 元素 | 主要原语、场景树、变换、矢量完整裁切及原生矩形clip、统一几何命中 | 命令式Canvas元素、各类型高级属性完全覆盖 |
 | 自定义元素 | 注册factory/schema、确定性自定义几何/picking、数值动画 | 自定义resize/编辑工具协议、异步资源就绪整合 |
 | 实例 | 独立引擎/代际handle、clone/detach/reparent/destroy | 多层App实例组合与跨层转发 |
 | 生命周期 | 原子结构事件、销毁监听清理、动画目标失效/编辑历史保护 | Ready/ViewReady/Complete分阶段资源管线 |

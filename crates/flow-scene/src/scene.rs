@@ -94,6 +94,29 @@ pub struct ClipRegion {
     pub world_transform: Affine,
 }
 impl ClipRegion {
+    /// Broad-phase visibility for a positive-area object rectangle. Exact
+    /// rounded/transformed point containment still uses each clip's contains.
+    /// Edge-only contact is empty; boundaries of nonempty rectangles retain the
+    /// inclusive Bounds::contains convention.
+    pub fn has_visible_area(mut bounds: Bounds, clips: &[Self]) -> bool {
+        if !bounds.is_valid() || !bounds.size.is_positive() {
+            return false;
+        }
+        for clip in clips {
+            let clip_bounds = clip.world_bounds();
+            if !clip_bounds.is_valid() {
+                return false;
+            }
+            let Some(next) = crate::geometry::intersection(bounds, clip_bounds) else {
+                return false;
+            };
+            if !next.is_valid() || !next.size.is_positive() {
+                return false;
+            }
+            bounds = next;
+        }
+        true
+    }
     pub fn world_bounds(self) -> Bounds {
         self.world_transform.transform_bounds(self.local_bounds)
     }
@@ -523,6 +546,15 @@ impl Scene {
                 || (!options.include_locked && item.locked)
                 || item.object.hit_policy == HitPolicy::None
                 || item.clips.iter().any(|clip| !clip.contains(world))
+                || (matches!(
+                    item.object.shape,
+                    crate::Shape::Text(_) | crate::Shape::Image(_)
+                ) && !ClipRegion::has_visible_area(
+                    item.world_transform.transform_bounds(
+                        item.object.shape.local_bounds().expect("text/image bounds"),
+                    ),
+                    &item.clips,
+                ))
             {
                 continue;
             }

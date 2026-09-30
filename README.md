@@ -29,6 +29,7 @@ cargo run --locked -p flow-studio --bin auto_size
 cargo run --locked -p flow-studio --bin state_styles
 cargo run --locked -p flow-studio --bin reactive_layout
 cargo run --locked -p flow-studio --bin measured_text
+cargo run --locked -p flow-studio --bin clip_chains
 cargo run --locked -p flow-studio --bin text_measure_probe # 无窗口真实字体探针
 python3 scripts/generate-media-fixtures.py
 cargo run --locked -p flow-studio --bin media
@@ -39,6 +40,7 @@ cargo run --locked -p flow-studio -- --file ./canvas.flow.json
 - **Interactions**：拖拽连线/吸附、有效和无效目标、只读及独立插件开关
 - **Studio**：节点工作流与原生内容编辑、文件 Save/Open、连接/分组、mock runner
 - **Primitives**：通用场景原语、嵌套变换/裁切、点击/拖动/缩放/旋转、捕获事件
+- **Clip chains**：Text/Image 在嵌套矩形 Frame 内真实裁切，图片 fit 保持完整尺寸；平移/正等比缩放/空交集与命中一致
 - **Measured text**：真实字体/字重/换行/行高测量，普通文字或容器宽度编辑联动自动高度，一次 Undo；支持中文/emoji 与显式字体缓存刷新
 - **Auto size**：按内容测量容器、换行自动高度、嵌套收敛；输入与布局同一Undo事务
 - **Animations**：真实属性插值、pause/resume/seek和实例销毁保护；完成一个Undo步骤，取消保留原历史
@@ -93,6 +95,7 @@ cargo +1.98.1 run --locked -p flow-studio
 
 ## 文档导航
 
+- [原生 Text/Image 矩形裁切链](docs/native-clipping.md)
 - [真实文字测量与响应尺寸](docs/text-measurement.md)
 
 - [Leafer 源码分层、差距与验收契约](docs/leafer-source-map.md)

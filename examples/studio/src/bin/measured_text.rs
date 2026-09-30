@@ -16,7 +16,7 @@ impl Lab {
         let mut scene = Scene::new();
         scene
             .insert(
-                DisplayObject::new("frame", display::Box::new(500., 600.).rounded(12.))
+                DisplayObject::new("frame", display::Frame::new(500., 600.))
                     .with_transform(Affine::translation(40., 40.))
                     .with_style(Style::fill(Color::hex(0x253249))),
                 None,
@@ -103,7 +103,7 @@ impl Render for Lab {
             .size;
         div().size_full().flex().flex_col().bg(rgb(theme.background)).text_color(rgb(theme.foreground))
             .child(div().h(px(65.)).px_4().flex().items_center().gap_2()
-                .child(ControlButton::new("width", "Width").on_click(cx.listener(|this, _, _, cx| this.edit(|s| s.update_object(&"frame".into(), |o| { let Shape::Box(f) = &mut o.shape else { unreachable!() }; f.size.width = if f.size.width > 400. { 320. } else { 700. }; }), cx))))
+                .child(ControlButton::new("width", "Width").on_click(cx.listener(|this, _, _, cx| this.edit(|s| s.update_object(&"frame".into(), |o| { let Shape::Frame(f) = &mut o.shape else { unreachable!() }; f.size.width = if f.size.width > 400. { 320. } else { 700. }; }), cx))))
                 .child(ControlButton::new("size", "Font size").on_click(cx.listener(|this, _, _, cx| this.edit(|s| s.update_object(&"body".into(), |o| { let Shape::Text(t) = &mut o.shape else { unreachable!() }; t.font_size = if t.font_size > 22. { 18. } else { 28. }; }), cx))))
                 .child(ControlButton::new("weight", "Weight").on_click(cx.listener(|this, _, _, cx| this.edit(|s| s.update_object(&"body".into(), |o| { let Shape::Text(t) = &mut o.shape else { unreachable!() }; t.font_weight = if t.font_weight == 400 { 700 } else { 400 }; }), cx))))
                 .child(ControlButton::new("content", "Content / empty").on_click(cx.listener(|this, _, _, cx| this.edit(|s| s.update_object(&"body".into(), |o| { let Shape::Text(t) = &mut o.shape else { unreachable!() }; t.content = if t.content.is_empty() { "中文与 English 👩‍💻\nTrailing newline keeps one empty line.\n".into() } else { String::new() }; }), cx))))

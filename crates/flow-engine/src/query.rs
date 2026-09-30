@@ -2,8 +2,8 @@ use crate::layout::intersection;
 use crate::subtree::paint_ids;
 use crate::{EngineError, LayoutEntry, SceneEngine};
 use gpui_flow_scene::{
-    Affine, Bounds, DisplayId, HitPolicy, HitTestOptions, HitTestResult, PaintItem, Point,
-    SceneError, Shape,
+    Affine, Bounds, ClipRegion, DisplayId, HitPolicy, HitTestOptions, HitTestResult, PaintItem,
+    Point, SceneError, Shape,
 };
 impl SceneEngine {
     pub fn world_transform(&self, id: &DisplayId) -> Result<Affine, EngineError> {
@@ -93,6 +93,13 @@ impl SceneEngine {
                 || (!options.include_invisible && (!e.visible || e.opacity <= 0.))
                 || object.hit_policy == HitPolicy::None
                 || e.clips.iter().any(|c| !c.contains(world))
+                || (matches!(object.shape, Shape::Text(_) | Shape::Image(_))
+                    && !ClipRegion::has_visible_area(
+                        e.world_transform.transform_bounds(
+                            object.shape.local_bounds().expect("text/image bounds"),
+                        ),
+                        &e.clips,
+                    ))
             {
                 continue;
             }

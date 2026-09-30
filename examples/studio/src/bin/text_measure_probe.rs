@@ -99,7 +99,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert!(backend.measure(&invalid).is_err());
     let mut scene = Scene::new();
     scene.insert(
-        DisplayObject::new("frame", display::Box::new(180., 500.)),
+        DisplayObject::new("frame", display::Frame::new(180., 500.)),
         None,
         None,
     )?;
@@ -153,7 +153,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .height;
     editor.transaction(|s| {
         s.update_object(&"frame".into(), |o| {
-            let Shape::Box(f) = &mut o.shape else {
+            let Shape::Frame(f) = &mut o.shape else {
                 unreachable!()
             };
             f.size.width = 320.;
