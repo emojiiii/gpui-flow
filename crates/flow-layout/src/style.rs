@@ -128,6 +128,38 @@ impl AxisSizing {
     }
 }
 
+/// Spacing policy for items or wrapped lines on a fixed-size axis.
+/// Automatic modes replace the numeric gap; they never resize child geometry.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GapMode {
+    /// Use the existing non-negative numeric gap.
+    #[default]
+    Fixed,
+    /// Divide positive remaining space equally; overflowing items have zero gap.
+    Auto,
+    /// Divide remaining space equally, including negative gaps (overlap).
+    Fit,
+}
+impl GapMode {
+    pub(crate) fn is_fixed(&self) -> bool {
+        *self == Self::Fixed
+    }
+    pub(crate) fn initial(self, fixed: f32) -> f64 {
+        if self == Self::Fixed {
+            f64::from(fixed)
+        } else {
+            0.0
+        }
+    }
+    /// Upstream autoGap operates only on two or more slots. A singleton keeps
+    /// normal alignment; there is no outer-edge spacing or division by zero.
+    pub(crate) fn distribute(self, available: f64, occupied: f64, count: usize) -> Option<f64> {
+        (count > 1 && (self == Self::Fit || (self == Self::Auto && available > occupied)))
+            .then(|| (available - occupied) / (count - 1) as f64)
+    }
+}
+
 /// Box/Frame content layout, in the container's intrinsic local units.
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -136,10 +168,16 @@ pub struct FlowStyle {
     pub height_sizing: AxisSizing,
     pub direction: FlowDirection,
     pub padding: Insets,
-    /// Minimum gap between items on the main axis.
+    /// Minimum gap between items on the main axis, when gap_mode is Fixed.
     pub gap: f32,
-    /// Gap between wrapped rows/columns on the cross axis.
+    /// Optional automatic main-axis spacing. Missing JSON retains numeric gaps.
+    #[serde(skip_serializing_if = "GapMode::is_fixed")]
+    pub gap_mode: GapMode,
+    /// Gap between wrapped rows/columns, when line_gap_mode is Fixed.
     pub line_gap: f32,
+    /// Optional automatic cross-axis spacing between completed wrapped lines.
+    #[serde(skip_serializing_if = "GapMode::is_fixed")]
+    pub line_gap_mode: GapMode,
     pub wrap: bool,
     /// Reverse completed line placement on the cross axis. Ignored when actual
     /// wrapping is disabled; does not reverse children within a line.
@@ -187,6 +225,17 @@ impl Default for FlowItem {
 pub(crate) fn validate_style(s: &FlowStyle) -> Result<(), String> {
     s.width_sizing.validate()?;
     s.height_sizing.validate()?;
+    let (main, cross) = if s.direction.is_row() {
+        (s.width_sizing, s.height_sizing)
+    } else {
+        (s.height_sizing, s.width_sizing)
+    };
+    if !s.gap_mode.is_fixed() && main.is_content() {
+        return Err("automatic item gaps require a fixed-size main axis".into());
+    }
+    if !s.line_gap_mode.is_fixed() && cross.is_content() {
+        return Err("automatic line gaps require a fixed-size cross axis".into());
+    }
     for (name, value) in [
         ("padding.top", s.padding.top),
         ("padding.right", s.padding.right),

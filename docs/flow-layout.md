@@ -79,7 +79,8 @@ a singleton stays at Start. `align_items` supports Start, Center, End, and Stret
 with a per-item `align_self` override. A non-wrapped line uses the full content
 cross-axis extent. Wrapped lines use their tallest/widest measured item, and the
 complete line block is placed with Start/Center/End `align_content`. Overflow is
-start-aligned; there is no negative spacing or shrink-to-fit behavior.
+start-aligned with fixed/Auto spacing. Opt-in Fit spacing can overlap items;
+there is no implicit geometry shrink-to-fit behavior.
 
 Wrapping uses each item's constrained main-axis basis plus the complete next gap
 before deciding to start a new line. An oversized item occupies its own line and
@@ -148,10 +149,11 @@ ordered children, separate hidden/excluded participation, per-line allocation,
 and range-constrained grow. This module deliberately uses typed optional input
 and atomic scene changes instead of JavaScript prototype mutation.
 
-Not implemented: global reactive scheduling, percentages, baseline
-alignment, automatic/fit gap strings, grow on the cross axis, ratio locking,
+Not implemented: global reactive scheduling, grow on the cross axis, ratio locking,
 shrink, stroke-box measurement, reactive dependency scheduling, input/computed
 property separation within Scene itself, or Leafer import/export compatibility.
+Percentages and baseline alignment are also unsupported here; the official Flow
+reference labels these future support, so they are not claimed existing Leafer gaps.
 Current scene mutators clone/validate candidates; this layout module is not a
 linear-time or large-scene performance guarantee.
 
@@ -279,3 +281,84 @@ Upstream shrinkContent/shrinkContentCancel separates padded content bounds from
 box bounds; it is not a CSS flex-shrink implementation. This milestone adds no
 implicit negative-free-space shrinking, percentages, text intrinsic measurement,
 frame scheduler or global input/computed property system.
+
+
+## Automatic and fit spacing
+
+```rust
+use gpui_flow_layout::{FlowStyle, GapMode};
+let style = FlowStyle {
+    wrap: true,
+    gap_mode: GapMode::Auto,
+    line_gap_mode: GapMode::Fit,
+    ..Default::default()
+};
+```
+
+`gap_mode` selects main-axis item spacing; `line_gap_mode` selects spacing between
+completed wrapped lines on the cross axis. `Fixed` is the default and retains the
+existing finite, non-negative numeric `gap` / `line_gap`. `Auto` and `Fit` replace
+that numeric value with a computed gap. Numeric values are still validated even
+when replaced. These are typed Rust/JSON mode fields, not Leafer API imports.
+Old JSON without mode fields still behaves identically; default `Fixed` fields
+are omitted when serializing. Existing `gap: 8.0` source expressions keep their
+numeric type. Exhaustive `FlowStyle` literals must supply the two new fields or
+use `..Default::default()`.
+
+The no-grow spacing policy follows pinned Leafer
+[`common/gap.ts`](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/flow/src/layout/common/gap.ts)
+and its callers in
+[`flowX.ts`](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/flow/src/layout/flowX.ts)
+/
+[`flowY.ts`](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/flow/src/layout/flowY.ts):
+
+- For two or more slots, Auto divides positive leftover extent by `count - 1`.
+  It uses zero gap when the slots fill or overflow the available extent
+- Fit divides all leftover extent by `count - 1`, including negative values.
+  Child geometry remains unchanged. The last slot can start before the first
+  when its extent exceeds the available axis; no artificial non-overlap clamp
+- No outer-edge gap is inserted. Padding is removed before calculating extent
+- Empty and singleton sets have no automatic gap and retain normal alignment
+- Wrapping measures items with zero automatic gap. Each completed line distributes
+  its own remaining main-axis space; Fit does not force all children onto one line
+- Row/RowReverse with positive `grow` uses zero automatic item gap, matching
+  `flowX`'s grow-or-gap precedence, even when every growing item reaches its maximum.
+  Existing explicit `justify` policy still applies to any remainder; automatic-gap
+  distribution does not run afterward
+- Column/ColumnReverse with participating positive `grow` supports Auto, whose
+  gap remains zero: positive grow consumes the space and exhausted grow leaves
+  nothing for Auto. Its combination with Fit is rejected atomically. Pinned
+  `flowY` runs `autoGap` after `growY` independently, unlike `flowX`; Fit can then
+  compute negative gaps after exhausted grow. That order is not emulated on top
+  of Flow's existing constrained-basis allocation. Fixed-gap column grow remains
+  unchanged; automatic cross-line gaps can still accompany column grow
+- Line gaps distribute the available cross extent after all line sizes are known.
+  `wrap_reverse` reverses whole lines after measurement; traversal reverse and
+  structural/paint order keep their existing independent behavior
+- Hidden participating children count; `in_flow=false` children do not
+
+This bounded implementation requires each automatic spacing axis to be fixed-size
+and rejects content sizing on that same axis rather than inventing a feedback rule.
+A fixed main axis with automatic item gaps may still have a content-sized cross
+axis, provided line gaps stay Fixed. Automatic line gaps have no effect without
+actual wrapping. Stroke-box measurement, per-axis item weights, and ratio locking
+remain separate missing capabilities.
+
+### Reuse and validation boundary
+
+Taffy 0.13.0 continues to compute item sizes, min/max redistribution, and cross-axis
+alignment/stretch. No new solver dependency or replacement allocator was added.
+The adapter passes zero numeric gap while computing an automatic line, then applies
+a small f64 signed-spacing policy to its main positions. CSS gap semantics are
+non-negative; Leafer's negative Fit gaps require this policy layer. The previous
+f64 huge/subnormal/weight-ratio fallback is unchanged. Cross-line assembly remains
+in the existing Flow adapter. Scene mutation, overflow checks, reactive derivation,
+engine handles and one-Undo transactions remain on the existing shared path.
+
+The focused `gap_modes` fixtures cover positive/negative spacing, overflowing and
+singleton slots, empty containers, both axes, wrap/reverse, grow/caps, transformed
+boxes, hidden/excluded participation, fractional/huge values, invalid inputs,
+old JSON defaults, repeat stability, and reactive resize/undo. Run
+`cargo test -p gpui-flow-layout --test gap_modes` plus the crate's existing suites.
+These fixtures are independent expected-output contracts from the pinned upstream
+policy; they are not a claim of full Leafer import/export or browser parity.

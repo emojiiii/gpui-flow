@@ -1,4 +1,4 @@
-use crate::{AlignContent, FlowError, FlowItem, FlowStyle, invalid};
+use crate::{AlignContent, FlowError, FlowItem, FlowStyle, JustifyContent, invalid};
 use gpui_flow_scene::{Affine, Bounds, DisplayId, DisplayObject, Scene, Shape};
 use std::collections::BTreeMap;
 
@@ -97,7 +97,10 @@ pub(crate) fn container(
     let (mut available_main, mut available_cross) = axis(row, width, height);
     let (origin_main, origin_cross) =
         axis(row, style.padding.left as f64, style.padding.top as f64);
-    let gap = style.gap as f64;
+    // Leafer forms auto/fit lines with zero gap, then distributes their space.
+    // Keep fixed-gap line formation and the existing Taffy adapter unchanged.
+    let gap = style.gap_mode.initial(style.gap);
+    let initial_line_gap = style.line_gap_mode.initial(style.line_gap);
     let mut lines = Vec::new();
     let mut line = Line::default();
     let mut count = 0;
@@ -149,7 +152,7 @@ pub(crate) fn container(
     }
     let natural_main = lines.iter().map(|line| line.main).fold(0.0, f64::max);
     let natural_cross = lines.iter().map(|line| line.cross).sum::<f64>()
-        + style.line_gap as f64 * lines.len().saturating_sub(1) as f64;
+        + initial_line_gap * lines.len().saturating_sub(1) as f64;
     let (natural_width, natural_height) = axis(row, natural_main, natural_cross);
     let next_width = scalar(
         id,
@@ -190,8 +193,19 @@ pub(crate) fn container(
             line.cross = available_cross;
         }
     }
-    let total_cross: f64 = lines.iter().map(|l| l.cross).sum::<f64>()
-        + style.line_gap as f64 * lines.len().saturating_sub(1) as f64;
+    let occupied_cross: f64 = lines.iter().map(|l| l.cross).sum();
+    let automatic_line_gap =
+        style
+            .line_gap_mode
+            .distribute(available_cross, occupied_cross, lines.len());
+    let line_gap = automatic_line_gap.unwrap_or(initial_line_gap);
+    // Upstream sets the resolved extent directly. Recomputing it from signed
+    // gaps could cancel huge values and invent free alignment space.
+    let total_cross = if automatic_line_gap.is_some() {
+        available_cross
+    } else {
+        occupied_cross + line_gap * lines.len().saturating_sub(1) as f64
+    };
     let cross_free = (available_cross - total_cross).max(0.0);
     let mut cross_at = origin_cross
         + match style.align_content {
@@ -202,8 +216,36 @@ pub(crate) fn container(
     if wrap && style.wrap_reverse {
         lines.reverse();
     }
+    let mut numeric_style = style.clone();
+    numeric_style.gap = gap as f32;
     for mut line in lines {
-        let positions = solver::solve(id, &mut line, available_main, style, auto_main)?;
+        // Leafer flowX grow wins over automatic gaps, even when all growing
+        // items cap. flowY's Auto after grow is also zero. Its Fit-after-grow
+        // ordering is outside this slice; column grow + Fit is rejected.
+        let automatic_gap = if line.items.iter().any(|item| item.input.grow > 0.0) {
+            None
+        } else {
+            style
+                .gap_mode
+                .distribute(available_main, line.main, line.items.len())
+        };
+        numeric_style.justify = if automatic_gap.is_some() {
+            JustifyContent::Start
+        } else {
+            style.justify
+        };
+        let mut positions =
+            solver::solve(id, &mut line, available_main, &numeric_style, auto_main)?;
+        if let Some(gap) = automatic_gap {
+            // CSS gaps cannot express Leafer's signed Fit spacing. Taffy still
+            // owns item sizes/cross alignment; this small f64 policy owns only
+            // the automatic main positions, including overflowing/negative ones.
+            let mut main = 0.0;
+            for (item, position) in line.items.iter().zip(&mut positions) {
+                position.main = main;
+                main += item.main + gap;
+            }
+        }
         for (mut item, position) in line.items.into_iter().zip(positions) {
             let (width, height) = axis(row, item.main, item.cross);
             let (x, y) = axis(row, origin_main + position.main, cross_at + position.cross);
@@ -216,7 +258,7 @@ pub(crate) fn container(
                 scene.update_object(&child, |object| *object = item.object)?;
             }
         }
-        cross_at += line.cross + style.line_gap as f64;
+        cross_at += line.cross + line_gap;
     }
     Ok(count)
 }

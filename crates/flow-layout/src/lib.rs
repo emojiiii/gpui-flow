@@ -132,6 +132,15 @@ impl FlowLayout {
                 if !item.in_flow {
                     continue;
                 }
+                // Pinned Leafer flowY runs automatic gaps after growY, unlike
+                // flowX's grow-or-gap branch. Do not approximate that ordering
+                // on top of this adapter's existing basis/minimum allocation.
+                if item.grow > 0.0 && !style.direction.is_row() && style.gap_mode == GapMode::Fit {
+                    return Err(invalid(
+                        child,
+                        "fit item gaps with column grow are unsupported; use fixed/auto gaps or remove grow",
+                    ));
+                }
                 if auto_main && item.grow > 0.0 {
                     return Err(invalid(
                         child,

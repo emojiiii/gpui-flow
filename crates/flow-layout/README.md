@@ -1,7 +1,7 @@
 # gpui-flow-layout
 
 Pure Rust, opt-in row/column flow layout for fixed and content-sized scene Box/Frame containers.
-Padding, item/line gaps, wrapping (including reverse line placement),
+Padding, fixed/automatic/fit item and line gaps, wrapping (including reverse line placement),
 row/column reverse traversal, alignment, weighted grow, and min/max sizes
 produce normal scene geometry and transform changes. No GPUI dependency or clock.
 
@@ -55,3 +55,11 @@ core tests use explicit contract fixtures. No backend is silently substituted.
 Measured edits compose with reactive layout and one Undo; explicit
 `refresh_text_metrics` invalidates cached metrics and actually reflows.
 See [text measurement](../../docs/text-measurement.md).
+
+`GapMode::Auto` distributes positive space between items (or wrapped lines);
+`GapMode::Fit` also permits negative spacing/overlap without resizing geometry.
+Set `gap_mode` and `line_gap_mode` independently; both default to `Fixed`, retaining
+existing numeric `gap`/`line_gap` behavior and JSON. Automatic spacing requires a
+fixed-size axis. Row grow takes precedence; column grow supports Auto but its
+combination with Fit is explicitly unsupported. Singleton slots keep their normal
+alignment. See [spacing rules](../../docs/flow-layout.md#automatic-and-fit-spacing).
