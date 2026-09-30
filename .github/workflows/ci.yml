@@ -58,6 +58,7 @@ jobs:
           cargo run --locked --manifest-path docs/examples/Cargo.toml --bin plugins
           cargo run --locked --manifest-path docs/examples/Cargo.toml --bin layout
           cargo run --locked --manifest-path docs/examples/Cargo.toml --bin animation
+          cargo run --locked --manifest-path docs/examples/Cargo.toml --bin auto_size
 
   native:
     name: Native UI (${{ matrix.os }})

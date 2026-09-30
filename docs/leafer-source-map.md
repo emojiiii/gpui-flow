@@ -2,17 +2,36 @@
 
 Status: source research and proposed contracts, **not an implementation/parity claim**. Reviewed 2026-09-30. No upstream code, package install, build script, or example was executed. No Rust source was changed for this report.
 
-> 基线说明：下方差距矩阵记录源码研究时的 `43eda10` 状态。后续已实现的引擎身份/生命周期/schema/dirty 缓存及原生事件接入见 [engine.md](engine.md)，不要把历史矩阵的“absent”误读为最新状态。后续批次实现了[多层矢量 paints](appearance.md)和[显式行列布局](flow-layout.md)；另有基础属性动画和编辑器安全播放会话；外观隔离合成、自动尺寸/布局调度、完整timeline/状态样式/运动路径仍然缺失。
+> 基线说明：下方差距矩阵记录源码研究时的 `43eda10` 状态。后续已实现的引擎身份/生命周期/schema/dirty 缓存及原生事件接入见 [engine.md](engine.md)，不要把历史矩阵的“absent”误读为最新状态。后续批次实现了[多层矢量 paints](appearance.md)和[显式行列布局](flow-layout.md)；另有基础属性动画和编辑器安全播放会话；外观隔离合成、全局响应式布局调度、完整timeline/状态样式/运动路径仍然缺失。
 
 ## 当前增量状态（不覆盖历史基线）
 
 - 引擎实例、生命周期、registry/schema、dirty 缓存、默认动作前事件路由：已实现，见 [engine.md](engine.md)
 - 外观：有序多层矢量 fill/stroke、渐变纹理逐层缓存、可见描边 bounds/hit、原子属性更新已实现；文本/图像不接受新 layers。透明度仍逐 paint，未实现隔离合成、混合/蒙版/阴影/擦除，见 [appearance.md](appearance.md)
-- 视觉布局：可选 `gpui-flow-layout`，固定 Box/Frame 的行/列、换行、padding/gap、对齐、grow/尺寸范围、隐藏与排除区别、嵌套父先处理、一次事务/撤销和独立配置持久化。显式 pass，不是响应式布局引擎；没有 auto-size、百分比、反向、shrink 或文字内在测量，见 [flow-layout.md](flow-layout.md)
+- 视觉布局：可选 `gpui-flow-layout`，固定/内容尺寸 Box/Frame 的行/列、换行、padding/gap、对齐、grow/尺寸范围、隐藏与排除区别、嵌套测量/安排、一次事务/撤销和独立配置持久化。显式pass或编辑+布局事务，具备内容auto-size和嵌套测量固定点；没有全局响应式调度、百分比、反向、shrink 或文字内在测量，见 [flow-layout.md](flow-layout.md)
 - 新原生示例 `layout_appearance` 将布局输出送入同一 SceneView；编译/模型测试不等于新窗口视觉验收
 - 键盘增量：KeyUp/Space进入同一路由，首按可取消、Up/取消/失焦必清状态、重复键和焦点按实例隔离，见 [keyboard-routing.md](keyboard-routing.md)。没有新增双击/触摸/IME支持
 - 动画增量：显式tick的平移/opacity/实色/自定义数值插值，原子跨元素更新、pause/resume/seek/cancel、旧身份保护及完成一次Undo/取消恢复基线的编辑器播放会话，见 [animation.md](animation.md)。没有完整timeline/状态样式/运动路径
+- 自动尺寸增量：固定/内容尺寸、有限min/max、wrap交叉轴测量、底向上测量与顶向下安排、32-pass上限、尺寸所有权冲突拒绝；custom geometry先规范化再测量，编辑+布局一个Undo步骤。不是全局observer调度
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
+
+## 九类能力当前边界（本轮 auto-size 后）
+
+这里描述已经落地的行为与仍待实现的契约；下方历史源码差距表保留研究基线。
+
+| 类别 | 当前实现 | 主要未覆盖契约 |
+|---|---|---|
+| 事件 | 实例持有、捕获/目标/冒泡、once、队列、默认动作前路由、KeyUp | 多指/压力、双击/长按、IME及完整事件族 |
+| 交互 | 选择/拖动/缩放/捕获取消、Space平移、插件策略 | 专用内外编辑工具生命周期、复杂手势 |
+| 外观 | 多层矢量paint、线性/径向渐变、描边bounds/picking | 隔离透明度、blend、mask、shadow/filter |
+| 布局 | 固定/内容轴、wrap测量、嵌套有界收敛、编辑+派生布局事务 | 全局reactive调度、百分比、反向、shrink、文字内在测量 |
+| 数据 | 类型属性/schema/default、原子变化、dirty分类、JSON | 完整input/computed分离及Leafer导入导出 |
+| 元素 | 主要原语、场景树、变换、裁切、统一几何命中 | 命令式Canvas元素、各类型高级属性完全覆盖 |
+| 自定义元素 | 注册factory/schema、确定性自定义几何/picking、数值动画 | 自定义resize/编辑工具协议、异步资源就绪整合 |
+| 实例 | 独立引擎/代际handle、clone/detach/reparent/destroy | 多层App实例组合与跨层转发 |
+| 生命周期 | 原子结构事件、销毁监听清理、动画目标失效/编辑历史保护 | Ready/ViewReady/Complete分阶段资源管线 |
+
+动画为可用的基础属性时钟与编辑器播放事务；完整timeline、状态样式和运动路径仍待实现。
 
 ## 1. Provenance and license boundary
 

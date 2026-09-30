@@ -182,3 +182,13 @@ cargo test --locked -p gpui-flow-layout
 - GPUI library 17项通过；完整workspace/all-targets检查与严格Clippy、六个可执行文档示例通过
 - 新animations示例完成Linux原生链接（本地为节省共享磁盘只去除可重建debug段，不改源码或检查规则）；具备真实帧时钟与Finish/Cancel/Undo/Redo适配，尚未实际打开窗口验收
 - 三平台最新自动结果仍以本轮提交Actions为准；编译/单测不能证明手工GUI操作和不同驱动已通过
+
+## 内容尺寸与编辑驱动布局增量（2026-09-30）
+
+- 最终headless aggregate：340项通过（含doctest）；另行7项FFmpeg/SDL dummy测试通过，原梯度性能测量仍ignored
+- layout共44项：原22项集成+1项doctest，以及新增20项集成+1项有界收敛单测
+- 新回归覆盖行列hug、padding/min/max、空容器、固定主轴wrap、auto主轴禁wrap、尺寸所有权拒绝、嵌套测量/父级分配、非整数幂等、custom归一化后bounds/hit/布局固定点、输入+布局单步Undo、失败原子性
+- 独立审查后补活跃动画→布局的分离Undo/Redo、stale tick/cancel保护、非法布局保留播放与原Redo分支；所有新增回归通过
+- 全workspace/all-targets check、严格Clippy、文档Clippy、格式检查通过；七个可执行文档示例通过
+- GPUI library17项通过；新auto_size示例完成Linux原生链接，尚未实际打开窗口操作验收
+- 三平台自动结果以本轮提交Actions为准；该增量实现显式编辑事务驱动reflow，没有全局observer或文字内在测量

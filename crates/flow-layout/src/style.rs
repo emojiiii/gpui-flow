@@ -64,10 +64,64 @@ impl Insets {
     }
 }
 
-/// Fixed-size Box/Frame content layout, in the container's local units.
+/// Ownership of one intrinsic container dimension. Content mode measures its
+/// participating children; finite limits clamp the box, not the child geometry.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
+pub enum AxisSizing {
+    #[default]
+    Fixed,
+    Content {
+        #[serde(default = "content_minimum")]
+        min: f32,
+        #[serde(default)]
+        max: Option<f32>,
+    },
+}
+fn content_minimum() -> f32 {
+    1.0
+}
+impl AxisSizing {
+    pub const fn content() -> Self {
+        Self::Content {
+            min: 1.0,
+            max: None,
+        }
+    }
+    pub const fn content_between(min: f32, max: Option<f32>) -> Self {
+        Self::Content { min, max }
+    }
+    pub fn is_content(self) -> bool {
+        matches!(self, Self::Content { .. })
+    }
+    pub(crate) fn resolve(self, natural: f64, fixed: f64) -> f64 {
+        match self {
+            Self::Fixed => fixed,
+            Self::Content { min, max } => natural
+                .max(min as f64)
+                .min(max.map_or(f64::INFINITY, f64::from)),
+        }
+    }
+    fn validate(self) -> Result<(), String> {
+        if let Self::Content { min, max } = self
+            && (!min.is_finite()
+                || min <= 0.0
+                || max.is_some_and(|max| !max.is_finite() || max < min))
+        {
+            return Err(
+                "content sizing requires a finite positive minimum and maximum >= minimum".into(),
+            );
+        }
+        Ok(())
+    }
+}
+
+/// Box/Frame content layout, in the container's intrinsic local units.
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct FlowStyle {
+    pub width_sizing: AxisSizing,
+    pub height_sizing: AxisSizing,
     pub direction: FlowDirection,
     pub padding: Insets,
     /// Minimum gap between items on the main axis.
@@ -116,6 +170,8 @@ impl Default for FlowItem {
 }
 
 pub(crate) fn validate_style(s: &FlowStyle) -> Result<(), String> {
+    s.width_sizing.validate()?;
+    s.height_sizing.validate()?;
     for (name, value) in [
         ("padding.top", s.padding.top),
         ("padding.right", s.padding.right),

@@ -104,6 +104,17 @@ impl SceneEngine {
     pub fn engine_id(&self) -> u64 {
         self.id
     }
+    /// Normalize an inert candidate using this engine's registered definitions,
+    /// without committing identity, revisions, observers, or history. Derived
+    /// layout providers can measure custom geometry before the final transaction.
+    /// Definitions must be pure and deterministic: preparation and the final
+    /// commit may invoke them more than once for the same property input.
+    pub fn prepare_scene(&self, mut scene: Scene) -> Result<Scene, EngineError> {
+        self.registry
+            .prepare_changes(&mut scene, Some(&self.scene))?;
+        scene.validate()?;
+        Ok(scene)
+    }
     pub fn registry(&self) -> &ElementRegistry {
         &self.registry
     }

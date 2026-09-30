@@ -72,12 +72,26 @@ pub(crate) fn container(
     let size = parent.object.shape.local_bounds().expect("Box/Frame").size;
     let children = parent.children.clone();
     let row = style.direction == FlowDirection::Row;
+    let auto_main = if row {
+        style.width_sizing
+    } else {
+        style.height_sizing
+    }
+    .is_content();
+    let auto_cross = if row {
+        style.height_sizing
+    } else {
+        style.width_sizing
+    }
+    .is_content();
+    // Like upstream Flow, content-sized main axes have no finite wrapping line.
+    let wrap = style.wrap && !auto_main;
     // Saturate the content area at zero when padding exceeds the fixed box.
     let width =
         (size.width as f64 - style.padding.left as f64 - style.padding.right as f64).max(0.0);
     let height =
         (size.height as f64 - style.padding.top as f64 - style.padding.bottom as f64).max(0.0);
-    let (available_main, available_cross) = axis(row, width, height);
+    let (mut available_main, mut available_cross) = axis(row, width, height);
     let (origin_main, origin_cross) =
         axis(row, style.padding.left as f64, style.padding.top as f64);
     let gap = style.gap as f64;
@@ -109,7 +123,7 @@ pub(crate) fn container(
         let main = basis.clamp(main_min, main_max);
         let cross = current_cross.clamp(cross_min, cross_max);
         let addition = main + if line.items.is_empty() { 0.0 } else { gap };
-        if style.wrap && !line.items.is_empty() && line.main + addition > available_main {
+        if wrap && !line.items.is_empty() && line.main + addition > available_main {
             lines.push(line);
             line = Line::default();
         }
@@ -130,13 +144,47 @@ pub(crate) fn container(
     if !line.items.is_empty() {
         lines.push(line);
     }
-    if lines.is_empty() {
-        return Ok(0);
+    let natural_main = lines.iter().map(|line| line.main).fold(0.0, f64::max);
+    let natural_cross = lines.iter().map(|line| line.cross).sum::<f64>()
+        + style.line_gap as f64 * lines.len().saturating_sub(1) as f64;
+    let (natural_width, natural_height) = axis(row, natural_main, natural_cross);
+    let next_width = scalar(
+        id,
+        style.width_sizing.resolve(
+            natural_width + style.padding.left as f64 + style.padding.right as f64,
+            size.width as f64,
+        ),
+    )?;
+    let next_height = scalar(
+        id,
+        style.height_sizing.resolve(
+            natural_height + style.padding.top as f64 + style.padding.bottom as f64,
+            size.height as f64,
+        ),
+    )?;
+    if next_width != size.width || next_height != size.height {
+        scene.update_object(id, |object| {
+            let size = match &mut object.shape {
+                Shape::Box(shape) => &mut shape.size,
+                Shape::Frame(shape) => &mut shape.size,
+                _ => unreachable!("validated container"),
+            };
+            size.width = next_width;
+            size.height = next_height;
+        })?;
     }
-
+    if auto_main || auto_cross {
+        (available_main, available_cross) = axis(
+            row,
+            (next_width as f64 - style.padding.left as f64 - style.padding.right as f64).max(0.0),
+            (next_height as f64 - style.padding.top as f64 - style.padding.bottom as f64).max(0.0),
+        );
+    }
     for line in &mut lines {
-        grow(line, available_main);
-        if !style.wrap {
+        if !auto_main {
+            grow(line, available_main);
+        }
+        if !wrap {
             // One non-wrapped line fills the content cross axis. Oversized
             // fixed children overflow rather than changing the parent's size.
             line.cross = available_cross;

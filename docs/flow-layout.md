@@ -1,7 +1,7 @@
 # Explicit visual flow layout
 
 `gpui-flow-layout` is an optional, headless Rust layout module. It arranges the
-direct children of fixed-size `Box` and `Frame` scene objects. It changes actual
+direct children of fixed or content-sized `Box` and `Frame` scene objects. It changes actual
 shape geometry and local transforms, so existing GPUI drawing, picking, engine
 bounds, damage, JSON, and editor undo/redo see the same result.
 
@@ -83,7 +83,7 @@ Wrapping uses each item's constrained main-axis basis plus the complete next gap
 before deciding to start a new line. An oversized item occupies its own line and
 overflows. Wrapped grow allocation happens independently per line. Nested layout
 is parent-first, allowing a resized nested Box/Frame to arrange its children using
-its final intrinsic size. Fixed parent sizes avoid parent-child measurement cycles.
+its final intrinsic size. Content-sized dimensions use the bounded measurement rules below; cyclic size ownership is rejected.
 
 ## Grow, constraints, and resizing
 
@@ -121,7 +121,7 @@ It serializes explicit layout configuration beside the scene, without reserving
 application-owned `Scene.data` or object data. Plain `Scene::to_json` saves the
 arranged geometry only. Runtime caches/handles/listeners are never saved.
 
-Container IDs must exist and refer to fixed-size Box/Frame nodes. Item overrides
+Container IDs must exist and refer to Box/Frame nodes. Item overrides
 must refer to direct children of configured containers. Remove or update stale
 configuration after deleting/reparenting nodes; it is rejected rather than silently
 ignored. Numeric validation also applies to excluded item inputs. Unknown style
@@ -146,9 +146,89 @@ ordered children, separate hidden/excluded participation, per-line allocation,
 and range-constrained grow. This module deliberately uses typed optional input
 and atomic scene changes instead of JavaScript prototype mutation.
 
-Not implemented: auto-sized parents, reverse direction/wrap, percentages, baseline
+Not implemented: global reactive scheduling, reverse direction/wrap, percentages, baseline
 alignment, automatic/fit gap strings, grow on the cross axis, ratio locking,
 shrink, stroke-box measurement, reactive dependency scheduling, input/computed
 property separation within Scene itself, or Leafer import/export compatibility.
 Current scene mutators clone/validate candidates; this layout module is not a
 linear-time or large-scene performance guarantee.
+
+
+## Content sizing and edit-driven reflow
+
+`FlowStyle.width_sizing` and `height_sizing` default to `AxisSizing::Fixed`, so old
+configurations keep their current behavior. `AxisSizing::content()` measures the
+intrinsic geometric boxes of participating children. `Content { min, max }`
+provides limits; the minimum defaults to one positive local unit and must be
+finite and > 0. The optional maximum must be finite and >= minimum.
+
+- Row natural width sums constrained main-axis bases plus gaps; natural height
+  takes the largest child cross extent. Column swaps the axes
+- With a fixed main axis, wrapping measures all line cross extents, line gaps
+  and padding. A fixed-width row can therefore calculate its own content height
+- With a content-sized main axis, wrapping is disabled, as in upstream
+  `getParseData` (`needWrap` requires a non-auto main axis). A maximum caps the
+  container box and permits overflow; it does not silently shrink children
+- Minimum size creates alignment space. Center/end/space-between use the
+  resolved container size; wrapped line blocks use align_content as before
+- Hidden children retain their layout slot. `in_flow=false` children do not
+  participate in this measurement and keep their own transform
+- Empty content containers use padding and their positive minimum. Own affine
+  transforms do not change intrinsic sizing units; child transformed boxes do
+- Stroke/effect extents and text font shaping are not intrinsic measurement here;
+  Text uses its explicitly provided geometry box, and Group has no supported
+  intrinsic resize box
+
+Nested containers are measured bottom-up, then arranged parent-first so parent
+width allocations can update a child's wrapping before the resulting height is
+propagated upward. The private candidate is repeated to a fixed point with a
+hard limit of 32 full passes. Failure returns `FlowError::NonConvergent` and
+commits no partial scene. `FlowReport.passes` reports actual work; container/item
+counts count unique configured work, not the number of repeated visits.
+
+One dimension must have one sizing owner. An auto main axis cannot be defined
+by a child's positive grow; an auto cross axis cannot depend on child stretch.
+A nested content-sized dimension cannot also receive parent grow/basis/stretch
+or item min/max allocation on that dimension. Choose non-stretch alignment or
+put a content dimension's limits in its own AxisSizing. These cases return an
+explicit error rather than retaining a stale size or entering a feedback loop.
+This is a bounded contract, not all CSS or Leafer auto-sizing combinations.
+
+Use `layout.transaction_editor(&mut editor, edit)` to combine an input change
+and dependent layout into one atomic Undo step. It first normalizes registered
+custom-element geometry with the editor's engine, then measures and validates
+before committing. Invalid input/geometry/layout changes nothing; earlier edits
+and Undo/Redo stay available. Plain `apply_to_editor` still explicitly reflows
+an already edited scene. Direct engine or scene writes are not automatically
+intercepted, and loading a FlowDocument does not install a background watcher.
+
+Registered element definitions must be pure and deterministic: equal resolved
+properties must produce equal geometry. Preparation and final commit may call a
+definition multiple times. Do not use call count, clock time, randomness, external
+I/O or mutable state as geometry input. The final committed custom geometry is
+tested as the same layout fixed point, rather than trusting the preview alone.
+
+A successful layout transaction during editor playback finishes the current
+animation frame as its own Undo step, then records the input edit plus layout as
+another step. Stale animation ticks/cancels cannot overwrite that edit. Rejected
+input or layout is computed privately and leaves playback, history and Redo
+intact; it does not end an active session.
+
+Examples:
+
+```bash
+cargo run --locked -p flow-studio --bin auto_size
+cargo run --locked --manifest-path docs/examples/Cargo.toml --bin auto_size
+```
+
+The native example changes a fixed width and adds/removes cards; all dependent
+positions and frame height are updated by the transaction entry point, with
+Undo/Redo. Native compile/link evidence is separate from actual GUI verification.
+
+Additional official-source grounding at the same pinned leafer-in revision:
+
+- [Flow box/content bounds and second layout](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/flow/src/index.ts)
+- [Automatic-side wrapping rules](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/flow/src/layout/common/data.ts)
+
+The Rust implementation keeps explicit configuration and atomic snapshots,
+instead of copying prototype/decorator or global watcher behavior.

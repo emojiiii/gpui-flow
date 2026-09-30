@@ -25,6 +25,7 @@ cargo run --locked -p flow-studio --bin interactions
 cargo run --locked -p flow-studio --bin gradients
 cargo run --locked -p flow-studio --bin layout_appearance
 cargo run --locked -p flow-studio --bin animations
+cargo run --locked -p flow-studio --bin auto_size
 python3 scripts/generate-media-fixtures.py
 cargo run --locked -p flow-studio --bin media
 # Linux 无 desktop portal 时，明确指定 Save/Open 路径：
@@ -34,6 +35,7 @@ cargo run --locked -p flow-studio -- --file ./canvas.flow.json
 - **Interactions**：拖拽连线/吸附、有效和无效目标、只读及独立插件开关
 - **Studio**：节点工作流与原生内容编辑、文件 Save/Open、连接/分组、mock runner
 - **Primitives**：通用场景原语、嵌套变换/裁切、点击/拖动/缩放/旋转、捕获事件
+- **Auto size**：按内容测量容器、换行自动高度、嵌套收敛；输入与布局同一Undo事务
 - **Animations**：真实属性插值、pause/resume/seek和实例销毁保护；完成一个Undo步骤，取消保留原历史
 - **Layout + Appearance**：行列/换行/grow/尺寸约束，一次 Reflow 一次撤销；多层矢量填充和描边，真实渐变叠绘
 - **Gradients**：多色标线性/径向渐变、变换和裁切
@@ -75,7 +77,7 @@ cargo +1.98.1 run --locked -p flow-studio
 | `gpui-flow-scene` | 保留场景树、显示原语、仿射变换、命中与事件 | 否 |
 | `gpui-flow-engine` | 唯一场景所有者、实例/生命周期、属性/缓存与树事件 | 否 |
 | `gpui-flow-animation` | 显式时钟、属性插值、播放控制、实例保护与编辑器安全会话 | 否 |
-| `gpui-flow-layout` | 显式行列布局、换行/grow/约束、原子编辑及配置持久化 | 否 |
+| `gpui-flow-layout` | 行列布局、content尺寸/换行/grow/约束、原子编辑及配置持久化 | 否 |
 | `gpui-flow-editor` | 通用场景选择、事务、历史与图形编辑 | 否 |
 | `gpui-flow-runtime` | `AgentRunner`、工作流调度、任务状态、事件和取消 | 否 |
 | `gpui-flow-media` | 媒体后端接口、FFmpeg 解码与播放控制 | 否 |

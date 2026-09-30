@@ -97,6 +97,9 @@ impl PropertySchema {
 }
 /// Pure, application-supplied definition. Geometry is regenerated from resolved
 /// properties before every committed change affecting a registered custom kind.
+/// Definitions must be deterministic: equal resolved properties produce equal
+/// geometry. Preparation, validation, and final commit may invoke a definition
+/// multiple times for the same input; invocation count is not a lifecycle event.
 /// No GPUI callback or network/resource operation belongs in this interface.
 pub trait ElementDefinition: Send + Sync + 'static {
     fn kind(&self) -> &str;

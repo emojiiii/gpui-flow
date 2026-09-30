@@ -1,6 +1,6 @@
 # gpui-flow-layout
 
-Pure Rust, opt-in row/column flow layout for fixed-size scene Box/Frame containers.
+Pure Rust, opt-in row/column flow layout for fixed and content-sized scene Box/Frame containers.
 Padding, item/line gaps, wrapping, alignment, weighted grow, and min/max sizes
 produce normal scene geometry and transform changes. No GPUI dependency or clock.
 
@@ -28,6 +28,15 @@ This is an explicit layout pass, not reactive scheduling or Leafer API parity.
 Position-only layout accepts transformed intrinsic geometry. Resizing supports
 Rect/Ellipse/Text/Image/Box/Frame with positive axis-aligned transforms; other
 resize requests fail atomically. Hidden children retain their slot; set
-`FlowItem.in_flow=false` to exclude a child. No auto-sized parents, shrink, reverse,
+`FlowItem.in_flow=false` to exclude a child. Content-sized parents measure with bounded bottom-up/top-down passes. No shrink, reverse,
 percentages, baseline/font measurement, stroke-box layout, or layout of Groups.
 See `docs/flow-layout.md` for precise semantics and upstream source references.
+
+
+`FlowStyle::width_sizing` / `height_sizing` accept `AxisSizing::Content` with
+finite positive min/max limits. A fixed main axis may wrap while its cross axis
+sizes to all lines. An auto main axis does not wrap, matching upstream Flow's
+measurement rule. Contradictory grow/stretch ownership is rejected, not guessed.
+`transaction_editor` combines a host input edit and dependent measurement in one
+undoable transaction, normalizing registered custom geometry before measuring.
+It is an explicit host entry point, not a global reactive watcher.
