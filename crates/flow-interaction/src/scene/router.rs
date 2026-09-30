@@ -7,6 +7,7 @@ use gpui_flow_engine::{ElementHandle, InstanceState};
 use gpui_flow_scene::{
     DisplayId, EventInput, EventKind, InputModifiers, Point, PointerDevice, SceneEvent,
 };
+use std::collections::BTreeSet;
 
 #[derive(Default)]
 pub struct SceneEventRouter {
@@ -15,6 +16,8 @@ pub struct SceneEventRouter {
     focus: Option<ElementHandle>,
     position: Point,
     sequence: u64,
+    held_keys: BTreeSet<KeyCode>,
+    space_pan: bool,
     actions: super::action_queue::SceneActionQueue,
 }
 #[derive(Default)]
@@ -29,6 +32,15 @@ impl SceneEventRouter {
     }
     pub fn action_sender(&self) -> super::SceneActionSender {
         self.actions.sender.clone()
+    }
+    /// Accepted Space navigation modifier, scoped to this router. A prevented
+    /// initial KeyDown never arms panning; physical release/cancel always clears it.
+    pub fn space_held(&self) -> bool {
+        self.space_pan
+    }
+    fn clear_keys(&mut self) {
+        self.held_keys.clear();
+        self.space_pan = false;
     }
     fn id(editor: &SceneEditor, handle: ElementHandle) -> Option<DisplayId> {
         editor
@@ -70,17 +82,51 @@ impl SceneEventRouter {
         &mut self,
         editor: &mut SceneEditor,
         host: &mut ScenePluginHost,
-        event: CanvasEvent,
+        mut event: CanvasEvent,
     ) -> RoutedReport {
         let mut out = RoutedReport::default();
+        // Instance loss cannot leave keyboard defaults armed for a replacement
+        // object with the same public ID. A new click establishes fresh focus.
+        if self
+            .focus
+            .is_some_and(|handle| Self::id(editor, handle).is_none())
+        {
+            self.focus = None;
+            self.clear_keys();
+        }
+        let repeat = match &event {
+            CanvasEvent::KeyDown { key, .. } => !self.held_keys.insert(key.clone()),
+            CanvasEvent::KeyUp { key, .. } => {
+                self.held_keys.remove(key);
+                if *key == KeyCode::Space {
+                    self.space_pan = false;
+                }
+                false
+            }
+            CanvasEvent::PointerCancel | CanvasEvent::FocusLost => {
+                self.clear_keys();
+                false
+            }
+            _ => false,
+        };
+        // Native adapters need not maintain a competing Space latch. Direct
+        // host-provided pointer modifiers remain an explicit supported input.
+        if let CanvasEvent::PointerDown(pointer)
+        | CanvasEvent::PointerMove(pointer)
+        | CanvasEvent::PointerUp(pointer) = &mut event
+        {
+            pointer.modifiers.space |= self.space_pan;
+        }
         if editor.reconcile_external() && host.has_capture() {
             self.pressed = None;
+            self.clear_keys();
             out.default = host.dispatch(editor, CanvasEvent::PointerCancel);
             return out;
         }
         if let Some((handle, _, pointer_id, _)) = self.pressed {
             if Self::id(editor, handle).is_none() {
                 self.pressed = None;
+                self.clear_keys();
                 out.default = host.dispatch(editor, CanvasEvent::PointerCancel);
                 return out;
             }
@@ -111,7 +157,7 @@ impl SceneEventRouter {
                 .flatten()
                 .and_then(|h| editor.engine.handle(&h.id));
         }
-        let input = metadata(&event);
+        let input = metadata(&event, repeat);
         if matches!(event, CanvasEvent::PointerMove(_)) && self.hover != hit {
             self.emit(
                 editor,
@@ -165,13 +211,28 @@ impl SceneEventRouter {
             CanvasEvent::PointerCancel | CanvasEvent::FocusLost => EventKind::PointerCancel,
             CanvasEvent::Wheel { .. } => EventKind::Wheel,
             CanvasEvent::KeyDown { .. } => EventKind::KeyDown,
+            CanvasEvent::KeyUp { .. } => EventKind::KeyUp,
         };
-        let target = if matches!(event, CanvasEvent::KeyDown { .. }) {
+        let target = if matches!(
+            event,
+            CanvasEvent::KeyDown { .. } | CanvasEvent::KeyUp { .. }
+        ) {
             self.focus
         } else {
             target
         };
         let prevented = self.emit(editor, target, kind, input.clone(), &mut out);
+        if matches!(
+            event,
+            CanvasEvent::KeyDown {
+                key: KeyCode::Space,
+                ..
+            }
+        ) && !repeat
+            && !prevented
+        {
+            self.space_pan = true;
+        }
         let escape = matches!(
             event,
             CanvasEvent::KeyDown {
@@ -209,6 +270,7 @@ impl SceneEventRouter {
         }
         if terminal {
             self.pressed = None;
+            self.clear_keys();
         }
         if matches!(event, CanvasEvent::FocusLost) {
             self.emit(editor, self.focus, EventKind::Blur, None, &mut out);
@@ -231,6 +293,37 @@ impl SceneEventRouter {
                 out.errors.push(error.to_string());
             }
         }
+        // Listener actions and keyboard defaults may remove/reset their own
+        // target. Retire focus/Space immediately, not on the next input tick.
+        if self
+            .focus
+            .is_some_and(|handle| Self::id(editor, handle).is_none())
+        {
+            self.focus = None;
+            self.clear_keys();
+        }
+        if self
+            .hover
+            .is_some_and(|handle| Self::id(editor, handle).is_none())
+        {
+            self.hover = None;
+        }
+        if self
+            .pressed
+            .is_some_and(|(handle, _, _, _)| Self::id(editor, handle).is_none())
+        {
+            self.pressed = None;
+            self.clear_keys();
+            let cancelled = host.dispatch(editor, CanvasEvent::PointerCancel);
+            out.default.effects.extend(cancelled.effects);
+            out.default.errors.extend(cancelled.errors);
+            out.default.handled |= cancelled.handled;
+            out.default.document_changed |= cancelled.document_changed;
+            out.default.selection_changed |= cancelled.selection_changed;
+            out.default.viewport_changed |= cancelled.viewport_changed;
+            out.default.default_prevented |= cancelled.default_prevented;
+            out.default.propagation_stopped |= cancelled.propagation_stopped;
+        }
         out.default.document_changed |= revision != editor.engine.revision();
         out.default.selection_changed |= selection != editor.selection;
         out.default.viewport_changed |= viewport != editor.viewport;
@@ -245,7 +338,7 @@ fn mods(m: crate::Modifiers) -> InputModifiers {
         meta: m.meta,
     }
 }
-fn metadata(event: &CanvasEvent) -> Option<EventInput> {
+fn metadata(event: &CanvasEvent, repeat: bool) -> Option<EventInput> {
     if let Some(p) = event.pointer() {
         return Some(EventInput::Pointer {
             pointer_id: p.pointer_id,
@@ -276,15 +369,17 @@ fn metadata(event: &CanvasEvent) -> Option<EventInput> {
             delta: *delta,
             modifiers: mods(*modifiers),
         }),
-        CanvasEvent::KeyDown { key, modifiers } => Some(EventInput::Key {
-            key: match key {
-                KeyCode::Character(c) => c.to_string(),
-                KeyCode::Other(s) => s.clone(),
-                other => format!("{other:?}"),
-            },
-            modifiers: mods(*modifiers),
-            repeat: false,
-        }),
+        CanvasEvent::KeyDown { key, modifiers } | CanvasEvent::KeyUp { key, modifiers } => {
+            Some(EventInput::Key {
+                key: match key {
+                    KeyCode::Character(c) => c.to_string(),
+                    KeyCode::Other(s) => s.clone(),
+                    other => format!("{other:?}"),
+                },
+                modifiers: mods(*modifiers),
+                repeat,
+            })
+        }
         _ => None,
     }
 }

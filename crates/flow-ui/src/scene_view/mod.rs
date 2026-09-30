@@ -32,7 +32,6 @@ pub struct SceneView {
     extent: WorldSize,
     subscriptions: Vec<Subscription>,
     interaction_window: Option<u64>,
-    space_held: bool,
     router: gpui_flow_interaction::scene::SceneEventRouter,
     pub interaction_error: Option<String>,
 }
@@ -57,7 +56,6 @@ impl SceneView {
             extent: WorldSize::new(1000., 700.),
             subscriptions: vec![],
             interaction_window: None,
-            space_held: false,
             router: gpui_flow_interaction::scene::SceneEventRouter::new(),
             interaction_error: None,
         }

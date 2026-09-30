@@ -52,8 +52,9 @@ impl PointerInput {
         }
     }
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum KeyCode {
+    Space,
     Escape,
     Delete,
     Backspace,
@@ -73,6 +74,10 @@ pub enum CanvasEvent {
         modifiers: Modifiers,
     },
     KeyDown {
+        key: KeyCode,
+        modifiers: Modifiers,
+    },
+    KeyUp {
         key: KeyCode,
         modifiers: Modifiers,
     },

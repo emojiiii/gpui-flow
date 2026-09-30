@@ -60,7 +60,7 @@ impl SceneView {
             input::CanvasEvent::PointerDown(input::PointerInput {
                 position: local,
                 button: button(event.button),
-                modifiers: modifiers(event.modifiers, self.space_held),
+                modifiers: modifiers(event.modifiers, self.router.space_held()),
                 hit,
                 pointer_id: 0,
             }),
@@ -77,7 +77,7 @@ impl SceneView {
             input::CanvasEvent::PointerMove(input::PointerInput {
                 position: local,
                 button: event.pressed_button.and_then(button),
-                modifiers: modifiers(event.modifiers, self.space_held),
+                modifiers: modifiers(event.modifiers, self.router.space_held()),
                 hit,
                 pointer_id: 0,
             }),
@@ -90,7 +90,7 @@ impl SceneView {
             input::CanvasEvent::PointerUp(input::PointerInput {
                 position: local,
                 button: button(event.button),
-                modifiers: modifiers(event.modifiers, self.space_held),
+                modifiers: modifiers(event.modifiers, self.router.space_held()),
                 hit: self.input_hit(local, event.modifiers.control),
                 pointer_id: 0,
             }),
@@ -101,8 +101,6 @@ impl SceneView {
         self.plugin_event(input::CanvasEvent::PointerCancel, cx);
     }
     pub(super) fn focus_lost(&mut self, cx: &mut Context<Self>) {
-        self.space_held = false;
-        self.cancel_input(cx);
         self.plugin_event(input::CanvasEvent::FocusLost, cx);
     }
     pub(super) fn scroll(&mut self, event: &ScrollWheelEvent, cx: &mut Context<Self>) {
@@ -114,48 +112,35 @@ impl SceneView {
             input::CanvasEvent::Wheel {
                 position: self.local(event.position),
                 delta,
-                modifiers: modifiers(event.modifiers, self.space_held),
+                modifiers: modifiers(event.modifiers, self.router.space_held()),
             },
             cx,
         );
     }
     pub(super) fn key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
-        let text = event.keystroke.key.as_str();
-        if text == "space" || text == " " {
-            self.space_held = true;
-            cx.notify();
-            return;
-        }
-        let key = match text {
-            "escape" => input::KeyCode::Escape,
-            "delete" => input::KeyCode::Delete,
-            "backspace" => input::KeyCode::Backspace,
-            t => {
-                let mut chars = t.chars();
-                match (chars.next(), chars.next()) {
-                    (Some(c), None) => input::KeyCode::Character(c),
-                    _ => input::KeyCode::Other(t.into()),
-                }
-            }
-        };
         self.plugin_event(
             input::CanvasEvent::KeyDown {
-                key,
-                modifiers: modifiers(event.keystroke.modifiers, self.space_held),
+                key: key_code(event.keystroke.key.as_str()),
+                modifiers: modifiers(event.keystroke.modifiers, self.router.space_held()),
             },
             cx,
         );
+        cx.notify();
     }
     pub(super) fn key_up(&mut self, event: &KeyUpEvent, cx: &mut Context<Self>) {
-        if matches!(event.keystroke.key.as_str(), "space" | " ") {
-            self.space_held = false;
-            cx.notify();
-        }
+        self.plugin_event(
+            input::CanvasEvent::KeyUp {
+                key: key_code(event.keystroke.key.as_str()),
+                modifiers: modifiers(event.keystroke.modifiers, self.router.space_held()),
+            },
+            cx,
+        );
+        cx.notify();
     }
     pub(super) fn input_cursor(&self) -> CursorStyle {
         match self.interactions.cursor() {
             input::CanvasCursor::Default
-                if self.space_held && self.interactions.is_enabled("pan") =>
+                if self.router.space_held() && self.interactions.is_enabled("pan") =>
             {
                 CursorStyle::OpenHand
             }
@@ -166,5 +151,39 @@ impl SceneView {
             input::CanvasCursor::Crosshair => CursorStyle::Crosshair,
             input::CanvasCursor::NotAllowed => CursorStyle::OperationNotAllowed,
         }
+    }
+}
+
+fn key_code(text: &str) -> input::KeyCode {
+    match text {
+        "space" | " " => input::KeyCode::Space,
+        "escape" => input::KeyCode::Escape,
+        "delete" => input::KeyCode::Delete,
+        "backspace" => input::KeyCode::Backspace,
+        text => {
+            let mut chars = text.chars();
+            match (chars.next(), chars.next()) {
+                (Some(c), None) => input::KeyCode::Character(c),
+                _ => input::KeyCode::Other(text.into()),
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::key_code;
+    use core::prelude::v1::test;
+    use gpui_flow_interaction::KeyCode;
+    #[test]
+    fn native_key_names_normalize_space_and_named_keys_for_both_edges() {
+        assert_eq!(key_code("space"), KeyCode::Space);
+        assert_eq!(key_code(" "), KeyCode::Space);
+        assert_eq!(key_code("escape"), KeyCode::Escape);
+        assert_eq!(key_code("delete"), KeyCode::Delete);
+        assert_eq!(key_code("backspace"), KeyCode::Backspace);
+        assert_eq!(key_code("a"), KeyCode::Character('a'));
+        assert_eq!(key_code("中"), KeyCode::Character('中'));
+        assert_eq!(key_code("f12"), KeyCode::Other("f12".into()));
     }
 }

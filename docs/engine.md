@@ -24,9 +24,9 @@
 
 `SceneEventRouter` 是无 GPUI 依赖的输入适配层。顺序为命中/实例检查 → 捕获/目标/冒泡监听器 → 未被阻止的默认插件 → 必须执行的 release/cancel 清理 → 有界排队命令。
 
-Down、Move、Up、Wheel、KeyDown 的 `prevent_default()` 在默认动作前生效。阻止 Up 会回滚活动手势并释放捕获，不会留下悬空事务。Escape、失焦、PointerCancel 的清理不能被阻止。次要 pointer id 不能移动或结束主指针手势。Click 需要同一存活实例、左键、同目标释放且移动小于 4 个逻辑屏幕像素。
+Down、Move、Up、Wheel、KeyDown/KeyUp 的 `prevent_default()` 在默认动作前生效。阻止 Up 会回滚活动手势并释放捕获，不会留下悬空事务。Escape、失焦、PointerCancel 的清理不能被阻止。次要 pointer id 不能移动或结束主指针手势。Click 需要同一存活实例、左键、同目标释放且移动小于 4 个逻辑屏幕像素。
 
-Enter/Leave 使用祖先路径差分；Over/Out 走正常冒泡。事件提供规范化键盘/滚轮/鼠标元数据和序号。当前原生适配器只有鼠标，压力、触摸、真实时间戳、KeyUp、双击合成尚未接通，不能据此宣称支持完整手势设备。
+Enter/Leave 使用祖先路径差分；Over/Out 走正常冒泡。事件提供规范化键盘/滚轮/鼠标元数据和序号。原生适配器现已接入KeyUp及可取消的Space默认导航，重复键和清理状态按router隔离，见 [键盘路由](keyboard-routing.md)。指针仍只有鼠标，压力、触摸、真实时间戳、双击合成尚未接通，不能据此宣称支持完整手势设备。
 
 监听器可以捕获 `view.action_sender()`，用 `enqueue(origin_handle, SceneCommand)` 请求修改。队列最多 256 条，满/关闭显式返回错误；每次输入最多处理 256 条。命令在当前事件路径结束后执行，且再次检查原始实例身份、能力和锁定。销毁或加载文档后，旧监听器排队的命令不会修改同名新对象。
 

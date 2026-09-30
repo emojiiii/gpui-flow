@@ -165,3 +165,11 @@ cargo run --locked -p flow-studio --bin layout_appearance
 cargo run --locked --manifest-path docs/examples/Cargo.toml --bin layout
 cargo test --locked -p gpui-flow-layout
 ```
+
+## KeyUp / Space 路由增量（2026-09-30）
+
+- 最终纯Rust aggregate：280项通过；另行7项FFmpeg/SDL dummy媒体测试通过，唯一未执行项仍为原有梯度性能测量
+- GPUI library：17项通过；新增native key名称规范化测试与12项键盘router回归
+- 回归覆盖首按取消、once监听器后的repeat不绕过、Up强制释放、Space平移保持选择、捕获/目标/冒泡顺序、只读队列、失焦/Escape/PointerCancel、实例reset与detach/reattach、回调删除自身即时清理
+- 全workspace/all-targets严格Clippy、文档Clippy、五个文档可执行示例通过
+- 本批未新增窗口手工验收；三平台链接和自动测试仍以本轮提交的Actions为准

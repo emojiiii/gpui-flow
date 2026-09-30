@@ -205,6 +205,10 @@ impl Render for SceneView {
                     this.key(event, cx);
                 }
             }))
-            .on_key_up(cx.listener(|this, event, _, cx| this.key_up(event, cx)))
+            .on_key_up(cx.listener(|this, event, window, cx| {
+                if this.focus.is_focused(window) {
+                    this.key_up(event, cx);
+                }
+            }))
     }
 }

@@ -85,6 +85,7 @@ cargo +1.98.1 run --locked -p flow-studio
 
 - [Leafer 源码分层、差距与验收契约](docs/leafer-source-map.md)
 - [元素实例、属性变更与事件引擎](docs/engine.md)
+- [键盘事件、Space导航与释放清理](docs/keyboard-routing.md)
 - [视觉行列布局与边界](docs/flow-layout.md)
 - [多层填充、描边与外观边界](docs/appearance.md)
 - [引擎基础契约实施顺序](docs/engine-contract-plan.md)

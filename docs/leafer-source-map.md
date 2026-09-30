@@ -10,6 +10,7 @@ Status: source research and proposed contracts, **not an implementation/parity c
 - 外观：有序多层矢量 fill/stroke、渐变纹理逐层缓存、可见描边 bounds/hit、原子属性更新已实现；文本/图像不接受新 layers。透明度仍逐 paint，未实现隔离合成、混合/蒙版/阴影/擦除，见 [appearance.md](appearance.md)
 - 视觉布局：可选 `gpui-flow-layout`，固定 Box/Frame 的行/列、换行、padding/gap、对齐、grow/尺寸范围、隐藏与排除区别、嵌套父先处理、一次事务/撤销和独立配置持久化。显式 pass，不是响应式布局引擎；没有 auto-size、百分比、反向、shrink 或文字内在测量，见 [flow-layout.md](flow-layout.md)
 - 新原生示例 `layout_appearance` 将布局输出送入同一 SceneView；编译/模型测试不等于新窗口视觉验收
+- 键盘增量：KeyUp/Space进入同一路由，首按可取消、Up/取消/失焦必清状态、重复键和焦点按实例隔离，见 [keyboard-routing.md](keyboard-routing.md)。没有新增双击/触摸/IME支持
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
 ## 1. Provenance and license boundary
