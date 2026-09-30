@@ -1,13 +1,23 @@
 //! A reusable native node canvas. Model and provider runtime are independent crates.
-mod builtins;
-mod canvas_view;
-mod components;
+mod canvas;
+pub mod components;
+pub mod nodes;
 mod renderer;
 mod theme;
-pub use builtins::*;
-pub use canvas_view::*;
+pub use canvas::*;
 pub use components::*;
 pub use gpui_flow_core as core;
 pub use gpui_flow_runtime as runtime;
+pub use nodes::*;
 pub use renderer::*;
 pub use theme::*;
+
+mod options;
+pub use options::*;
+
+pub mod display;
+pub use gpui_flow_scene as scene;
+
+mod scene_view;
+pub use gpui_flow_editor as editor;
+pub use scene_view::*;

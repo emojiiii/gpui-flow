@@ -9,3 +9,6 @@ gpui-flow-core.workspace = true
 gpui-flow-runtime.workspace = true
 serde_json.workspace = true
 gpui-kit.workspace = true
+gpui-flow-scene.workspace = true
+gpui-flow-editor.workspace = true
+lyon = "1"

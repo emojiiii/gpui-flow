@@ -1,0 +1,8 @@
+[package]
+name = "gpui-flow-editor"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+[dependencies]
+gpui-flow-core.workspace = true
+gpui-flow-scene.workspace = true

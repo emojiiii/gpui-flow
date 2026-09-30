@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: 1
+  CARGO_BUILD_JOBS: 2
+
+jobs:
+  core:
+    name: Format, core and runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@1.98.1
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            docs/examples -> target
+      - name: Format workspace and documentation examples
+        run: |
+          cargo fmt --all -- --check
+          cargo fmt --manifest-path docs/examples/Cargo.toml --package gpui-flow-doc-examples -- --check
+      - name: Test model and runtime without a display
+        run: cargo test --locked -p gpui-flow-core -p gpui-flow-runtime -p gpui-flow-scene -p gpui-flow-editor
+      - name: Lint model and runtime
+        run: cargo clippy --locked -p gpui-flow-core -p gpui-flow-runtime -p gpui-flow-scene -p gpui-flow-editor --all-targets -- -D warnings
+      - name: Verify executable documentation
+        run: |
+          cargo clippy --locked --manifest-path docs/examples/Cargo.toml --all-targets -- -D warnings
+          cargo run --locked --manifest-path docs/examples/Cargo.toml --bin core
+          cargo run --locked --manifest-path docs/examples/Cargo.toml --bin runner
+
+  native:
+    name: Native UI (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      CARGO_PROFILE_DEV_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux native dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential pkg-config clang libclang-dev \
+            libasound2-dev libfontconfig-dev libfreetype-dev libssl-dev \
+            libvulkan1 mesa-vulkan-drivers libwayland-dev \
+            libx11-xcb-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libzstd-dev
+      - name: Verify macOS SDK
+        if: runner.os == 'macOS'
+        run: |
+          xcode-select -p
+          xcrun --find clang
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@1.98.1
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: native-${{ matrix.os }}
+      - name: Check all workspace targets
+        run: cargo check --locked --workspace --all-targets
+      - name: Lint full workspace
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: Test reusable UI components
+        run: cargo test --locked -p gpui-flow --lib
+      - name: Link native Studio
+        run: cargo build --locked -p flow-studio
+      # This job proves compilation and linking, not graphical interaction.
+      # Never run provider calls, upload graphs, or require production secrets in CI.

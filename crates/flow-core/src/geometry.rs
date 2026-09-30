@@ -23,10 +23,17 @@ impl Point {
         if !grid.is_finite() || grid <= 0.0 {
             return self;
         }
-        Self::new(
-            (self.x / grid).round() * grid,
-            (self.y / grid).round() * grid,
-        )
+        // Widen the intermediate calculation so tiny, valid grid intervals
+        // cannot turn otherwise finite coordinates into infinity.
+        let snap = |value: f32| {
+            let result = ((value as f64 / grid as f64).round() * grid as f64) as f32;
+            if result.is_finite() {
+                result
+            } else {
+                value
+            }
+        };
+        Self::new(snap(self.x), snap(self.y))
     }
 }
 impl Add for Point {

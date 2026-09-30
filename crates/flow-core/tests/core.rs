@@ -549,3 +549,42 @@ fn fresh_ids_do_not_collide_across_item_kinds() {
     graph.add_node(node("edge-1", 0.0)).unwrap();
     assert_eq!(graph.fresh_id("edge"), "edge-2");
 }
+
+#[test]
+fn reducing_history_limit_keeps_redo_bounded() {
+    let mut editor = editor();
+    editor.selection.select_node("a", false);
+    for _ in 0..8 {
+        editor.move_selection(Point::new(1.0, 0.0)).unwrap();
+    }
+    for _ in 0..4 {
+        assert!(editor.undo());
+    }
+    editor.set_history_limit(2);
+    while editor.redo() {
+        assert!(editor.history_len() <= 2);
+    }
+}
+
+#[test]
+fn snapping_extreme_finite_coordinates_stays_finite() {
+    let point = Point::new(f32::MAX, -f32::MAX);
+    assert!(point.snapped(f32::MIN_POSITIVE).is_finite());
+    assert_eq!(
+        Point::new(13.0, -13.0).snapped(10.0),
+        Point::new(10.0, -10.0)
+    );
+}
+
+#[test]
+fn rejects_overflowing_aggregate_bounds() {
+    let mut graph = Graph::new();
+    graph.nodes.insert(
+        NodeId::from("a"),
+        Node::new("a", "A", Point::new(-2e38, 0.)),
+    );
+    graph
+        .nodes
+        .insert(NodeId::from("b"), Node::new("b", "B", Point::new(2e38, 0.)));
+    assert!(graph.validate().is_err());
+}

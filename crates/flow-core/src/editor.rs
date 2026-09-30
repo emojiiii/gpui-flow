@@ -349,6 +349,10 @@ impl Editor {
         };
         self.restore(entry.after.clone());
         self.undo.push(entry);
+        let excess = self.undo.len().saturating_sub(self.history_limit);
+        if excess > 0 {
+            self.undo.drain(..excess);
+        }
         true
     }
     pub fn select_all(&mut self) {

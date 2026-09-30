@@ -1,0 +1,13 @@
+[package]
+name = "gpui-flow-doc-examples"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# These executable documentation examples are independent of the native UI workspace.
+[workspace]
+
+[dependencies]
+gpui-flow-core = { path = "../../crates/flow-core" }
+gpui-flow-runtime = { path = "../../crates/flow-runtime" }
+serde_json = "1"

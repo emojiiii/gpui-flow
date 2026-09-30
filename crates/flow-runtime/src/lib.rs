@@ -184,6 +184,13 @@ impl Runtime {
             false
         }
     }
+    /// Cancel and forget a removed node. Pending events for it are discarded by `poll`.
+    pub fn forget(&mut self, node: &str) {
+        if let Some(active) = self.active.remove(node) {
+            active.token.cancel();
+        }
+        self.records.remove(node);
+    }
     pub fn retry(&mut self, node: &str) -> Result<u64, String> {
         let a = self.active.get(node).ok_or("unknown job")?;
         let input = a.input.clone();
@@ -332,5 +339,99 @@ mod tests {
         .unwrap();
         terminal(&mut rt);
         assert_eq!(rt.records["a"].status, RunStatus::Failed);
+    }
+}
+
+#[cfg(test)]
+mod regressions {
+    use super::*;
+    fn wait(rt: &mut Runtime) {
+        for _ in 0..1000 {
+            rt.poll();
+            if rt.records.values().all(|r| {
+                matches!(
+                    r.status,
+                    RunStatus::Succeeded | RunStatus::Failed | RunStatus::Cancelled
+                )
+            }) {
+                return;
+            }
+            thread::sleep(Duration::from_millis(1));
+        }
+        panic!("timeout");
+    }
+    struct Panics;
+    impl AgentRunner for Panics {
+        fn run(&self, _: Value, _: RunContext) -> Result<Value, String> {
+            panic!("test provider failure")
+        }
+    }
+    #[test]
+    fn provider_panic_is_terminal_failure() {
+        let mut rt = Runtime::default();
+        rt.start("n", Value::Null, Arc::new(Panics)).unwrap();
+        wait(&mut rt);
+        assert_eq!(rt.records["n"].status, RunStatus::Failed);
+    }
+    #[test]
+    fn old_attempt_events_are_ignored() {
+        let mut rt = Runtime::default();
+        let runner = Arc::new(MockRunner {
+            steps: 1,
+            delay: Duration::ZERO,
+            fail: false,
+        });
+        let old = rt.start("n", Value::Null, runner).unwrap();
+        wait(&mut rt);
+        rt.retry("n").unwrap();
+        rt.sender
+            .send(Event {
+                run_id: old,
+                node_id: "n".into(),
+                attempt: 1,
+                event: RunEvent::Failed("stale".into()),
+            })
+            .unwrap();
+        wait(&mut rt);
+        assert_eq!(rt.records["n"].status, RunStatus::Succeeded);
+        assert_eq!(rt.records["n"].attempt, 2);
+    }
+    #[test]
+    fn forgotten_jobs_cannot_resurrect() {
+        let mut rt = Runtime::default();
+        let old = rt
+            .start("n", Value::Null, Arc::new(MockRunner::default()))
+            .unwrap();
+        rt.forget("n");
+        rt.sender
+            .send(Event {
+                run_id: old,
+                node_id: "n".into(),
+                attempt: 1,
+                event: RunEvent::Output(Value::Null),
+            })
+            .unwrap();
+        rt.poll();
+        assert!(rt.records.is_empty());
+        assert!(rt.retry("n").is_err());
+    }
+    #[test]
+    fn progress_is_bounded() {
+        let token = CancellationToken::default();
+        let (tx, rx) = mpsc::channel();
+        let ctx = RunContext {
+            cancellation: token,
+            emit: Arc::new(move |event| {
+                tx.send(event).unwrap();
+            }),
+        };
+        ctx.progress(f32::NAN, "nan");
+        ctx.progress(4., "high");
+        for expected in [0., 1.] {
+            match rx.recv().unwrap() {
+                RunEvent::Progress { fraction, .. } => assert_eq!(fraction, expected),
+                _ => panic!("unexpected event"),
+            }
+        }
     }
 }

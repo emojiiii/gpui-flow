@@ -11,7 +11,15 @@ fn main() {
                     window_bounds: Some(WindowBounds::Windowed(bounds)),
                     ..Default::default()
                 },
-                |_, cx| cx.new(FlowCanvas::demo),
+                |window, cx| {
+                    window.set_window_title("gpui-flow Studio");
+                    gpui_kit::component::Theme::change(
+                        gpui_kit::component::ThemeMode::Dark,
+                        Some(window),
+                        cx,
+                    );
+                    cx.new(FlowCanvas::demo)
+                },
             )
             .expect("open studio window");
             cx.activate(true);

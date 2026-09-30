@@ -604,6 +604,12 @@ impl Graph {
                 }
             }
         }
+        if self.bounds().is_some_and(|bounds| !bounds.is_valid()) {
+            issues.push(ValidationIssue {
+                path: "bounds".into(),
+                message: "aggregate graph bounds overflow".into(),
+            });
+        }
         for node in self.nodes.values() {
             issues.extend(validate_node(node));
         }

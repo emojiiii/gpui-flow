@@ -1,5 +1,6 @@
 [package]
 name = "flow-studio"
+default-run = "flow-studio"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
