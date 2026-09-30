@@ -48,18 +48,18 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
                     return;
                 };
                 let id = DisplayId::from(id.clone());
-                if !object_editable(&cx.editor.scene, &id) {
+                if !object_editable(cx.editor.scene(), &id) {
                     return;
                 }
-                let Some(node) = cx.editor.scene.get(&id) else {
+                let Some(node) = cx.editor.scene().get(&id) else {
                     return;
                 };
-                let Ok(Some(bounds)) = cx.editor.scene.local_bounds(&id) else {
+                let Ok(Some(bounds)) = cx.editor.scene().local_bounds(&id) else {
                     return;
                 };
                 let Some(inverse) = cx
                     .editor
-                    .scene
+                    .scene()
                     .world_transform(&id)
                     .ok()
                     .and_then(Affine::inverse)

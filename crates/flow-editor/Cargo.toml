@@ -6,3 +6,6 @@ publish.workspace = true
 [dependencies]
 gpui-flow-core.workspace = true
 gpui-flow-scene.workspace = true
+
+gpui-flow-engine.workspace = true
+serde_json.workspace = true

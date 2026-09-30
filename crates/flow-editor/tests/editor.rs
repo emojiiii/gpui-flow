@@ -24,11 +24,13 @@ fn world_translation_respects_parent() {
     e.selection.select("rect".into(), false);
     e.translate_selection(Point::new(20., 10.)).unwrap();
     assert_eq!(
-        e.scene.get(&"rect".into()).unwrap().object.transform.tx,
+        e.scene().get(&"rect".into()).unwrap().object.transform.tx,
         10.
     );
     assert_eq!(
-        e.scene.local_to_world(&"rect".into(), Point::ZERO).unwrap(),
+        e.scene()
+            .local_to_world(&"rect".into(), Point::ZERO)
+            .unwrap(),
         Point::new(20., 10.)
     );
 }
@@ -39,11 +41,13 @@ fn nested_selection_moves_once() {
     e.selection.select("rect".into(), true);
     e.translate_selection(Point::new(20., 10.)).unwrap();
     assert_eq!(
-        e.scene.get(&"rect".into()).unwrap().object.transform,
+        e.scene().get(&"rect".into()).unwrap().object.transform,
         Affine::IDENTITY
     );
     assert_eq!(
-        e.scene.local_to_world(&"rect".into(), Point::ZERO).unwrap(),
+        e.scene()
+            .local_to_world(&"rect".into(), Point::ZERO)
+            .unwrap(),
         Point::new(20., 10.)
     );
 }
@@ -51,7 +55,7 @@ fn nested_selection_moves_once() {
 fn gesture_history_and_cancel() {
     let mut e = SceneEditor::new(scene()).unwrap();
     e.selection.select("rect".into(), false);
-    let original = e.scene.clone();
+    let original = e.scene().clone();
     assert!(e.begin_edit());
     assert!(!e.begin_edit());
     e.translate_selection(Point::new(4., 0.)).unwrap();
@@ -59,25 +63,27 @@ fn gesture_history_and_cancel() {
     assert!(!e.undo());
     e.commit_edit();
     assert!(e.undo());
-    assert_eq!(e.scene, original);
+    assert_eq!(*e.scene(), original);
     assert!(e.redo());
     e.begin_edit();
     e.translate_selection(Point::new(1., 0.)).unwrap();
     e.cancel_edit();
     assert_eq!(
-        e.scene.local_to_world(&"rect".into(), Point::ZERO).unwrap(),
+        e.scene()
+            .local_to_world(&"rect".into(), Point::ZERO)
+            .unwrap(),
         Point::new(12., 0.)
     );
 }
 #[test]
 fn failed_edit_is_atomic() {
     let mut e = SceneEditor::new(scene()).unwrap();
-    let before = e.scene.clone();
+    let before = e.scene().clone();
     assert!(
         e.transaction(|scene| scene.update_object(&"rect".into(), |o| o.transform.tx = f32::NAN))
             .is_err()
     );
-    assert_eq!(e.scene, before);
+    assert_eq!(*e.scene(), before);
     assert!(!e.undo());
 }
 #[test]
@@ -89,16 +95,16 @@ fn locked_ancestor_protects_children() {
     e.selection.select("rect".into(), false);
     e.translate_selection(Point::new(20., 0.)).unwrap();
     e.delete_selection().unwrap();
-    assert_eq!(s, e.scene);
+    assert_eq!(s, *e.scene());
 }
 #[test]
 fn deleting_group_is_undoable() {
     let mut e = SceneEditor::new(scene()).unwrap();
     e.selection.select("group".into(), false);
     e.delete_selection().unwrap();
-    assert!(e.scene.get(&"rect".into()).is_none());
+    assert!(e.scene().get(&"rect".into()).is_none());
     assert!(e.undo());
-    assert!(e.scene.get(&"rect".into()).is_some());
+    assert!(e.scene().get(&"rect".into()).is_some());
 }
 #[test]
 fn marquee_excludes_clipped_and_disabled_children() {

@@ -2,6 +2,8 @@
 
 Status: source research and proposed contracts, **not an implementation/parity claim**. Reviewed 2026-09-30. No upstream code, package install, build script, or example was executed. No Rust source was changed for this report.
 
+> 基线说明：下方差距矩阵记录源码研究时的 `43eda10` 状态。后续已实现的引擎身份/生命周期/schema/dirty 缓存及原生事件接入见 [engine.md](engine.md)，不要把历史矩阵的“absent”误读为最新状态。外观合成、自动布局、动画等仍然缺失。
+
 ## 1. Provenance and license boundary
 
 The official UI README explicitly identifies separate core, UI, and official-plugin repositories ([repository map][U-readme]). All three were cloned for inspection and left clean:

@@ -31,8 +31,8 @@ pub fn object_editable(scene: &Scene, id: &DisplayId) -> bool {
 }
 pub fn selection_bounds(editor: &SceneEditor) -> Result<Option<Rect>, SceneError> {
     let mut result = None;
-    for id in editor.selection.roots(&editor.scene) {
-        if let Some(bounds) = editor.scene.world_bounds(&id)? {
+    for id in editor.selection.roots(editor.scene()) {
+        if let Some(bounds) = editor.scene().world_bounds(&id)? {
             result = Some(result.map_or(bounds, |old: Rect| old.union(bounds)));
         }
     }
@@ -40,3 +40,9 @@ pub fn selection_bounds(editor: &SceneEditor) -> Result<Option<Rect>, SceneError
 }
 pub type SceneDispatchReport = crate::DispatchReport;
 pub type SceneInteractionError = crate::InteractionError;
+
+mod router;
+pub use router::{RoutedReport, SceneEventRouter};
+
+mod action_queue;
+pub use action_queue::{ActionQueueError, SceneActionSender};

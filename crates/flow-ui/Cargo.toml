@@ -17,3 +17,5 @@ image.workspace = true
 gpui-flow-media.workspace = true
 
 gpui-flow-interaction.workspace = true
+
+gpui-flow-engine.workspace = true

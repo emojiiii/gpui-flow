@@ -1,0 +1,795 @@
+use crate::change::diff;
+use crate::layout::update_layout;
+use crate::registry::apply_property;
+use crate::subtree::{extract_subtree, insert_forest, tree_ids};
+use crate::*;
+use gpui_flow_scene::{
+    DispatchResult, DisplayId, DisplayObject, EventDispatcher, EventKind, ListenerOptions, Scene,
+    SceneError, SceneEvent, Shape,
+};
+use serde_json::Value;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    panic::{AssertUnwindSafe, catch_unwind},
+    sync::atomic::{AtomicU64, Ordering},
+};
+static NEXT_ENGINE: AtomicU64 = AtomicU64::new(1);
+struct Instance {
+    id: DisplayId,
+    generation: u64,
+    state: InstanceState,
+    disposers: BTreeMap<DisposerId, Box<dyn FnOnce()>>,
+}
+struct Observer {
+    owner: Option<ElementHandle>,
+    callback: Box<dyn FnMut(&ChangeSet)>,
+}
+#[derive(Default)]
+enum CommitMode {
+    #[default]
+    Normal,
+    Reset,
+    Detach(u64, Scene),
+    Attach(u64),
+}
+/// Canonical live owner. Only document snapshots are cloneable/serializable.
+/// Transactions describe atomic net state, not intermediate operations inside
+/// their closure. Use explicit destroy/create calls when replacing identity.
+pub struct SceneEngine {
+    id: u64,
+    scene: Scene,
+    registry: ElementRegistry,
+    revision: u64,
+    layout: LayoutSnapshot,
+    instances: Vec<Instance>,
+    free: Vec<usize>,
+    ids: BTreeMap<DisplayId, usize>,
+    detached: BTreeMap<u64, Scene>,
+    next_sequence: u64,
+    dispatcher: EventDispatcher,
+    listeners: BTreeMap<ListenerId, ElementHandle>,
+    observers: BTreeMap<ObserverId, Observer>,
+    last_change: ChangeSet,
+    callback_panics: usize,
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct CloneResult {
+    pub root: ElementHandle,
+    pub ids: BTreeMap<DisplayId, DisplayId>,
+    pub changes: ChangeSet,
+}
+impl SceneEngine {
+    pub fn new(scene: Scene) -> Result<Self, EngineError> {
+        Self::with_registry(scene, ElementRegistry::default())
+    }
+    pub fn with_registry(mut scene: Scene, registry: ElementRegistry) -> Result<Self, EngineError> {
+        registry.prepare_scene(&mut scene)?;
+        let id = NEXT_ENGINE
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| v.checked_add(1))
+            .map_err(|_| EngineError::Exhausted)?;
+        let dirty = scene
+            .nodes()
+            .map(|n| (n.object.id.clone(), DirtyFlags::ALL))
+            .collect();
+        let (layout, _) = update_layout(&scene, &LayoutSnapshot::default(), &dirty, 0)?;
+        let mut engine = Self {
+            id,
+            scene,
+            registry,
+            revision: 0,
+            layout,
+            instances: vec![],
+            free: vec![],
+            ids: BTreeMap::new(),
+            detached: BTreeMap::new(),
+            next_sequence: 0,
+            dispatcher: EventDispatcher::new(),
+            listeners: BTreeMap::new(),
+            observers: BTreeMap::new(),
+            last_change: ChangeSet::default(),
+            callback_panics: 0,
+        };
+        let ids = tree_ids(&engine.scene);
+        for id in ids {
+            engine.allocate(id, InstanceState::Attached)?;
+        }
+        Ok(engine)
+    }
+    pub fn scene(&self) -> &Scene {
+        &self.scene
+    }
+    pub fn registry(&self) -> &ElementRegistry {
+        &self.registry
+    }
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+    pub fn layout(&self) -> &LayoutSnapshot {
+        &self.layout
+    }
+    pub fn last_change(&self) -> &ChangeSet {
+        &self.last_change
+    }
+    /// Number of application observer/disposer panics caught to preserve cleanup.
+    pub fn callback_panics(&self) -> usize {
+        self.callback_panics
+    }
+    pub fn handle(&self, id: &DisplayId) -> Option<ElementHandle> {
+        self.ids.get(id).map(|&slot| self.make_handle(slot))
+    }
+    fn make_handle(&self, slot: usize) -> ElementHandle {
+        ElementHandle {
+            engine: self.id,
+            slot,
+            generation: self.instances[slot].generation,
+        }
+    }
+    fn check(&self, h: ElementHandle) -> Result<&Instance, EngineError> {
+        let instance = self
+            .instances
+            .get(h.slot)
+            .ok_or(EngineError::InvalidHandle)?;
+        if h.engine != self.id || h.generation != instance.generation {
+            return Err(EngineError::InvalidHandle);
+        }
+        Ok(instance)
+    }
+    fn live(&self, h: ElementHandle) -> Result<&Instance, EngineError> {
+        let i = self.check(h)?;
+        if i.state == InstanceState::Destroyed {
+            Err(EngineError::InvalidHandle)
+        } else {
+            Ok(i)
+        }
+    }
+    fn attached_id(&self, h: ElementHandle) -> Result<DisplayId, EngineError> {
+        let i = self.live(h)?;
+        if i.state != InstanceState::Attached {
+            Err(EngineError::DetachedHandle)
+        } else {
+            Ok(i.id.clone())
+        }
+    }
+    pub fn instance(&self, h: ElementHandle) -> Result<InstanceInfo, EngineError> {
+        let i = self.check(h)?;
+        Ok(InstanceInfo {
+            handle: h,
+            id: i.id.clone(),
+            state: i.state,
+        })
+    }
+    pub fn object(&self, h: ElementHandle) -> Result<&DisplayObject, EngineError> {
+        let i = self.live(h)?;
+        if let Some(n) = self.scene.get(&i.id) {
+            return Ok(&n.object);
+        }
+        self.detached
+            .values()
+            .find_map(|s| s.get(&i.id))
+            .map(|n| &n.object)
+            .ok_or(EngineError::InvalidHandle)
+    }
+    fn allocate(
+        &mut self,
+        id: DisplayId,
+        state: InstanceState,
+    ) -> Result<ElementHandle, EngineError> {
+        let slot = if let Some(slot) = self.free.pop() {
+            let generation = self.instances[slot]
+                .generation
+                .checked_add(1)
+                .ok_or(EngineError::Exhausted)?;
+            self.instances[slot] = Instance {
+                id: id.clone(),
+                generation,
+                state,
+                disposers: BTreeMap::new(),
+            };
+            slot
+        } else {
+            let slot = self.instances.len();
+            self.instances.push(Instance {
+                id: id.clone(),
+                generation: 1,
+                state,
+                disposers: BTreeMap::new(),
+            });
+            slot
+        };
+        self.ids.insert(id, slot);
+        Ok(self.make_handle(slot))
+    }
+    fn sequence(&mut self) -> Result<u64, EngineError> {
+        self.next_sequence = self
+            .next_sequence
+            .checked_add(1)
+            .ok_or(EngineError::Exhausted)?;
+        Ok(self.next_sequence)
+    }
+    pub fn transaction(
+        &mut self,
+        edit: impl FnOnce(&mut Scene) -> Result<(), SceneError>,
+    ) -> Result<ChangeSet, EngineError> {
+        self.transaction_with_origin(ChangeOrigin::Edit, edit)
+    }
+    pub fn transaction_with_origin(
+        &mut self,
+        origin: ChangeOrigin,
+        edit: impl FnOnce(&mut Scene) -> Result<(), SceneError>,
+    ) -> Result<ChangeSet, EngineError> {
+        let mut next = self.scene.clone();
+        edit(&mut next)?;
+        self.apply(next, origin, CommitMode::Normal)
+    }
+    pub fn replace_scene(&mut self, scene: Scene) -> Result<ChangeSet, EngineError> {
+        self.apply(scene, ChangeOrigin::UndoRedo, CommitMode::Normal)
+    }
+    /// Load a new document, preserving definitions but invalidating every old
+    /// instance and scoped resource, even when serialized IDs are reused.
+    pub fn reset_scene(&mut self, scene: Scene) -> Result<ChangeSet, EngineError> {
+        self.apply(scene, ChangeOrigin::Import, CommitMode::Reset)
+    }
+    pub fn create(
+        &mut self,
+        kind: &str,
+        id: impl Into<DisplayId>,
+        properties: Value,
+        parent: Option<ElementHandle>,
+        index: Option<usize>,
+    ) -> Result<(ElementHandle, ChangeSet), EngineError> {
+        let object = self.registry.create(kind, id, properties)?;
+        let id = object.id.clone();
+        let parent = parent.map(|h| self.attached_id(h)).transpose()?;
+        let changes = self.transaction(|scene| scene.insert(object, parent, index))?;
+        Ok((self.handle(&id).expect("created"), changes))
+    }
+    pub fn set_property(
+        &mut self,
+        handle: ElementHandle,
+        key: PropertyKey,
+        value: Value,
+    ) -> Result<ChangeSet, EngineError> {
+        self.set_properties(handle, [(key, value)])
+    }
+    /// Apply a property batch as one validated revision and change notification.
+    pub fn set_properties(
+        &mut self,
+        handle: ElementHandle,
+        properties: impl IntoIterator<Item = (PropertyKey, Value)>,
+    ) -> Result<ChangeSet, EngineError> {
+        let id = self.attached_id(handle)?;
+        let mut next = self.scene.clone();
+        let mut object = next.get(&id).expect("attached").object.clone();
+        for (key, value) in properties {
+            apply_property(&mut object, &key, value)?;
+        }
+        // Registered custom properties may temporarily disagree with old fallback
+        // bounds. Geometry generation runs before complete scene validation.
+        if object.shape != next.get(&id).expect("attached").object.shape
+            && let Shape::Custom(custom) = &object.shape
+            && let Some(def) = self.registry.get(&custom.kind)
+        {
+            let rebuilt = self
+                .registry
+                .create(def.kind(), id.clone(), custom.data.clone())?;
+            object.shape = rebuilt.shape;
+        }
+        next.update_object(&id, |o| *o = object)?;
+        self.apply(next, ChangeOrigin::Edit, CommitMode::Normal)
+    }
+    pub fn reparent(
+        &mut self,
+        handle: ElementHandle,
+        parent: Option<ElementHandle>,
+        index: Option<usize>,
+        preserve_world: bool,
+    ) -> Result<ChangeSet, EngineError> {
+        let id = self.attached_id(handle)?;
+        let parent = parent.map(|h| self.attached_id(h)).transpose()?;
+        self.transaction(|scene| scene.reparent(&id, parent, index, preserve_world))
+    }
+    pub fn detach(
+        &mut self,
+        handle: ElementHandle,
+    ) -> Result<(DetachedSubtree, ChangeSet), EngineError> {
+        let id = self.attached_id(handle)?;
+        let subtree = extract_subtree(&self.scene, &id)?;
+        let token = self
+            .next_sequence
+            .checked_add(1)
+            .ok_or(EngineError::Exhausted)?;
+        let mut next = self.scene.clone();
+        next.remove(&id)?;
+        let changes = self.apply(
+            next,
+            ChangeOrigin::Lifecycle,
+            CommitMode::Detach(token, subtree),
+        )?;
+        self.next_sequence = token;
+        Ok((
+            DetachedSubtree {
+                engine: self.id,
+                token,
+                root: id,
+            },
+            changes,
+        ))
+    }
+    pub fn detached_scene(&self, subtree: &DetachedSubtree) -> Result<&Scene, EngineError> {
+        if subtree.engine != self.id {
+            return Err(EngineError::InvalidSubtree);
+        }
+        self.detached
+            .get(&subtree.token)
+            .ok_or(EngineError::InvalidSubtree)
+    }
+    pub fn attach(
+        &mut self,
+        subtree: &DetachedSubtree,
+        parent: Option<ElementHandle>,
+        index: Option<usize>,
+    ) -> Result<ChangeSet, EngineError> {
+        let detached = self.detached_scene(subtree)?.clone();
+        let parent = parent.map(|h| self.attached_id(h)).transpose()?;
+        let mut next = self.scene.clone();
+        insert_forest(&mut next, &detached, parent, index)?;
+        self.apply(
+            next,
+            ChangeOrigin::Lifecycle,
+            CommitMode::Attach(subtree.token),
+        )
+    }
+    pub fn destroy(&mut self, handle: ElementHandle) -> Result<ChangeSet, EngineError> {
+        if self.check(handle)?.state == InstanceState::Destroyed {
+            return Ok(self.no_change(ChangeOrigin::Lifecycle));
+        }
+        let id = self.attached_id(handle)?;
+        self.transaction_with_origin(ChangeOrigin::Lifecycle, |scene| {
+            scene.remove(&id)?;
+            Ok(())
+        })
+    }
+    pub fn destroy_detached(
+        &mut self,
+        subtree: &DetachedSubtree,
+    ) -> Result<ChangeSet, EngineError> {
+        let ids = tree_ids(self.detached_scene(subtree)?);
+        let revision = self.revision.checked_add(1).ok_or(EngineError::Exhausted)?;
+        let mut change = ChangeSet {
+            before_revision: self.revision,
+            revision,
+            origin: ChangeOrigin::Lifecycle,
+            ..Default::default()
+        };
+        for id in ids.iter().rev() {
+            let handle = self.handle(id).expect("detached instance");
+            change.lifecycle.push(LifecycleEvent {
+                handle,
+                id: id.clone(),
+                kind: LifecycleKind::Destroyed,
+                old_parent: self
+                    .detached_scene(subtree)?
+                    .get(id)
+                    .and_then(|n| n.parent.clone()),
+                new_parent: None,
+            });
+        }
+        self.detached.remove(&subtree.token);
+        self.revision = revision;
+        self.layout.revision = revision;
+        for event in &change.lifecycle {
+            self.instances[event.handle.slot].state = InstanceState::Destroyed;
+            self.ids.remove(&event.id);
+        }
+        self.publish(&change);
+        for event in &change.lifecycle {
+            self.cleanup(event.handle);
+        }
+        self.last_change = change.clone();
+        Ok(change)
+    }
+    /// Clone attached or detached input state with new document IDs. Runtime
+    /// listeners, animation clocks and resource ownership are never copied.
+    pub fn clone_subtree(
+        &mut self,
+        handle: ElementHandle,
+        parent: Option<ElementHandle>,
+        index: Option<usize>,
+    ) -> Result<CloneResult, EngineError> {
+        let instance = self.live(handle)?;
+        let source = if instance.state == InstanceState::Attached {
+            &self.scene
+        } else {
+            self.detached
+                .values()
+                .find(|s| s.get(&instance.id).is_some())
+                .ok_or(EngineError::InvalidHandle)?
+        };
+        let source = extract_subtree(source, &instance.id)?;
+        let parent = parent.map(|h| self.attached_id(h)).transpose()?;
+        let mut mapping = BTreeMap::new();
+        let mut reserved: BTreeSet<_> = self.ids.keys().cloned().collect();
+        let mut sequence = 0u64;
+        for old in tree_ids(&source) {
+            let id = loop {
+                sequence = sequence.checked_add(1).ok_or(EngineError::Exhausted)?;
+                let id = DisplayId::from(format!("{}-copy-{sequence}", old.as_str()));
+                if reserved.insert(id.clone()) {
+                    break id;
+                }
+            };
+            mapping.insert(old, id);
+        }
+        let mut clone = Scene::new();
+        for old in tree_ids(&source) {
+            let node = source.get(&old).expect("source");
+            let mut object = node.object.clone();
+            object.id = mapping[&old].clone();
+            clone.insert(
+                object,
+                node.parent.as_ref().map(|p| mapping[p].clone()),
+                None,
+            )?;
+        }
+        let root = mapping[source.roots().first().expect("subtree root")].clone();
+        let mut next = self.scene.clone();
+        insert_forest(&mut next, &clone, parent, index)?;
+        let changes = self.apply(next, ChangeOrigin::Edit, CommitMode::Normal)?;
+        Ok(CloneResult {
+            root: self.handle(&root).expect("clone"),
+            ids: mapping,
+            changes,
+        })
+    }
+    fn no_change(&self, origin: ChangeOrigin) -> ChangeSet {
+        ChangeSet {
+            before_revision: self.revision,
+            revision: self.revision,
+            origin,
+            ..Default::default()
+        }
+    }
+    fn apply(
+        &mut self,
+        mut next: Scene,
+        origin: ChangeOrigin,
+        mode: CommitMode,
+    ) -> Result<ChangeSet, EngineError> {
+        self.registry
+            .prepare_changes(&mut next, Some(&self.scene))?;
+        // Detached IDs remain reserved. Only the matching attach operation may
+        // reuse them; ordinary history/import cannot alias retained instances.
+        let attaching = match &mode {
+            CommitMode::Attach(token) => Some(
+                self.detached
+                    .get(token)
+                    .ok_or(EngineError::InvalidSubtree)?,
+            ),
+            _ => None,
+        };
+        for node in next.nodes() {
+            if let Some(handle) = self.handle(&node.object.id)
+                && self.check(handle)?.state == InstanceState::Detached
+                && !matches!(mode, CommitMode::Reset)
+                && attaching.is_none_or(|s| s.get(&node.object.id).is_none())
+            {
+                return Err(EngineError::Scene(SceneError::DuplicateId(
+                    node.object.id.clone(),
+                )));
+            }
+        }
+        if self.scene == next && !matches!(mode, CommitMode::Reset) {
+            return Ok(self.no_change(origin));
+        }
+        let revision = self.revision.checked_add(1).ok_or(EngineError::Exhausted)?;
+        let mut change = diff(
+            &self.scene,
+            &next,
+            &self.registry,
+            self.revision,
+            revision,
+            origin,
+        )?;
+        let (layout, damage) = update_layout(&next, &self.layout, &change.dirty, revision)?;
+        change.layout = layout.stats;
+        change.damage = damage;
+        let old_ids = tree_ids(&self.scene);
+        let new_ids = tree_ids(&next);
+        let replaced: BTreeSet<_> = old_ids
+            .iter()
+            .filter(|id| {
+                next.get(id).is_some_and(|n| {
+                    matches!(mode, CommitMode::Reset)
+                        || element_kind(&n.object)
+                            != element_kind(&self.scene.get(id).expect("old").object)
+                })
+            })
+            .cloned()
+            .collect();
+        let removed: Vec<_> = old_ids
+            .iter()
+            .filter(|id| next.get(id).is_none() || replaced.contains(*id))
+            .cloned()
+            .collect();
+        let added: Vec<_> = new_ids
+            .iter()
+            .filter(|id| self.scene.get(id).is_none() || replaced.contains(*id))
+            .cloned()
+            .collect();
+        // Validate possible slot generation exhaustion before committing anything.
+        if self
+            .free
+            .iter()
+            .chain(removed.iter().filter_map(|id| self.ids.get(id)))
+            .any(|&slot| self.instances[slot].generation == u64::MAX)
+        {
+            return Err(EngineError::Exhausted);
+        }
+        let mut cleanup = vec![];
+        if matches!(mode, CommitMode::Reset) {
+            let detached_ids: Vec<_> = self.detached.values().flat_map(tree_ids).collect();
+            for id in detached_ids.into_iter().rev() {
+                let handle = self.handle(&id).expect("detached");
+                self.instances[handle.slot].state = InstanceState::Destroyed;
+                self.ids.remove(&id);
+                cleanup.push(handle);
+                change.lifecycle.push(LifecycleEvent {
+                    handle,
+                    id,
+                    kind: LifecycleKind::Destroyed,
+                    old_parent: None,
+                    new_parent: None,
+                });
+            }
+            self.detached.clear();
+        }
+        for id in removed.iter().rev() {
+            let handle = self.handle(id).expect("old handle");
+            let parent = self.scene.get(id).and_then(|n| n.parent.clone());
+            change.lifecycle.push(LifecycleEvent {
+                handle,
+                id: id.clone(),
+                kind: LifecycleKind::Unmounted,
+                old_parent: parent.clone(),
+                new_parent: None,
+            });
+            if matches!(mode, CommitMode::Detach(..)) {
+                self.instances[handle.slot].state = InstanceState::Detached;
+                change.lifecycle.push(LifecycleEvent {
+                    handle,
+                    id: id.clone(),
+                    kind: LifecycleKind::Detached,
+                    old_parent: parent,
+                    new_parent: None,
+                });
+            } else {
+                self.instances[handle.slot].state = InstanceState::Destroyed;
+                self.ids.remove(id);
+                cleanup.push(handle);
+                change.lifecycle.push(LifecycleEvent {
+                    handle,
+                    id: id.clone(),
+                    kind: LifecycleKind::Destroyed,
+                    old_parent: parent,
+                    new_parent: None,
+                });
+            }
+        }
+        for id in &added {
+            let (handle, created) = if let Some(handle) = self.handle(id) {
+                self.instances[handle.slot].state = InstanceState::Attached;
+                (handle, false)
+            } else {
+                (self.allocate(id.clone(), InstanceState::Attached)?, true)
+            };
+            let parent = next.get(id).and_then(|n| n.parent.clone());
+            if created {
+                change.lifecycle.push(LifecycleEvent {
+                    handle,
+                    id: id.clone(),
+                    kind: LifecycleKind::Created,
+                    old_parent: None,
+                    new_parent: parent.clone(),
+                });
+            }
+            change.lifecycle.push(LifecycleEvent {
+                handle,
+                id: id.clone(),
+                kind: LifecycleKind::Mounted,
+                old_parent: None,
+                new_parent: parent,
+            });
+        }
+        for structural in &change.structure {
+            if structural.kind == StructureKind::Reparented && !replaced.contains(&structural.id) {
+                change.lifecycle.push(LifecycleEvent {
+                    handle: self.handle(&structural.id).expect("retained"),
+                    id: structural.id.clone(),
+                    kind: LifecycleKind::Reparented,
+                    old_parent: structural.old_parent.clone(),
+                    new_parent: structural.new_parent.clone(),
+                });
+            }
+        }
+        match mode {
+            CommitMode::Detach(token, subtree) => {
+                self.detached.insert(token, subtree);
+            }
+            CommitMode::Attach(token) => {
+                self.detached.remove(&token);
+            }
+            CommitMode::Normal | CommitMode::Reset => {}
+        }
+        self.scene = next;
+        self.layout = layout;
+        self.revision = revision;
+        self.publish(&change);
+        for handle in cleanup {
+            self.cleanup(handle);
+        }
+        self.last_change = change.clone();
+        Ok(change)
+    }
+    pub fn on(
+        &mut self,
+        handle: ElementHandle,
+        kind: EventKind,
+        options: ListenerOptions,
+        handler: impl FnMut(&mut SceneEvent) + 'static,
+    ) -> Result<ListenerId, EngineError> {
+        let id = self.live(handle)?.id.clone();
+        let raw = self.dispatcher.on(id, kind, options, handler);
+        let token = ListenerId {
+            engine: self.id,
+            raw,
+        };
+        self.listeners.insert(token, handle);
+        Ok(token)
+    }
+    pub fn off(&mut self, id: ListenerId) -> bool {
+        if id.engine != self.id {
+            return false;
+        }
+        self.listeners.remove(&id);
+        self.dispatcher.off(id.raw)
+    }
+    pub fn listener_scope_count(&self) -> usize {
+        self.listeners.len()
+    }
+    pub fn property_descriptor(
+        &self,
+        handle: ElementHandle,
+        key: &PropertyKey,
+    ) -> Result<PropertyDescriptor, EngineError> {
+        if let PropertyKey::Custom(name) = key {
+            let object = self.object(handle)?;
+            let Shape::Custom(custom) = &object.shape else {
+                return Err(EngineError::Property("not a custom element".into()));
+            };
+            return self
+                .registry
+                .get(&custom.kind)
+                .and_then(|d| d.schema().descriptor(name).cloned())
+                .ok_or_else(|| {
+                    EngineError::Property(format!("no declared custom property {name}"))
+                });
+        }
+        self.live(handle)?;
+        key.descriptor()
+            .ok_or_else(|| EngineError::Property("unknown property".into()))
+    }
+    pub fn listener_count(&self) -> usize {
+        self.dispatcher.len()
+    }
+    pub fn dispatch(&mut self, event: SceneEvent) -> Result<DispatchResult, EngineError> {
+        let result = self.dispatcher.dispatch(&self.scene, event);
+        self.listeners
+            .retain(|id, _| self.dispatcher.contains_listener(id.raw));
+        Ok(result?)
+    }
+    pub fn on_change(
+        &mut self,
+        owner: Option<ElementHandle>,
+        handler: impl FnMut(&ChangeSet) + 'static,
+    ) -> Result<ObserverId, EngineError> {
+        if let Some(owner) = owner {
+            self.live(owner)?;
+        }
+        let id = ObserverId {
+            engine: self.id,
+            sequence: self.sequence()?,
+        };
+        self.observers.insert(
+            id,
+            Observer {
+                owner,
+                callback: Box::new(handler),
+            },
+        );
+        Ok(id)
+    }
+    pub fn off_change(&mut self, id: ObserverId) -> bool {
+        id.engine == self.id && self.observers.remove(&id).is_some()
+    }
+    pub fn add_disposer(
+        &mut self,
+        owner: ElementHandle,
+        dispose: impl FnOnce() + 'static,
+    ) -> Result<DisposerId, EngineError> {
+        self.live(owner)?;
+        let id = DisposerId {
+            engine: self.id,
+            sequence: self.sequence()?,
+        };
+        self.instances[owner.slot]
+            .disposers
+            .insert(id, Box::new(dispose));
+        Ok(id)
+    }
+    pub fn dispose(&mut self, id: DisposerId) -> bool {
+        if id.engine != self.id {
+            return false;
+        }
+        for instance in &mut self.instances {
+            if let Some(disposer) = instance.disposers.remove(&id) {
+                if catch_unwind(AssertUnwindSafe(disposer)).is_err() {
+                    self.callback_panics += 1;
+                }
+                return true;
+            }
+        }
+        false
+    }
+    fn publish(&mut self, change: &ChangeSet) {
+        for observer in self.observers.values_mut() {
+            // Instance observers receive only their own deltas/lifecycle or
+            // destruction; a global observer receives the whole change stream.
+            let relevant = observer.owner.is_none_or(|h| {
+                change.lifecycle.iter().any(|e| e.handle == h)
+                    || self.instances.get(h.slot).is_some_and(|i| {
+                        i.generation == h.generation && change.dirty.contains_key(&i.id)
+                    })
+            });
+            if relevant && catch_unwind(AssertUnwindSafe(|| (observer.callback)(change))).is_err() {
+                self.callback_panics += 1;
+            }
+        }
+    }
+    fn cleanup(&mut self, handle: ElementHandle) {
+        let listener_ids: Vec<_> = self
+            .listeners
+            .iter()
+            .filter(|(_, owner)| **owner == handle)
+            .map(|(id, _)| *id)
+            .collect();
+        for id in listener_ids {
+            self.off(id);
+        }
+        self.observers
+            .retain(|_, observer| observer.owner != Some(handle));
+        let disposers = std::mem::take(&mut self.instances[handle.slot].disposers);
+        for disposer in disposers.into_values() {
+            if catch_unwind(AssertUnwindSafe(disposer)).is_err() {
+                self.callback_panics += 1;
+            }
+        }
+        if !self.free.contains(&handle.slot) {
+            self.free.push(handle.slot);
+        }
+    }
+}
+impl Drop for SceneEngine {
+    fn drop(&mut self) {
+        for instance in &mut self.instances {
+            for disposer in std::mem::take(&mut instance.disposers).into_values() {
+                let _ = catch_unwind(AssertUnwindSafe(disposer));
+            }
+        }
+    }
+}
+fn element_kind(object: &DisplayObject) -> (&str, Option<&str>) {
+    match &object.shape {
+        Shape::Custom(c) => ("custom", Some(&c.kind)),
+        shape => (shape.tag(), None),
+    }
+}

@@ -12,7 +12,7 @@ impl Render for SceneView {
                     .into_iter()
                     .filter(|issue| {
                         this.editor
-                            .scene
+                            .scene()
                             .get(&issue.object.clone().into())
                             .is_some()
                     })
@@ -61,7 +61,7 @@ impl Render for SceneView {
         .absolute()
         .size_full();
         self.diagnostics.clear();
-        let objects = match self.editor.scene.paint_list() {
+        let objects = match self.editor.engine.paint_list() {
             Ok(items) => items
                 .iter()
                 .map(|item| RenderObject::from_paint_item(item, viewport))

@@ -236,7 +236,7 @@ impl ScenePluginHost {
         report.effects.push(effect);
     }
     fn cancel_active(&mut self, editor: &mut SceneEditor, report: &mut DispatchReport) {
-        let before = editor.scene.clone();
+        let before = editor.scene().clone();
         let selection = editor.selection.clone();
         let viewport = editor.viewport;
         if self.gesture_owner.take().is_some() && editor.editing() {
@@ -244,7 +244,7 @@ impl ScenePluginHost {
         }
         if let Some(capture) = self.capture.take() {
             editor.selection = capture.selection;
-            let graph = editor.scene.clone();
+            let graph = editor.scene().clone();
             editor.selection.retain_existing(&graph);
             editor.viewport = capture.viewport;
         }
@@ -257,7 +257,7 @@ impl ScenePluginHost {
         for entry in &mut self.plugins {
             entry.plugin.on_lifecycle(PluginLifecycle::Cancelled);
         }
-        if before != editor.scene {
+        if before != *editor.scene() {
             self.effect(CanvasEffect::DocumentChanged, report);
         }
         if selection != editor.selection {
@@ -474,7 +474,7 @@ impl ScenePluginHost {
                 self.capture_owner().unwrap().into(),
             ));
         }
-        let graph = editor.scene.clone();
+        let graph = editor.scene().clone();
         let selection = editor.selection.clone();
         let viewport = editor.viewport;
         self.apply(editor, owner, command, report)?;
@@ -484,7 +484,7 @@ impl ScenePluginHost {
         for effect in effects {
             self.effect(effect, report);
         }
-        if graph != editor.scene {
+        if graph != *editor.scene() {
             self.effect(CanvasEffect::DocumentChanged, report);
         }
         if selection != editor.selection {
@@ -504,7 +504,7 @@ impl ScenePluginHost {
         report: &mut DispatchReport,
     ) -> Result<(), InteractionError> {
         let require_editable = |id: &DisplayId| {
-            if object_editable(&editor.scene, id) {
+            if object_editable(editor.scene(), id) {
                 Ok(())
             } else {
                 Err(InteractionError::InvalidInput(format!(
@@ -555,7 +555,7 @@ impl ScenePluginHost {
             }
             SceneCommand::CancelGesture => self.cancel_active(editor, report),
             SceneCommand::Select { id, mode } => {
-                if editor.scene.get(&id).is_none() {
+                if editor.scene().get(&id).is_none() {
                     return Err(SceneError::MissingNode(id).into());
                 }
                 match mode {
@@ -566,8 +566,8 @@ impl ScenePluginHost {
             }
             SceneCommand::ClearSelection => editor.selection.clear(),
             SceneCommand::SelectAll => {
-                editor.selection = if let Some(bounds) = editor.scene.visible_bounds()? {
-                    SceneSelection::in_rect(&editor.scene, bounds)?
+                editor.selection = if let Some(bounds) = editor.scene().visible_bounds()? {
+                    SceneSelection::in_rect(editor.scene(), bounds)?
                 } else {
                     SceneSelection::default()
                 };
@@ -578,7 +578,7 @@ impl ScenePluginHost {
                         "invalid marquee bounds".into(),
                     ));
                 }
-                let selected = SceneSelection::in_rect(&editor.scene, rect)?;
+                let selected = SceneSelection::in_rect(editor.scene(), rect)?;
                 if additive {
                     editor.selection.ids.extend(selected.ids);
                 } else {
@@ -586,7 +586,7 @@ impl ScenePluginHost {
                 }
             }
             SceneCommand::TranslateSelection { delta } => {
-                for id in editor.selection.roots(&editor.scene) {
+                for id in editor.selection.roots(editor.scene()) {
                     require_editable(&id)?;
                 }
                 editor.translate_selection(delta)?;
@@ -595,7 +595,7 @@ impl ScenePluginHost {
                 if !anchor.is_finite() {
                     return Err(InteractionError::InvalidInput("invalid move anchor".into()));
                 }
-                for id in editor.selection.roots(&editor.scene) {
+                for id in editor.selection.roots(editor.scene()) {
                     require_editable(&id)?;
                 }
                 if let Some(bounds) = selection_bounds(editor)? {
@@ -609,22 +609,30 @@ impl ScenePluginHost {
                 })?;
             }
             SceneCommand::RotateSelection { degrees } => {
-                for id in editor.selection.roots(&editor.scene) {
+                for id in editor.selection.roots(editor.scene()) {
                     require_editable(&id)?;
                 }
                 editor.rotate_selection(degrees)?;
             }
             SceneCommand::ScaleSelection { factor } => {
-                for id in editor.selection.roots(&editor.scene) {
+                for id in editor.selection.roots(editor.scene()) {
                     require_editable(&id)?;
                 }
                 editor.scale_selection(factor)?;
             }
             SceneCommand::DeleteSelection => {
-                for id in editor.selection.roots(&editor.scene) {
+                for id in editor.selection.roots(editor.scene()) {
                     require_editable(&id)?;
                 }
                 editor.delete_selection()?;
+            }
+            SceneCommand::SetProperty { id, key, value } => {
+                require_editable(&id)?;
+                let handle = editor
+                    .engine
+                    .handle(&id)
+                    .ok_or(SceneError::MissingNode(id))?;
+                editor.set_property(handle, key, value)?;
             }
             SceneCommand::SetObjectData { id, data } => {
                 require_editable(&id)?;
@@ -650,7 +658,7 @@ impl ScenePluginHost {
                 if editor.editing() {
                     return Err(InteractionError::GestureOwned("active scene edit".into()));
                 }
-                *editor = SceneEditor::new(scene)?;
+                editor.load_scene(scene)?;
             }
             SceneCommand::PasteScene { scene, offset } => {
                 scene.validate()?;
@@ -712,7 +720,7 @@ impl ScenePluginHost {
                 }
             }
             SceneCommand::Fit { canvas, padding } => {
-                if let Some(bounds) = editor.scene.visible_bounds()?
+                if let Some(bounds) = editor.scene().visible_bounds()?
                     && !editor.viewport.fit(bounds, canvas, padding)
                 {
                     return Err(InteractionError::InvalidInput(

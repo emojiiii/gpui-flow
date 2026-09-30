@@ -69,10 +69,10 @@ let scene = Scene::from_json(&json)?;
 
 ## 事件
 
-`SceneView.dispatcher` 接收真实 GPUI pointer 事件，转换成世界/本地坐标后派发。监听器属于运行时，不写入 JSON。
+`SceneView::on/off` 接收真实 GPUI pointer 事件，转换成世界/本地坐标后派发。监听器属于运行时，不写入 JSON。
 
 ```rust
-view.dispatcher.on(
+view.on(
     "frame", EventKind::PointerDown,
     ListenerOptions { capture: true, once: false },
     |event| {

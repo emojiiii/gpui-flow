@@ -67,14 +67,14 @@ fn shared_trait_drives_real_scene_selection_drag_and_undo() {
     assert_eq!(host.capture_owner(), Some("drag"));
     assert!(editor.editing());
     assert_eq!(
-        editor.scene.get(&"a".into()).unwrap().object.transform.tx,
+        editor.scene().get(&"a".into()).unwrap().object.transform.tx,
         70.0
     );
     up(&mut host, &mut editor, 90.0, 75.0);
     assert!(!editor.editing());
     assert!(editor.undo());
     assert_eq!(
-        editor.scene.get(&"a".into()).unwrap().object.transform.tx,
+        editor.scene().get(&"a".into()).unwrap().object.transform.tx,
         30.0
     );
 }
@@ -87,7 +87,7 @@ fn disabling_scene_selection_does_not_move_unrelated_selection() {
     begin_move(&mut host, &mut editor);
     assert!(!host.has_capture());
     assert_eq!(
-        editor.scene.get(&"b".into()).unwrap().object.transform.tx,
+        editor.scene().get(&"b".into()).unwrap().object.transform.tx,
         250.0
     );
 }
@@ -95,11 +95,11 @@ fn disabling_scene_selection_does_not_move_unrelated_selection() {
 fn uninstall_drag_rolls_back_scene_transaction() {
     let mut host = ScenePluginHost::with_defaults();
     let mut editor = editor();
-    let before = editor.scene.clone();
+    let before = editor.scene().clone();
     begin_move(&mut host, &mut editor);
     let result = host.uninstall("drag", &mut editor).unwrap();
     assert!(result.document_changed);
-    assert_eq!(editor.scene, before);
+    assert_eq!(*editor.scene(), before);
     assert!(!editor.editing());
     assert!(!host.has_capture());
     assert!(!editor.undo());
@@ -108,10 +108,10 @@ fn uninstall_drag_rolls_back_scene_transaction() {
 fn readonly_midgesture_cancels_and_blocks_scene_mutations() {
     let mut host = ScenePluginHost::with_defaults();
     let mut editor = editor();
-    let before = editor.scene.clone();
+    let before = editor.scene().clone();
     begin_move(&mut host, &mut editor);
     host.set_editable(false, &mut editor);
-    assert_eq!(editor.scene, before);
+    assert_eq!(*editor.scene(), before);
     let commands = vec![
         SceneCommand::Undo,
         SceneCommand::Redo,
@@ -137,7 +137,7 @@ fn readonly_midgesture_cancels_and_blocks_scene_mutations() {
             Err(InteractionError::CapabilityDenied(Capability::Edit))
         ));
     }
-    assert_eq!(editor.scene, before);
+    assert_eq!(*editor.scene(), before);
 }
 #[test]
 fn scene_navigation_and_selection_policies_are_independent() {
@@ -201,7 +201,7 @@ fn scene_missing_button_and_focus_loss_roll_back_not_commit() {
         begin_move(&mut host, &mut editor);
         host.dispatch(&mut editor, event);
         assert_eq!(
-            editor.scene.get(&"a".into()).unwrap().object.transform.tx,
+            editor.scene().get(&"a".into()).unwrap().object.transform.tx,
             30.0
         );
         assert!(!editor.editing());
@@ -291,11 +291,11 @@ fn scene_resize_preserves_negative_origin_anchor_and_no_motion_is_noop() {
     );
     movement(&mut host, &mut editor, 152.0, 138.0);
     assert_eq!(
-        editor.scene.get(&"p".into()).unwrap().object.transform,
+        editor.scene().get(&"p".into()).unwrap().object.transform,
         Affine::translation(100.0, 100.0)
     );
     movement(&mut host, &mut editor, 252.0, 218.0);
-    let matrix = editor.scene.get(&"p".into()).unwrap().object.transform;
+    let matrix = editor.scene().get(&"p".into()).unwrap().object.transform;
     assert!(
         matrix
             .transform_point(Point::new(-50.0, -40.0))
@@ -325,7 +325,12 @@ fn text_and_image_resize_remain_uniform() {
             HitTarget::ObjectResize("object".into()),
         );
         movement(&mut host, &mut editor, 150.0, 60.0);
-        let matrix = editor.scene.get(&"object".into()).unwrap().object.transform;
+        let matrix = editor
+            .scene()
+            .get(&"object".into())
+            .unwrap()
+            .object
+            .transform;
         assert!((matrix.a - matrix.d).abs() < 0.001);
         assert!((matrix.a - 1.5).abs() < 0.001);
         host.cancel(&mut editor);
@@ -388,7 +393,7 @@ fn world_drag_under_rotated_parent_uses_parent_inverse() {
         .unwrap();
     let mut editor = SceneEditor::new(scene).unwrap();
     let before = editor
-        .scene
+        .scene()
         .world_transform(&"child".into())
         .unwrap()
         .transform_point(Point::ZERO);
@@ -402,7 +407,7 @@ fn world_drag_under_rotated_parent_uses_parent_inverse() {
     );
     movement(&mut host, &mut editor, 310.0, 160.0);
     let after = editor
-        .scene
+        .scene()
         .world_transform(&"child".into())
         .unwrap()
         .transform_point(Point::ZERO);
@@ -422,12 +427,12 @@ fn independent_scene_snap_plugin_changes_move_and_disable_rolls_back() {
     );
     movement(&mut host, &mut editor, 58.0, 58.0);
     assert_eq!(
-        editor.scene.get(&"a".into()).unwrap().object.transform.tx,
+        editor.scene().get(&"a".into()).unwrap().object.transform.tx,
         40.0
     );
     host.set_enabled("snapping", false, &mut editor).unwrap();
     assert_eq!(
-        editor.scene.get(&"a".into()).unwrap().object.transform.tx,
+        editor.scene().get(&"a".into()).unwrap().object.transform.tx,
         30.0
     );
     assert!(!host.has_capture());
@@ -455,13 +460,13 @@ fn scene_paste_remaps_ids_preserves_parent_links_and_undoes() {
         },
     )
     .unwrap();
-    assert_eq!(editor.scene.len(), 4);
+    assert_eq!(editor.scene().len(), 4);
     assert_eq!(editor.selection.ids.len(), 1);
     let root = editor.selection.ids.iter().next().unwrap();
-    assert_eq!(editor.scene.get(root).unwrap().children.len(), 1);
-    assert_eq!(editor.scene.get(root).unwrap().object.transform.tx, 100.0);
+    assert_eq!(editor.scene().get(root).unwrap().children.len(), 1);
+    assert_eq!(editor.scene().get(root).unwrap().object.transform.tx, 100.0);
     host.execute(&mut editor, SceneCommand::Undo).unwrap();
-    assert_eq!(editor.scene.len(), 2);
+    assert_eq!(editor.scene().len(), 2);
 }
 struct Prevent;
 impl CanvasPlugin<SceneEditor, SceneCommand> for Prevent {
@@ -504,7 +509,7 @@ fn scene_plugin_replacement_cancels_even_unrelated_active_behavior() {
     assert!(host.install(Prevent).is_err());
     host.replace(Prevent, &mut editor).unwrap();
     assert_eq!(
-        editor.scene.get(&"a".into()).unwrap().object.transform.tx,
+        editor.scene().get(&"a".into()).unwrap().object.transform.tx,
         30.0
     );
     assert!(!editor.editing());

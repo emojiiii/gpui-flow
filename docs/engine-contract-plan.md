@@ -1,6 +1,6 @@
 # 源码对照后的引擎契约计划
 
-状态：设计提案，尚未实现；不是功能完成清单。当前可运行基线为 `43eda10`。完整上游文件对照见 `leafer-source-map.md`（已完成源码核验）。
+状态：A/B 引擎基础和 C 的鼠标/滚轮/KeyDown 事件路由已接入 SceneEditor/SceneView，正在进行完整回归与原生验收。D/E 仍为后续计划，不是功能完成清单。实现 API 与准确边界见 [engine.md](engine.md)。完整上游文件对照见 `leafer-source-map.md`。
 
 ## 为什么还需要这层
 
@@ -36,7 +36,7 @@ PropertySpec 声明默认值、类型/验证、序列化规则及失效类别。
 
 ### C. 统一树事件与交互默认动作
 
-当前需要修正的明确问题：SceneView 的 Move/Up 默认动作在树事件之前执行，Wheel/Key 不进入树分发。新 router 必须让 prevent_default 在动作前生效，同时无论被阻止与否都完成 release/cancel 清理。回调中的写操作通过有界命令队列，在固定事件路径完成后执行，避免直接重入可变借用和树结构半修改。
+旧基线问题：SceneView 的 Move/Up 默认动作在树事件之前执行，Wheel/Key 不进入树分发。现已由 SceneEventRouter 统一接入，让 prevent_default 在动作前生效，同时无论被阻止与否都完成 release/cancel 清理。回调中的写操作通过有界命令队列，在固定事件路径完成后执行，避免直接重入可变借用和树结构半修改。
 
 测试：capture→target capture→target bubble→bubble 顺序；once/off；同节点 stop 与 immediate stop 区别；Down/Move/Up/Wheel/Key 的 default prevention；hover enter/leave路径差分；pointer捕获/按钮不匹配/窗口失焦；已删除目标；事件回调排队修改/删除；取消清理不能被 prevent_default 阻断。
 

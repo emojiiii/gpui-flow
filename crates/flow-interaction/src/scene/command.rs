@@ -42,6 +42,11 @@ pub enum SceneCommand {
         factor: f32,
     },
     DeleteSelection,
+    SetProperty {
+        id: DisplayId,
+        key: gpui_flow_engine::PropertyKey,
+        value: Value,
+    },
     SetObjectData {
         id: DisplayId,
         data: Value,

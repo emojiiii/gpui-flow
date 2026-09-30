@@ -2411,6 +2411,7 @@ dependencies = [
  "gpui",
  "gpui-flow-core",
  "gpui-flow-editor",
+ "gpui-flow-engine",
  "gpui-flow-interaction",
  "gpui-flow-media",
  "gpui-flow-runtime",
@@ -2434,7 +2435,19 @@ name = "gpui-flow-editor"
 version = "0.1.0"
 dependencies = [
  "gpui-flow-core",
+ "gpui-flow-engine",
  "gpui-flow-scene",
+ "serde_json",
+]
+
+[[package]]
+name = "gpui-flow-engine"
+version = "0.1.0"
+dependencies = [
+ "gpui-flow-core",
+ "gpui-flow-scene",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -2443,6 +2456,7 @@ version = "0.1.0"
 dependencies = [
  "gpui-flow-core",
  "gpui-flow-editor",
+ "gpui-flow-engine",
  "gpui-flow-scene",
  "serde_json",
 ]

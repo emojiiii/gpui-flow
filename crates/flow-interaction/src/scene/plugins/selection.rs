@@ -43,7 +43,7 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneSelectionPlugin {
                         let mut id = DisplayId::from(id.clone());
                         if p.modifiers.control
                             && let Some(parent) =
-                                cx.editor.scene.get(&id).and_then(|n| n.parent.clone())
+                                cx.editor.scene().get(&id).and_then(|n| n.parent.clone())
                         {
                             id = parent;
                         }

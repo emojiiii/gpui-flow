@@ -59,16 +59,16 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneDragPlugin {
                 };
                 let id = DisplayId::from(id.clone());
                 let selected =
-                    cx.editor.scene.ancestor_path(&id).is_ok_and(|path| {
+                    cx.editor.scene().ancestor_path(&id).is_ok_and(|path| {
                         path.iter().any(|id| cx.editor.selection.ids.contains(id))
                     });
                 if !selected
                     || cx
                         .editor
                         .selection
-                        .roots(&cx.editor.scene)
+                        .roots(cx.editor.scene())
                         .iter()
-                        .any(|id| !object_editable(&cx.editor.scene, id))
+                        .any(|id| !object_editable(cx.editor.scene(), id))
                 {
                     return;
                 }

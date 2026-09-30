@@ -14,10 +14,52 @@ pub enum EventKind {
     DoubleClick,
     PointerEnter,
     PointerLeave,
+    PointerOver,
+    PointerOut,
+    Focus,
+    Blur,
     Wheel,
     KeyDown,
     KeyUp,
     Custom(String),
+}
+/// Normalized platform metadata. Logical coordinates live in SceneEvent; native
+/// objects, credentials and opaque OS pointers are never retained here.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InputModifiers {
+    pub shift: bool,
+    pub control: bool,
+    pub alt: bool,
+    pub meta: bool,
+}
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PointerDevice {
+    #[default]
+    Mouse,
+    Touch,
+    Pen,
+    Unknown,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum EventInput {
+    Pointer {
+        pointer_id: u64,
+        device: PointerDevice,
+        button: Option<u8>,
+        buttons: u16,
+        pressure: Option<f32>,
+        modifiers: InputModifiers,
+        cancelled: bool,
+    },
+    Wheel {
+        delta: Point,
+        modifiers: InputModifiers,
+    },
+    Key {
+        key: String,
+        modifiers: InputModifiers,
+        repeat: bool,
+    },
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventPhase {
@@ -34,6 +76,10 @@ pub struct SceneEvent {
     pub world_position: Option<Point>,
     pub local_position: Option<Point>,
     pub data: Value,
+    pub input: Option<EventInput>,
+    pub related_target: Option<DisplayId>,
+    pub sequence: u64,
+    pub timestamp_millis: Option<u64>,
     pub bubbles: bool,
     pub cancelable: bool,
     default_prevented: bool,
@@ -52,6 +98,10 @@ impl SceneEvent {
             world_position: None,
             local_position: None,
             data: Value::Null,
+            input: None,
+            related_target: None,
+            sequence: 0,
+            timestamp_millis: None,
             bubbles,
             cancelable: true,
             default_prevented: false,
@@ -135,6 +185,9 @@ impl EventDispatcher {
             },
         );
         id
+    }
+    pub fn contains_listener(&self, id: ListenerId) -> bool {
+        self.listeners.contains_key(&id)
     }
     pub fn off(&mut self, id: ListenerId) -> bool {
         self.listeners.remove(&id).is_some()

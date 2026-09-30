@@ -35,9 +35,18 @@ impl SceneView {
         }
     }
     fn plugin_event(&mut self, event: input::CanvasEvent, cx: &mut Context<Self>) {
-        let report = self.interactions.dispatch(&mut self.editor, event);
-        self.apply_input_report(report, cx);
+        let report = self
+            .router
+            .dispatch(&mut self.editor, &mut self.interactions, event);
+        for event in report.events {
+            cx.emit(SceneViewEvent::Pointer(Box::new(event)));
+        }
+        if let Some(error) = report.errors.last() {
+            self.interaction_error = Some(error.clone());
+        }
+        self.apply_input_report(report.default, cx);
     }
+
     pub(super) fn down(
         &mut self,
         event: &MouseDownEvent,
@@ -45,18 +54,8 @@ impl SceneView {
         cx: &mut Context<Self>,
     ) {
         window.focus(&self.focus, cx);
-        self.cancel_input(cx);
         let local = self.local(event.position);
-        let world = self.world(event.position);
-        self.last_pointer = world;
         let hit = self.input_hit(local, event.modifiers.control);
-        if let input::HitTarget::Object(id) | input::HitTarget::ObjectResize(id) = &hit {
-            let id = DisplayId::from(id.clone());
-            if self.dispatch(EventKind::PointerDown, id.clone(), world, cx) {
-                return;
-            }
-            self.pressed = Some((id, world));
-        }
         self.plugin_event(
             input::CanvasEvent::PointerDown(input::PointerInput {
                 position: local,
@@ -70,8 +69,6 @@ impl SceneView {
     }
     pub(super) fn moved(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
         let local = self.local(event.position);
-        let world = self.world(event.position);
-        self.last_pointer = world;
         if event.pressed_button.is_none() && self.interactions.has_capture() {
             self.cancel_input(cx);
         }
@@ -86,16 +83,9 @@ impl SceneView {
             }),
             cx,
         );
-        if let Some((id, _)) = self.pressed.clone() {
-            self.dispatch(EventKind::PointerMove, id, world, cx);
-        } else if let Some(id) = self.hit(world) {
-            self.dispatch(EventKind::PointerMove, id, world, cx);
-        }
     }
     pub(super) fn up(&mut self, event: &MouseUpEvent, cx: &mut Context<Self>) {
         let local = self.local(event.position);
-        let world = self.world(event.position);
-        self.last_pointer = world;
         self.plugin_event(
             input::CanvasEvent::PointerUp(input::PointerInput {
                 position: local,
@@ -106,19 +96,8 @@ impl SceneView {
             }),
             cx,
         );
-        if let Some((id, start)) = self.pressed.take() {
-            self.dispatch(EventKind::PointerUp, id.clone(), world, cx);
-            if event.button == MouseButton::Left
-                && start.distance(world) * self.editor.viewport.zoom < 4.
-            {
-                self.dispatch(EventKind::Click, id, world, cx);
-            }
-        }
     }
     pub(super) fn cancel_input(&mut self, cx: &mut Context<Self>) {
-        if let Some((id, _)) = self.pressed.take() {
-            self.dispatch(EventKind::PointerCancel, id, self.last_pointer, cx);
-        }
         self.plugin_event(input::CanvasEvent::PointerCancel, cx);
     }
     pub(super) fn focus_lost(&mut self, cx: &mut Context<Self>) {
@@ -147,11 +126,8 @@ impl SceneView {
             cx.notify();
             return;
         }
-        if text == "escape" {
-            self.cancel_input(cx);
-            return;
-        }
         let key = match text {
+            "escape" => input::KeyCode::Escape,
             "delete" => input::KeyCode::Delete,
             "backspace" => input::KeyCode::Backspace,
             t => {
