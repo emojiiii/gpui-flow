@@ -2,7 +2,7 @@
 use gpui::{prelude::*, *};
 use gpui_flow::{
     ControlButton, FlowTheme, SceneView,
-    interaction::scene::{StatePaint, StateStyles},
+    interaction::scene::{StatePaint, StateStyles, StateTransition, StateTransitions},
     scene::{self, Affine, Color, DisplayObject, Scene, Style, display},
 };
 fn styles() -> StateStyles {
@@ -56,6 +56,16 @@ impl Lab {
                     styles(),
                 )
                 .unwrap();
+            view.state_styles
+                .set_transitions(
+                    &view.editor.engine,
+                    view.editor.engine.handle(&"card".into()).unwrap(),
+                    StateTransitions {
+                        transition: StateTransition::new(180),
+                        transition_out: Some(StateTransition::new(320)),
+                    },
+                )
+                .unwrap();
             view
         });
         Self {
@@ -104,6 +114,16 @@ impl Lab {
                     .unwrap();
                 view.state_styles
                     .set_disabled(&view.editor.engine, handle, self.disabled)
+                    .unwrap();
+                view.state_styles
+                    .set_transitions(
+                        &view.editor.engine,
+                        handle,
+                        StateTransitions {
+                            transition: StateTransition::new(180),
+                            transition_out: Some(StateTransition::new(320)),
+                        },
+                    )
                     .unwrap();
             } else {
                 view.state_styles.unbind(handle);
@@ -164,7 +184,7 @@ impl Render for Lab {
                 ControlButton::new("bind", binding)
                     .on_click(cx.listener(|this, _, _, cx| this.toggle_binding(cx))),
             );
-        let help = "selected blue → focus purple → hover teal → press amber; disabled gray suppresses pointer colors. Hover never adds Undo. Disabled here is visual, not an access policy.";
+        let help = "180ms entry / 320ms exit · selected blue → focus purple → hover teal → press amber; disabled gray suppresses pointer colors. Hover never adds Undo. Disabled here is visual, not an access policy.";
         div()
             .size_full()
             .flex()

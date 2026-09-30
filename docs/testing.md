@@ -211,3 +211,12 @@ cargo test --locked -p gpui-flow-layout
 - 全workspace/all-targets check、严格Clippy、格式检查、文档Clippy、9个可执行文档示例及18项UI测试通过
 - reactive_layout完成Linux原生链接，控件调用普通SceneEditor::transaction，由已安装provider自动重排；本批未实际打开窗口验收。三平台自动结果以精确提交的Actions为准
 - 没有宣称异步全局watcher、帧合并、局部依赖调度、序列化runtime配置或完整input/computed分离
+
+## 状态 fill/opacity 过渡增量（2026-09-30）
+
+- `flow-interaction/tests/state_transitions.rs`：14项，覆盖进出时间/exit回退与显式零时长、RGBA/opacity/easing、连续快速反转、同目标不重启、disabled/PointerCancel、同通道canonical编辑/animation冲突、Undo/Redo、detach/reattach epoch、reset、binding替换/解绑、整帧失败原子、单调时钟、极大时长和配置变更finish
+- 复用现有animation纯插值器；`TweenValue::interpolate`验证有限输入与匹配类型，精确端点，无引擎写入
+- 395项headless aggregate通过（含doctest）；原有梯度性能测量仍ignored
+- 19项UI单测通过，包括实际RenderObject中间色/opacity、endpoint后active=false；workspace所有target check和strict clippy通过
+- 现有`state_styles`原生示例启用180ms进入/320ms退出；本地链接和headless行为验证，不声称人工GUI验收
+- executable `state_styles`文档验证进出/反转且Undo不被污染；发布后的三平台结果仍以精确commit的Actions为准

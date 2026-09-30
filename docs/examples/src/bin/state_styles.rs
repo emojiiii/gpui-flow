@@ -72,6 +72,51 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert!(editor.undo());
     assert_eq!(fill(editor.scene()), Color::BLACK.into());
     assert!(!editor.undo());
-    println!("State priority, current baseline restoration and untouched edit history verified");
+    sheet.presentation(&editor, &router)?; // accept the new canonical base after Undo
+    sheet.set_transitions(
+        &editor.engine,
+        handle,
+        StateTransitions {
+            transition: StateTransition::new(100),
+            transition_out: Some(StateTransition::new(200)),
+        },
+    )?;
+    router.dispatch(
+        &mut editor,
+        &mut host,
+        CanvasEvent::PointerMove(PointerInput::left(
+            Point::new(20., 20.),
+            HitTarget::Object("card".into()),
+        )),
+    );
+    use std::time::Duration;
+    sheet.presentation_at(&editor, &router, Duration::ZERO)?;
+    let midway = fill(
+        sheet
+            .presentation_at(&editor, &router, Duration::from_millis(50))?
+            .as_ref(),
+    );
+    assert_ne!(midway, Color::BLACK.into());
+    assert_ne!(midway, Color::hex(0x239e91).into());
+    router.dispatch(&mut editor, &mut host, CanvasEvent::PointerLeave);
+    assert_eq!(
+        fill(
+            sheet
+                .presentation_at(&editor, &router, Duration::from_millis(50))?
+                .as_ref()
+        ),
+        midway
+    );
+    assert_eq!(
+        fill(
+            sheet
+                .presentation_at(&editor, &router, Duration::from_millis(250))?
+                .as_ref()
+        ),
+        Color::BLACK.into()
+    );
+    assert!(!sheet.has_active_transitions());
+    assert!(!editor.undo());
+    println!("State priority, transition entry/exit/reversal and untouched history verified");
     Ok(())
 }

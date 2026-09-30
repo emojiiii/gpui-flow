@@ -4,6 +4,7 @@ fn state_render_objects(
     editor: &SceneEditor,
     router: &gpui_flow_interaction::scene::SceneEventRouter,
     styles: &mut gpui_flow_interaction::scene::SceneStateStyles,
+    now: std::time::Duration,
 ) -> (Vec<RenderObject>, Option<String>) {
     let convert = |items: Vec<gpui_flow_scene::PaintItem<'_>>| {
         items
@@ -19,7 +20,7 @@ fn state_render_objects(
             .map_err(|e| e.to_string())
     };
     let presented = styles
-        .presentation(editor, router)
+        .presentation_at(editor, router, now)
         .map_err(|e| e.to_string())
         .and_then(|scene| match scene {
             std::borrow::Cow::Owned(scene) => {
@@ -99,9 +100,19 @@ impl Render for SceneView {
         .absolute()
         .size_full();
         self.diagnostics.clear();
-        let (objects, state_error) =
-            state_render_objects(&self.editor, &self.router, &mut self.state_styles);
+        let (objects, state_error) = state_render_objects(
+            &self.editor,
+            &self.router,
+            &mut self.state_styles,
+            self.state_clock.elapsed(),
+        );
         self.state_style_error = state_error;
+        if self.state_style_error.is_none() && self.state_styles.has_active_transitions() {
+            let entity = cx.entity().downgrade();
+            window.on_next_frame(move |_, cx| {
+                let _ = entity.update(cx, |_, cx| cx.notify());
+            });
+        }
         let corners: Vec<_> = self
             .editor
             .selection
@@ -306,7 +317,8 @@ mod state_tests {
             .unwrap();
         let canonical = editor.scene().clone();
         let revision = editor.engine.revision();
-        let (objects, error) = state_render_objects(&editor, &router, &mut sheet);
+        let (objects, error) =
+            state_render_objects(&editor, &router, &mut sheet, std::time::Duration::ZERO);
         assert!(error.unwrap().contains("paint layers"));
         assert_eq!(objects.len(), 1);
         assert_eq!(
@@ -316,8 +328,76 @@ mod state_tests {
         assert_eq!(editor.scene(), &canonical);
         assert_eq!(editor.engine.revision(), revision);
         sheet.unbind(handle);
-        let (objects, error) = state_render_objects(&editor, &router, &mut sheet);
+        let (objects, error) =
+            state_render_objects(&editor, &router, &mut sheet, std::time::Duration::ZERO);
         assert!(error.is_none());
         assert_eq!(objects.len(), 1);
+    }
+    #[test]
+    fn transition_frames_render_interpolated_values_and_stop_requesting_motion() {
+        use std::time::Duration;
+        let mut scene = Scene::new();
+        scene
+            .insert(
+                DisplayObject::new("a", display::Rect::new(40., 30.))
+                    .with_style(gpui_flow_scene::Style::fill(Color::BLACK)),
+                None,
+                None,
+            )
+            .unwrap();
+        let mut editor = SceneEditor::new(scene).unwrap();
+        let handle = editor.engine.handle(&"a".into()).unwrap();
+        let mut sheet = SceneStateStyles::new(&editor.engine);
+        sheet
+            .bind(
+                &editor.engine,
+                handle,
+                StateStyles {
+                    hover: StatePaint {
+                        fill: Some(Color::WHITE),
+                        opacity: Some(0.5),
+                    },
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        sheet
+            .set_transitions(
+                &editor.engine,
+                handle,
+                StateTransitions {
+                    transition: StateTransition::new(100),
+                    transition_out: None,
+                },
+            )
+            .unwrap();
+        let mut router = SceneEventRouter::new();
+        let mut host = ScenePluginHost::new();
+        router.dispatch(
+            &mut editor,
+            &mut host,
+            CanvasEvent::PointerMove(PointerInput::left(
+                Point::new(10., 10.),
+                HitTarget::Object("a".into()),
+            )),
+        );
+        let (_, error) = state_render_objects(&editor, &router, &mut sheet, Duration::ZERO);
+        assert!(error.is_none());
+        assert!(sheet.has_active_transitions());
+        let (objects, error) =
+            state_render_objects(&editor, &router, &mut sheet, Duration::from_millis(50));
+        assert!(error.is_none());
+        assert_eq!(objects[0].object.style.opacity, 0.75);
+        assert_eq!(
+            objects[0].object.style.fill,
+            Some(Color::rgb(128, 128, 128).into())
+        );
+        let (objects, error) =
+            state_render_objects(&editor, &router, &mut sheet, Duration::from_millis(100));
+        assert!(error.is_none());
+        assert_eq!(objects[0].object.style.opacity, 0.5);
+        assert!(!sheet.has_active_transitions()); // SceneView's next-frame request gate is now false.
+        state_render_objects(&editor, &router, &mut sheet, Duration::from_millis(1000));
+        assert!(!sheet.has_active_transitions());
     }
 }

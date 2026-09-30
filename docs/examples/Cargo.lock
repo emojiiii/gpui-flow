@@ -60,6 +60,7 @@ dependencies = [
 name = "gpui-flow-interaction"
 version = "0.1.0"
 dependencies = [
+ "gpui-flow-animation",
  "gpui-flow-core",
  "gpui-flow-editor",
  "gpui-flow-engine",

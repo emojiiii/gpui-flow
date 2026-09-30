@@ -4,7 +4,8 @@
 `gpui-flow-interaction::scene`. `SceneView` consumes it directly. Register
 `StateStyles` against a live `ElementHandle`, then routed input and editor
 selection resolve the current appearance. This is a bounded Leafer contract
-milestone, not complete state/transition compatibility.
+milestone, not complete state/transition compatibility. Optional solid-fill/opacity transitions
+use the existing animation sampler and the same non-mutating presentation layer.
 
 ## Priority and input
 
@@ -63,7 +64,8 @@ Replacement preserves the existing disabled flag. Invalid opacity (NaN/infinity
 or outside `[0,1]`), unsupported style combinations and foreign handles fail
 without replacing the prior binding. There are at most 1024 bindings per sheet.
 `unbind` and `clear` remove them explicitly. No listeners, observers, timers or
-background tasks are installed by a sheet.
+background tasks are installed by a sheet. SceneView requests a next frame only
+while a successful presentation reports active motion.
 
 Dead/replaced generations are pruned on bind, presentation or explicit `prune`.
 Dropping a sheet releases all registrations. Resetting a document cannot transfer
@@ -71,6 +73,49 @@ a binding to a reused public ID. Detached instances retain their style binding
 but have no active pointer state. Reattachment keeps the live handle while
 advancing `InstanceInfo.attachment_epoch`; the router uses this epoch so a
 complete detach/reattach between input events cannot revive old press/hover/focus.
+
+## Paint transitions
+
+`set_transitions(engine, handle, StateTransitions { transition, transition_out })`
+sets per-binding timing. `StateTransition` contains `duration_ms` and the existing
+`flow-animation::Easing`. Defaults are zero-duration, preserving immediate styles.
+An omitted `transition_out` falls back to `transition`; an explicit zero-duration
+exit snaps. Adding a state uses entry timing, removing states uses exit timing;
+entering/leaving disabled explicitly uses entry/exit. Simultaneous additions and
+removals prefer entry. A new patch on the same active state also uses entry timing.
+This is a declared binding-level subset of Leafer's per-state/element settings.
+
+- Solid-to-solid RGBA and local opacity interpolate, with exact endpoints and the
+  shared animation easing/color rules. Gradient or absent-fill endpoints snap;
+  unlike upstream's nullable color interpolation, no synthetic transparent paint
+  is introduced. Other style fields always pass through from the current document
+- Retargeting or reversing starts from the old transition sampled at the current
+  host time. Repeated render frames or changes to an unrelated state/field do not
+  restart an unchanged channel target
+- A canonical fill or opacity edit/animation cancels existing motion on that
+  channel. Its currently active state override still applies; an unowned channel
+  immediately follows the new document value. Other channels keep progressing.
+  This avoids chasing an animated baseline and never restores stale document data
+- Changing timing explicitly finishes that binding's current motion, even if its
+  target is unchanged. `finish_transitions` finishes all current endpoints;
+  `unbind`/`clear` immediately release presentation back to the document
+- Headless hosts call `presentation_at(editor, router, monotonic_duration)`.
+  `presentation` samples the last accepted time. A backwards timestamp fails.
+  All frame changes and the clock commit only after the entire presentation is
+  valid; dead-instance pruning may still occur on a failed frame
+- Detach retires motion, and a changed attachment epoch retires it even if detach
+  and reattach occurred between two frames. A new binding can animate from the
+  current base; old IDs cannot inherit prior motion after destruction/reset
+- `SceneView` supplies a monotonic clock and requests further frames only during
+  active transitions. Render failure retains diagnostics and canonical fallback,
+  and does not start a self-sustaining invalid-frame loop
+
+The sheet is runtime configuration: bindings, clocks and motion are not serialized
+or part of edit history. State transitions do not acquire an editor PlaybackToken,
+interrupt playback, add Undo steps, or change reactive layout geometry. Hosts
+should call `cx.notify()` after changing runtime styles/settings, as for other UI
+configuration. The native state_styles example uses 180ms entry and 320ms exit;
+hover, press, leave or disable midway to exercise continuous retargeting.
 
 ## Usage
 
@@ -104,7 +149,8 @@ and linking are distinct from manual GUI verification.
 Inspected pinned `leafer-in` revision
 `3eb445bf34debb638766615282224b77108bf610`:
 
-- [state/style.ts](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/state/src/style.ts): field merging, priority, disabled suppression, normal-style restoration and transition hooks
+- [state/style.ts](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/state/src/style.ts): field merging, priority, disabled suppression, normal-style restoration, getFromStyle retargeting and transitionOut fallback
+- [animate/Transition.ts](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/animate/src/Transition.ts): numeric/color interpolation and discrete complex-paint fallback
 - [state/event.ts](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/state/src/event.ts): pointer enter/leave/down/up integration
 - [state/check.ts](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/state/src/check.ts) and [helper.ts](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/state/src/helper.ts): pointer/fixed-state lookup and parent-button behavior
 - [Interaction.ts](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/interaction/interaction/src/Interaction.ts): hover/press path membership versus exact focus
@@ -113,4 +159,5 @@ Rust uses a non-mutating presentation layer instead of temporarily assigning
 properties and restoring normalStyle. No upstream implementation was copied.
 Missing: named `states`, placeholder styles, button inheritance, programmatic
 focus transfer, geometry/custom-property state changes, declarative serialization,
-automatic transitions, timeline composition and motion paths.
+per-state transition overrides, transition delay/repeat, gradient/absent-fill
+interpolation, timeline composition and motion paths.

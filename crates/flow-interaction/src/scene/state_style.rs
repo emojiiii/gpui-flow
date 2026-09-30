@@ -1,10 +1,10 @@
 //! Paint-only state overlays. The canonical document, caches, and edit history
 //! are never overwritten by transient hover/press/focus presentation.
-use super::SceneEventRouter;
+use super::{SceneEventRouter, StateTransitions, state_transition::TransitionFrame};
 use gpui_flow_editor::SceneEditor;
 use gpui_flow_engine::{ElementHandle, EngineError, InstanceState, SceneEngine};
 use gpui_flow_scene::{Color, Scene, SceneError, Shape, Style};
-use std::{borrow::Cow, collections::BTreeMap};
+use std::{borrow::Cow, collections::BTreeMap, time::Duration};
 
 pub const MAX_STATE_STYLE_BINDINGS: usize = 1024;
 
@@ -99,6 +99,7 @@ pub enum StateStyleError {
     Unbound,
     Capacity,
     InvalidStyle(String),
+    TimeWentBackwards,
 }
 impl From<EngineError> for StateStyleError {
     fn from(error: EngineError) -> Self {
@@ -116,6 +117,7 @@ impl std::fmt::Display for StateStyleError {
             Self::Engine(error) => error.fmt(f),
             Self::Scene(error) => error.fmt(f),
             Self::WrongEngine => write!(f, "state styles belong to another scene engine"),
+            Self::TimeWentBackwards => write!(f, "state transition time must be monotonic"),
             Self::Unbound => write!(f, "instance has no state style binding"),
             Self::Capacity => write!(f, "state style binding capacity exhausted"),
             Self::InvalidStyle(error) => write!(f, "invalid state style: {error}"),
@@ -126,6 +128,8 @@ impl std::error::Error for StateStyleError {}
 struct Binding {
     styles: StateStyles,
     disabled: bool,
+    transitions: StateTransitions,
+    frame: Option<TransitionFrame>,
 }
 /// Opt-in, engine-scoped registrations. No listener closures or timers are
 /// installed. Explicit unbind/clear release registrations; dead generations are
@@ -133,12 +137,14 @@ struct Binding {
 pub struct SceneStateStyles {
     engine: u64,
     bindings: BTreeMap<ElementHandle, Binding>,
+    time: Duration,
 }
 impl SceneStateStyles {
     pub fn new(engine: &SceneEngine) -> Self {
         Self {
             engine: engine.engine_id(),
             bindings: BTreeMap::new(),
+            time: Duration::ZERO,
         }
     }
     fn check(&self, engine: &SceneEngine) -> Result<(), StateStyleError> {
@@ -196,7 +202,20 @@ impl SceneStateStyles {
             return Err(StateStyleError::Capacity);
         }
         let disabled = self.bindings.get(&handle).is_some_and(|b| b.disabled);
-        self.bindings.insert(handle, Binding { styles, disabled });
+        let (transitions, frame) = self
+            .bindings
+            .get(&handle)
+            .map(|binding| (binding.transitions, binding.frame.clone()))
+            .unwrap_or_default();
+        self.bindings.insert(
+            handle,
+            Binding {
+                styles,
+                disabled,
+                transitions,
+                frame,
+            },
+        );
         Ok(())
     }
     /// Visual state only. Editing/hit/command authorization stays in the host's
@@ -215,40 +234,106 @@ impl SceneStateStyles {
             .disabled = disabled;
         Ok(())
     }
-    /// Resolve against the *current* canonical style, not a saved restoration
-    /// snapshot. Edits/animation made while hovered become visible when it ends.
-    /// Unchanged presentation borrows the source; overlays allocate a private
-    /// scene so inherited opacity and clipping use the existing paint pipeline.
+    /// Set timing for this binding. Reconfiguration finishes existing motion;
+    /// future state changes use the new settings. Runtime-only, never an edit.
+    pub fn set_transitions(
+        &mut self,
+        engine: &SceneEngine,
+        handle: ElementHandle,
+        transitions: StateTransitions,
+    ) -> Result<(), StateStyleError> {
+        self.check(engine)?;
+        engine.object(handle)?;
+        let binding = self
+            .bindings
+            .get_mut(&handle)
+            .ok_or(StateStyleError::Unbound)?;
+        binding.transitions = transitions;
+        if let Some(frame) = &mut binding.frame {
+            frame.finish();
+        }
+        Ok(())
+    }
+    pub fn has_active_transitions(&self) -> bool {
+        self.bindings
+            .values()
+            .any(|b| b.frame.as_ref().is_some_and(TransitionFrame::active))
+    }
+    /// Snap running presentation to its resolved endpoint, leaving registrations
+    /// in place. Unbind/clear instead release the overlay to the canonical scene.
+    pub fn finish_transitions(&mut self) {
+        for binding in self.bindings.values_mut() {
+            if let Some(frame) = &mut binding.frame {
+                frame.finish();
+            }
+        }
+    }
+    pub fn transition_time(&self) -> Duration {
+        self.time
+    }
+    /// Resolve at the most recently accepted time. With default zero-duration
+    /// timing this retains immediate state-style behavior.
     pub fn presentation<'a>(
         &mut self,
         editor: &'a SceneEditor,
         router: &SceneEventRouter,
     ) -> Result<Cow<'a, Scene>, StateStyleError> {
+        self.presentation_at(editor, router, self.time)
+    }
+    /// Resolve against the current canonical style at a monotonic host time.
+    /// Entry/exit retarget from the interpolated display value. A canonical fill
+    /// or opacity edit cancels motion on that channel; the current state patch
+    /// still takes precedence. Other fields always come from the document.
+    /// Invalid presentation leaves the accepted clock and all motion unchanged.
+    pub fn presentation_at<'a>(
+        &mut self,
+        editor: &'a SceneEditor,
+        router: &SceneEventRouter,
+        now: Duration,
+    ) -> Result<Cow<'a, Scene>, StateStyleError> {
+        self.check(&editor.engine)?;
+        if now < self.time {
+            return Err(StateStyleError::TimeWentBackwards);
+        }
         self.prune(&editor.engine)?;
         let mut scene = Cow::Borrowed(editor.scene());
+        let mut frames = Vec::with_capacity(self.bindings.len());
         for (handle, binding) in &self.bindings {
             let info = editor.engine.instance(*handle)?;
             if info.state != InstanceState::Attached {
+                frames.push((*handle, None));
                 continue;
             }
             let input = router.state(&editor.engine, *handle);
             let object = editor.engine.object(*handle)?;
-            let next = binding.styles.resolve(
-                &object.style,
-                VisualState {
-                    selected: editor.selection.ids.contains(&info.id),
-                    focus: input.focus,
-                    hover: input.hover,
-                    press: input.press,
-                    disabled: binding.disabled,
-                },
-            );
+            let state = VisualState {
+                selected: editor.selection.ids.contains(&info.id),
+                focus: input.focus,
+                hover: input.hover,
+                press: input.press,
+                disabled: binding.disabled,
+            };
+            let target = binding.styles.resolve(&object.style, state);
+            let mut frame = binding
+                .frame
+                .clone()
+                .filter(|frame| frame.epoch == info.attachment_epoch)
+                .unwrap_or_else(|| TransitionFrame::new(info.attachment_epoch, &object.style));
+            let next = frame.resolve(&object.style, target, state, binding.transitions, now);
             if next != object.style {
                 scene
                     .to_mut()
                     .update_object(&info.id, |object| object.style = next)?;
             }
+            frames.push((*handle, Some(frame)));
         }
+        for (handle, frame) in frames {
+            self.bindings
+                .get_mut(&handle)
+                .expect("binding exists during presentation")
+                .frame = frame;
+        }
+        self.time = now;
         Ok(scene)
     }
 }

@@ -30,6 +30,7 @@ pub struct SceneView {
     /// Opt-in paint-only state presentation; never writes editor documents.
     pub state_styles: gpui_flow_interaction::scene::SceneStateStyles,
     pub state_style_error: Option<String>,
+    state_clock: std::time::Instant,
     focus: FocusHandle,
     origin: WorldPoint,
     extent: WorldSize,
@@ -57,6 +58,7 @@ impl SceneView {
             renderers: crate::display::DisplayRegistry::default(),
             state_styles,
             state_style_error: None,
+            state_clock: std::time::Instant::now(),
             focus: cx.focus_handle(),
             origin: WorldPoint::ZERO,
             extent: WorldSize::new(1000., 700.),

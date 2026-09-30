@@ -38,6 +38,31 @@ pub enum TweenValue {
     Number(f64),
     Color(Color),
 }
+impl TweenValue {
+    /// Sample a pure tween without mutating an engine or editor history.
+    /// Finite progress is clamped to [0, 1]; exact endpoints are preserved.
+    pub fn interpolate(
+        &self,
+        to: &Self,
+        progress: f64,
+        easing: Easing,
+    ) -> Result<Self, AnimationError> {
+        if !progress.is_finite() {
+            return Err(invalid("interpolation progress must be finite"));
+        }
+        match (self, to) {
+            (Self::Point(a), Self::Point(b)) if a.is_finite() && b.is_finite() => {}
+            (Self::Number(a), Self::Number(b)) if a.is_finite() && b.is_finite() => {}
+            (Self::Color(_), Self::Color(_)) => {}
+            _ => {
+                return Err(invalid(
+                    "interpolation requires matching finite value types",
+                ));
+            }
+        }
+        interpolate(self, to, easing.sample(progress))
+    }
+}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Tween {

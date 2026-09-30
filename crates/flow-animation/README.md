@@ -37,7 +37,11 @@ remain low-level APIs for hosts that manage their own history; cancel keeps valu
 there are no timers or engine subscriptions left behind.
 
 This is one-interval interpolation, not a full keyframe timeline. No loops, delay,
-reverse/swing, physics, state-style transitions or motion-path animation are
+reverse/swing, physics or motion-path animation are
 claimed. Color interpolates encoded RGBA channels. Transform animation currently
 changes translation only, preserving the other affine coefficients. See
 `docs/animation.md` for lifecycle, conflicts, editor history, and source references.
+
+`TweenValue::interpolate` exposes the same pure, finite-input sampler for runtime
+presentation. `gpui-flow-interaction` uses it for paint-only state transitions,
+with independent clocks and no editor playback/history writes.

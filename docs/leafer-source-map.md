@@ -2,7 +2,7 @@
 
 Status: source research and proposed contracts, **not an implementation/parity claim**. Reviewed 2026-09-30. No upstream code, package install, build script, or example was executed. No Rust source was changed for this report.
 
-> 基线说明：下方差距矩阵记录源码研究时的 `43eda10` 状态。后续已实现的引擎身份/生命周期/schema/dirty 缓存及原生事件接入见 [engine.md](engine.md)，不要把历史矩阵的“absent”误读为最新状态。后续批次实现了[多层矢量 paints](appearance.md)和[显式行列布局](flow-layout.md)；另有基础属性动画和编辑器安全播放会话；外观隔离合成、全局响应式布局调度、完整timeline/状态过渡/运动路径仍然缺失。
+> 基线说明：下方差距矩阵记录源码研究时的 `43eda10` 状态。后续已实现的引擎身份/生命周期/schema/dirty 缓存及原生事件接入见 [engine.md](engine.md)，不要把历史矩阵的“absent”误读为最新状态。后续批次实现了[多层矢量 paints](appearance.md)和[显式行列布局](flow-layout.md)；另有基础属性动画和编辑器安全播放会话；外观隔离合成、全局响应式布局调度、完整timeline/高级状态过渡/运动路径仍然缺失。
 
 ## 当前增量状态（不覆盖历史基线）
 
@@ -11,13 +11,13 @@ Status: source research and proposed contracts, **not an implementation/parity c
 - 视觉布局：可选 `gpui-flow-layout`，固定/内容尺寸 Box/Frame 的行/列、换行、padding/gap、对齐、grow/尺寸范围、隐藏与排除区别、嵌套测量/安排、一次事务/撤销和独立配置持久化。显式pass、编辑+布局事务或opt-in提交前自动派生，具备内容auto-size和嵌套测量固定点；没有全局响应式调度、百分比、反向、shrink 或文字内在测量，见 [flow-layout.md](flow-layout.md)
 - 新原生示例 `layout_appearance` 将布局输出送入同一 SceneView；编译/模型测试不等于新窗口视觉验收
 - 键盘增量：KeyUp/Space进入同一路由，首按可取消、Up/取消/失焦必清状态、重复键和焦点按实例隔离，见 [keyboard-routing.md](keyboard-routing.md)。没有新增双击/触摸/IME支持
-- 动画增量：显式tick的平移/opacity/实色/自定义数值插值，原子跨元素更新、pause/resume/seek/cancel、旧身份保护及完成一次Undo/取消恢复基线的编辑器播放会话，见 [animation.md](animation.md)。没有完整timeline/状态过渡/运动路径
+- 动画增量：显式tick的平移/opacity/实色/自定义数值插值，原子跨元素更新、pause/resume/seek/cancel、旧身份保护及完成一次Undo/取消恢复基线的编辑器播放会话，见 [animation.md](animation.md)。没有完整timeline/运动路径；paint-only状态过渡由interaction呈现层提供
 - 自动尺寸增量：固定/内容尺寸、有限min/max、wrap交叉轴测量、底向上测量与顶向下安排、32-pass上限、尺寸所有权冲突拒绝；custom geometry先规范化再测量，编辑+布局一个Undo步骤。不是全局observer调度
-- 状态呈现增量：selected/focus/hover/press/disabled优先级、paint-only填色/opacity叠加、不改文档/Undo、PointerLeave和挂载期隔离已接入SceneView；没有命名state、placeholder、button继承或transition，见[state-styles.md](state-styles.md)
+- 状态呈现增量：selected/focus/hover/press/disabled优先级、paint-only填色/opacity叠加、不改文档/Undo、PointerLeave和挂载期隔离已接入SceneView；已有实色/opacity进出过渡、连续反转和逐帧调度；没有命名state、placeholder、button继承或每态transition覆盖，见[state-styles.md](state-styles.md)
 - 同步响应布局增量：安装live绑定后普通shape/transform/树编辑在一次提交内派生，严格size/transform白名单、8轮外层固定点、失败与播放历史保护；UndoRedo精确还原且runtime配置不序列化。没有帧合并/局部依赖调度，见[reactive-layout.md](reactive-layout.md)
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
-## 九类能力当前边界（本轮同步响应布局后）
+## 九类能力当前边界（本轮状态过渡后）
 
 这里描述已经落地的行为与仍待实现的契约；下方历史源码差距表保留研究基线。
 
@@ -25,7 +25,7 @@ Status: source research and proposed contracts, **not an implementation/parity c
 |---|---|---|
 | 事件 | 实例持有、捕获/目标/冒泡、once、队列、默认动作前路由、KeyUp | 多指/压力、双击/长按、IME及完整事件族 |
 | 交互 | 选择/拖动/缩放/捕获取消、Space平移、插件策略 | 专用内外编辑工具生命周期、复杂手势 |
-| 外观 | 多层矢量paint、线性/径向渐变、描边bounds/picking、paint-only状态呈现 | 隔离透明度、blend、mask、shadow/filter |
+| 外观 | 多层矢量paint、线性/径向渐变、描边bounds/picking、paint-only状态呈现及实色/opacity过渡 | 隔离透明度、blend、mask、shadow/filter |
 | 布局 | 固定/内容轴、wrap测量、嵌套有界收敛、opt-in提交前自动派生 | 帧合并/局部依赖调度、百分比、反向、shrink、文字内在测量 |
 | 数据 | 类型属性/schema/default、原子变化、dirty分类、JSON | 完整input/computed分离及Leafer导入导出 |
 | 元素 | 主要原语、场景树、变换、裁切、统一几何命中 | 命令式Canvas元素、各类型高级属性完全覆盖 |
@@ -33,7 +33,9 @@ Status: source research and proposed contracts, **not an implementation/parity c
 | 实例 | 独立引擎/代际handle、clone/detach/reparent/destroy | 多层App实例组合与跨层转发 |
 | 生命周期 | 原子结构事件、销毁监听清理、动画目标失效/编辑历史保护 | Ready/ViewReady/Complete分阶段资源管线 |
 
-动画为可用的基础属性时钟与编辑器播放事务；完整timeline、状态过渡和运动路径仍待实现。
+动画为可用的基础属性时钟与编辑器播放事务；完整timeline、高级状态过渡和运动路径仍待实现。
+
+本轮过渡复用纯插值器；按binding配置transition/transitionOut回退，反转从当前显示值开始。文档同通道变化取消旧motion、失败整帧原子、生命周期清理且不改Undo。None/gradient离散切换，未实现每态配置、延迟/循环或geometry transition。
 
 ## 1. Provenance and license boundary
 

@@ -70,7 +70,7 @@ CI 配置目标为 Ubuntu 24.04、macOS 15 和 Windows（windows-latest / MSVC�
 
 ## 状态呈现边界
 
-支持selected/focus/hover/press/disabled的实色base fill与opacity运行时叠加，当前不支持命名states、placeholder、button继承、geometry状态或自动transition。叠加不改Scene/Undo/JSON，hit与fit仍使用canonical geometry；disabled只控制呈现，不代替交互权限。活跃状态采用私有Scene副本绘制，未作大场景增量性能保证。详见[state-styles.md](state-styles.md)
+支持selected/focus/hover/press/disabled的实色base fill与opacity运行时叠加，当前不支持命名states、placeholder、button继承、geometry状态。已有binding级实色/opacity自动transition，未覆盖每态设置、延迟/重复及gradient/None插值。叠加不改Scene/Undo/JSON，hit与fit仍使用canonical geometry；disabled只控制呈现，不代替交互权限。活跃状态采用私有Scene副本绘制，未作大场景增量性能保证。详见[state-styles.md](state-styles.md)
 
 ## 响应布局边界
 
