@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15]
+        os: [ubuntu-24.04, macos-15, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
@@ -90,6 +90,6 @@ jobs:
       - name: Test reusable UI components
         run: cargo test --locked -p gpui-flow --lib
       - name: Link native Studio
-        run: cargo build --locked -p flow-studio
+        run: cargo build --locked -p flow-studio --bins
       # This job proves compilation and linking, not graphical interaction.
       # Never run provider calls, upload graphs, or require production secrets in CI.

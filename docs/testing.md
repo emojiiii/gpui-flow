@@ -64,7 +64,7 @@ cargo run --locked --manifest-path docs/examples/Cargo.toml --bin runner
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) 包含：
 
 1. Ubuntu 24.04：主 workspace 与文档示例格式检查、core/runtime/scene/editor 测试及 clippy、执行文档示例
-2. Ubuntu 24.04 / macOS 15：安装平台依赖，完整 workspace check/clippy，UI组件单测，链接全部三个示例
+2. Ubuntu 24.04 / macOS 15 / windows-latest（MSVC）：安装平台依赖，完整 workspace check/clippy，UI组件单测，链接全部三个示例
 
 CI 使用 Rust 1.98.1 和 `--locked`，只授予 `contents: read`，不需要供应商密钥，不发布 crate、部署应用或上传用户图。并发工作流会取消同一分支的旧 run。native job 不是图形 E2E 测试。
 

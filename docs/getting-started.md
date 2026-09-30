@@ -27,6 +27,10 @@ sudo apt-get install -y \
 
 运行原生窗口还需要桌面会话、字体与可用图形后端。CI 的 `cargo build` 不会打开窗口，也不能代替视觉验证。其他 Linux 发行版请按发行版包名安装对应开发库。
 
+### Windows
+
+使用 MSVC Rust 工具链、Git 和 Visual Studio 2022 Build Tools（“使用 C++ 的桌面开发”工作负载与 Windows SDK）。CI 使用 `windows-latest` 自带的 MSVC/SDK 环境，执行 workspace check/clippy、UI 单测和三个示例链接；查看对应提交的 Actions 结果，不将配置存在当作通过证据。Windows 上尚未进行真实窗口、输入法与文件对话框人工验收。
+
 ### macOS
 
 安装 Xcode Command Line Tools，并保证系统 SDK 和 Metal 工具可用：
