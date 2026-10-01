@@ -99,6 +99,134 @@ fn multiply_and_screen_read_the_internal_backdrop() {
         assert_eq!(at(&render(&s), 5, 5), expected);
     }
 }
+fn artistic_modes() -> [BlendMode; 15] {
+    use BlendMode::*;
+    [
+        Multiply, Screen, Overlay, Darken, Lighten, ColorDodge, ColorBurn, HardLight, SoftLight,
+        Difference, Exclusion, Hue, Saturation, Color, Luminosity,
+    ]
+}
+fn blended_pixel(mode: BlendMode, background: u32, foreground: u32, alpha: f32) -> [u8; 4] {
+    let mut s = Scene::new();
+    s.insert(group("g", 1.), None, None).unwrap();
+    insert(&mut s, rect("back", 0., Color::hex(background)), "g");
+    let mut front = rect("front", 0., Color::hex(foreground));
+    front.style.blend_mode = mode;
+    front.style.opacity = alpha;
+    insert(&mut s, front, "g");
+    at(&render(&s), 5, 5)
+}
+#[test]
+fn separable_artistic_modes_match_independent_channel_equations() {
+    fn equation(mode: BlendMode, b: f64, s: f64) -> f64 {
+        use BlendMode::*;
+        match mode {
+            Multiply => b * s,
+            Screen => b + s - b * s,
+            Overlay => {
+                if b <= 0.5 {
+                    2. * b * s
+                } else {
+                    1. - 2. * (1. - b) * (1. - s)
+                }
+            }
+            Darken => b.min(s),
+            Lighten => b.max(s),
+            ColorDodge => {
+                if s == 1. {
+                    1.
+                } else {
+                    (b / (1. - s)).min(1.)
+                }
+            }
+            ColorBurn => {
+                if s == 0. {
+                    0.
+                } else {
+                    1. - ((1. - b) / s).min(1.)
+                }
+            }
+            HardLight => {
+                if s <= 0.5 {
+                    2. * b * s
+                } else {
+                    1. - 2. * (1. - b) * (1. - s)
+                }
+            }
+            SoftLight => {
+                if s <= 0.5 {
+                    b - (1. - 2. * s) * b * (1. - b)
+                } else {
+                    let d = if b <= 0.25 {
+                        ((16. * b - 12.) * b + 4.) * b
+                    } else {
+                        b.sqrt()
+                    };
+                    b + (2. * s - 1.) * (d - b)
+                }
+            }
+            Difference => (b - s).abs(),
+            Exclusion => b + s - 2. * b * s,
+            _ => unreachable!(),
+        }
+    }
+    for mode in artistic_modes().into_iter().take(11) {
+        for alpha in [1., 0.5] {
+            let pixel = blended_pixel(mode, 0x33b366, 0xcc4d99, alpha);
+            for (i, (b, s)) in [51., 179., 102.]
+                .into_iter()
+                .zip([204., 77., 153.])
+                .enumerate()
+            {
+                let expected = ((1. - alpha as f64) * b
+                    + alpha as f64 * 255. * equation(mode, b / 255., s / 255.))
+                .round() as i16;
+                assert!(
+                    (pixel[i] as i16 - expected).abs() <= 2,
+                    "{mode:?} alpha {alpha} channel {i}: {} != {expected}",
+                    pixel[i]
+                );
+            }
+            assert_eq!(pixel[3], 255);
+        }
+    }
+}
+#[test]
+fn nonseparable_modes_preserve_the_expected_color_components() {
+    // Red source, blue destination. Rec.601 luminance is .30/.11 respectively.
+    for (mode, expected) in [
+        (BlendMode::Hue, [94, 0, 0, 255]),
+        (BlendMode::Saturation, [0, 0, 255, 255]),
+        (BlendMode::Color, [94, 0, 0, 255]),
+        (BlendMode::Luminosity, [54, 54, 255, 255]),
+    ] {
+        let actual = blended_pixel(mode, 0x0000ff, 0xff0000, 1.);
+        for i in 0..4 {
+            assert!(
+                (actual[i] as i16 - expected[i]).abs() <= 2,
+                "{mode:?}: {actual:?}"
+            );
+        }
+    }
+}
+#[test]
+fn every_artistic_mode_requires_a_real_backdrop_and_roundtrips() {
+    for mode in artistic_modes() {
+        assert!(mode.requires_backdrop());
+        let encoded = serde_json::to_string(&mode).unwrap();
+        assert_eq!(serde_json::from_str::<BlendMode>(&encoded).unwrap(), mode);
+        let mut s = Scene::new();
+        let mut o = rect("external", 0., Color::WHITE);
+        o.style.blend_mode = mode;
+        s.insert(o, None, None).unwrap();
+        let units = scene_units(&s, CompositeLimits::default()).unwrap();
+        assert!(
+            matches!(&units[0],SceneUnit::Rejected(e) if e.error==CompositeError::UnsupportedExternalBackdrop)
+        );
+    }
+    assert!(!BlendMode::Normal.requires_backdrop());
+    assert!(!BlendMode::PassThrough.requires_backdrop());
+}
 #[test]
 fn alpha_mask_is_hidden_and_masks_following_siblings_once() {
     let mut s = Scene::new();

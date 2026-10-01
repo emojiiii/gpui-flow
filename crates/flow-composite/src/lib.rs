@@ -5,6 +5,7 @@
 //! custom renderers must remain outside these domains. Image and text ink pixels
 //! are supplied by the host, never fetched, decoded or shaped by this crate.
 mod image;
+mod nonseparable;
 mod plan;
 mod raster;
 mod text;

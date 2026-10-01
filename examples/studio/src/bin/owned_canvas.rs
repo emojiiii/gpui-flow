@@ -8,6 +8,14 @@ use gpui_flow::{
     },
 };
 use std::sync::Arc;
+fn next_blend(current: BlendMode) -> BlendMode {
+    use BlendMode::*;
+    let modes = [
+        Multiply, Screen, Overlay, Darken, Lighten, ColorDodge, ColorBurn, HardLight, SoftLight,
+        Difference, Exclusion, Hue, Saturation, Color, Luminosity,
+    ];
+    modes[(modes.iter().position(|mode| *mode == current).unwrap_or(0) + 1) % modes.len()]
+}
 fn document() -> Scene {
     let mut scene = Scene::new();
     for (id, x, y, color, blend) in [
@@ -100,20 +108,31 @@ impl Lab {
                 .unwrap();
             cx.notify();
         });
+        cx.notify();
     }
 }
 impl Render for Lab {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let blend = self
+            .view
+            .read(cx)
+            .editor
+            .scene()
+            .get(&"blue".into())
+            .unwrap()
+            .object
+            .style
+            .blend_mode;
         div().size_full().flex().flex_col().bg(rgb(0x161b25)).text_color(rgb(0xffffff))
             .child(div().h(px(54.)).px_3().flex().items_center().gap_2().child("Owned canvas")
                 .child(ControlButton::new("mode", "Owned / domains").on_click(cx.listener(|this,_,_,cx| this.view.update(cx, |v,cx| { v.compositing_mode=if v.compositing_mode==SceneCompositing::OwnedCanvas {SceneCompositing::Domains} else {SceneCompositing::OwnedCanvas};cx.notify(); }))))
                 .child(ControlButton::new("theme", "Yellow / white").on_click(cx.listener(|this,_,_,cx| this.view.update(cx, |v,cx| {v.theme.background=if v.theme.background==0xf3dd94 {0xffffff} else {0xf3dd94};cx.notify();}))))
                 .child(ControlButton::new("grid", "Grid").on_click(cx.listener(|this,_,_,cx| this.view.update(cx, |v,cx| {v.show_grid = !v.show_grid;cx.notify();}))))
-                .child(ControlButton::new("blend", "Multiply / Screen").on_click(cx.listener(|this,_,_,cx| this.edit("blue", |o| {o.style.blend_mode=if o.style.blend_mode==BlendMode::Multiply {BlendMode::Screen} else {BlendMode::Multiply};}, cx))))
+                .child(ControlButton::new("blend", "Next blend").on_click(cx.listener(|this,_,_,cx| this.edit("blue", |o| {o.style.blend_mode=next_blend(o.style.blend_mode);}, cx))))
                 .child(ControlButton::new("reject", "Custom reject / restore").on_click(cx.listener(|this,_,_,cx| this.edit("unsupported", |o| o.visible = !o.visible, cx))))
                 .child(ControlButton::new("undo", "Undo").on_click(cx.listener(|this,_,_,cx| this.view.update(cx, |v,cx| {v.editor.undo();cx.notify();})))))
             .child(div().flex_1().min_h_0().overflow_hidden().child(self.view.clone()))
-            .child(div().h(px(64.)).px_4().text_sm().child("Only the owned SceneView canvas is a backdrop. Host controls are outside.\nDrag, pan, zoom and Undo; overlays stay above the complete canvas. Visible Custom rejects the whole domain. GIF and native-backend text use their existing producers."))
+            .child(div().h(px(64.)).px_4().text_sm().child(format!("Blue blend: {blend:?}. Only the owned SceneView canvas is a backdrop; host controls are outside.\nDrag, pan, zoom and Undo. Custom rejects the whole domain; GIF and text use existing producers.")))
     }
 }
 fn main() {

@@ -27,3 +27,13 @@ Fixed-size Box/Frame support uses existing vector contours/stroke meshes, comple
 SceneView shares a bounded runtime playhead between native and CPU image routes, with pause/resume/seek, generation resets and freeze/resume visibility behavior. Animation samples coalesce without cancelling admitted workers; only current-frame pixels are copied. Encoded finite loop counts, APNG animation, rate and editor-timeline coupling remain outside this slice. See [animated images](../../docs/compositing.md#animated-images-and-runtime-controls).
 
 `owned_canvas(scene, CanvasBackdrop, limits)` is an explicit alternative: one complete presented tree over a caller-owned opaque background and optional canvas-relative dot grid. It supports top-level blending against earlier roots and these owned pixels, never arbitrary host/native GPUI content. Visible unsupported or missing producers reject the whole canvas; no native siblings are skipped or reordered. The wrapper uses a noncanonical empty cache ID and counts toward node/depth limits. Background/grid work and bounded grid geometry are charged; the full visible physical canvas still has the 4,194,304-pixel cap. See [owned canvas](../../docs/compositing.md#explicit-owned-canvas-backdrop).
+
+## Artistic blend extension (2026-10-01)
+
+All 15 artistic modes now work inside supported domains: Multiply, Screen,
+Overlay, Darken, Lighten, ColorDodge, ColorBurn, HardLight, SoftLight, Difference,
+Exclusion, Hue, Saturation, Color and Luminosity. Exposed roots still require
+OwnedCanvas or a real isolating ancestor, never an invented host backdrop.
+Separable modes reuse tiny-skia; the four non-separable modes use a narrowly
+scoped W3C pixel adapter correcting the locked backend's lower-gamut clipping.
+See [implementation and verification](../../docs/compositing.md#additional-artistic-blends).

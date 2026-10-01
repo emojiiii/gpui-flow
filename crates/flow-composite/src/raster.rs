@@ -218,6 +218,28 @@ impl Raster<'_> {
     ) -> Result<(), CompositeError> {
         self.check()?;
         self.budget.write(self.pixels)?;
+        if crate::nonseparable::is_nonseparable(blend) {
+            for (index, (dst, src)) in target
+                .data_mut()
+                .as_chunks_mut::<4>()
+                .0
+                .iter_mut()
+                .zip(source.data().as_chunks::<4>().0.iter())
+                .enumerate()
+            {
+                if index % self.width as usize == 0 {
+                    self.check()?;
+                }
+                crate::nonseparable::pixel(
+                    dst,
+                    src,
+                    opacity,
+                    clip.map_or(255, |mask| mask.data()[index]),
+                    blend,
+                );
+            }
+            return Ok(());
+        }
         target.draw_pixmap(
             0,
             0,
@@ -227,7 +249,20 @@ impl Raster<'_> {
                 blend_mode: match blend {
                     BlendMode::Multiply => tiny_skia::BlendMode::Multiply,
                     BlendMode::Screen => tiny_skia::BlendMode::Screen,
-                    _ => tiny_skia::BlendMode::SourceOver,
+                    BlendMode::Overlay => tiny_skia::BlendMode::Overlay,
+                    BlendMode::Darken => tiny_skia::BlendMode::Darken,
+                    BlendMode::Lighten => tiny_skia::BlendMode::Lighten,
+                    BlendMode::ColorDodge => tiny_skia::BlendMode::ColorDodge,
+                    BlendMode::ColorBurn => tiny_skia::BlendMode::ColorBurn,
+                    BlendMode::HardLight => tiny_skia::BlendMode::HardLight,
+                    BlendMode::SoftLight => tiny_skia::BlendMode::SoftLight,
+                    BlendMode::Difference => tiny_skia::BlendMode::Difference,
+                    BlendMode::Exclusion => tiny_skia::BlendMode::Exclusion,
+                    BlendMode::Hue => tiny_skia::BlendMode::Hue,
+                    BlendMode::Saturation => tiny_skia::BlendMode::Saturation,
+                    BlendMode::Color => tiny_skia::BlendMode::Color,
+                    BlendMode::Luminosity => tiny_skia::BlendMode::Luminosity,
+                    BlendMode::PassThrough | BlendMode::Normal => tiny_skia::BlendMode::SourceOver,
                 },
                 ..Default::default()
             },
@@ -621,10 +656,7 @@ fn rasterize_inner(
     if cancelled.load(Ordering::Relaxed) {
         return Err(CompositeError::Superseded);
     }
-    if matches!(
-        source.root.object.style.blend_mode,
-        BlendMode::Multiply | BlendMode::Screen
-    ) {
+    if source.root.object.style.blend_mode.requires_backdrop() {
         return Err(CompositeError::UnsupportedExternalBackdrop);
     }
     if !viewport.device_scale.is_finite()

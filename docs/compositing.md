@@ -12,7 +12,7 @@ At the GPUI boundary, those bytes pass once through `swap_rgba_pa_to_bgra` into 
 
 ## Public model and supported semantics
 
-- `Style.blend_mode`: `PassThrough` (JSON `pass_through`, legacy default), `Normal`, `Multiply`, `Screen`
+- `Style.blend_mode`: `PassThrough` (JSON `pass_through`, legacy default), `Normal`, `Multiply`, `Screen`, `Overlay`, `Darken`, `Lighten`, `ColorDodge`, `ColorBurn`, `HardLight`, `SoftLight`, `Difference`, `Exclusion`, `Hue`, `Saturation`, `Color`, `Luminosity`
 - `DisplayObject.mask`: `None` (legacy default), `Alpha`; a mask must be a direct Group child
 - Engine `PropertyKey::BlendMode` marks PAINT; `PropertyKey::Mask` marks PAINT | GEOMETRY, without redefining picking
 - Group opacity and multi-paint primitive opacity apply once after the object's complete contents, including overlaps
@@ -24,6 +24,29 @@ At the GPUI boundary, those bytes pass once through `swap_rgba_pa_to_bgra` into 
 - Box overflow is visible by default; Frame clips descendants by default. Nested rounded child clips intersect under affine transforms, without turning pass-through containers into isolated blend groups. Inherited clips outside the domain still apply to the finished output
 
 Missing JSON fields retain old defaults. Rust `Style` and `DisplayObject` exhaustive literals need the new fields or constructor/default syntax; new enum variants may require updating exhaustive matches. This is backward JSON reading, not Leafer JSON import compatibility or compatibility with older renderers.
+
+### Additional artistic blends
+
+The 13 modes after Screen are implemented for all existing domain producers,
+including owned-canvas roots, using the same isolation, alpha/clip and budget
+rules. JSON names use snake_case (`color_dodge`, `hard_light`, etc.). Every
+artistic mode requires an actual backdrop: default Domains mode rejects it at
+an exposed root; OwnedCanvas supplies its own background and preceding scene
+pixels. This does not capture arbitrary host UI.
+
+Separable modes reuse tiny-skia 0.11.4. Tests compare them to independent channel
+equations with both opaque and half-opacity sources. The four non-separable
+modes use a small scalar adapter for the [W3C non-separable equations](https://www.w3.org/TR/compositing-1/#blendingnonseparable),
+because the locked tiny-skia highp `clip_color` lower-gamut condition checks the
+maximum rather than minimum component. An opaque red-over-blue Hue fixture
+produced [207,0,0] through that implementation instead of the expected [94,0,0].
+The adapter retains the existing surfaces/rasterizer, applies source opacity,
+source-over alpha and clip coverage once, checks cancellation per row, and
+allocates no extra surface. It uses encoded RGB, not linear-light or ICC-aware
+color management. Porter-Duff erase/copy and filters remain separate work.
+
+`owned_canvas` has a Next blend control cycling all 15 artistic modes and shows
+the selected blue object's mode in its footer.
 
 ## Explicit owned-canvas backdrop
 
@@ -243,3 +266,17 @@ New fixtures cover real opaque empty-canvas output, root Multiply/Screen over th
 The actual cloud Linux window showed roots blending with the yellow theme and grid, shared-native-backend text, and visibly changing GIF frames. Yellow/white background switching changed blend pixels; removing the grid and switching Multiply to Screen produced the expected changed overlaps. Showing a Custom node removed the complete canvas and reported `UnsupportedShape("custom")`; Undo restored it. Switching to default Domains mode reported `UnsupportedExternalBackdrop` for external roots, and returning to OwnedCanvas recovered the complete output. Dragging moved the selected object while selection/resize overlays remained above it; Undo, wheel pan and Ctrl+wheel zoom kept the recovered pixels and overlays aligned. The window was closed and return to the launching shell verified.
 
 Hard invalidations intentionally hid incompatible output while the next complete frame was computed, so temporary blank canvas/pending states were visible during theme, geometry and mode edits. The animation workload frequently showed `Compositing…` while complete admitted frames continued changing. This is a correctness/bounded-memory slice, not a smooth-frame-rate claim or damage-tracking implementation. Window-resize/DPR coverage in this batch is automated, not a live multi-monitor test. No macOS/Windows, GPU failure injection, screenshot goldens, large-scene performance, standalone font suite, ignored media suite or full old-example interaction sweep was rerun. CI remains paused; commits use `[skip ci]`.
+
+### Artistic blend validation (2026-10-01)
+
+747 headless tests passed (8 existing media tests ignored), 83 UI tests passed,
+strict workspace/all-target Clippy and formatting passed, and `owned_canvas`
+linked on Linux. New fixtures cover channel equations, half opacity, HSL gamut
+clipping, gray/transparent pixels, coverage, owned background, rounded clipping,
+external-backdrop rejection, serialization and engine dirty/invalid-value rules.
+In the actual cloud Linux window, Overlay and Hue changed the displayed overlap,
+Undo selected Exclusion, and Domains rejected its unavailable external backdrop.
+Accepted animation refreshes no longer continuously show a loading badge; edits
+can still briefly show the explicitly marked stale compatible frame while a
+replacement is computed. No smooth-frame-rate, full color management,
+Windows/macOS, or arbitrary host-backdrop acceptance is claimed.

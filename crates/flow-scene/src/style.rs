@@ -235,6 +235,26 @@ pub enum BlendMode {
     Normal,
     Multiply,
     Screen,
+    Overlay,
+    Darken,
+    Lighten,
+    ColorDodge,
+    ColorBurn,
+    HardLight,
+    SoftLight,
+    Difference,
+    Exclusion,
+    Hue,
+    Saturation,
+    Color,
+    Luminosity,
+}
+impl BlendMode {
+    /// Artistic modes require actual destination pixels. A standalone domain
+    /// cannot substitute transparent black for an unknown host backdrop.
+    pub fn requires_backdrop(self) -> bool {
+        !matches!(self, Self::PassThrough | Self::Normal)
+    }
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]

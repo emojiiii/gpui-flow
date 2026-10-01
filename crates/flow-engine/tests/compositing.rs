@@ -25,10 +25,33 @@ fn blend_and_mask_setters_report_specific_dirty_bits_and_reject_invalid_values()
         .unwrap();
     assert!(c.dirty[&"r".into()].contains(DirtyFlags::PAINT | DirtyFlags::GEOMETRY));
     assert!(!c.dirty[&"r".into()].contains(DirtyFlags::HIT));
+    for mode in [
+        "overlay",
+        "darken",
+        "lighten",
+        "color_dodge",
+        "color_burn",
+        "hard_light",
+        "soft_light",
+        "difference",
+        "exclusion",
+        "hue",
+        "saturation",
+        "color",
+        "luminosity",
+    ] {
+        let changed = e
+            .set_property(h, PropertyKey::BlendMode, json!(mode))
+            .unwrap();
+        assert!(changed.dirty[&"r".into()].contains(DirtyFlags::PAINT));
+        assert!(!changed.dirty[&"r".into()].contains(DirtyFlags::HIT));
+    }
+    let before = e.scene().clone();
     assert!(
-        e.set_property(h, PropertyKey::BlendMode, json!("overlay"))
+        e.set_property(h, PropertyKey::BlendMode, json!("unknown_blend"))
             .is_err()
     );
+    assert_eq!(*e.scene(), before);
     assert!(
         e.set_property(
             e.handle(&"g".into()).unwrap(),

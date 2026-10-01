@@ -241,7 +241,7 @@ fn visit(
             }));
             return;
         }
-        let result = if matches!(o.style.blend_mode, BlendMode::Multiply | BlendMode::Screen) {
+        let result = if o.style.blend_mode.requires_backdrop() {
             Err(CompositeError::UnsupportedExternalBackdrop)
         } else {
             capture(scene, id, parent, limits, &mut Counts::default(), 0)
@@ -371,10 +371,7 @@ fn requires_parent_backdrop(node: &DomainNode) -> bool {
     if !node.object.visible || node.object.style.opacity == 0. {
         return false;
     }
-    if matches!(
-        node.object.style.blend_mode,
-        BlendMode::Multiply | BlendMode::Screen
-    ) {
+    if node.object.style.blend_mode.requires_backdrop() {
         return true;
     }
     if node.object.style.blend_mode == BlendMode::Normal || node.object.style.opacity < 1. {

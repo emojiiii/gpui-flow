@@ -56,6 +56,49 @@ fn empty_canvas_has_real_opaque_pixels_and_no_canonical_identity() {
     assert_eq!(pixel(&frame, 99, 79), [0x12, 0x34, 0x56, 255]);
 }
 #[test]
+fn artistic_root_modes_use_owned_background_and_respect_rounded_clipping() {
+    for (blend, expected) in [
+        (BlendMode::Difference, [255, 0, 255, 255]),
+        (BlendMode::Darken, [0, 0, 0, 255]),
+        (BlendMode::Lighten, [255, 0, 255, 255]),
+        (BlendMode::Hue, [94, 0, 0, 255]),
+        (BlendMode::Color, [94, 0, 0, 255]),
+        (BlendMode::Saturation, [0, 0, 255, 255]),
+        (BlendMode::Luminosity, [54, 54, 255, 255]),
+    ] {
+        let mut scene = Scene::new();
+        scene
+            .insert(
+                DisplayObject::new("clip", display::Frame::new(30., 30.).rounded(10.)).with_style(
+                    Style {
+                        fill: None,
+                        ..Default::default()
+                    },
+                ),
+                None,
+                None,
+            )
+            .unwrap();
+        scene
+            .insert(
+                rect("front", Color::hex(0xff0000), blend),
+                Some("clip".into()),
+                None,
+            )
+            .unwrap();
+        let frame = render(&scene, backdrop(Color::hex(0x0000ff)), viewport());
+        let got = pixel(&frame, 15, 15);
+        for i in 0..4 {
+            assert!(
+                (got[i] as i16 - expected[i]).abs() <= 2,
+                "{blend:?} {got:?}"
+            );
+        }
+        assert_eq!(pixel(&frame, 0, 0), [0, 0, 255, 255]);
+        assert_eq!(pixel(&frame, 40, 40), [0, 0, 255, 255]);
+    }
+}
+#[test]
 fn root_blend_reads_canvas_and_prior_roots_in_stable_tree_order() {
     for (blend, expected) in [
         (BlendMode::Multiply, [0, 0, 0, 255]),
