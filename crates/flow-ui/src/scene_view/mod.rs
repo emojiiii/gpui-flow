@@ -294,6 +294,32 @@ impl SceneView {
             .flatten()
             .map(|hit| hit.id)
     }
+    fn line_handles(
+        &self,
+    ) -> Option<(
+        DisplayId,
+        [gpui_flow_interaction::scene::SceneLineHandle; 2],
+    )> {
+        if self.text_editor_active()
+            || !self.is_editable()
+            || !self.interactions.is_enabled("line-endpoints")
+            || self.tools.as_ref().is_some_and(|tools| {
+                !tools.outer_tool_active(gpui_flow_interaction::scene::DEFAULT_OUTER_TOOL)
+            })
+        {
+            return None;
+        }
+        let geometry =
+            gpui_flow_interaction::scene::SceneLineGeometry::for_selection(&self.editor)?;
+        let id = self
+            .editor
+            .engine
+            .instance(geometry.target)
+            .ok()?
+            .id
+            .clone();
+        Some((id, geometry.screen_handles(&self.editor)?))
+    }
     fn resize_handles(
         &self,
     ) -> Option<(
@@ -301,6 +327,7 @@ impl SceneView {
         [gpui_flow_interaction::scene::SceneResizeHandle; 8],
     )> {
         if self.text_editor_active()
+            || self.line_handles().is_some()
             || !self.is_editable()
             || !self.interactions.is_enabled("resize")
             || self.tools.as_ref().is_some_and(|tools| {
@@ -324,6 +351,7 @@ impl SceneView {
     }
     fn rotation_handle(&self) -> Option<gpui_flow_interaction::scene::SceneRotationHandle> {
         if self.text_editor_active()
+            || self.line_handles().is_some()
             || !self.is_editable()
             || !self.interactions.is_enabled("rotate")
             || self.tools.as_ref().is_some_and(|tools| {

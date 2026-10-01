@@ -30,6 +30,8 @@ struct SelectionCapture {
     engine: u64,
     document: u64,
     accepted_revision: u64,
+    // Frozen at pointer-down; short existing lines may grow and return exactly.
+    minimum_line_length: Option<f64>,
 }
 /// Plugin host deliberately does not expose mutable editor state to plugins.
 /// A trusted application can still access its own Editor directly; read-only
@@ -490,6 +492,12 @@ impl ScenePluginHost {
             } => Some((*token, *handle, key.clone())),
             _ => None,
         };
+        let line_identity = match &command {
+            SceneCommand::SetLineEndpoint {
+                target, endpoint, ..
+            } => Some((*target, *endpoint)),
+            _ => None,
+        };
         let resize_identity = match &command {
             SceneCommand::SetResizeTransform { target, .. } => Some(*target),
             _ => None,
@@ -551,6 +559,13 @@ impl ScenePluginHost {
         {
             return Err(InteractionError::InvalidInput(
                 "middleware cannot retarget an owned edit command".into(),
+            ));
+        }
+        if let Some((target, endpoint)) = line_identity
+            && !matches!(&command, SceneCommand::SetLineEndpoint { target: actual, endpoint: actual_endpoint, .. } if *actual == target && *actual_endpoint == endpoint)
+        {
+            return Err(InteractionError::InvalidInput(
+                "middleware cannot retarget a line endpoint command".into(),
             ));
         }
         if let Some(target) = resize_identity
@@ -722,6 +737,8 @@ impl ScenePluginHost {
                         engine: editor.engine.engine_id(),
                         document: editor.engine.document_epoch(),
                         accepted_revision: editor.engine.revision(),
+                        minimum_line_length: super::SceneLineGeometry::for_selection(editor)
+                            .map(|geometry| geometry.minimum_length),
                     }),
                 });
             }
@@ -926,6 +943,92 @@ impl ScenePluginHost {
                                     "unsupported derived resize subtree".into(),
                                 ));
                             }
+                        }
+                        Ok(())
+                    },
+                )?;
+                if let Some(guard) = self
+                    .capture
+                    .as_mut()
+                    .and_then(|c| c.selection_guard.as_mut())
+                {
+                    guard.accepted_revision = editor.engine.revision();
+                }
+            }
+            SceneCommand::SetLineEndpoint {
+                target,
+                endpoint,
+                position,
+            } => {
+                if self.capture_target_stale(editor) {
+                    return Err(InteractionError::InvalidInput("stale line capture".into()));
+                }
+                let geometry = super::SceneLineGeometry::for_selection(editor)
+                    .filter(|geometry| geometry.target == target)
+                    .ok_or_else(|| {
+                        InteractionError::InvalidInput("unsupported line target".into())
+                    })?;
+                let instance = editor
+                    .engine
+                    .instance(target)
+                    .map_err(|error| InteractionError::InvalidInput(error.to_string()))?;
+                let id = instance.id.clone();
+                let guard = self
+                    .capture
+                    .as_ref()
+                    .and_then(|c| c.selection_guard.as_ref());
+                if guard.is_some_and(|guard| {
+                    guard.targets.as_slice() != [(target, instance.attachment_epoch)]
+                }) {
+                    return Err(InteractionError::InvalidInput(
+                        "line attachment changed".into(),
+                    ));
+                }
+                let minimum = guard
+                    .and_then(|guard| guard.minimum_line_length)
+                    .unwrap_or(geometry.minimum_length);
+                let mut candidate = geometry.line.clone();
+                endpoint.set(&mut candidate, position);
+                if !super::SceneLineGeometry::world_length(&candidate, geometry.world)
+                    .is_some_and(|length| length >= minimum)
+                {
+                    return Err(InteractionError::InvalidInput(
+                        "line endpoint is nonfinite or too short".into(),
+                    ));
+                }
+                let opposite = endpoint.opposite().position(&geometry.line);
+                let transform = editor
+                    .engine
+                    .object(target)
+                    .map_err(|error| InteractionError::InvalidInput(error.to_string()))?
+                    .transform;
+                editor.transaction_validated(
+                    |scene| {
+                        scene.update_object(&id, |object| {
+                            // Never replay a cached whole Shape: only the requested
+                            // field changes; style, the opposite end and metadata stay live.
+                            if let gpui_flow_scene::Shape::Line(line) = &mut object.shape {
+                                endpoint.set(line, position);
+                            }
+                        })
+                    },
+                    |scene| {
+                        let (line, world) = super::SceneLineGeometry::scene_line(scene, &id)
+                            .ok_or_else(|| {
+                                SceneError::InvalidGeometry("unsupported derived line".into())
+                            })?;
+                        if world != geometry.world
+                            || scene
+                                .get(&id)
+                                .is_none_or(|node| node.object.transform != transform)
+                            || endpoint.opposite().position(&line) != opposite
+                            || endpoint.position(&line) != position
+                            || !super::SceneLineGeometry::world_length(&line, world)
+                                .is_some_and(|length| length >= minimum)
+                        {
+                            return Err(SceneError::InvalidGeometry(
+                                "derived line changed the endpoint contract".into(),
+                            ));
                         }
                         Ok(())
                     },

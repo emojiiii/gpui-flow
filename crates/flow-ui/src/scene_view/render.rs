@@ -277,6 +277,7 @@ impl Render for SceneView {
             handles
         });
         let rotation_handle = self.rotation_handle();
+        let line_handles = self.line_handles();
         let overlay = canvas(
             |_, _, _| (),
             move |bounds, _, window, _| {
@@ -294,6 +295,22 @@ impl Render for SceneView {
                 }
                 if let Some(handles) = resize_handles {
                     let side = gpui_flow_interaction::scene::RESIZE_HANDLE_PAINT_SIZE;
+                    for handle in handles {
+                        window.paint_quad(fill(
+                            Bounds::new(
+                                bounds.origin
+                                    + point(
+                                        px(handle.position.x - side / 2.),
+                                        px(handle.position.y - side / 2.),
+                                    ),
+                                size(px(side), px(side)),
+                            ),
+                            rgb(theme.accent),
+                        ));
+                    }
+                }
+                if let Some((_, handles)) = line_handles {
+                    let side = gpui_flow_interaction::scene::LINE_HANDLE_PAINT_SIZE;
                     for handle in handles {
                         window.paint_quad(fill(
                             Bounds::new(

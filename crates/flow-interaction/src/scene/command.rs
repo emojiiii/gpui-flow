@@ -63,6 +63,13 @@ pub enum SceneCommand {
     SetRotationTransforms {
         transforms: Vec<(gpui_flow_engine::ElementHandle, Affine)>,
     },
+    /// Changes only one intrinsic Line coordinate. Middleware cannot change
+    /// its live target, endpoint, or command kind.
+    SetLineEndpoint {
+        target: gpui_flow_engine::ElementHandle,
+        endpoint: super::LineEndpoint,
+        position: Point,
+    },
     RotateSelection {
         degrees: f32,
     },

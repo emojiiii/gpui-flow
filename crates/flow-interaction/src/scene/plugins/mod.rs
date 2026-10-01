@@ -1,6 +1,7 @@
 //! Independently installed retained-scene behavior using CanvasPlugin<SceneEditor, SceneCommand>.
 mod drag;
 mod keyboard;
+mod line;
 mod pan;
 mod resize;
 mod rotate;
@@ -11,6 +12,7 @@ use super::ScenePluginHost;
 use crate::InteractionError;
 pub use drag::SceneDragPlugin;
 pub use keyboard::SceneKeyboardPlugin;
+pub use line::SceneLineEndpointPlugin;
 pub use pan::ScenePanPlugin;
 pub use resize::SceneResizePlugin;
 pub use rotate::SceneRotatePlugin;
@@ -22,6 +24,7 @@ pub fn install_defaults(host: &mut ScenePluginHost) -> Result<(), InteractionErr
     host.install(ScenePanPlugin::default())?;
     host.install(SceneResizePlugin::default())?;
     host.install(SceneRotatePlugin::default())?;
+    host.install(SceneLineEndpointPlugin::default())?;
     host.install(SceneDragPlugin::default())?;
     host.install(SceneZoomPlugin::default())?;
     host.install(SceneKeyboardPlugin)?;
