@@ -23,9 +23,12 @@ impl SceneView {
         if let Some((id, handles)) = self.resize_handles()
             && let Some(hit) = input::scene::hit_resize_handle(&handles, local)
         {
-            return input::HitTarget::ObjectResizeHandle {
-                id: id.to_string(),
-                handle: hit.handle,
+            return match id {
+                Some(id) => input::HitTarget::ObjectResizeHandle {
+                    id: id.to_string(),
+                    handle: hit.handle,
+                },
+                None => input::HitTarget::SelectionResizeHandle { handle: hit.handle },
             };
         }
         let world = self.editor.viewport.screen_to_world(local);
@@ -401,6 +404,9 @@ mod tests {
         for hit in [
             HitTarget::Background,
             HitTarget::ObjectResize("text".into()),
+            HitTarget::SelectionResizeHandle {
+                handle: gpui_flow_editor::ResizeHandle::TopLeft,
+            },
             HitTarget::ObjectResizeHandle {
                 id: "text".into(),
                 handle: gpui_flow_editor::ResizeHandle::TopLeft,

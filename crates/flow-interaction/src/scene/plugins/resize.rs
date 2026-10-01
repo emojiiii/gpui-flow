@@ -1,4 +1,6 @@
-use crate::scene::{SceneCommand, SceneResizeGeometry, object_editable};
+use crate::scene::{
+    SceneCommand, SceneResizeGeometry, SceneSelectionResizeGeometry, object_editable,
+};
 use crate::*;
 use gpui_flow_core::{Point, Rect};
 use gpui_flow_editor::{
@@ -16,9 +18,15 @@ struct Resize {
     handle: Option<ResizeHandle>,
     minimum_scale: Point,
 }
+struct SelectionResize {
+    geometry: SceneSelectionResizeGeometry,
+    start_world: Point,
+    handle: ResizeHandle,
+}
 #[derive(Default)]
 pub struct SceneResizePlugin {
     resize: Option<Resize>,
+    selection_resize: Option<SelectionResize>,
 }
 impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
     fn id(&self) -> &str {
@@ -36,6 +44,7 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
             PluginLifecycle::Cancelled | PluginLifecycle::Disabled | PluginLifecycle::Uninstalled
         ) {
             self.resize = None;
+            self.selection_resize = None;
         }
     }
     fn on_event(
@@ -49,6 +58,35 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
         }
         match event {
             CanvasEvent::PointerDown(p) if p.button == Some(PointerButton::Left) => {
+                if let HitTarget::SelectionResizeHandle { handle } = p.hit {
+                    if cx.editor.editing() || p.modifiers.space {
+                        return;
+                    }
+                    let Some(geometry) = SceneSelectionResizeGeometry::for_selection(cx.editor)
+                    else {
+                        return;
+                    };
+                    let start_world = cx.editor.viewport.screen_to_world(p.position);
+                    if !start_world.is_finite() {
+                        return;
+                    }
+                    let cursor = geometry
+                        .screen_handles(cx.editor)
+                        .and_then(|handles| handles.into_iter().find(|h| h.handle == handle))
+                        .map_or(CanvasCursor::Resize, |h| h.cursor);
+                    out.command(SceneCommand::BeginGesture);
+                    out.command(SceneCommand::CapturePointerForSelection {
+                        pointer_id: p.pointer_id,
+                        targets: geometry.roots.iter().map(|root| root.target).collect(),
+                    });
+                    self.selection_resize = Some(SelectionResize {
+                        geometry,
+                        start_world,
+                        handle,
+                    });
+                    out.effect(CanvasEffect::Cursor(cursor));
+                    return;
+                }
                 let (id, handle) = match &p.hit {
                     HitTarget::ObjectResize(id) => (id, None),
                     HitTarget::ObjectResizeHandle { id, handle } => (id, Some(*handle)),
@@ -127,7 +165,28 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
                 out.effect(CanvasEffect::Cursor(cursor));
             }
             CanvasEvent::PointerMove(p) => {
-                if let Some(resize) = &self.resize {
+                if let Some(resize) = &self.selection_resize {
+                    let geometry = resize.geometry.geometry;
+                    let Some(delta) = resize_transform_with_options(
+                        Affine::IDENTITY,
+                        geometry.bounds,
+                        resize.start_world,
+                        cx.editor.viewport.screen_to_world(p.position),
+                        ResizeOptions {
+                            handle: resize.handle,
+                            uniform: geometry.uniform || p.modifiers.shift,
+                            minimum_scale: geometry.minimum_scale,
+                        },
+                    ) else {
+                        out.command(SceneCommand::CancelGesture);
+                        return;
+                    };
+                    let Some(transforms) = resize.geometry.transforms(delta) else {
+                        out.command(SceneCommand::CancelGesture);
+                        return;
+                    };
+                    out.command(SceneCommand::SetResizeTransforms { transforms });
+                } else if let Some(resize) = &self.resize {
                     let current = resize
                         .inverse
                         .transform_point(cx.editor.viewport.screen_to_world(p.position));
@@ -189,16 +248,27 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
                             .and_then(|g| g.screen_handles(cx.editor))
                             .and_then(|handles| handles.into_iter().find(|h| h.handle == *handle))
                             .map_or(CanvasCursor::Default, |h| h.cursor)
+                    } else if let HitTarget::SelectionResizeHandle { handle } = p.hit {
+                        SceneSelectionResizeGeometry::for_selection(cx.editor)
+                            .and_then(|g| g.screen_handles(cx.editor))
+                            .and_then(|handles| handles.into_iter().find(|h| h.handle == handle))
+                            .map_or(CanvasCursor::Default, |h| h.cursor)
                     } else {
                         CanvasCursor::Default
                     };
                     out.effect(CanvasEffect::Cursor(cursor));
                 }
             }
-            CanvasEvent::PointerLeave if self.resize.is_none() && cx.capture_owner.is_none() => {
+            CanvasEvent::PointerLeave
+                if self.resize.is_none()
+                    && self.selection_resize.is_none()
+                    && cx.capture_owner.is_none() =>
+            {
                 out.effect(CanvasEffect::Cursor(CanvasCursor::Default));
             }
-            CanvasEvent::PointerUp(_) if self.resize.take().is_some() => {
+            CanvasEvent::PointerUp(_)
+                if self.resize.take().is_some() || self.selection_resize.take().is_some() =>
+            {
                 out.command(SceneCommand::CommitGesture);
                 out.command(SceneCommand::ReleasePointer);
                 out.effect(CanvasEffect::Cursor(CanvasCursor::Default));

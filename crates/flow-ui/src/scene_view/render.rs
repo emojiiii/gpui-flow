@@ -256,7 +256,7 @@ impl Render for SceneView {
                 let _ = entity.update(cx, |_, cx| cx.notify());
             });
         }
-        let corners: Vec<_> = self
+        let mut corners: Vec<_> = self
             .editor
             .selection
             .ids
@@ -265,7 +265,17 @@ impl Render for SceneView {
             .filter_map(|id| self.selection_corners(id))
             .collect();
         let marquee = self.interactions.marquee();
-        let resize_handles = self.resize_handles().map(|(_, handles)| handles);
+        let resize_handles = self.resize_handles().map(|(target, handles)| {
+            if target.is_none() {
+                corners.push([
+                    handles[0].position,
+                    handles[2].position,
+                    handles[4].position,
+                    handles[6].position,
+                ]);
+            }
+            handles
+        });
         let overlay = canvas(
             |_, _, _| (),
             move |bounds, _, window, _| {

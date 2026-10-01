@@ -333,9 +333,18 @@ impl SceneEditor {
         &mut self,
         edit: impl FnOnce(&mut Scene) -> Result<(), SceneError>,
     ) -> Result<(), SceneError> {
+        self.transaction_validated(edit, |_| Ok(()))
+    }
+    /// Validate the final normalized/derived candidate without exposing a
+    /// partially committed scene or adding another history step.
+    pub fn transaction_validated(
+        &mut self,
+        edit: impl FnOnce(&mut Scene) -> Result<(), SceneError>,
+        validate: impl FnOnce(&Scene) -> Result<(), SceneError>,
+    ) -> Result<(), SceneError> {
         self.reconcile_external();
         let before = self.snapshot();
-        self.engine.transaction(edit)?;
+        self.engine.transaction_validated(edit, validate)?;
         // A failed input/derived-layout commit must not end playback or discard
         // its Redo branch. On success, record its last frame before the edit.
         self.finish_playback_before_edit(&before);

@@ -300,6 +300,17 @@ impl SceneEngine {
         edit(&mut next)?;
         self.apply(next, origin, CommitMode::Normal)
     }
+    /// One atomic edit with a final contract check after normalization and
+    /// reactive layout, before identities, observers or document state change.
+    pub fn transaction_validated(
+        &mut self,
+        edit: impl FnOnce(&mut Scene) -> Result<(), SceneError>,
+        validate: impl FnOnce(&Scene) -> Result<(), SceneError>,
+    ) -> Result<ChangeSet, EngineError> {
+        let mut next = self.scene.clone();
+        edit(&mut next)?;
+        self.apply_validated(next, ChangeOrigin::Edit, CommitMode::Normal, validate)
+    }
     pub fn replace_scene(&mut self, scene: Scene) -> Result<ChangeSet, EngineError> {
         self.apply(scene, ChangeOrigin::UndoRedo, CommitMode::Normal)
     }
@@ -596,15 +607,25 @@ impl SceneEngine {
     }
     fn apply(
         &mut self,
+        next: Scene,
+        origin: ChangeOrigin,
+        mode: CommitMode,
+    ) -> Result<ChangeSet, EngineError> {
+        self.apply_validated(next, origin, mode, |_| Ok(()))
+    }
+    fn apply_validated(
+        &mut self,
         mut next: Scene,
         origin: ChangeOrigin,
         mode: CommitMode,
+        validate: impl FnOnce(&Scene) -> Result<(), SceneError>,
     ) -> Result<ChangeSet, EngineError> {
         self.registry
             .prepare_changes(&mut next, Some(&self.scene))?;
         if !matches!(mode, CommitMode::Reset) {
             next = self.derive_candidate(next, origin)?;
         }
+        validate(&next)?;
         // Detached IDs remain reserved. Only the matching attach operation may
         // reuse them; ordinary history/import cannot alias retained instances.
         let attaching = match &mode {

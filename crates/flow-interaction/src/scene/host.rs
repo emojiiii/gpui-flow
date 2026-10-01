@@ -23,6 +23,13 @@ struct Capture {
     selection: SceneSelection,
     viewport: Viewport,
     target: Option<(ElementHandle, u64, u64)>,
+    selection_guard: Option<SelectionCapture>,
+}
+struct SelectionCapture {
+    targets: Vec<(ElementHandle, u64)>,
+    engine: u64,
+    document: u64,
+    accepted_revision: u64,
 }
 /// Plugin host deliberately does not expose mutable editor state to plugins.
 /// A trusted application can still access its own Editor directly; read-only
@@ -243,12 +250,20 @@ impl ScenePluginHost {
         let viewport = editor.viewport;
         let stale_target = self.capture_target_stale(editor);
         if stale_target && self.gesture_owner.is_some() {
-            let same_document = self.capture.as_ref().and_then(|c| c.target).is_some_and(
-                |(target, _, document)| {
-                    target.engine_id() == editor.engine.engine_id()
-                        && document == editor.engine.document_epoch()
-                },
-            );
+            let same_document = self.capture.as_ref().is_some_and(|capture| {
+                capture.selection_guard.as_ref().map_or_else(
+                    || {
+                        capture.target.is_some_and(|(target, _, document)| {
+                            target.engine_id() == editor.engine.engine_id()
+                                && document == editor.engine.document_epoch()
+                        })
+                    },
+                    |guard| {
+                        guard.engine == editor.engine.engine_id()
+                            && guard.document == editor.engine.document_epoch()
+                    },
+                )
+            });
             if same_document {
                 editor.commit_edit();
             } else {
@@ -294,6 +309,19 @@ impl ScenePluginHost {
         report
     }
     fn capture_target_stale(&self, editor: &SceneEditor) -> bool {
+        // Engine revisions cover every descendant, ancestor transform and
+        // topology dependency. No full-tree scan on pointer motion; only our
+        // own successful batch advances this accepted-state marker.
+        if self.capture.as_ref().is_some_and(|capture| {
+            capture.selection_guard.as_ref().is_some_and(|guard| {
+                guard.engine != editor.engine.engine_id()
+                    || guard.document != editor.engine.document_epoch()
+                    || guard.accepted_revision != editor.engine.revision()
+                    || capture.selection != editor.selection
+            })
+        }) {
+            return true;
+        }
         self.capture
             .as_ref()
             .and_then(|c| c.target)
@@ -466,6 +494,22 @@ impl ScenePluginHost {
             SceneCommand::SetResizeTransform { target, .. } => Some(*target),
             _ => None,
         };
+        let resize_batch_identity = match &command {
+            SceneCommand::SetResizeTransforms { transforms } => Some(
+                transforms
+                    .iter()
+                    .map(|(target, _)| *target)
+                    .collect::<Vec<_>>(),
+            ),
+            _ => None,
+        };
+        let capture_selection_identity = match &command {
+            SceneCommand::CapturePointerForSelection {
+                pointer_id,
+                targets,
+            } => Some((*pointer_id, targets.clone())),
+            _ => None,
+        };
         let mut effects = vec![];
         let mut participants = vec![];
         let cleanup = matches!(
@@ -512,6 +556,22 @@ impl ScenePluginHost {
         {
             return Err(InteractionError::InvalidInput(
                 "middleware cannot retarget a resize command".into(),
+            ));
+        }
+        if let Some(targets) = &resize_batch_identity
+            && !matches!(&command, SceneCommand::SetResizeTransforms { transforms }
+                if transforms.iter().map(|(target, _)| target).eq(targets.iter()))
+        {
+            return Err(InteractionError::InvalidInput(
+                "middleware cannot change resize batch membership".into(),
+            ));
+        }
+        if let Some((pointer, targets)) = &capture_selection_identity
+            && !matches!(&command, SceneCommand::CapturePointerForSelection { pointer_id, targets: actual }
+                if pointer_id == pointer && actual == targets)
+        {
+            return Err(InteractionError::InvalidInput(
+                "middleware cannot change selection capture membership".into(),
             ));
         }
         if command.capability() == Some(Capability::Edit)
@@ -602,8 +662,63 @@ impl ScenePluginHost {
                         selection: editor.selection.clone(),
                         viewport: editor.viewport,
                         target,
+                        selection_guard: None,
                     });
                 }
+            }
+            SceneCommand::CapturePointerForSelection {
+                pointer_id,
+                targets,
+            } => {
+                if let Some(active) = self.capture_owner() {
+                    return Err(InteractionError::GestureOwned(active.into()));
+                }
+                let expected: Vec<_> = editor
+                    .selection
+                    .roots(editor.scene())
+                    .iter()
+                    .filter_map(|id| editor.engine.handle(id))
+                    .collect();
+                if editor.selection.ids.len() < 2
+                    || targets.is_empty()
+                    || targets != expected
+                    || editor
+                        .selection
+                        .ids
+                        .iter()
+                        .any(|id| editor.scene().get(id).is_none())
+                {
+                    return Err(InteractionError::InvalidInput(
+                        "invalid selection capture".into(),
+                    ));
+                }
+                let mut guarded = Vec::with_capacity(targets.len());
+                for target in targets {
+                    let instance = editor
+                        .engine
+                        .instance(target)
+                        .map_err(|error| InteractionError::InvalidInput(error.to_string()))?;
+                    if instance.state != InstanceState::Attached {
+                        return Err(InteractionError::InvalidInput(
+                            "detached resize participant".into(),
+                        ));
+                    }
+                    guarded.push((target, instance.attachment_epoch));
+                }
+                self.capture = Some(Capture {
+                    owner: owner.into(),
+                    pointer_id,
+                    button: self.event_button,
+                    selection: editor.selection.clone(),
+                    viewport: editor.viewport,
+                    target: None,
+                    selection_guard: Some(SelectionCapture {
+                        targets: guarded,
+                        engine: editor.engine.engine_id(),
+                        document: editor.engine.document_epoch(),
+                        accepted_revision: editor.engine.revision(),
+                    }),
+                });
             }
             SceneCommand::ReleasePointer => {
                 if self.capture_owner() == Some(owner) {
@@ -707,6 +822,106 @@ impl ScenePluginHost {
                 editor.transaction(|scene| {
                     scene.update_object(&id, |object| object.transform = transform)
                 })?;
+            }
+            SceneCommand::SetResizeTransforms { transforms } => {
+                if self.capture_target_stale(editor) {
+                    return Err(InteractionError::InvalidInput(
+                        "stale resize selection".into(),
+                    ));
+                }
+                let expected = editor.selection.roots(editor.scene());
+                if editor.selection.ids.len() < 2
+                    || transforms.len() != expected.len()
+                    || transforms.is_empty()
+                    || editor
+                        .selection
+                        .ids
+                        .iter()
+                        .any(|id| editor.scene().get(id).is_none())
+                {
+                    return Err(InteractionError::InvalidInput(
+                        "invalid resize batch membership".into(),
+                    ));
+                }
+                let mut edits = Vec::with_capacity(transforms.len());
+                for (index, ((target, transform), id)) in
+                    transforms.iter().zip(&expected).enumerate()
+                {
+                    let instance = editor
+                        .engine
+                        .instance(*target)
+                        .map_err(|error| InteractionError::InvalidInput(error.to_string()))?;
+                    if instance.state != InstanceState::Attached || &instance.id != id {
+                        return Err(InteractionError::InvalidInput(
+                            "stale resize participant".into(),
+                        ));
+                    }
+                    if let Some(guard) = self
+                        .capture
+                        .as_ref()
+                        .and_then(|c| c.selection_guard.as_ref())
+                        && guard.targets.get(index) != Some(&(*target, instance.attachment_epoch))
+                    {
+                        return Err(InteractionError::InvalidInput(
+                            "resize attachment changed".into(),
+                        ));
+                    }
+                    require_editable(id)?;
+                    if !editor
+                        .engine
+                        .local_bounds(id)
+                        .ok()
+                        .flatten()
+                        .is_some_and(|bounds| bounds.size.is_positive())
+                        || !super::SceneResizeGeometry::accepts_scene_transform(
+                            editor.scene(),
+                            id,
+                            *transform,
+                        )
+                    {
+                        return Err(InteractionError::InvalidInput(
+                            "unsupported resize participant".into(),
+                        ));
+                    }
+                    edits.push((id.clone(), *transform));
+                }
+                editor.transaction_validated(
+                    |scene| {
+                        for (id, transform) in &edits {
+                            scene.update_object(id, |object| object.transform = *transform)?;
+                        }
+                        Ok(())
+                    },
+                    |scene| {
+                        // Providers/normalizers run inside this same transaction.
+                        // Their final matrices must obey the native subtree
+                        // contract too, before any observer sees the candidate.
+                        for id in &expected {
+                            let node = scene
+                                .get(id)
+                                .ok_or_else(|| SceneError::MissingNode(id.clone()))?;
+                            if !object_editable(scene, id)
+                                || !super::SceneResizeGeometry::accepts_scene_transform(
+                                    scene,
+                                    id,
+                                    node.object.transform,
+                                )
+                            {
+                                return Err(SceneError::InvalidGeometry(
+                                    "unsupported derived resize subtree".into(),
+                                ));
+                            }
+                        }
+                        Ok(())
+                    },
+                )?;
+                if let Some(guard) = self
+                    .capture
+                    .as_mut()
+                    .and_then(|c| c.selection_guard.as_mut())
+                {
+                    guard.accepted_revision = editor.engine.revision();
+                }
             }
             SceneCommand::RotateSelection { degrees } => {
                 for id in editor.selection.roots(editor.scene()) {

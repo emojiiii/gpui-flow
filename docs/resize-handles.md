@@ -101,7 +101,8 @@ Legacy capture gains the same stale-target safety guard.
 
 ## Explicit exclusions
 
-No multi-selection transform box, path/line control-point editor, rotation
+The later [shared-selection resize slice](selection-resize.md) adds a world-axis
+box for multiple selections. This original slice adds no path/line control-point editor, rotation
 handle, skew handle, pivot/Alt-center editing, flip UI, intrinsic-size rewrite,
 custom resize callback or arbitrary tool view factory is added. The existing R
 rotation shortcut is unchanged and does not expand native Text/Image transform

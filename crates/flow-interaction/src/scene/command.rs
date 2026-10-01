@@ -17,6 +17,12 @@ pub enum SceneCommand {
         pointer_id: u64,
         target: gpui_flow_engine::ElementHandle,
     },
+    /// All selection roots, guarded together with their engine revision. The
+    /// revision also guards every descendant and ancestor dependency in O(1).
+    CapturePointerForSelection {
+        pointer_id: u64,
+        targets: Vec<gpui_flow_engine::ElementHandle>,
+    },
     ReleasePointer,
     BeginGesture,
     CommitGesture,
@@ -46,6 +52,11 @@ pub enum SceneCommand {
     SetResizeTransform {
         target: gpui_flow_engine::ElementHandle,
         transform: Affine,
+    },
+    /// Exactly one immutable ordered membership set. Middleware may normalize
+    /// matrices, but cannot drop, add, duplicate, reorder or retarget members.
+    SetResizeTransforms {
+        transforms: Vec<(gpui_flow_engine::ElementHandle, Affine)>,
     },
     RotateSelection {
         degrees: f32,
@@ -101,6 +112,7 @@ impl SceneCommand {
         Some(match self {
             Self::CapturePointer { .. }
             | Self::CapturePointerForTarget { .. }
+            | Self::CapturePointerForSelection { .. }
             | Self::ReleasePointer
             | Self::CancelGesture => {
                 return None;

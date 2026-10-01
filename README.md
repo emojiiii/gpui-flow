@@ -133,6 +133,7 @@ cargo +1.98.1 run --locked -p flow-studio
 
 - [Leafer 源码分层、差距与验收契约](docs/leafer-source-map.md)
 - [Retained Text 内容编辑与工具会话](docs/text-editing.md)（Linux本地模型/UI/原生闭环已验，平台IME与跨平台边界见文档）
+- [多选共享八方向缩放框](docs/selection-resize.md)（18项新回归、583项受影响/98项UI、严格Clippy/格式与Linux原生共享拖动、mixed/zoom/pan已验；范围见文档）
 - [单选八方向缩放手柄](docs/resize-handles.md)（26项新回归、受影响聚合与Linux原生拖动已验；保留旧API，非完整编辑器对齐）
 - [元素实例、属性变更与事件引擎](docs/engine.md)
 - [属性动画、播放控制与Undo历史](docs/animation.md)

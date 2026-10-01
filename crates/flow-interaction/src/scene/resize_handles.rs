@@ -3,8 +3,8 @@ use super::object_editable;
 use crate::CanvasCursor;
 use gpui_flow_core::{Point, Rect};
 use gpui_flow_editor::{ResizeHandle, SceneEditor};
-use gpui_flow_engine::InstanceState;
-use gpui_flow_scene::{Affine, DisplayId, Shape};
+use gpui_flow_engine::{ElementHandle, InstanceState};
+use gpui_flow_scene::{Affine, DisplayId, Scene, Shape};
 
 pub const RESIZE_HANDLE_HIT_RADIUS: f32 = 10.;
 pub const RESIZE_HANDLE_PAINT_SIZE: f32 = 8.;
@@ -102,11 +102,21 @@ impl SceneResizeGeometry {
     /// composition through ancestors. Never turn a working native descendant
     /// into an unsupported rotated/skewed/nonuniform presentation.
     pub fn accepts_transform(editor: &SceneEditor, id: &DisplayId, transform: Affine) -> bool {
-        let Some(node) = editor.scene().get(id) else {
+        Self::validate_subtree(editor.scene(), id, transform, false)
+    }
+    pub(crate) fn accepts_scene_transform(
+        scene: &Scene,
+        id: &DisplayId,
+        transform: Affine,
+    ) -> bool {
+        Self::validate_subtree(scene, id, transform, true)
+    }
+    fn validate_subtree(scene: &Scene, id: &DisplayId, transform: Affine, selection: bool) -> bool {
+        let Some(node) = scene.get(id) else {
             return false;
         };
         let parent = match &node.parent {
-            Some(parent) => match editor.engine.world_transform(parent) {
+            Some(parent) => match scene.world_transform(parent) {
                 Ok(matrix) => matrix,
                 Err(_) => return false,
             },
@@ -114,10 +124,11 @@ impl SceneResizeGeometry {
         };
         let mut pending = vec![(id, parent * transform)];
         while let Some((next, world)) = pending.pop() {
-            let Some(node) = editor.scene().get(next) else {
+            let Some(node) = scene.get(next) else {
                 return false;
             };
-            if !world.is_finite()
+            if (selection && (node.object.locked || matches!(node.object.shape, Shape::Custom(_))))
+                || !world.is_finite()
                 || world.inverse().is_none()
                 || (matches!(node.object.shape, Shape::Text(_) | Shape::Image(_))
                     && !native_transform_supported(world))
@@ -125,7 +136,7 @@ impl SceneResizeGeometry {
                 return false;
             }
             for child in &node.children {
-                let Some(node) = editor.scene().get(child) else {
+                let Some(node) = scene.get(child) else {
                     return false;
                 };
                 pending.push((child, world * node.object.transform));
@@ -173,5 +184,96 @@ fn resize_cursor(direction: Point) -> CanvasCursor {
         1 => CanvasCursor::Resize,
         2 => CanvasCursor::ResizeVertical,
         _ => CanvasCursor::ResizeOtherDiagonal,
+    }
+}
+
+/// Frozen root matrices for one shared world-axis resize. The bounds union uses
+/// cached geometric subtree bounds (stroke and internal clipping included),
+/// never visual effect/shadow bounds, and never an arbitrary primary element.
+#[derive(Debug, Clone)]
+pub struct SceneSelectionResizeGeometry {
+    pub geometry: SceneResizeGeometry,
+    pub roots: Vec<SceneResizeRoot>,
+}
+#[derive(Debug, Clone, Copy)]
+pub struct SceneResizeRoot {
+    pub target: ElementHandle,
+    pub original: Affine,
+    pub parent: Affine,
+    pub parent_inverse: Affine,
+}
+impl SceneSelectionResizeGeometry {
+    pub fn for_selection(editor: &SceneEditor) -> Option<Self> {
+        if editor.selection.ids.len() < 2
+            || editor
+                .selection
+                .ids
+                .iter()
+                .any(|id| editor.engine.handle(id).is_none())
+        {
+            return None;
+        }
+        let mut bounds: Option<Rect> = None;
+        let mut uniform = false;
+        let mut roots = Vec::new();
+        for id in editor.selection.roots(editor.scene()) {
+            let geometry = SceneResizeGeometry::for_target(editor, &id)?;
+            if !SceneResizeGeometry::accepts_scene_transform(editor.scene(), &id, geometry.original)
+            {
+                return None;
+            }
+            let world_bounds = editor.engine.world_bounds(&id).ok()??;
+            if !world_bounds.is_valid() || !world_bounds.size.is_positive() {
+                return None;
+            }
+            bounds = Some(bounds.map_or(world_bounds, |old| old.union(world_bounds)));
+            uniform |= geometry.uniform;
+            let node = editor.scene().get(&id)?;
+            let parent = match &node.parent {
+                Some(id) => editor.engine.world_transform(id).ok()?,
+                None => Affine::IDENTITY,
+            };
+            roots.push(SceneResizeRoot {
+                target: editor.engine.handle(&id)?,
+                original: geometry.original,
+                parent,
+                parent_inverse: parent.inverse()?,
+            });
+        }
+        let bounds = bounds?;
+        if !bounds.is_valid() || !bounds.size.is_positive() {
+            return None;
+        }
+        let floor = |length: f32| (1. / (length as f64).max(1.)).clamp(0.05, 1.) as f32;
+        Some(Self {
+            geometry: SceneResizeGeometry {
+                bounds,
+                original: Affine::IDENTITY,
+                world: Affine::IDENTITY,
+                inverse: Affine::IDENTITY,
+                minimum_scale: Point::new(floor(bounds.size.width), floor(bounds.size.height)),
+                uniform,
+            },
+            roots,
+        })
+    }
+    pub fn screen_handles(&self, editor: &SceneEditor) -> Option<[SceneResizeHandle; 8]> {
+        self.geometry.screen_handles(editor)
+    }
+    /// Apply one world delta to every frozen root. Identity bypass avoids
+    /// rounding drift (and Redo invalidation) in P^-1 * P at zero motion.
+    pub fn transforms(&self, delta: Affine) -> Option<Vec<(ElementHandle, Affine)>> {
+        self.roots
+            .iter()
+            .map(|root| {
+                let transform = if delta == Affine::IDENTITY {
+                    root.original
+                } else {
+                    root.parent_inverse * delta * root.parent * root.original
+                };
+                (transform.is_finite() && transform.inverse().is_some())
+                    .then_some((root.target, transform))
+            })
+            .collect()
     }
 }

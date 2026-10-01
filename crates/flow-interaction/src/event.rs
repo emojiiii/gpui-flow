@@ -31,6 +31,11 @@ pub enum HitTarget {
     /// Retained-scene object ID for a SceneEditor-backed plugin host.
     Object(String),
     ObjectResize(String),
+    /// Shared world-axis box for the complete current selection; no arbitrary
+    /// primary object owns its input or capture.
+    SelectionResizeHandle {
+        handle: gpui_flow_editor::ResizeHandle,
+    },
     /// A named single-selection transform handle. The legacy ObjectResize
     /// retains its bottom-right behavior for existing headless integrations.
     ObjectResizeHandle {
