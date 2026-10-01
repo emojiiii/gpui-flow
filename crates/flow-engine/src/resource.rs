@@ -268,6 +268,8 @@ impl SceneResources {
                     } else {
                         // Conservative support for future granular shape deltas.
                         property.property.starts_with("shape.")
+                            || (property.property == "text.content"
+                                && matches!(&entry.source, Source::Text(_)))
                     }
                 });
                 // Commit observation catches A -> B -> A even without a render

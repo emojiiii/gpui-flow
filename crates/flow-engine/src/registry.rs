@@ -384,6 +384,8 @@ pub enum PropertyKey {
     InnerShadowLayers,
     Mask,
     Shape,
+    /// Plain content of a built-in Text, preserving its layout box and typography.
+    TextContent,
     Custom(String),
 }
 impl PropertyKey {
@@ -411,6 +413,7 @@ impl PropertyKey {
             Self::InnerShadowLayers => "style.inner_shadow_layers".into(),
             Self::Mask => "mask".into(),
             Self::Shape => "shape".into(),
+            Self::TextContent => "text.content".into(),
         }
     }
 }
@@ -419,6 +422,18 @@ pub(crate) fn apply_property(
     key: &PropertyKey,
     value: Value,
 ) -> Result<(), EngineError> {
+    if *key == PropertyKey::TextContent {
+        let Shape::Text(text) = &mut object.shape else {
+            return Err(EngineError::Property(
+                "text content requires a built-in Text element".into(),
+            ));
+        };
+        text.content = value
+            .as_str()
+            .ok_or_else(|| EngineError::Property("text content must be a string".into()))?
+            .to_owned();
+        return Ok(());
+    }
     if let PropertyKey::Custom(name) = key {
         let Shape::Custom(custom) = &mut object.shape else {
             return Err(EngineError::Property(
@@ -451,7 +466,7 @@ pub(crate) fn property_dirty(name: &str) -> DirtyFlags {
         | "style.inner_shadow_layers" => DirtyFlags::PAINT,
         "mask" => DirtyFlags::PAINT | DirtyFlags::GEOMETRY,
         "transform" => DirtyFlags::TRANSFORM | DirtyFlags::HIT,
-        "shape" => DirtyFlags::GEOMETRY | DirtyFlags::PAINT | DirtyFlags::HIT,
+        "shape" | "text.content" => DirtyFlags::GEOMETRY | DirtyFlags::PAINT | DirtyFlags::HIT,
         "style.stroke" | "style.stroke_layers" | "style.fill_rule" => {
             DirtyFlags::GEOMETRY | DirtyFlags::PAINT | DirtyFlags::HIT
         }
@@ -468,7 +483,7 @@ impl PropertyKey {
     /// Custom-property descriptors are resolved against their element definition.
     pub fn descriptor(&self) -> Option<PropertyDescriptor> {
         let (value_type, default) = match self {
-            Self::Name => (PropertyType::String, Some(json!(""))),
+            Self::Name | Self::TextContent => (PropertyType::String, Some(json!(""))),
             Self::Classes
             | Self::FillLayers
             | Self::StrokeLayers

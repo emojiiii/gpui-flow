@@ -15,6 +15,18 @@ pub struct PlaybackToken {
     engine: u64,
     sequence: u64,
 }
+/// Opaque ownership of a live editor session. Never serialize tokens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EditSessionToken {
+    engine: u64,
+    sequence: u64,
+}
+struct OwnedEdit {
+    token: EditSessionToken,
+    document_epoch: u64,
+    baseline: Snapshot,
+    last_owned: Snapshot,
+}
 struct Playback {
     token: PlaybackToken,
     document_epoch: u64,
@@ -29,6 +41,8 @@ pub struct SceneEditor {
     undo: Vec<Snapshot>,
     redo: Vec<Snapshot>,
     pending: Option<Snapshot>,
+    edit_session: Option<OwnedEdit>,
+    edit_sequence: u64,
     playback: Option<Playback>,
     playback_sequence: u64,
     history_limit: usize,
@@ -48,6 +62,8 @@ impl SceneEditor {
             undo: vec![],
             redo: vec![],
             pending: None,
+            edit_session: None,
+            edit_sequence: 0,
             playback: None,
             playback_sequence: 0,
             history_limit: 100,
@@ -65,6 +81,7 @@ impl SceneEditor {
         self.undo.clear();
         self.redo.clear();
         self.pending = None;
+        self.edit_session = None;
         self.playback = None;
         Ok(())
     }
@@ -134,7 +151,7 @@ impl SceneEditor {
     /// or another playback must finish first; ownership cannot be stolen.
     pub fn begin_playback(&mut self) -> Result<PlaybackToken, EngineError> {
         self.reconcile_external();
-        if self.pending.is_some() || self.playback.is_some() {
+        if self.pending.is_some() || self.edit_session.is_some() || self.playback.is_some() {
             return Err(EngineError::Property(
                 "an edit or playback is already active".into(),
             ));
@@ -213,6 +230,105 @@ impl SceneEditor {
         self.playback = None;
         true
     }
+    /// Reserve one undo baseline for a long-running, token-owned edit. Gestures
+    /// and playback cannot share it. Public editor edits revoke this ownership
+    /// only after a successful commit, preserving each as a separate undo step.
+    pub fn begin_edit_session(&mut self) -> Result<EditSessionToken, EngineError> {
+        self.reconcile_external();
+        if self.pending.is_some() || self.edit_session.is_some() || self.playback.is_some() {
+            return Err(EngineError::Property(
+                "an edit or playback is already active".into(),
+            ));
+        }
+        let sequence = self
+            .edit_sequence
+            .checked_add(1)
+            .ok_or(EngineError::Exhausted)?;
+        let token = EditSessionToken {
+            engine: self.engine.engine_id(),
+            sequence,
+        };
+        let baseline = self.snapshot();
+        self.edit_session = Some(OwnedEdit {
+            token,
+            document_epoch: self.engine.document_epoch(),
+            last_owned: baseline.clone(),
+            baseline,
+        });
+        self.edit_sequence = sequence;
+        Ok(token)
+    }
+    pub fn is_edit_session_active(&mut self, token: EditSessionToken) -> bool {
+        self.reconcile_external();
+        self.edit_session
+            .as_ref()
+            .is_some_and(|edit| edit.token == token)
+    }
+    /// The only mutation route that can extend an owned edit. A stale token
+    /// cannot mutate the scene or another edit's history baseline.
+    pub fn set_edit_session_property(
+        &mut self,
+        token: EditSessionToken,
+        handle: ElementHandle,
+        key: PropertyKey,
+        value: serde_json::Value,
+    ) -> Result<ChangeSet, EngineError> {
+        if !self.is_edit_session_active(token) {
+            return Err(EngineError::Property(
+                "edit session ended or belongs to another editor".into(),
+            ));
+        }
+        let changes = self.engine.set_property(handle, key, value)?;
+        self.observed_revision = self.engine.revision();
+        self.selection.retain_existing(self.engine.scene());
+        let last_owned = self.snapshot();
+        self.edit_session
+            .as_mut()
+            .expect("active edit session")
+            .last_owned = last_owned;
+        Ok(changes)
+    }
+    fn finish_active_edit_session(&mut self) -> bool {
+        let Some(edit) = self.edit_session.take() else {
+            return false;
+        };
+        self.record(edit.baseline);
+        true
+    }
+    fn finish_edit_session_before_edit(&mut self, before: &Snapshot) {
+        if let Some(edit) = self.edit_session.take()
+            && edit.baseline.scene != before.scene
+        {
+            self.push_undo(edit.baseline);
+        }
+    }
+    /// Keep live changes as one undo step. Also used when a target or permission
+    /// is revoked: discarding a session never writes its stale baseline back.
+    pub fn finish_edit_session(&mut self, token: EditSessionToken) -> bool {
+        if !self.is_edit_session_active(token) {
+            return false;
+        }
+        self.finish_active_edit_session()
+    }
+    /// Escape rollback is safe only while this token still owns all intervening
+    /// document edits. Selection is interaction state and is not rolled back.
+    pub fn cancel_edit_session(&mut self, token: EditSessionToken) -> bool {
+        if !self.is_edit_session_active(token) {
+            return false;
+        }
+        let mut baseline = self
+            .edit_session
+            .as_ref()
+            .expect("active edit session")
+            .baseline
+            .clone();
+        baseline.selection = self.selection.clone();
+        if !self.restore(baseline) {
+            return false;
+        }
+        self.edit_session = None;
+        true
+    }
     pub fn transaction(
         &mut self,
         edit: impl FnOnce(&mut Scene) -> Result<(), SceneError>,
@@ -223,6 +339,7 @@ impl SceneEditor {
         // A failed input/derived-layout commit must not end playback or discard
         // its Redo branch. On success, record its last frame before the edit.
         self.finish_playback_before_edit(&before);
+        self.finish_edit_session_before_edit(&before);
         self.observed_revision = self.engine.revision();
         self.selection.retain_existing(self.engine.scene());
         if self.pending.is_none() {
@@ -241,6 +358,7 @@ impl SceneEditor {
         let before = self.snapshot();
         self.engine.set_property(handle, key, value)?;
         self.finish_playback_before_edit(&before);
+        self.finish_edit_session_before_edit(&before);
         self.observed_revision = self.engine.revision();
         self.selection.retain_existing(self.engine.scene());
         if self.pending.is_none() {
@@ -248,15 +366,37 @@ impl SceneEditor {
         }
         Ok(())
     }
-    /// Direct engine writes outside an owned playback remain a history boundary.
-    /// During playback, preserve its last frame and the external edit separately;
-    /// cancellation must never restore an older frame over that external write.
+    /// Direct engine writes outside an owned session/playback remain a history
+    /// boundary. During ownership, preserve the last owned snapshot and external
+    /// edit separately; cancellation can never overwrite the external write.
     pub fn reconcile_external(&mut self) -> bool {
+        // Engine replacement can reuse a revision number; identity is stronger
+        // than revision equality. A document reset always drops old history.
+        if self.edit_session.as_ref().is_some_and(|edit| {
+            edit.token.engine != self.engine.engine_id()
+                || edit.document_epoch != self.engine.document_epoch()
+        }) {
+            self.edit_session = None;
+            self.pending = None;
+            self.playback = None;
+            self.undo.clear();
+            self.redo.clear();
+            self.selection.retain_existing(self.engine.scene());
+            self.observed_revision = self.engine.revision();
+            return true;
+        }
         if self.observed_revision == self.engine.revision() {
             return false;
         }
         self.pending = None;
-        if let Some(playback) = self.playback.take() {
+        if let Some(edit) = self.edit_session.take() {
+            if edit.baseline.scene != edit.last_owned.scene {
+                self.push_undo(edit.baseline);
+            }
+            if edit.last_owned.scene != *self.scene() {
+                self.push_undo(edit.last_owned);
+            }
+        } else if let Some(playback) = self.playback.take() {
             if self.engine.document_epoch() != playback.document_epoch {
                 // An explicit new-document load remains a history boundary.
                 self.undo.clear();
@@ -280,16 +420,24 @@ impl SceneEditor {
         true
     }
     /// Starts one undoable gesture. Returns false if a gesture already exists.
+    /// An owned session or playback is first sealed as its own undo step.
     pub fn begin_edit(&mut self) -> bool {
         self.reconcile_external();
         self.finish_active_playback();
+        self.finish_active_edit_session();
         if self.pending.is_some() {
             return false;
         }
         self.pending = Some(self.snapshot());
         true
     }
+    /// Any user edit is active, including an owned edit session.
     pub fn editing(&self) -> bool {
+        self.pending.is_some() || self.edit_session.is_some()
+    }
+    /// An unowned begin_edit gesture is active. Owned sessions have their own
+    /// token-only finish/cancel methods; generic commit/cancel cannot steal them.
+    pub fn gesture_editing(&self) -> bool {
         self.pending.is_some()
     }
     pub fn commit_edit(&mut self) {
@@ -313,6 +461,7 @@ impl SceneEditor {
     pub fn undo(&mut self) -> bool {
         self.reconcile_external();
         self.finish_active_playback();
+        self.finish_active_edit_session();
         if self.editing() {
             return false;
         }
@@ -330,6 +479,7 @@ impl SceneEditor {
     pub fn redo(&mut self) -> bool {
         self.reconcile_external();
         self.finish_active_playback();
+        self.finish_active_edit_session();
         if self.editing() {
             return false;
         }

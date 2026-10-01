@@ -132,6 +132,7 @@ cargo +1.98.1 run --locked -p flow-studio
 - [真实文字测量与响应尺寸](docs/text-measurement.md)
 
 - [Leafer 源码分层、差距与验收契约](docs/leafer-source-map.md)
+- [Retained Text 内容编辑与工具会话](docs/text-editing.md)（Linux本地模型/UI/原生闭环已验，平台IME与跨平台边界见文档）
 - [元素实例、属性变更与事件引擎](docs/engine.md)
 - [属性动画、播放控制与Undo历史](docs/animation.md)
 - [键盘事件、Space导航与释放清理](docs/keyboard-routing.md)

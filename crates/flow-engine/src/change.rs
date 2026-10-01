@@ -205,6 +205,29 @@ pub(crate) fn diff(
                             property_dirty(&name),
                         );
                     }
+                } else if key == "shape" && a[key]["type"] == "text" && b[key]["type"] == "text" {
+                    record_property(
+                        &mut change,
+                        &id,
+                        "text.content",
+                        &a[key]["geometry"]["content"],
+                        &b[key]["geometry"]["content"],
+                        property_dirty("text.content"),
+                    );
+                    let mut old_shape = a[key].clone();
+                    let mut new_shape = b[key].clone();
+                    old_shape["geometry"]["content"] = Value::Null;
+                    new_shape["geometry"]["content"] = Value::Null;
+                    if old_shape != new_shape {
+                        record_property(
+                            &mut change,
+                            &id,
+                            "shape",
+                            &a[key],
+                            &b[key],
+                            property_dirty("shape"),
+                        );
+                    }
                 } else if key == "shape"
                     && a[key]["type"] == "custom"
                     && b[key]["type"] == "custom"

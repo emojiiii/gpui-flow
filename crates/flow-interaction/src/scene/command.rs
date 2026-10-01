@@ -47,6 +47,14 @@ pub enum SceneCommand {
         key: gpui_flow_engine::PropertyKey,
         value: Value,
     },
+    /// Token-owned property write, subject to the same policy and middleware
+    /// as SetProperty. Runtime handles/tokens never enter serialized documents.
+    SetSessionProperty {
+        token: gpui_flow_editor::EditSessionToken,
+        handle: gpui_flow_engine::ElementHandle,
+        key: gpui_flow_engine::PropertyKey,
+        value: Value,
+    },
     SetObjectData {
         id: DisplayId,
         data: Value,

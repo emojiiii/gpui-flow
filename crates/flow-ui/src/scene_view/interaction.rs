@@ -34,11 +34,13 @@ impl SceneView {
             input::HitTarget::Background
         }
     }
-    fn plugin_event(&mut self, event: input::CanvasEvent, cx: &mut Context<Self>) {
+    fn plugin_event(&mut self, event: input::CanvasEvent, cx: &mut Context<Self>) -> bool {
         let report = self
             .router
             .dispatch(&mut self.editor, &mut self.interactions, event);
+        let allowed = !report.default.default_prevented;
         self.apply_routed_report(report, cx);
+        allowed
     }
     fn apply_routed_report(&mut self, report: input::scene::RoutedReport, cx: &mut Context<Self>) {
         self.pending_native_focus |= report.focus_requested;
@@ -122,10 +124,25 @@ impl SceneView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.text_editor_active() {
+            self.finish_text_editor(window, cx);
+            if self.text_editor_active() {
+                return;
+            }
+        }
         window.focus(&self.focus, cx);
         let local = self.local(event.position);
         let hit = self.input_hit(local, event.modifiers.control);
-        self.plugin_event(
+        let text_target =
+            native_text_activation(event, &hit, self.router.space_held()).and_then(|id| {
+                let handle = self.editor.engine.handle(&id.into())?;
+                matches!(
+                    self.editor.engine.object(handle).ok()?.shape,
+                    gpui_flow_scene::Shape::Text(_)
+                )
+                .then_some(handle)
+            });
+        let allowed = self.plugin_event(
             input::CanvasEvent::PointerDown(input::PointerInput {
                 position: local,
                 button: button(event.button),
@@ -135,8 +152,19 @@ impl SceneView {
             }),
             cx,
         );
+        if allowed
+            && self.tools.is_some()
+            && let Some(handle) = text_target
+            && let Err(error) = self.open_text_editor(handle, window, cx)
+        {
+            self.interaction_error = Some(error.to_string());
+            cx.notify();
+        }
     }
     pub(super) fn moved(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
+        if self.text_editor_active() {
+            return;
+        }
         let local = self.local(event.position);
         if event.pressed_button.is_none()
             && (self.interactions.has_capture() || self.router.has_pressed(&self.editor.engine))
@@ -156,6 +184,9 @@ impl SceneView {
         );
     }
     pub(super) fn up(&mut self, event: &MouseUpEvent, cx: &mut Context<Self>) {
+        if self.text_editor_active() {
+            return;
+        }
         let local = self.local(event.position);
         self.plugin_event(
             input::CanvasEvent::PointerUp(input::PointerInput {
@@ -172,6 +203,9 @@ impl SceneView {
         self.plugin_event(input::CanvasEvent::PointerCancel, cx);
     }
     pub(super) fn pointer_leave(&mut self, cx: &mut Context<Self>) {
+        if self.text_editor_active() {
+            return;
+        }
         self.plugin_event(input::CanvasEvent::PointerLeave, cx);
     }
     pub(super) fn focus_lost(&mut self, cx: &mut Context<Self>) {
@@ -193,6 +227,9 @@ impl SceneView {
         );
     }
     pub(super) fn key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
+        if self.text_editor_active() {
+            return;
+        }
         self.plugin_event(
             input::CanvasEvent::KeyDown {
                 key: key_code(event.keystroke.key.as_str()),
@@ -203,6 +240,9 @@ impl SceneView {
         cx.notify();
     }
     pub(super) fn key_up(&mut self, event: &KeyUpEvent, cx: &mut Context<Self>) {
+        if self.text_editor_active() {
+            return;
+        }
         self.plugin_event(
             input::CanvasEvent::KeyUp {
                 key: key_code(event.keystroke.key.as_str()),
@@ -229,6 +269,28 @@ impl SceneView {
     }
 }
 
+fn native_text_activation(
+    event: &MouseDownEvent,
+    hit: &input::HitTarget,
+    space_held: bool,
+) -> Option<String> {
+    // Native GPUI owns click timing. Modified/pan/resize clicks retain outer behavior.
+    if space_held
+        || event.button != MouseButton::Left
+        || event.click_count != 2
+        || event.modifiers.shift
+        || event.modifiers.control
+        || event.modifiers.alt
+        || event.modifiers.platform
+    {
+        return None;
+    }
+    match hit {
+        input::HitTarget::Object(id) => Some(id.clone()),
+        _ => None,
+    }
+}
+
 fn key_code(text: &str) -> input::KeyCode {
     match text {
         "space" | " " => input::KeyCode::Space,
@@ -247,8 +309,10 @@ fn key_code(text: &str) -> input::KeyCode {
 
 #[cfg(test)]
 mod tests {
-    use super::key_code;
+    use super::{key_code, native_text_activation};
     use core::prelude::v1::test;
+    use gpui::{Modifiers, MouseButton, MouseDownEvent};
+    use gpui_flow_interaction::HitTarget;
     use gpui_flow_interaction::KeyCode;
     #[test]
     fn native_key_names_normalize_space_and_named_keys_for_both_edges() {
@@ -260,5 +324,81 @@ mod tests {
         assert_eq!(key_code("a"), KeyCode::Character('a'));
         assert_eq!(key_code("中"), KeyCode::Character('中'));
         assert_eq!(key_code("f12"), KeyCode::Other("f12".into()));
+    }
+    #[test]
+    fn only_native_unmodified_double_click_activates_a_text_target() {
+        let event = MouseDownEvent {
+            button: MouseButton::Left,
+            click_count: 2,
+            ..Default::default()
+        };
+        let target = HitTarget::Object("text".into());
+        assert_eq!(
+            native_text_activation(&event, &target, false),
+            Some("text".into())
+        );
+        assert_eq!(native_text_activation(&event, &target, true), None);
+        for count in [0, 1, 3, 4] {
+            assert_eq!(
+                native_text_activation(
+                    &MouseDownEvent {
+                        click_count: count,
+                        ..event.clone()
+                    },
+                    &target,
+                    false
+                ),
+                None
+            );
+        }
+        for button in [MouseButton::Middle, MouseButton::Right] {
+            assert_eq!(
+                native_text_activation(
+                    &MouseDownEvent {
+                        button,
+                        ..event.clone()
+                    },
+                    &target,
+                    false
+                ),
+                None
+            );
+        }
+        for modifiers in [
+            Modifiers {
+                shift: true,
+                ..Default::default()
+            },
+            Modifiers {
+                control: true,
+                ..Default::default()
+            },
+            Modifiers {
+                alt: true,
+                ..Default::default()
+            },
+            Modifiers {
+                platform: true,
+                ..Default::default()
+            },
+        ] {
+            assert_eq!(
+                native_text_activation(
+                    &MouseDownEvent {
+                        modifiers,
+                        ..event.clone()
+                    },
+                    &target,
+                    false
+                ),
+                None
+            );
+        }
+        for hit in [
+            HitTarget::Background,
+            HitTarget::ObjectResize("text".into()),
+        ] {
+            assert_eq!(native_text_activation(&event, &hit, false), None);
+        }
     }
 }

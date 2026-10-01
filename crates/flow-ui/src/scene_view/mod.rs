@@ -3,6 +3,7 @@ mod composite;
 mod interaction;
 mod plugins;
 mod render;
+mod text_edit;
 use crate::{
     FlowTheme,
     display::{RenderIssue, RenderObject},
@@ -18,6 +19,7 @@ pub enum SceneViewEvent {
     Pointer(Box<SceneEvent>),
     Resource(gpui_flow_engine::ResourceEvent),
     ResourceView(gpui_flow_engine::ResourceViewEvent),
+    EditorTool(gpui_flow_interaction::scene::SceneToolEvent),
 }
 impl EventEmitter<SceneViewEvent> for SceneView {}
 /// Which pixels are owned by the CPU compositing pass.
@@ -61,6 +63,8 @@ pub struct SceneView {
     interaction_window: Option<u64>,
     router: gpui_flow_interaction::scene::SceneEventRouter,
     pub interaction_error: Option<String>,
+    tools: Option<gpui_flow_interaction::scene::SceneToolController>,
+    text_input: Option<text_edit::TextInputSession>,
 }
 impl SceneView {
     pub fn new(scene: Scene, cx: &mut Context<Self>) -> Result<Self, SceneError> {
@@ -77,6 +81,10 @@ impl SceneView {
                 Err(error) => (None, Some(error.to_string())),
             };
         cx.on_release(|this: &mut Self, cx| {
+            if let Some(tools) = &mut this.tools {
+                let _ = tools.dispose(&mut this.editor, &mut this.interactions);
+            }
+            this.text_input = None;
             this.compositing.dispose(cx);
             if let Some(resources) = &mut this.resources {
                 let _ = resources.dispose(&mut this.editor.engine);
@@ -110,6 +118,8 @@ impl SceneView {
             interaction_window: None,
             router: gpui_flow_interaction::scene::SceneEventRouter::new(),
             interaction_error: None,
+            tools: None,
+            text_input: None,
         }
     }
     pub fn resources(&self) -> Option<&crate::resources::SceneResourceAdapter> {
@@ -285,7 +295,8 @@ impl SceneView {
             .map(|hit| hit.id)
     }
     fn resize_target(&self) -> Option<DisplayId> {
-        if !self.is_editable()
+        if self.text_editor_active()
+            || !self.is_editable()
             || !self.interactions.is_enabled("resize")
             || self.editor.selection.ids.len() != 1
         {

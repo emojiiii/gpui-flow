@@ -424,6 +424,12 @@ impl ScenePluginHost {
         {
             return Err(InteractionError::CapabilityDenied(capability));
         }
+        let session_identity = match &command {
+            SceneCommand::SetSessionProperty {
+                token, handle, key, ..
+            } => Some((*token, *handle, key.clone())),
+            _ => None,
+        };
         let mut effects = vec![];
         let mut participants = vec![];
         let cleanup = matches!(
@@ -456,6 +462,14 @@ impl ScenePluginHost {
             && !self.allows(capability)
         {
             return Err(InteractionError::CapabilityDenied(capability));
+        }
+        if let Some((token, handle, key)) = session_identity
+            && !matches!(&command, SceneCommand::SetSessionProperty { token: actual_token, handle: actual_handle, key: actual_key, .. }
+                if *actual_token == token && *actual_handle == handle && *actual_key == key)
+        {
+            return Err(InteractionError::InvalidInput(
+                "middleware cannot retarget an owned edit command".into(),
+            ));
         }
         if command.capability() == Some(Capability::Edit)
             && self
@@ -634,6 +648,23 @@ impl ScenePluginHost {
                     .ok_or(SceneError::MissingNode(id))?;
                 editor.set_property(handle, key, value)?;
             }
+            SceneCommand::SetSessionProperty {
+                token,
+                handle,
+                key,
+                value,
+            } => {
+                let id = editor
+                    .engine
+                    .object(handle)
+                    .map_err(|error| InteractionError::InvalidInput(error.to_string()))?
+                    .id
+                    .clone();
+                require_editable(&id)?;
+                editor
+                    .set_edit_session_property(token, handle, key, value)
+                    .map_err(|error| InteractionError::InvalidInput(error.to_string()))?;
+            }
             SceneCommand::SetObjectData { id, data } => {
                 require_editable(&id)?;
                 editor.transaction(move |scene| {
@@ -655,7 +686,7 @@ impl ScenePluginHost {
                 Ok(())
             })?,
             SceneCommand::LoadScene(scene) => {
-                if editor.editing() {
+                if editor.gesture_editing() {
                     return Err(InteractionError::GestureOwned("active scene edit".into()));
                 }
                 editor.load_scene(scene)?;

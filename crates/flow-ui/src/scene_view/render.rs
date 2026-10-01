@@ -114,6 +114,7 @@ fn state_render_objects(
 }
 impl Render for SceneView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.reconcile_text_editor(window, cx);
         self.subscribe_input(window, cx);
         self.sync_requested_focus(window, cx);
         if let Some(resources) = &mut self.resources {
@@ -260,6 +261,7 @@ impl Render for SceneView {
             .selection
             .ids
             .iter()
+            .filter(|_| !self.text_editor_active())
             .filter_map(|id| self.selection_corners(id))
             .collect();
         let marquee = self.interactions.marquee();
@@ -475,6 +477,9 @@ impl Render for SceneView {
                     .text_xs()
                     .child(error.clone()),
             );
+        }
+        if let Some(panel) = self.text_editor_panel(cx) {
+            view = view.child(panel);
         }
         view.cursor(self.input_cursor())
             .on_hover(cx.listener(|this, hovered, _, cx| {

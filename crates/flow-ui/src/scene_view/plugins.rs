@@ -112,6 +112,7 @@ impl SceneView {
         self.subscriptions
             .push(cx.observe_window_activation(window, |this, window, cx| {
                 if !window.is_window_active() {
+                    this.finish_text_editor(window, cx);
                     if let Some(resources) = &mut this.resources {
                         resources.freeze_images(this.state_clock.elapsed());
                     }
@@ -121,10 +122,11 @@ impl SceneView {
             }));
         self.subscriptions
             .push(cx.observe_window_visibility(window, |this, _, window, cx| {
-                if !window.is_visible()
-                    && let Some(resources) = &mut this.resources
-                {
-                    resources.freeze_images(this.state_clock.elapsed());
+                if !window.is_visible() {
+                    this.finish_text_editor(window, cx);
+                    if let Some(resources) = &mut this.resources {
+                        resources.freeze_images(this.state_clock.elapsed());
+                    }
                 }
                 cx.notify();
             }));

@@ -498,3 +498,66 @@ fn model_measurement_is_independent_of_ancestor_zoom() {
         assert!(result.1.changed.is_empty());
     }
 }
+
+#[test]
+fn owned_text_content_session_remeasures_and_reflows_in_one_undo() {
+    use gpui_flow_engine::PropertyKey;
+    use serde_json::json;
+    let (mut scene, layout, backend) = fixture(TextSizing::AutoHeight);
+    let measured = layout.with_text_measurer(backend);
+    measured.apply_to_scene(&mut scene).unwrap();
+    let mut editor = SceneEditor::new(scene.clone()).unwrap();
+    measured.install_reactive(&mut editor.engine).unwrap();
+    let baseline = editor.scene().clone();
+    let handle = editor.engine.handle(&"text".into()).unwrap();
+    let token = editor.begin_edit_session().unwrap();
+    for content in ["long fixture", "A\n"] {
+        editor
+            .set_edit_session_property(token, handle, PropertyKey::TextContent, json!(content))
+            .unwrap();
+        assert_eq!(text(editor.scene()).size.height, 60.);
+        assert_eq!(height(editor.scene()), 80.);
+        assert!(editor.is_edit_session_active(token));
+    }
+    let finished = editor.scene().clone();
+    assert!(editor.finish_edit_session(token));
+    assert!(editor.undo());
+    assert_eq!(editor.scene(), &baseline);
+    assert!(!editor.undo());
+    assert!(editor.redo());
+    assert_eq!(editor.scene(), &finished);
+}
+
+#[test]
+fn failed_text_measurement_preserves_owned_edit_and_last_accepted_content() {
+    use gpui_flow_engine::PropertyKey;
+    use serde_json::json;
+    let (mut scene, layout, backend) = fixture(TextSizing::AutoHeight);
+    let measured = layout.with_text_measurer(backend.clone());
+    measured.apply_to_scene(&mut scene).unwrap();
+    let mut editor = SceneEditor::new(scene).unwrap();
+    measured.install_reactive(&mut editor.engine).unwrap();
+    let handle = editor.engine.handle(&"text".into()).unwrap();
+    let token = editor.begin_edit_session().unwrap();
+    editor
+        .set_edit_session_property(
+            token,
+            handle,
+            PropertyKey::TextContent,
+            json!("long fixture"),
+        )
+        .unwrap();
+    let accepted = editor.scene().clone();
+    backend.mode.store(1, Ordering::SeqCst);
+    assert!(
+        editor
+            .set_edit_session_property(token, handle, PropertyKey::TextContent, json!("A\n"))
+            .is_err()
+    );
+    assert_eq!(editor.scene(), &accepted);
+    assert!(editor.is_edit_session_active(token));
+    backend.mode.store(0, Ordering::SeqCst);
+    assert!(editor.cancel_edit_session(token));
+    assert_eq!(text(editor.scene()).content, "fixture");
+    assert!(!editor.undo());
+}
