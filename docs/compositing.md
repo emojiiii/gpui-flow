@@ -74,7 +74,7 @@ Child clipping uses an 8-bit mask on each actual paint or isolated-layer composi
 
 `Box.paint_order` and `Frame.paint_order` explicitly select `BeforeChildren` (own fills → own strokes → children) or `StrokeAfterChildren` (own fills → children → own strokes). Existing constructors and missing JSON fields retain `BeforeChildren`; rounded corners, clipping, opacity and blending do not silently change it. `SceneUnit::NativePhase` schedules native entry/exit paints, while a captured domain still substitutes one whole subtree. CPU preparation splits its existing paint vector after the emitted fills and submits each layer once inside the same container isolation. `Scene::paint_list`/`paint_order`, geometric picking and event ancestry remain structural, with one entry per object. A child can still be picked beneath a visually overlaid parent stroke.
 
-This is a bounded explicit option, not complete Leafer Box/Frame parity. In the pinned source, `BoxData.__drawAfterFill` is conditional on `__single || __clipAfterFill`; Leafer does not universally put container strokes after children. Its picker also prefers descendants over an overlapping Box/Frame. Flow does not reproduce that automatic phase-selection policy. Frame keeps the existing Scene style defaults rather than adopting Leafer's default white fill. This change adds no auto-sizing, scrolling, path-input boxes, container shadows or other Leafer-only rendering properties. See the [full contract, pinned source citations and validation scope](container-paint-order.md).
+This is a bounded explicit option, not complete Leafer Box/Frame parity. In the pinned source, `BoxData.__drawAfterFill` is conditional on `__single || __clipAfterFill`; Leafer does not universally put container strokes after children. Its picker also prefers descendants over an overlapping Box/Frame. Flow does not reproduce that automatic phase-selection policy. Frame keeps the existing Scene style defaults rather than adopting Leafer's default white fill. This change adds no auto-sizing, scrolling, path-input boxes or other Leafer-only rendering properties. Container shadows are a separate [bounded extension](group-shadows.md). See the [full contract, pinned source citations and validation scope](container-paint-order.md).
 
 Alpha masks still require a direct Group parent. A Box/Frame can itself be that Group's mask, including its painted children, and it can contain a Group with mask runs. Direct mask children of Box/Frame remain a validation error. No mask/disclosure/resource permissions are widened.
 
@@ -163,7 +163,7 @@ Custom inside a required domain rejects the entire domain. Text requires the exp
 
 In the default `SceneCompositing::Domains` mode, a domain root that needs multiply/screen against external content returns `UnsupportedExternalBackdrop`. A mask alone does not isolate a pass-through opacity-1 Group: a blend escaping an opaque mask run is rejected too. Explicit Normal groups and opacity isolation are supported, as are translucent mask runs that genuinely isolate their content. Put a required vector background inside the same Normal Group. Native siblings, host background, grid and selection decorations are not captured by that default mode. The explicit owned-canvas mode below includes only pixels owned by SceneView; arbitrary host GPUI content remains unsupported.
 
-No eraser, inner/group/container/spread/box/scale-fixed shadows, general blur/background filters, grayscale/path/clipping masks, scale-fixed stroke, pixel picking, automatic resolution reduction or tiling is claimed. The single leaf-shadow subset is described below; supported text, artistic blends and closed aligned strokes are covered in their dedicated sections. The engine's hit testing and conservative selection/layout bounds still include geometry beyond transparent mask pixels. Alpha-mask bounds do not become Leafer-style layout bounds. Rounded contours and stroke expansion retain the existing 0.1 local-unit approximation; gradient/AA bytes need not match the older native renderer. There is no wide-gamut, ICC or linear-light guarantee.
+No eraser, inner/spread/box/scale-fixed shadows, general blur/background filters, grayscale/path/clipping masks, scale-fixed stroke, pixel picking, automatic resolution reduction or tiling is claimed. The single leaf-shadow subset is described below and [bounded subtree shadows](group-shadows.md) extend it; supported text, artistic blends and closed aligned strokes are covered in their dedicated sections. The engine's hit testing and conservative selection/layout bounds still include geometry beyond transparent mask pixels. Alpha-mask bounds do not become Leafer-style layout bounds. Rounded contours and stroke expansion retain the existing 0.1 local-unit approximation; gradient/AA bytes need not match the older native renderer. There is no wide-gamut, ICC or linear-light guarantee.
 
 ## Budget, invalidation and lifecycle
 
@@ -355,8 +355,9 @@ and per extraction/tint row; the library call itself is not interruptible. Large
 blur, zoom/DPR or combined scenes can fail with `TooLarge`, `WorkingSetLimit` or
 `WorkLimit`, leaving no partial published frame.
 
-Group, Box, Frame and Custom shadows are rejected as `UnsupportedShadow` in this
-slice; supported leaves may still sit inside those normal supported containers.
+Group, Box and Frame now support [bounded composed-subtree shadows](group-shadows.md),
+including child effects and explicit PassThrough rejection. Custom shadows remain
+`UnsupportedShadow`. The validation checkpoint below records the earlier leaf-only slice.
 Multiple shadows, inner shadow, spread, box-only knockout, per-shadow blend,
 scale-fixed shadows and general filters remain unsupported. The native example
 is `cargo run --locked --offline -p flow-studio --bin outer_shadows`.

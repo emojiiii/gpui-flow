@@ -287,29 +287,6 @@ fn artistic_blend_in_owned_canvas_applies_to_shadow_and_source_together() {
 }
 #[test]
 fn unsupported_shadow_shapes_and_transforms_reject_without_native_fallback() {
-    for shape in [
-        gpui_flow_scene::Shape::Group(display::Group::new()),
-        gpui_flow_scene::Shape::Box(display::Box::new(10., 10.)),
-        gpui_flow_scene::Shape::Frame(display::Frame::new(10., 10.)),
-    ] {
-        let mut s = Scene::new();
-        s.insert(
-            DisplayObject::new("bad", shape).with_style(Style {
-                shadow: Some(Shadow::new(1., 1., 1., Color::BLACK)),
-                ..Default::default()
-            }),
-            None,
-            None,
-        )
-        .unwrap();
-        assert!(matches!(
-            &scene_units(&s, CompositeLimits::default()).unwrap()[0],
-            SceneUnit::Rejected(CompositeIssue {
-                error: CompositeError::UnsupportedShadow(_),
-                ..
-            })
-        ));
-    }
     for a in [
         Affine::scale(1., 2.),
         Affine::skew(5., 0.),
@@ -570,4 +547,72 @@ fn fractional_shadow_offset_uses_premultiplied_bilinear_coverage() {
     assert_eq!(p[1], 0);
     assert_eq!(p[2], 0);
     assert_eq!(pixel(&f, 45., 25., 1.), [255, 0, 0, 255]);
+}
+#[test]
+fn group_shadow_preserves_image_and_text_descendant_ink_holes() {
+    for text in [false, true] {
+        let mut rgba = vec![0; 12 * 12 * 4];
+        for y in 0..12 {
+            for x in 0..12 {
+                if !(4..8).contains(&x) || !(4..8).contains(&y) {
+                    rgba[(y * 12 + x) * 4..(y * 12 + x) * 4 + 4].copy_from_slice(&[0, 0, 255, 255]);
+                }
+            }
+        }
+        let image = Arc::new(
+            StaticImage::from_premultiplied_rgba(12, 12, rgba, CompositeLimits::default()).unwrap(),
+        );
+        let mut s = Scene::new();
+        s.insert(
+            DisplayObject::new("parent", display::Group::new()).with_style(Style {
+                shadow: Some(Shadow::new(20., 0., 0., Color::hex(0xff0000))),
+                ..Default::default()
+            }),
+            None,
+            None,
+        )
+        .unwrap();
+        let shape: gpui_flow_scene::Shape = if text {
+            display::Text::new("ink", Size::new(12., 12.)).into()
+        } else {
+            display::Image::new("local.png", Size::new(12., 12.)).into()
+        };
+        s.insert(
+            DisplayObject::new("ink", shape)
+                .with_transform(Affine::translation(20., 20.))
+                .with_style(Style {
+                    shadow: None,
+                    ..Default::default()
+                }),
+            Some("parent".into()),
+            None,
+        )
+        .unwrap();
+        let mut images = ImageInputs::default();
+        let mut texts = TextInputs::default();
+        if text {
+            texts.insert(
+                "ink".into(),
+                Ok(Some(Arc::new(TextImage {
+                    image,
+                    local_bounds: Bounds::new(Point::ZERO, Size::new(12., 12.)),
+                }))),
+            );
+        } else {
+            images.insert("ink".into(), Ok(image));
+        }
+        let f = rasterize_with_inputs(
+            &source(&s),
+            &images,
+            &texts,
+            viewport(),
+            &mut PixelBudget::new(CompositeLimits::default(), 0).unwrap(),
+            &AtomicBool::new(false),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(pixel(&f, 42., 22., 1.), [255, 0, 0, 255]);
+        assert_eq!(pixel(&f, 46., 26., 1.), [0; 4]);
+        assert_eq!(pixel(&f, 26., 26., 1.), [0; 4]);
+    }
 }

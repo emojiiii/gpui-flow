@@ -41,7 +41,8 @@ stroke in legacy mode; the final stroke can cover that child in opt-in mode.
 Box still shows descendant overflow by default. Frame still clips descendants
 by default and keeps Flow's existing Style defaults. This option does not add
 Leafer's white Frame fill, automatic isolation decisions, scrolling, path-input
-containers, container shadows, inner shadows, filters or new mask modes. It
+containers, inner shadows, filters or new mask modes. Container shadows are a
+separate [bounded extension](group-shadows.md) using these same phases. This option
 does not modify the separate optional layout system.
 
 ## Pinned Leafer reference

@@ -1,0 +1,176 @@
+//! No pixel allocation: replay the bounded paint schedule against a private
+//! ledger before the first domain output surface. This intentionally repeats
+//! descendant work when a parent shadow samples it and when it is painted.
+//! A rejected exponential shadow chain never reaches Gaussian or RGBA work.
+use super::*;
+
+pub(super) fn admit(
+    raster: &Raster<'_>,
+    root: &PreparedNode,
+    source: &DomainSource,
+) -> Result<(), CompositeError> {
+    let mut ledger = raster.budget.clone();
+    let mut plan = Admission {
+        width: raster.width,
+        height: raster.height,
+        pixels: raster.pixels,
+        world_to_layer: raster.world_to_layer,
+        budget: &mut ledger,
+        cancelled: raster.cancelled,
+    };
+    plan.budget.reserve(plan.pixels * 4)?; // retained output
+    if let Some(backdrop) = source.canvas {
+        plan.budget.write(plan.pixels)?;
+        if backdrop.grid.is_some_and(|g| g.color.a != 0) {
+            plan.budget.write(plan.pixels)?; // conservative even if no grid dots
+        }
+    }
+    plan.node(root, 0, false)?;
+    if !source.clips.is_empty() {
+        plan.budget.reserve(plan.pixels)?;
+        for index in 0..source.clips.len() {
+            plan.budget.write(plan.pixels)?;
+            if index != 0 {
+                plan.budget.write(plan.pixels)?;
+                plan.budget.reserve(plan.pixels)?;
+                plan.budget.in_use -= plan.pixels;
+            }
+        }
+        plan.budget.write(plan.pixels)?;
+        plan.budget.in_use -= plan.pixels;
+    }
+    plan.check()
+}
+struct Admission<'a> {
+    width: u32,
+    height: u32,
+    pixels: u64,
+    world_to_layer: Affine,
+    budget: &'a mut PixelBudget,
+    cancelled: &'a AtomicBool,
+}
+impl Admission<'_> {
+    fn check(&self) -> Result<(), CompositeError> {
+        if self.cancelled.load(Ordering::Relaxed) {
+            Err(CompositeError::Superseded)
+        } else {
+            Ok(())
+        }
+    }
+    fn node(
+        &mut self,
+        node: &PreparedNode,
+        depth: usize,
+        clip: bool,
+    ) -> Result<(), CompositeError> {
+        self.check()?;
+        if !node.visible
+            || node.opacity == 0.
+            || node.bounds.is_none_or(|b| {
+                let b = transformed(b, self.world_to_layer);
+                b[2] < -1.
+                    || b[3] < -1.
+                    || b[0] > self.width as f64 + 1.
+                    || b[1] > self.height as f64 + 1.
+            })
+        {
+            return Ok(());
+        }
+        let isolated =
+            node.shadow.is_some() || node.opacity < 1. || node.blend != BlendMode::PassThrough;
+        if isolated {
+            if depth >= self.budget.limits.max_depth {
+                return Err(CompositeError::NestingLimit);
+            }
+            self.budget.reserve(self.pixels * 4)?;
+            self.contents(node, depth + 1, false, true)?;
+            self.budget.write(self.pixels)?;
+            self.budget.in_use -= self.pixels * 4;
+        } else {
+            self.contents(node, depth, clip, true)?;
+        }
+        Ok(())
+    }
+    fn contents(
+        &mut self,
+        node: &PreparedNode,
+        depth: usize,
+        clip: bool,
+        shadow: bool,
+    ) -> Result<(), CompositeError> {
+        self.check()?;
+        if let Some(effect) = node.shadow.filter(|_| shadow) {
+            let plan =
+                crate::shadow::SourcePlan::new(effect, self.world_to_layer, self.budget.limits)?;
+            let bytes = plan.filter.bytes(plan.pixels, plan.width);
+            self.budget.reserve(bytes)?;
+            self.budget.write(plan.filter.work(plan.pixels))?;
+            Admission {
+                width: plan.width,
+                height: plan.height,
+                pixels: plan.pixels,
+                world_to_layer: plan.world_to_layer,
+                budget: self.budget,
+                cancelled: self.cancelled,
+            }
+            .contents(node, depth, false, false)?;
+            self.budget.write(self.pixels)?;
+            self.budget.in_use -= bytes;
+        }
+        self.budget
+            .write(self.pixels * (node.paints.len() as u64 + u64::from(node.image.is_some())))?;
+        if node.child_clip.is_some() && !node.children.is_empty() {
+            self.budget.reserve(self.pixels)?;
+            self.budget.write(self.pixels)?;
+            if clip {
+                self.budget.write(self.pixels * 2)?;
+                self.budget.reserve(self.pixels)?;
+                self.budget.in_use -= self.pixels;
+            }
+            self.children(node, depth, true)?;
+            self.budget.in_use -= self.pixels;
+        } else {
+            self.children(node, depth, clip)?;
+        }
+        Ok(())
+    }
+    fn children(
+        &mut self,
+        node: &PreparedNode,
+        depth: usize,
+        clip: bool,
+    ) -> Result<(), CompositeError> {
+        let mut i = 0;
+        while i < node.children.len() {
+            self.check()?;
+            let child = &node.children[i];
+            if child.mask == MaskMode::None {
+                self.node(child, depth, clip)?;
+                i += 1;
+                continue;
+            }
+            self.budget.reserve(self.pixels * 4)?;
+            self.node(child, depth, false)?;
+            self.budget.reserve(self.pixels)?;
+            self.budget.write(self.pixels)?; // alpha extraction
+            self.budget.in_use -= self.pixels * 4;
+            self.budget.reserve(self.pixels * 4)?;
+            i += 1;
+            while i < node.children.len() && node.children[i].mask == MaskMode::None {
+                let content = &node.children[i];
+                let flush = child.opacity == 1. && content.blend != BlendMode::PassThrough;
+                if flush {
+                    self.budget.write(self.pixels * 3)?;
+                }
+                self.node(content, depth, false)?;
+                if flush {
+                    self.budget.write(self.pixels * 3)?;
+                }
+                i += 1;
+            }
+            self.budget.write(self.pixels * 3)?;
+            self.budget.in_use -= self.pixels * 5;
+        }
+        Ok(())
+    }
+}

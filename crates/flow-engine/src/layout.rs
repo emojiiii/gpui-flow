@@ -72,6 +72,7 @@ struct Builder<'a> {
     dirty: &'a BTreeMap<DisplayId, DirtyFlags>,
     next: LayoutSnapshot,
     affected: BTreeSet<DisplayId>,
+    visual_subtrees: BTreeSet<DisplayId>,
 }
 impl Builder<'_> {
     fn visit(
@@ -179,12 +180,9 @@ impl Builder<'_> {
         {
             return Err(SceneError::InvalidGeometry("cached bounds overflow".into()));
         }
-        entry.effect_bounds = entry.world_bounds.map(|b| {
-            object
-                .style
-                .shadow
-                .map_or(b, |s| s.expand_bounds(b, entry.world_transform))
-        });
+        // Compose descendants (including their effects) before expanding this
+        // parent's shadow. Geometric bounds remain deliberately unchanged.
+        entry.effect_bounds = entry.world_bounds;
         for child in &children {
             let mut bounds = self.next.entries[child].effect_bounds;
             if let Some((c, _)) = clip {
@@ -195,6 +193,12 @@ impl Builder<'_> {
                 entry.effect_bounds = Some(entry.effect_bounds.map_or(b, |a| a.union(b)));
             }
         }
+        entry.effect_bounds = entry.effect_bounds.map(|b| {
+            object
+                .style
+                .shadow
+                .map_or(b, |s| s.expand_bounds(b, entry.world_transform))
+        });
         if entry.effect_bounds.is_some_and(|b| !b.is_valid()) {
             return Err(SceneError::InvalidGeometry(
                 "cached effect bounds overflow".into(),
@@ -208,12 +212,20 @@ impl Builder<'_> {
                 | DirtyFlags::ORDER
                 | DirtyFlags::STRUCTURE,
         );
+        // A paint-only descendant edit can alter a parent's shadow without
+        // changing either bound (for example inside a fixed Frame). Carry that
+        // signal through intermediate groups without triggering layout work.
+        let descendant_dirty = children.iter().any(|id| self.visual_subtrees.contains(id));
+        if world_changed || bounds_changed || visually_dirty || descendant_dirty {
+            self.visual_subtrees.insert(id.clone());
+        }
         if flags.intersects(DirtyFlags::PAINT) {
             self.next.stats.paint_invalidated += 1;
         }
         if world_changed
             || bounds_changed
             || visually_dirty
+            || (descendant_dirty && object.style.shadow.is_some_and(|s| s.is_visible()))
             || old.is_none_or(|e| e.effect_bounds != entry.effect_bounds)
         {
             entry.revision = self.next.revision;
@@ -238,6 +250,7 @@ pub(crate) fn update_layout(
             ..Default::default()
         },
         affected: BTreeSet::new(),
+        visual_subtrees: BTreeSet::new(),
     };
     for root in scene.roots() {
         builder.visit(root, &ParentState::default(), false)?;

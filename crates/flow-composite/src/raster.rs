@@ -1,3 +1,4 @@
+mod admission;
 use crate::{
     CanvasBackdrop, CompositeError, CompositeLimits, DomainSource, ImageInputs, TextInputs,
     vector::{Preparation, PreparedNode, VectorPaint, transform},
@@ -28,6 +29,7 @@ pub struct CpuFrame {
 /// retained outputs are accounted, including scratch RGBA and 8-bit masks.
 /// tiny-skia's private scan-conversion allocations and GPU atlas aren't a
 /// process-wide memory guarantee; input geometry is independently bounded.
+#[derive(Clone)]
 pub struct PixelBudget {
     limits: CompositeLimits,
     in_use: u64,
@@ -76,16 +78,6 @@ impl PixelBudget {
     /// Charge producer work performed before rasterization (for example glyph pixels).
     pub fn charge_input_work(&mut self, n: u64) -> Result<(), CompositeError> {
         self.write(n)
-    }
-    fn admit_work(&self, n: u64) -> Result<(), CompositeError> {
-        if self
-            .writes
-            .checked_add(n)
-            .is_none_or(|v| v > self.limits.max_surface_writes)
-        {
-            return Err(CompositeError::WorkLimit);
-        }
-        Ok(())
     }
     fn write(&mut self, n: u64) -> Result<(), CompositeError> {
         self.writes = self
@@ -328,7 +320,7 @@ impl Raster<'_> {
         draw_shadow: bool,
     ) -> Result<(), CompositeError> {
         if draw_shadow && node.shadow.is_some() {
-            self.shadow(node, target, clip)?;
+            self.shadow(node, target, depth, clip)?;
         }
         let (before, after) = node.paints.split_at(node.before_children);
         self.paints(before, target, clip)?;
@@ -410,37 +402,19 @@ impl Raster<'_> {
         &mut self,
         node: &PreparedNode,
         target: &mut Pixmap,
+        depth: usize,
         clip: Option<&Mask>,
     ) -> Result<(), CompositeError> {
-        use crate::shadow::FilterPlan;
         let shadow = node.shadow.expect("shadow branch");
-        let filter = FilterPlan::new(shadow, self.world_to_layer)?;
-        let ink = transformed(shadow.ink_bounds, self.world_to_layer);
-        let x0 = ink[0].floor() - filter.halo;
-        let y0 = ink[1].floor() - filter.halo;
-        let w = ink[2].ceil() + filter.halo - x0;
-        let h = ink[3].ceil() + filter.halo - y0;
-        if [x0, y0, w, h].iter().any(|n| !n.is_finite())
-            || w <= 0.
-            || h <= 0.
-            || w > self.budget.limits.max_dimension as f64
-            || h > self.budget.limits.max_dimension as f64
-            || w * h > self.budget.limits.max_pixels as f64
-            || x0.abs() > 1_000_000.
-            || y0.abs() > 1_000_000.
-        {
-            return Err(CompositeError::TooLarge);
-        }
-        let (width, height) = (w as u32, h as u32);
-        let pixels = width as u64 * height as u64;
+        let plan = crate::shadow::SourcePlan::new(shadow, self.world_to_layer, self.budget.limits)?;
+        let (width, height, pixels) = (plan.width, plan.height, plan.pixels);
+        let [x0, y0] = plan.origin;
+        let filter = &plan.filter;
         let scratch_bytes = filter.bytes(pixels, width);
         let filter_work = filter.work(pixels);
-        let paint_work = pixels * (node.paints.len() as u64 + u64::from(node.image.is_some()));
         self.check()?;
-        // Admit every filter/source allocation and all source/filter/destination
-        // work before constructing even the first temporary surface.
-        self.budget
-            .admit_work(filter_work + paint_work + self.pixels)?;
+        // Complete recursive scratch/work admission already succeeded before
+        // the domain output allocation. Runtime accounting remains a backstop.
         self.budget.reserve(scratch_bytes)?;
         self.budget.write(filter_work)?;
         let mut source = Pixmap::from_vec(
@@ -452,11 +426,11 @@ impl Raster<'_> {
             width,
             height,
             pixels,
-            world_to_layer: Affine::translation(-x0 as f32, -y0 as f32) * self.world_to_layer,
+            world_to_layer: plan.world_to_layer,
             budget: self.budget,
             cancelled: self.cancelled,
         };
-        scratch.contents(node, &mut source, 0, None, false)?;
+        scratch.contents(node, &mut source, depth, None, false)?;
         let mut alpha = bytes(pixels)?;
         for (row, input) in alpha
             .chunks_mut(width as usize)
@@ -539,11 +513,15 @@ impl Raster<'_> {
             self.node(mask_node, &mut mask_surface, depth, None)?;
             self.budget.reserve(self.pixels)?;
             let mut alpha = bytes(self.pixels)?;
-            for (a, p) in alpha
-                .iter_mut()
-                .zip(mask_surface.data().as_chunks::<4>().0.iter())
+            self.budget.write(self.pixels)?;
+            for (row, input) in alpha
+                .chunks_mut(self.width as usize)
+                .zip(mask_surface.data().chunks(self.width as usize * 4))
             {
-                *a = p[3];
+                self.check()?;
+                for (a, p) in row.iter_mut().zip(input.as_chunks::<4>().0) {
+                    *a = p[3];
+                }
             }
             let mask = Mask::from_vec(
                 alpha,
@@ -717,7 +695,7 @@ fn bounds(b: Bounds) -> [f64; 4] {
         b.origin.y as f64 + b.size.height as f64,
     ]
 }
-fn transformed(b: [f64; 4], a: Affine) -> [f64; 4] {
+pub(crate) fn transformed(b: [f64; 4], a: Affine) -> [f64; 4] {
     let mut r = [
         f64::INFINITY,
         f64::INFINITY,
@@ -885,6 +863,10 @@ fn rasterize_inner(
         budget,
         cancelled,
     };
+    if prep.has_shadows {
+        // No domain RGBA, mask, or filter scratch has been allocated yet.
+        admission::admit(&raster, &root, source)?;
+    }
     let mut output = raster.surface()?;
     if let Some(backdrop) = source.canvas {
         raster.backdrop(&mut output, backdrop, viewport, [x0, y0], prep.points)?;

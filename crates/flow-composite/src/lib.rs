@@ -89,6 +89,9 @@ pub enum CompositeError {
     UnsupportedExternalBackdrop,
     UnsupportedTransform,
     UnsupportedShadow(DisplayId),
+    /// A shadow would isolate a pass-through container whose descendants need
+    /// its external backdrop. Select Normal explicitly or isolate those blends.
+    UnsupportedShadowBackdrop(DisplayId),
     InvalidGeometry(String),
     TooLarge,
     WorkingSetLimit,
@@ -124,3 +127,6 @@ mod shadow_tests;
 
 #[cfg(test)]
 mod container_phase_tests;
+
+#[cfg(test)]
+mod group_shadow_tests;

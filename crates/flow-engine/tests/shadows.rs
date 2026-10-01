@@ -69,3 +69,96 @@ fn rejected_shadow_property_preserves_document_and_revision() {
         assert_eq!(e.revision(), revision);
     }
 }
+
+#[test]
+fn parent_effect_bounds_expand_after_descendant_effects_and_clip_before_shadow() {
+    for clip in [false, true] {
+        let mut s = Scene::new();
+        let shape: Shape = if clip {
+            display::Frame::new(25., 20.).into()
+        } else {
+            display::Group::new().into()
+        };
+        s.insert(
+            DisplayObject::new("g", shape).with_style(Style {
+                shadow: Some(Shadow::new(40., 0., 0., Color::BLACK)),
+                ..Default::default()
+            }),
+            None,
+            None,
+        )
+        .unwrap();
+        s.insert(
+            DisplayObject::new("r", display::Rect::new(10., 10.)).with_style(Style {
+                shadow: Some(Shadow::new(20., 0., 0., Color::BLACK)),
+                ..Default::default()
+            }),
+            Some("g".into()),
+            None,
+        )
+        .unwrap();
+        let mut e = SceneEngine::new(s).unwrap();
+        let geometry = e.world_bounds(&"g".into()).unwrap();
+        assert_eq!(
+            e.effect_bounds(&"g".into()).unwrap().unwrap().max_x(),
+            if clip { 65. } else { 70. }
+        );
+        let change = e
+            .set_property(
+                e.handle(&"r".into()).unwrap(),
+                PropertyKey::Shadow,
+                serde_json::to_value(Shadow::new(30., 0., 0., Color::BLACK)).unwrap(),
+            )
+            .unwrap();
+        assert_eq!(
+            e.effect_bounds(&"g".into()).unwrap().unwrap().max_x(),
+            if clip { 65. } else { 80. }
+        );
+        assert_eq!(e.world_bounds(&"g".into()).unwrap(), geometry);
+        assert_eq!(change.layout.bounds_recomputed, 0);
+        assert!(change.damage_bounds().unwrap().max_x() >= if clip { 65. } else { 80. });
+        assert!(
+            e.hit_test(Point::new(55., 5.), Default::default())
+                .unwrap()
+                .is_none()
+        );
+    }
+}
+
+#[test]
+fn paint_only_descendant_changes_damage_shadow_through_non_effect_groups() {
+    let mut s = Scene::new();
+    s.insert(
+        DisplayObject::new("root", display::Frame::new(50., 50.)).with_style(Style {
+            shadow: Some(Shadow::new(60., 0., 0., Color::BLACK)),
+            ..Default::default()
+        }),
+        None,
+        None,
+    )
+    .unwrap();
+    s.insert(
+        DisplayObject::new("middle", display::Group::new()),
+        Some("root".into()),
+        None,
+    )
+    .unwrap();
+    s.insert(
+        DisplayObject::new("ink", display::Rect::new(10., 10.)),
+        Some("middle".into()),
+        None,
+    )
+    .unwrap();
+    let mut e = SceneEngine::new(s).unwrap();
+    let before = e.effect_bounds(&"root".into()).unwrap();
+    let change = e
+        .set_property(
+            e.handle(&"ink".into()).unwrap(),
+            PropertyKey::Fill,
+            serde_json::to_value(Paint::solid(Color::TRANSPARENT)).unwrap(),
+        )
+        .unwrap();
+    assert_eq!(e.effect_bounds(&"root".into()).unwrap(), before);
+    assert_eq!(change.layout.bounds_recomputed, 0);
+    assert!(change.damage_bounds().unwrap().max_x() >= 110.);
+}

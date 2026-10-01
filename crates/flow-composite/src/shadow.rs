@@ -87,8 +87,53 @@ pub(crate) fn validate_shape(
     id: &DisplayId,
     shape: &gpui_flow_scene::Shape,
 ) -> Result<(), CompositeError> {
-    if shape.allows_children() || matches!(shape, gpui_flow_scene::Shape::Custom(_)) {
+    if matches!(shape, gpui_flow_scene::Shape::Custom(_)) {
         return Err(CompositeError::UnsupportedShadow(id.clone()));
     }
     Ok(())
+}
+
+/// The same checked source extent is used in recursive admission and painting.
+/// It includes descendant effects but excludes this node's own shadow.
+pub(crate) struct SourcePlan {
+    pub filter: FilterPlan,
+    pub origin: [f64; 2],
+    pub width: u32,
+    pub height: u32,
+    pub pixels: u64,
+    pub world_to_layer: Affine,
+}
+impl SourcePlan {
+    pub fn new(
+        shadow: PreparedShadow,
+        world_to_layer: Affine,
+        limits: crate::CompositeLimits,
+    ) -> Result<Self, CompositeError> {
+        let filter = FilterPlan::new(shadow, world_to_layer)?;
+        let ink = crate::raster::transformed(shadow.ink_bounds, world_to_layer);
+        let x0 = ink[0].floor() - filter.halo;
+        let y0 = ink[1].floor() - filter.halo;
+        let w = ink[2].ceil() + filter.halo - x0;
+        let h = ink[3].ceil() + filter.halo - y0;
+        if [x0, y0, w, h].iter().any(|n| !n.is_finite())
+            || w <= 0.
+            || h <= 0.
+            || w > limits.max_dimension as f64
+            || h > limits.max_dimension as f64
+            || w * h > limits.max_pixels as f64
+            || x0.abs() > 1_000_000.
+            || y0.abs() > 1_000_000.
+        {
+            return Err(CompositeError::TooLarge);
+        }
+        let (width, height) = (w as u32, h as u32);
+        Ok(Self {
+            filter,
+            origin: [x0, y0],
+            width,
+            height,
+            pixels: width as u64 * height as u64,
+            world_to_layer: Affine::translation(-x0 as f32, -y0 as f32) * world_to_layer,
+        })
+    }
 }

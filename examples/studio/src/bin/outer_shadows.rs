@@ -134,7 +134,7 @@ impl Render for Lab {
                 .child(ControlButton::new("bridge","Text bridge").on_click(cx.listener(|this,_,_,cx|{this.text_enabled = !this.text_enabled;let bridge=this.text_enabled.then(||this.bridge.clone());this.view.update(cx,|v,cx|v.set_text_rasterizer(bridge,cx).unwrap());cx.notify();})))
                 .child(ControlButton::new("undo","Undo").on_click(cx.listener(|this,_,_,cx|this.view.update(cx,|v,cx|{v.editor.undo();cx.notify();})))))
             .child(div().flex_1().min_h_0().overflow_hidden().child(self.view.clone()))
-            .child(div().h(px(86.)).px_4().text_sm().child("One alpha-derived outer shadow per leaf. Blur = 2 sigma; bounded CPU Gaussian, no browser-byte equivalence.\nClick the shape to select: shadow pixels do not enlarge selection or hit geometry. Drag, pan/zoom and Undo use the same Scene.\nGroups, containers, non-uniform transforms, inner/spread/box and scale-fixed shadows are explicitly unsupported."))
+            .child(div().h(px(86.)).px_4().text_sm().child("One alpha-derived outer shadow per leaf. Blur = 2 sigma; bounded CPU Gaussian, no browser-byte equivalence.\nClick the shape to select: shadow pixels do not enlarge selection or hit geometry. Drag, pan/zoom and Undo use the same Scene.\nGroup/Box/Frame shadows have a separate group_shadows lab. Non-uniform transforms and inner/spread/box/scale-fixed shadows remain unsupported."))
     }
 }
 fn main() {

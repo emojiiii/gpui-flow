@@ -332,9 +332,7 @@ fn capture(
             children: vec![],
         });
     }
-    if o.style.shadow.is_some()
-        && (o.shape.allows_children() || matches!(o.shape, Shape::Custom(_)))
-    {
+    if o.style.shadow.is_some() && matches!(o.shape, Shape::Custom(_)) {
         return Err(CompositeError::UnsupportedShadow(o.id.clone()));
     }
     let points = match &o.shape {
@@ -384,11 +382,22 @@ fn capture(
             depth + 1,
         )?);
     }
-    Ok(DomainNode {
+    let captured = DomainNode {
         object: o.clone(),
         world_transform,
         children,
-    })
+    };
+    // A new effect surface must not silently sever a pass-through descendant
+    // from its existing backdrop, even when the outer domain owns that backdrop.
+    if o.shape.allows_children()
+        && o.style.shadow.is_some_and(|shadow| shadow.is_visible())
+        && o.style.blend_mode == BlendMode::PassThrough
+        && o.style.opacity == 1.
+        && requires_parent_backdrop(&captured)
+    {
+        return Err(CompositeError::UnsupportedShadowBackdrop(o.id.clone()));
+    }
+    Ok(captured)
 }
 
 // A mask alone does not isolate a pass-through Group in Leafer. Only blends
