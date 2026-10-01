@@ -20,12 +20,23 @@ pub enum SceneViewEvent {
     ResourceView(gpui_flow_engine::ResourceViewEvent),
 }
 impl EventEmitter<SceneViewEvent> for SceneView {}
+/// Which pixels are owned by the CPU compositing pass.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SceneCompositing {
+    /// Keep independent isolation domains and native siblings (the default).
+    #[default]
+    Domains,
+    /// Include this view's opaque background, grid and complete presented
+    /// document in one bounded domain. Does not capture host/native backdrops.
+    OwnedCanvas,
+}
 /// Embed this view in any host shell. Register scoped element listeners with `on`; the engine owns their lifecycle.
 /// Actual content lives in `editor.scene()`; no demo-specific UI or provider runs occur here.
 pub struct SceneView {
     pub editor: SceneEditor,
     pub theme: FlowTheme,
     pub show_grid: bool,
+    pub compositing_mode: SceneCompositing,
     pub interactions: gpui_flow_interaction::scene::ScenePluginHost,
     pub diagnostics: Vec<RenderIssue>,
     pub gradient_diagnostics: Vec<crate::display::GradientRenderIssue>,
@@ -76,6 +87,7 @@ impl SceneView {
             editor: SceneEditor::from_engine(engine),
             theme: FlowTheme::default(),
             show_grid: true,
+            compositing_mode: SceneCompositing::Domains,
             interactions: gpui_flow_interaction::scene::ScenePluginHost::with_defaults(),
             diagnostics: vec![],
             gradient_diagnostics: vec![],

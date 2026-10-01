@@ -1,6 +1,6 @@
 use super::*;
 use crate::display::DisplayElement;
-use gpui_flow_composite::{CompositeLimits, SceneUnit};
+use gpui_flow_composite::{CanvasBackdrop, CanvasGrid, CompositeLimits, SceneUnit};
 struct StateFrame {
     objects: Vec<RenderObject>,
     units: Vec<SceneUnit>,
@@ -29,15 +29,30 @@ fn animation_images(
     }
     visible
 }
-fn state_render_frame(
+fn state_render_frame_with_canvas(
     editor: &SceneEditor,
     router: &gpui_flow_interaction::scene::SceneEventRouter,
     styles: &mut gpui_flow_interaction::scene::SceneStateStyles,
     now: std::time::Duration,
+    backdrop: Option<CanvasBackdrop>,
 ) -> (StateFrame, Option<String>) {
     let convert = |scene: &Scene| -> Result<StateFrame, String> {
-        let units = gpui_flow_composite::scene_units(scene, CompositeLimits::default())
-            .map_err(|e| e.to_string())?;
+        let units = if let Some(backdrop) = backdrop {
+            vec![match gpui_flow_composite::owned_canvas(
+                scene,
+                backdrop,
+                CompositeLimits::default(),
+            ) {
+                Ok(source) => SceneUnit::Domain(Box::new(source)),
+                Err(error) => SceneUnit::Rejected(gpui_flow_composite::CompositeIssue {
+                    object: DisplayId::default(),
+                    error,
+                }),
+            }]
+        } else {
+            gpui_flow_composite::scene_units(scene, CompositeLimits::default())
+                .map_err(|e| e.to_string())?
+        };
         let objects = scene
             .paint_list()
             .map_err(|e| e.to_string())?
@@ -62,6 +77,29 @@ fn state_render_frame(
                 Some(format!("{error}; canonical render: {fallback}")),
             ),
         },
+    }
+}
+#[cfg(test)]
+fn state_render_frame(
+    editor: &SceneEditor,
+    router: &gpui_flow_interaction::scene::SceneEventRouter,
+    styles: &mut gpui_flow_interaction::scene::SceneStateStyles,
+    now: std::time::Duration,
+) -> (StateFrame, Option<String>) {
+    state_render_frame_with_canvas(editor, router, styles, now, None)
+}
+fn canvas_backdrop(
+    theme: FlowTheme,
+    show_grid: bool,
+    viewport: gpui_flow_core::Viewport,
+) -> CanvasBackdrop {
+    CanvasBackdrop {
+        color: gpui_flow_scene::Color::hex(theme.background),
+        grid: show_grid.then_some(CanvasGrid {
+            color: gpui_flow_scene::Color::hex(theme.grid),
+            spacing: (24. * viewport.zoom).max(12.),
+            offset: viewport.pan,
+        }),
     }
 }
 #[cfg(test)]
@@ -119,6 +157,7 @@ impl Render for SceneView {
         let theme = self.theme;
         let viewport = self.editor.viewport;
         let show_grid = self.show_grid;
+        let owned_canvas = self.compositing_mode == SceneCompositing::OwnedCanvas;
         let entity = cx.entity().downgrade();
         let background = canvas(
             move |bounds, window, cx| {
@@ -142,7 +181,7 @@ impl Render for SceneView {
                 }
             },
             move |bounds, _, window, _| {
-                if show_grid {
+                if show_grid && !owned_canvas {
                     let gap = (24. * viewport.zoom).max(12.);
                     let w: f32 = bounds.size.width.into();
                     let h: f32 = bounds.size.height.into();
@@ -167,11 +206,12 @@ impl Render for SceneView {
         .absolute()
         .size_full();
         self.diagnostics.clear();
-        let (frame, state_error) = state_render_frame(
+        let (frame, state_error) = state_render_frame_with_canvas(
             &self.editor,
             &self.router,
             &mut self.state_styles,
             self.state_clock.elapsed(),
+            owned_canvas.then(|| canvas_backdrop(theme, show_grid, viewport)),
         );
         self.state_style_error = state_error;
         let domains = frame
@@ -267,7 +307,7 @@ impl Render for SceneView {
             .relative()
             .size_full()
             .overflow_hidden()
-            .bg(rgb(theme.background))
+            .when(!owned_canvas, |view| view.bg(rgb(theme.background)))
             .track_focus(&self.focus)
             .child(background);
         let mut objects = frame
@@ -362,7 +402,17 @@ impl Render for SceneView {
             let message = self
                 .composite_diagnostics
                 .first()
-                .map(|e| format!("Composite {}: {}", e.object, e.error))
+                .map(|e| {
+                    format!(
+                        "Composite {}: {}",
+                        if e.object.as_str().is_empty() {
+                            "canvas"
+                        } else {
+                            e.object.as_str()
+                        },
+                        e.error
+                    )
+                })
                 .unwrap_or_else(|| "Compositing…".into());
             view = view.child(
                 div()
@@ -854,5 +904,125 @@ mod state_tests {
         let restored = raster_container(&restored);
         assert_eq!(restored.screen_bounds, original.screen_bounds);
         assert_eq!(restored.premul_rgba, original.premul_rgba);
+    }
+}
+
+#[cfg(test)]
+mod owned_canvas_tests {
+    use super::*;
+    use core::prelude::v1::test;
+    use gpui_flow_scene::{BlendMode, Color, DisplayObject, Style, display};
+    #[test]
+    fn owned_mode_captures_one_complete_presented_tree_without_native_siblings() {
+        let mut scene = Scene::new();
+        for (id, blend) in [
+            ("behind", BlendMode::PassThrough),
+            ("blend", BlendMode::Multiply),
+        ] {
+            scene
+                .insert(
+                    DisplayObject::new(id, display::Rect::new(20., 20.)).with_style(Style {
+                        fill: Some(Color::WHITE.into()),
+                        blend_mode: blend,
+                        ..Default::default()
+                    }),
+                    None,
+                    None,
+                )
+                .unwrap();
+        }
+        let editor = SceneEditor::new(scene.clone()).unwrap();
+        let router = gpui_flow_interaction::scene::SceneEventRouter::new();
+        let mut styles = gpui_flow_interaction::scene::SceneStateStyles::new(&editor.engine);
+        let (native, _) =
+            state_render_frame(&editor, &router, &mut styles, std::time::Duration::ZERO);
+        assert!(
+            native
+                .units
+                .iter()
+                .any(|u| matches!(u, SceneUnit::Rejected(_)))
+        );
+        let (owned, error) = state_render_frame_with_canvas(
+            &editor,
+            &router,
+            &mut styles,
+            std::time::Duration::ZERO,
+            Some(canvas_backdrop(FlowTheme::default(), true, editor.viewport)),
+        );
+        assert!(error.is_none());
+        assert_eq!(owned.units.len(), 1);
+        let SceneUnit::Domain(domain) = &owned.units[0] else {
+            panic!("whole canvas missing")
+        };
+        assert!(domain.is_owned_canvas());
+        assert_eq!(
+            domain
+                .ids()
+                .into_iter()
+                .map(DisplayId::as_str)
+                .collect::<Vec<_>>(),
+            vec!["behind", "blend"]
+        );
+        assert_eq!(editor.scene(), &scene);
+        assert_eq!(SceneCompositing::default(), SceneCompositing::Domains);
+    }
+    #[test]
+    fn canvas_grid_key_tracks_theme_pan_zoom_and_grid_visibility() {
+        let mut theme = FlowTheme::default();
+        let mut view = gpui_flow_core::Viewport {
+            pan: WorldPoint::new(-13., 27.),
+            zoom: 0.25,
+            ..Default::default()
+        };
+        let a = canvas_backdrop(theme, true, view);
+        assert_eq!(a.grid.unwrap().spacing, 12.);
+        assert_eq!(a.grid.unwrap().offset, view.pan);
+        view.zoom = 2.;
+        let b = canvas_backdrop(theme, true, view);
+        assert_eq!(b.grid.unwrap().spacing, 48.);
+        assert_ne!(a, b);
+        theme.background ^= 0xffffff;
+        assert_ne!(b, canvas_backdrop(theme, true, view));
+        assert!(canvas_backdrop(theme, false, view).grid.is_none());
+    }
+    #[test]
+    fn visible_custom_rejects_entire_owned_canvas_instead_of_native_fallback() {
+        let mut scene = Scene::new();
+        scene
+            .insert(
+                DisplayObject::new(
+                    "native",
+                    display::Custom::new(
+                        "host-control",
+                        gpui_flow_scene::Bounds::new(WorldPoint::ZERO, WorldSize::new(20., 20.)),
+                        vec![],
+                    ),
+                ),
+                None,
+                None,
+            )
+            .unwrap();
+        let editor = SceneEditor::new(scene).unwrap();
+        let router = gpui_flow_interaction::scene::SceneEventRouter::new();
+        let mut styles = gpui_flow_interaction::scene::SceneStateStyles::new(&editor.engine);
+        let (owned, error) = state_render_frame_with_canvas(
+            &editor,
+            &router,
+            &mut styles,
+            std::time::Duration::ZERO,
+            Some(canvas_backdrop(
+                FlowTheme::default(),
+                false,
+                editor.viewport,
+            )),
+        );
+        assert!(error.is_none());
+        assert!(matches!(
+            &owned.units[..],
+            [SceneUnit::Rejected(gpui_flow_composite::CompositeIssue {
+                error: gpui_flow_composite::CompositeError::UnsupportedShape(_),
+                ..
+            })]
+        ));
     }
 }

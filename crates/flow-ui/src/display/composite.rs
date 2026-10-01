@@ -1873,4 +1873,94 @@ mod tests {
         }
         assert!(ink > 0);
     }
+    fn canvas_key(e: &SceneEngine, color: gpui_flow_scene::Color, grid: bool) -> Arc<RequestKey> {
+        let domain = gpui_flow_composite::owned_canvas(
+            e.scene(),
+            gpui_flow_composite::CanvasBackdrop {
+                color,
+                grid: grid.then_some(gpui_flow_composite::CanvasGrid {
+                    color: gpui_flow_scene::Color::BLACK,
+                    spacing: 12.,
+                    offset: gpui_flow_scene::Point::ZERO,
+                }),
+            },
+            CompositeLimits::default(),
+        )
+        .unwrap();
+        let mut k = (*key(e)).clone();
+        k.domains = RequestKey::new(vec![domain], e, k.viewport, k.window).domains;
+        Arc::new(k)
+    }
+    #[test]
+    fn owned_canvas_theme_grid_mode_and_viewport_are_hard_invalidation() {
+        use gpui_flow_scene::Color;
+        let e = engine();
+        let first = canvas_key(&e, Color::WHITE, false);
+        for next in [
+            canvas_key(&e, Color::BLACK, false),
+            canvas_key(&e, Color::WHITE, true),
+            key(&e),
+        ] {
+            let mut c = CompositeController::default();
+            c.request(first.clone());
+            let work = c.take_work().unwrap();
+            c.request(next.clone());
+            assert!(work.cancel.load(Ordering::Relaxed));
+            c.finish(first.clone(), work.run());
+            assert!(c.frame(&DisplayId::default()).is_none());
+            assert_eq!(c.take_work().unwrap().key, next);
+        }
+        let mut c = CompositeController::default();
+        c.request(first.clone());
+        let work = c.take_work().unwrap();
+        c.finish(first.clone(), work.run());
+        let frame = c.frame(&DisplayId::default()).unwrap().0;
+        c.accepted(&first, &DisplayId::default(), &frame.image);
+        let retired = c.request(canvas_key(&e, Color::BLACK, false));
+        assert_eq!(retired.len(), 1);
+        assert!(c.old_frame(&DisplayId::default()).is_none());
+        assert_eq!(retired[0].image.id, frame.image.id);
+        for kind in 0..4 {
+            let mut other = (*first).clone();
+            match kind {
+                0 => other.viewport.world_to_screen.tx += 1.,
+                1 => other.viewport.canvas_bounds.size.width += 1.,
+                2 => other.viewport.device_scale = 1.5,
+                _ => other.viewport.content_mask.size.width -= 1.,
+            }
+            assert!(!first.compatible(&other, &DisplayId::default()));
+        }
+    }
+    #[test]
+    fn owned_canvas_animation_coalesces_but_theme_change_cancels_immediately() {
+        use gpui_flow_scene::{Color, Size, display};
+        let mut e = engine();
+        e.transaction(|s| {
+            s.update_object(&"r".into(), |o| {
+                o.shape = display::Image::new("animated.gif", Size::new(20., 20.)).into();
+            })
+        })
+        .unwrap();
+        let mut first = (*canvas_key(&e, Color::WHITE, false)).clone();
+        first.domains[0].images = animated_key().domains[0].images.clone();
+        let first = Arc::new(first);
+        let next = next_frame(&first, 1);
+        let id = DisplayId::default();
+        let mut c = CompositeController::default();
+        c.request(first.clone());
+        let work = c.take_work().unwrap();
+        c.request(next.clone());
+        assert!(!work.cancel.load(Ordering::Relaxed));
+        c.finish(first.clone(), work.run());
+        let frame = c.frame(&id).unwrap().0;
+        c.accepted(&first, &id, &frame.image);
+        c.request(next.clone());
+        assert!(c.old_frame(&id).is_some());
+        let work = c.take_work().unwrap();
+        let mut theme = (*canvas_key(&e, Color::BLACK, false)).clone();
+        theme.domains[0].images = next.domains[0].images.clone();
+        c.request(Arc::new(theme));
+        assert!(work.cancel.load(Ordering::Relaxed));
+        assert!(c.old_frame(&id).is_none());
+    }
 }
