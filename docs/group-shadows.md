@@ -117,7 +117,7 @@ Those upstream branches are not copied or claimed as complete parity. Flow's
 composed-subtree alpha, explicit paint phases, conservative rejection and image
 Gaussian are its tested contract, not a browser/Leafer byte-equivalence promise.
 
-Custom, inner/spread/box-only/per-shadow-blend/scale-fixed shadows and
+Custom, container-inner/spread/box-only/per-shadow-blend/scale-fixed shadows and
 general filters remain unsupported. Run the native lab with
 `cargo run --locked --offline -p flow-studio --bin group_shadows`.
 
@@ -165,3 +165,6 @@ CI and the ignored tests were not exercised. The first aggregate caught the
 unchanged-extent damage bug now fixed; a later matrix fixture correctly hit the
 PassThrough guard and was corrected to request Normal explicitly. No guard was
 relaxed to make that test pass.
+
+
+当前新增[有界叶节点多层内阴影](inner-shadows.md)。支持范围、真实paint alpha与Leafer几何shape的差别、fill/inner/stroke顺序、完整有界文字源和拒绝规则见该契约；此前阶段的内阴影缺项记录保留为历史验证范围。

@@ -280,9 +280,10 @@ impl BlendMode {
         !matches!(self, Self::PassThrough | Self::Normal)
     }
 }
-/// One outer, alpha-derived drop shadow. Local-space `blur` maps to 2σ in
+/// One alpha-derived shadow layer. Local-space `blur` maps to 2σ in
 /// the bounded CPU renderer; this is not a browser-pixel-equivalence promise.
-/// Inner, spread, box, scale-fixed and per-shadow blend fields are unsupported.
+/// Its owning style array determines inner/outer placement. Spread, box,
+/// scale-fixed and per-shadow blend fields are unsupported.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Shadow {
@@ -344,6 +345,9 @@ pub struct Style {
     /// Additional outer shadows in back-to-front order, sharing the same source
     /// alpha. Combined with `shadow`, at most MAX_SHADOW_LAYERS are accepted.
     pub shadow_layers: Vec<Shadow>,
+    /// Inner shadows in back-to-front order, supported on bounded leaf producers.
+    /// Every layer uses the same original ink alpha, between fill and stroke.
+    pub inner_shadow_layers: Vec<Shadow>,
 }
 impl Default for Style {
     fn default() -> Self {
@@ -357,6 +361,7 @@ impl Default for Style {
             blend_mode: BlendMode::PassThrough,
             shadow: None,
             shadow_layers: Vec::new(),
+            inner_shadow_layers: Vec::new(),
         }
     }
 }
@@ -365,6 +370,9 @@ impl Default for Style {
 pub const MAX_PAINT_LAYERS: usize = 32;
 /// Maximum combined base and additional outer shadows, including transparent layers.
 pub const MAX_SHADOW_LAYERS: usize = 8;
+/// Independent inner-shadow ceiling, including transparent entries. Actual
+/// combined inner/outer work must also fit the compositor's cumulative budget.
+pub const MAX_INNER_SHADOW_LAYERS: usize = 8;
 
 impl Style {
     /// Base shadow followed by additional shadows, in painter order. Every layer
@@ -377,6 +385,9 @@ impl Style {
     }
     pub fn has_visible_shadows(&self) -> bool {
         self.shadows().any(|s| s.is_visible())
+    }
+    pub fn has_inner_shadows(&self) -> bool {
+        !self.inner_shadow_layers.is_empty()
     }
     /// Union each projection of the original source extent, never a chain of
     /// projections. Does not change geometric paint/hit/layout/selection bounds.
@@ -444,7 +455,12 @@ impl Style {
                 "appearance exceeds {MAX_SHADOW_LAYERS} shadow layers"
             ));
         }
-        for shadow in self.shadows() {
+        if self.inner_shadow_layers.len() > MAX_INNER_SHADOW_LAYERS {
+            return Err(format!(
+                "appearance exceeds {MAX_INNER_SHADOW_LAYERS} inner shadow layers"
+            ));
+        }
+        for shadow in self.shadows().chain(self.inner_shadow_layers.iter()) {
             shadow.validate()?;
         }
         for fill in self.fills() {

@@ -8,6 +8,7 @@ use tiny_skia::{Path, PathBuilder, Transform};
 pub(crate) struct PreparedNode {
     pub bounds: Option<[f64; 4]>,
     pub shadows: Vec<crate::shadow::PreparedShadow>,
+    pub inner_shadows: Vec<crate::shadow::PreparedShadow>,
     pub visible: bool,
     pub opacity: f32,
     pub blend: BlendMode,
@@ -36,6 +37,7 @@ pub(crate) struct VectorPaint {
 pub(crate) struct Preparation {
     pub triangles: usize,
     pub has_shadows: bool,
+    pub has_inner_shadows: bool,
     nodes: usize,
     masks: usize,
     source_points: usize,
@@ -220,6 +222,7 @@ impl Preparation {
             return Ok(PreparedNode {
                 bounds: None,
                 shadows: Vec::new(),
+                inner_shadows: Vec::new(),
                 visible: object.visible,
                 opacity: object.style.opacity,
                 blend: object.style.blend_mode,
@@ -452,6 +455,25 @@ impl Preparation {
                 });
             }
         }
+        let mut inner_shadows = Vec::new();
+        if object.style.has_inner_shadows() {
+            crate::shadow::validate_inner_shape(&object.id, &object.shape)?;
+        }
+        for &effect in object
+            .style
+            .inner_shadow_layers
+            .iter()
+            .filter(|s| s.is_visible())
+        {
+            self.has_inner_shadows = true;
+            if let Some(ink_bounds) = ink_bounds {
+                inner_shadows.push(crate::shadow::PreparedShadow {
+                    effect,
+                    world: source.world_transform,
+                    ink_bounds,
+                });
+            }
+        }
         self.bounds = match (previous_bounds, node_bounds) {
             (Some(a), Some(b)) => Some([
                 a[0].min(b[0]),
@@ -464,11 +486,14 @@ impl Preparation {
         Ok(PreparedNode {
             bounds: node_bounds,
             shadows,
+            inner_shadows,
             visible: object.visible,
             opacity: object.style.opacity,
             blend: object.style.blend_mode,
             mask: object.mask,
-            before_children: if object.shape.paint_phases().1.is_some() {
+            before_children: if object.shape.paint_phases().1.is_some()
+                || object.style.has_inner_shadows()
+            {
                 fill_count
             } else {
                 paints.len()

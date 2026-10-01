@@ -136,6 +136,7 @@ impl DomainSource {
                 && a.object.style.fill_rule == b.object.style.fill_rule
                 && a.object.style.shadow == b.object.style.shadow
                 && a.object.style.shadow_layers == b.object.style.shadow_layers
+                && a.object.style.inner_shadow_layers == b.object.style.inner_shadow_layers
                 && a.object.style.fills().map(|p| p.is_visible()).eq(b
                     .object
                     .style
@@ -173,19 +174,40 @@ impl DomainSource {
     }
     /// Visible text producers with their exact presented style and world matrix.
     pub fn texts(&self) -> Vec<(&DisplayObject, Affine)> {
-        fn visit<'a>(node: &'a DomainNode, out: &mut Vec<(&'a DisplayObject, Affine)>) {
+        self.text_sources()
+            .into_iter()
+            .map(|(object, world, _)| (object, world))
+            .collect()
+    }
+    /// Text producers plus whether an effect samples their complete alignment
+    /// box. A host must not pre-crop those inputs to the destination viewport:
+    /// offscreen glyph alpha can affect visible inner or outer shadow pixels.
+    pub fn text_sources(&self) -> Vec<(&DisplayObject, Affine, bool)> {
+        fn visit<'a>(
+            node: &'a DomainNode,
+            ancestor_effect: bool,
+            out: &mut Vec<(&'a DisplayObject, Affine, bool)>,
+        ) {
             if !node.object.visible || node.object.style.opacity == 0. {
                 return;
             }
+            let effect = ancestor_effect
+                || node.object.style.has_visible_shadows()
+                || node
+                    .object
+                    .style
+                    .inner_shadow_layers
+                    .iter()
+                    .any(|s| s.is_visible());
             if matches!(node.object.shape, Shape::Text(_)) {
-                out.push((&node.object, node.world_transform));
+                out.push((&node.object, node.world_transform, effect));
             }
             for child in &node.children {
-                visit(child, out);
+                visit(child, effect, out);
             }
         }
         let mut out = Vec::new();
-        visit(&self.root, &mut out);
+        visit(&self.root, false, &mut out);
         out
     }
     pub fn ids(&self) -> Vec<&DisplayId> {
@@ -217,6 +239,7 @@ fn boundary(scene: &Scene, id: &DisplayId) -> bool {
     };
     let o = &node.object;
     o.style.has_shadows()
+        || o.style.has_inner_shadows()
         || o.style.blend_mode != BlendMode::PassThrough
         || (o.style.opacity < 1.0
             && (o.shape.allows_children()
@@ -335,6 +358,9 @@ fn capture(
     }
     if o.style.has_shadows() && matches!(o.shape, Shape::Custom(_)) {
         return Err(CompositeError::UnsupportedShadow(o.id.clone()));
+    }
+    if o.style.has_inner_shadows() {
+        crate::shadow::validate_inner_shape(&o.id, &o.shape)?;
     }
     let points = match &o.shape {
         Shape::Path(p) => p.commands.len(),

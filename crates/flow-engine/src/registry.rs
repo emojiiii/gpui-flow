@@ -381,6 +381,7 @@ pub enum PropertyKey {
     BlendMode,
     Shadow,
     ShadowLayers,
+    InnerShadowLayers,
     Mask,
     Shape,
     Custom(String),
@@ -407,6 +408,7 @@ impl PropertyKey {
             Self::BlendMode => "style.blend_mode".into(),
             Self::Shadow => "style.shadow".into(),
             Self::ShadowLayers => "style.shadow_layers".into(),
+            Self::InnerShadowLayers => "style.inner_shadow_layers".into(),
             Self::Mask => "mask".into(),
             Self::Shape => "shape".into(),
         }
@@ -443,7 +445,10 @@ pub(crate) fn apply_property(
 }
 pub(crate) fn property_dirty(name: &str) -> DirtyFlags {
     match name {
-        "style.blend_mode" | "style.shadow" | "style.shadow_layers" => DirtyFlags::PAINT,
+        "style.blend_mode"
+        | "style.shadow"
+        | "style.shadow_layers"
+        | "style.inner_shadow_layers" => DirtyFlags::PAINT,
         "mask" => DirtyFlags::PAINT | DirtyFlags::GEOMETRY,
         "transform" => DirtyFlags::TRANSFORM | DirtyFlags::HIT,
         "shape" => DirtyFlags::GEOMETRY | DirtyFlags::PAINT | DirtyFlags::HIT,
@@ -464,9 +469,11 @@ impl PropertyKey {
     pub fn descriptor(&self) -> Option<PropertyDescriptor> {
         let (value_type, default) = match self {
             Self::Name => (PropertyType::String, Some(json!(""))),
-            Self::Classes | Self::FillLayers | Self::StrokeLayers | Self::ShadowLayers => {
-                (PropertyType::Array, Some(json!([])))
-            }
+            Self::Classes
+            | Self::FillLayers
+            | Self::StrokeLayers
+            | Self::ShadowLayers
+            | Self::InnerShadowLayers => (PropertyType::Array, Some(json!([]))),
             Self::Visible | Self::HitChildren => (PropertyType::Boolean, Some(json!(true))),
             Self::Locked => (PropertyType::Boolean, Some(json!(false))),
             Self::Opacity => (

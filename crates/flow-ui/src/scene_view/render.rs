@@ -1020,6 +1020,62 @@ mod state_tests {
         assert_eq!(next.fill, Some(Color::TRANSPARENT.into()));
     }
     #[test]
+    fn inner_layers_edit_undo_and_state_preserve_geometry_and_pixels() {
+        use gpui_flow_scene::{Affine, Shadow, Style};
+        let mut scene = Scene::new();
+        scene
+            .insert(
+                DisplayObject::new("r", display::Rect::new(20., 20.))
+                    .with_transform(Affine::translation(20., 20.))
+                    .with_style(Style {
+                        fill: Some(Color::rgb(0, 0, 255).into()),
+                        inner_shadow_layers: vec![Shadow::new(2., 0., 0., Color::rgb(255, 0, 0))],
+                        ..Default::default()
+                    }),
+                None,
+                None,
+            )
+            .unwrap();
+        let mut editor = SceneEditor::new(scene).unwrap();
+        let mut styles = SceneStateStyles::new(&editor.engine);
+        let router = SceneEventRouter::new();
+        let (before, error) =
+            super::state_render_frame(&editor, &router, &mut styles, std::time::Duration::ZERO);
+        assert!(error.is_none());
+        let old = raster_container(&before);
+        let geometry = editor.engine.world_bounds(&"r".into()).unwrap();
+        editor
+            .transaction(|s| {
+                s.update_object(&"r".into(), |o| o.style.inner_shadow_layers[0].x = 10.)
+            })
+            .unwrap();
+        let (after, error) =
+            super::state_render_frame(&editor, &router, &mut styles, std::time::Duration::ZERO);
+        assert!(error.is_none());
+        let new = raster_container(&after);
+        assert_eq!(new.screen_bounds, old.screen_bounds);
+        assert_ne!(new.premul_rgba, old.premul_rgba);
+        assert_eq!(editor.engine.world_bounds(&"r".into()).unwrap(), geometry);
+        assert!(editor.undo());
+        let (restored, _) =
+            super::state_render_frame(&editor, &router, &mut styles, std::time::Duration::ZERO);
+        assert_eq!(raster_container(&restored).premul_rgba, old.premul_rgba);
+        let object = &editor.scene().get(&"r".into()).unwrap().object;
+        let next = gpui_flow_interaction::scene::StateStyles {
+            hover: gpui_flow_interaction::scene::StatePaint::fill(Color::TRANSPARENT),
+            ..Default::default()
+        }
+        .resolve(
+            &object.style,
+            gpui_flow_interaction::scene::VisualState {
+                hover: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(next.inner_shadow_layers, object.style.inner_shadow_layers);
+        assert_eq!(next.fill, Some(Color::TRANSPARENT.into()));
+    }
+    #[test]
     fn container_clip_edit_and_undo_restore_the_actual_composite_pixels() {
         use gpui_flow_scene::{Shape, Style};
         let mut s = Scene::new();

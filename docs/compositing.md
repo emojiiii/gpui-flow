@@ -163,7 +163,7 @@ Custom inside a required domain rejects the entire domain. Text requires the exp
 
 In the default `SceneCompositing::Domains` mode, a domain root that needs multiply/screen against external content returns `UnsupportedExternalBackdrop`. A mask alone does not isolate a pass-through opacity-1 Group: a blend escaping an opaque mask run is rejected too. Explicit Normal groups and opacity isolation are supported, as are translucent mask runs that genuinely isolate their content. Put a required vector background inside the same Normal Group. Native siblings, host background, grid and selection decorations are not captured by that default mode. The explicit owned-canvas mode below includes only pixels owned by SceneView; arbitrary host GPUI content remains unsupported.
 
-No eraser, inner/spread/box/scale-fixed shadows, general blur/background filters, grayscale/path/clipping masks, scale-fixed stroke, pixel picking, automatic resolution reduction or tiling is claimed. The single leaf-shadow subset is described below and [bounded subtree shadows](group-shadows.md) extend it; supported text, artistic blends and closed aligned strokes are covered in their dedicated sections. The engine's hit testing and conservative selection/layout bounds still include geometry beyond transparent mask pixels. Alpha-mask bounds do not become Leafer-style layout bounds. Rounded contours and stroke expansion retain the existing 0.1 local-unit approximation; gradient/AA bytes need not match the older native renderer. There is no wide-gamut, ICC or linear-light guarantee.
+No eraser, container-inner/spread/box/scale-fixed shadows, general blur/background filters, grayscale/path/clipping masks, scale-fixed stroke, pixel picking, automatic resolution reduction or tiling is claimed. The single leaf-shadow subset is described below and [bounded subtree shadows](group-shadows.md) extend it; supported text, artistic blends and closed aligned strokes are covered in their dedicated sections. The engine's hit testing and conservative selection/layout bounds still include geometry beyond transparent mask pixels. Alpha-mask bounds do not become Leafer-style layout bounds. Rounded contours and stroke expansion retain the existing 0.1 local-unit approximation; gradient/AA bytes need not match the older native renderer. There is no wide-gamut, ICC or linear-light guarantee.
 
 ## Budget, invalidation and lifecycle
 
@@ -359,7 +359,7 @@ Group, Box and Frame now support [bounded composed-subtree shadows](group-shadow
 including child effects and explicit PassThrough rejection. Custom shadows remain
 `UnsupportedShadow`. The validation checkpoint below records the earlier leaf-only slice.
 [Bounded multiple outer shadows](multiple-shadows.md) now extend the base property.
-Inner shadow, spread, box-only knockout, per-shadow blend,
+Container inner shadow, spread, box-only knockout, per-shadow blend,
 scale-fixed shadows and general filters remain unsupported. The native example
 is `cargo run --locked --offline -p flow-studio --bin outer_shadows`.
 
@@ -439,3 +439,6 @@ ignored tests and a full old-example interaction sweep were not run. See the
 [complete paint-order validation record](container-paint-order.md#validation-status)
 for the test seams and unchanged limits. Earlier checkpoints above remain
 historical and unchanged.
+
+
+当前新增[有界叶节点多层内阴影](inner-shadows.md)。支持范围、真实paint alpha与Leafer几何shape的差别、fill/inner/stroke顺序、完整有界文字源和拒绝规则见该契约；此前阶段的内阴影缺项记录保留为历史验证范围。

@@ -4,11 +4,13 @@
 
 私有早期开发版本，API 尚未承诺稳定。以 Leafer 的显示对象/容器分层和 React Flow 的节点扩展思路为参考，独立实现；不宣称完整 Leafer 功能或 API 兼容。
 
-单个叶节点外阴影现已进入同一Scene/engine/CPU路径：矢量fill/stroke、图片透明像素和真实glyph alpha作为源，复用锁定image Gaussian；支持blur/offset/color、整体opacity/blend/clip与Undo。visual effect bounds不改变布局/命中/选择。Custom、inner/spread/box/scale-fixed阴影仍明确不支持；Group/Box/Frame现已扩展为[有界子树阴影](docs/group-shadows.md)；见[契约和预算](docs/compositing.md#bounded-leaf-outer-shadows)，示例`outer_shadows`。本轮786项headless（8项原有忽略）、86项UI、严格Clippy/格式与原生链接通过；真实窗口验过blur/offset/alpha/clip/Undo、拒绝恢复、选择与pan/zoom，详见[叶节点阶段验证](docs/compositing.md#outer-shadow-validation-2026-10-01)。
+单个叶节点外阴影现已进入同一Scene/engine/CPU路径：矢量fill/stroke、图片透明像素和真实glyph alpha作为源，复用锁定image Gaussian；支持blur/offset/color、整体opacity/blend/clip与Undo。visual effect bounds不改变布局/命中/选择。Custom、spread/box/scale-fixed阴影仍明确不支持（内阴影见下方新切片）；Group/Box/Frame现已扩展为[有界子树阴影](docs/group-shadows.md)；见[契约和预算](docs/compositing.md#bounded-leaf-outer-shadows)，示例`outer_shadows`。本轮786项headless（8项原有忽略）、86项UI、严格Clippy/格式与原生链接通过；真实窗口验过blur/offset/alpha/clip/Undo、拒绝恢复、选择与pan/zoom，详见[叶节点阶段验证](docs/compositing.md#outer-shadow-validation-2026-10-01)。
 
 Group/Box/Frame外阴影使用完整子树alpha，包含子阴影、mask结果、child clip和显式fill/children/stroke阶段；不使用bounding box代替形状。递归scratch/filter工作在任何域像素分配前预预算，深层指数重绘会拒绝。需要外部backdrop的PassThrough后代明确拒绝，Normal仍需显式选择；父effect bounds/damage覆盖子效果且不扩张布局、命中或选择。见[契约、限制和验证](docs/group-shadows.md)，示例`group_shadows`。本批825项headless（8项原有忽略）、91项UI、严格workspace/docs Clippy与格式、文档test targets及原生构建通过；云端真实窗口验过拒绝/Normal恢复、clip/order/alpha/Undo、反复切换、选择与pan/zoom，正常退出0。
 
 新增[有界多重外阴影](docs/multiple-shadows.md)：旧 `style.shadow` 为底层，`shadow_layers` 按先后叠加，合计最多8层。每层独立取同一份未加自身阴影的真实source alpha，子效果仍进入父source；复用Gaussian和完整递归预算，无层间重复投影。支持PAINT属性、视觉damage/cache、Undo，几何layout/hit/selection保持不变；示例 `multiple_shadows`。本批847项headless（8项原有忽略）、93项UI、严格Clippy/格式、docs targets及原生构建通过；真实窗口验过顺序/offset/blur/alpha/clip/phase/Undo、拒绝恢复、选择和pan/zoom，正常退出0。
+
+新增[有界叶节点内阴影](docs/inner-shadows.md)：`inner_shadow_layers` 独立最多8层，采用真实墨迹alpha的反向投影，fill之后、stroke之前叠加。矢量/Image/窄Text支持，Group/Box/Frame/Custom显式拒绝；不扩张effect/layout/hit/selection边界。受影响的Text保留完整有界对齐框源，避免视口截口制造假边缘。示例 `inner_shadows` 与 `inner_shadow_text_probe`。 本片867项headless（8项原有忽略）、96项UI、严格Clippy/格式、docs targets及真实字体边界探针通过；原生已验图层/alpha/clip/Undo、拒绝恢复、选择和pan/zoom。首次较大示例触发共享WorkLimit后仅收窄示例默认值，预算保持不变，不宣称大规模性能已解决。
 
 ## 当前进展（2026-10-01）
 

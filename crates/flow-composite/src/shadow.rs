@@ -93,6 +93,16 @@ pub(crate) fn validate_shape(
     Ok(())
 }
 
+pub(crate) fn validate_inner_shape(
+    id: &DisplayId,
+    shape: &gpui_flow_scene::Shape,
+) -> Result<(), CompositeError> {
+    if shape.allows_children() || matches!(shape, gpui_flow_scene::Shape::Custom(_)) {
+        return Err(CompositeError::UnsupportedInnerShadow(id.clone()));
+    }
+    Ok(())
+}
+
 /// The same checked source extent is used in recursive admission and painting.
 /// It includes descendant effects but excludes this node's own shadow.
 pub(crate) struct SourcePlan {

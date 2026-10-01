@@ -296,8 +296,10 @@ impl Raster<'_> {
         }) {
             return Ok(());
         }
-        let isolated =
-            !node.shadows.is_empty() || node.opacity < 1. || node.blend != BlendMode::PassThrough;
+        let isolated = !node.shadows.is_empty()
+            || !node.inner_shadows.is_empty()
+            || node.opacity < 1.
+            || node.blend != BlendMode::PassThrough;
         if isolated {
             if depth >= self.budget.limits.max_depth {
                 return Err(CompositeError::NestingLimit);
@@ -321,7 +323,7 @@ impl Raster<'_> {
     ) -> Result<(), CompositeError> {
         if draw_shadow {
             for &shadow in &node.shadows {
-                self.shadow(node, shadow, target, depth, clip)?;
+                self.shadow(node, shadow, target, depth, false)?;
             }
         }
         let (before, after) = node.paints.split_at(node.before_children);
@@ -373,6 +375,11 @@ impl Raster<'_> {
         }
         // Restore the ancestor clip after children. The container's child clip
         // must never cut away its own outside/centered stroke.
+        if draw_shadow {
+            for &shadow in &node.inner_shadows {
+                self.shadow(node, shadow, target, depth, true)?;
+            }
+        }
         self.paints(after, target, clip)?;
         Ok(())
     }
@@ -406,14 +413,14 @@ impl Raster<'_> {
         shadow: crate::shadow::PreparedShadow,
         target: &mut Pixmap,
         depth: usize,
-        clip: Option<&Mask>,
+        inner: bool,
     ) -> Result<(), CompositeError> {
         let plan = crate::shadow::SourcePlan::new(shadow, self.world_to_layer, self.budget.limits)?;
         let (width, height, pixels) = (plan.width, plan.height, plan.pixels);
         let [x0, y0] = plan.origin;
         let filter = &plan.filter;
         let scratch_bytes = filter.bytes(pixels, width);
-        let filter_work = filter.work(pixels);
+        let filter_work = filter.work(pixels) + if inner { pixels * 2 } else { 0 };
         self.check()?;
         // Complete recursive scratch/work admission already succeeded before
         // the domain output allocation. Runtime accounting remains a backstop.
@@ -453,7 +460,11 @@ impl Raster<'_> {
         };
         scratch.check()?;
         let c = shadow.effect.color;
-        let position = [x0 + filter.offset[0], y0 + filter.offset[1]];
+        let position = if inner {
+            [x0, y0]
+        } else {
+            [x0 + filter.offset[0], y0 + filter.offset[1]]
+        };
         let origin = [position[0].floor(), position[1].floor()];
         let fraction = [
             (position[0] - origin[0]) as f32,
@@ -465,12 +476,30 @@ impl Raster<'_> {
         for (y, row) in source.data_mut().chunks_mut(width as usize * 4).enumerate() {
             scratch.check()?;
             for (x, p) in row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
-                let coverage = image::imageops::interpolate_bilinear(
+                let sampled = image::imageops::interpolate_bilinear(
                     &alpha,
-                    x as f32 - fraction[0],
-                    y as f32 - fraction[1],
+                    x as f32
+                        - if inner {
+                            filter.offset[0] as f32
+                        } else {
+                            fraction[0]
+                        },
+                    y as f32
+                        - if inner {
+                            filter.offset[1] as f32
+                        } else {
+                            fraction[1]
+                        },
                 )
                 .map_or(0, |p| p[0]);
+                // Keep original source coverage, including holes and edge AA.
+                // With zero blur/offset, translucent ink deliberately yields
+                // A*(1-A); only fully opaque ink has zero inner coverage.
+                let coverage = if inner {
+                    ((p[3] as u32 * (255 - sampled as u32) + 127) / 255) as u8
+                } else {
+                    sampled
+                };
                 let a = (coverage as u32 * c.a as u32 + 127) / 255;
                 *p = [
                     ((c.r as u32 * a + 127) / 255) as u8,
@@ -487,7 +516,9 @@ impl Raster<'_> {
             source.as_ref(),
             &PixmapPaint::default(),
             Transform::from_translate(origin[0] as f32, origin[1] as f32),
-            clip,
+            // Every visible effect creates an isolation boundary. Its ancestor
+            // clip is applied there, once, after source and all own effects.
+            None,
         );
         self.check()?;
         drop(alpha);
@@ -865,7 +896,7 @@ fn rasterize_inner(
         budget,
         cancelled,
     };
-    if prep.has_shadows {
+    if prep.has_shadows || prep.has_inner_shadows {
         // No domain RGBA, mask, or filter scratch has been allocated yet.
         admission::admit(&raster, &root, source)?;
     }

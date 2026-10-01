@@ -60,7 +60,7 @@ pub(crate) struct TextPreparation<'a> {
 }
 impl TextPreparation<'_> {
     pub fn domain(&mut self, source: &DomainSource, inputs: &mut TextInputs) {
-        for (object, world) in source.texts() {
+        for (object, world, full_source) in source.text_sources() {
             let result = (|| {
                 let Shape::Text(text) = &object.shape else {
                     unreachable!()
@@ -87,7 +87,8 @@ impl TextPreparation<'_> {
                 let backend = self
                     .backend
                     .ok_or_else(|| CompositeError::TextBackendRequired(object.id.clone()))?;
-                let clip = intersection(self.viewport.canvas_bounds, self.viewport.content_mask);
+                let bounds = [m.tx, m.ty, text.size.width * m.a, text.size.height * m.d];
+                let clip = source_clip(full_source, bounds, self.viewport);
                 let Some(clip) = clip else {
                     return Ok(None);
                 };
@@ -105,7 +106,7 @@ impl TextPreparation<'_> {
                         TextAlign::Center => gpui::TextAlign::Center,
                         TextAlign::End => gpui::TextAlign::Right,
                     },
-                    bounds: [m.tx, m.ty, text.size.width * m.a, text.size.height * m.d],
+                    bounds,
                     clip: [
                         clip.origin.x,
                         clip.origin.y,
@@ -172,6 +173,17 @@ impl TextPreparation<'_> {
     }
 }
 
+fn source_clip(full_source: bool, bounds: [f32; 4], viewport: RasterViewport) -> Option<Bounds> {
+    if full_source {
+        Some(Bounds::new(
+            Point::new(bounds[0], bounds[1]),
+            Size::new(bounds[2], bounds[3]),
+        ))
+    } else {
+        intersection(viewport.canvas_bounds, viewport.content_mask)
+    }
+}
+
 fn intersection(a: Bounds, b: Bounds) -> Option<Bounds> {
     let x = a.min_x().max(b.min_x());
     let y = a.min_y().max(b.min_y());
@@ -179,4 +191,27 @@ fn intersection(a: Bounds, b: Bounds) -> Option<Bounds> {
     let bottom = a.max_y().min(b.max_y());
     (right > x && bottom > y)
         .then(|| Bounds::new(Point::new(x, y), Size::new(right - x, bottom - y)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn effect_text_source_keeps_offscreen_ink_before_destination_clipping() {
+        let viewport = RasterViewport {
+            world_to_screen: Affine::IDENTITY,
+            canvas_bounds: Bounds::new(Point::ZERO, Size::new(100., 100.)),
+            content_mask: Bounds::new(Point::new(10., 10.), Size::new(80., 80.)),
+            device_scale: 1.25,
+        };
+        let bounds = [-20., -30., 70., 80.];
+        assert_eq!(
+            source_clip(true, bounds, viewport),
+            Some(Bounds::new(Point::new(-20., -30.), Size::new(70., 80.)))
+        );
+        assert_eq!(
+            source_clip(false, bounds, viewport),
+            Some(viewport.content_mask)
+        );
+    }
 }
