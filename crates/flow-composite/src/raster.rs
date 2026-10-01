@@ -1,5 +1,5 @@
 use crate::{
-    CompositeError, CompositeLimits, DomainSource, ImageInputs, TextInputs,
+    CanvasBackdrop, CompositeError, CompositeLimits, DomainSource, ImageInputs, TextInputs,
     vector::{Preparation, PreparedNode, transform},
 };
 use gpui_flow_scene::{
@@ -105,6 +105,88 @@ struct Raster<'a> {
     cancelled: &'a AtomicBool,
 }
 impl Raster<'_> {
+    fn backdrop(
+        &mut self,
+        target: &mut Pixmap,
+        backdrop: CanvasBackdrop,
+        viewport: RasterViewport,
+        origin: [f64; 2],
+        prepared_points: usize,
+    ) -> Result<(), CompositeError> {
+        self.check()?;
+        self.budget.write(self.pixels)?;
+        let c = backdrop.color;
+        target.fill(tiny_skia::Color::from_rgba8(c.r, c.g, c.b, c.a));
+        let Some(grid) = backdrop.grid.filter(|g| g.color.a != 0) else {
+            return Ok(());
+        };
+        let scale = viewport.device_scale as f64;
+        let gap = grid.spacing as f64;
+        let canvas = bounds(viewport.canvas_bounds);
+        let start = [
+            canvas[0] + (grid.offset.x as f64).rem_euclid(gap),
+            canvas[1] + (grid.offset.y as f64).rem_euclid(gap),
+        ];
+        // Restrict generation to the actual allocated visible crop, while
+        // retaining the original canvas grid anchor after scrolling/clipping.
+        let range = |axis: usize, pixels: u32| {
+            let low = origin[axis] / scale;
+            let high = (origin[axis] + pixels as f64) / scale;
+            let first = ((low - start[axis] - 1.) / gap).ceil().max(0.);
+            let end = ((high.min(canvas[axis + 2]) - start[axis]) / gap)
+                .ceil()
+                .max(first);
+            (first, end)
+        };
+        let (x0, x1) = range(0, self.width);
+        let (y0, y1) = range(1, self.height);
+        let dots = (x1 - x0) * (y1 - y0);
+        if !dots.is_finite()
+            || dots * 4. + prepared_points as f64 > self.budget.limits.max_total_points as f64
+        {
+            return Err(CompositeError::InputLimit);
+        }
+        let mut path = PathBuilder::new();
+        for ix in 0..(x1 - x0) as usize {
+            self.check()?;
+            let x = (start[0] + (x0 + ix as f64) * gap) * scale - origin[0];
+            for iy in 0..(y1 - y0) as usize {
+                let y = (start[1] + (y0 + iy as f64) * gap) * scale - origin[1];
+                // A legal tiny logical viewport can have an enormous DPR.
+                // Clip these axis-aligned dots before constructing geometry,
+                // retaining a device-pixel guard for antialiased edge coverage.
+                let left = x.max(-1.);
+                let top = y.max(-1.);
+                let right = (x + scale).min(self.width as f64 + 1.);
+                let bottom = (y + scale).min(self.height as f64 + 1.);
+                if right <= left || bottom <= top {
+                    continue;
+                }
+                let rect = tiny_skia::Rect::from_xywh(
+                    left as f32,
+                    top as f32,
+                    (right - left) as f32,
+                    (bottom - top) as f32,
+                )
+                .ok_or(CompositeError::UnsupportedTransform)?;
+                path.push_rect(rect);
+            }
+        }
+        if let Some(path) = path.finish() {
+            self.budget.write(self.pixels)?;
+            let c = grid.color;
+            let mut paint = tiny_skia::Paint::default();
+            paint.set_color_rgba8(c.r, c.g, c.b, c.a);
+            target.fill_path(
+                &path,
+                &paint,
+                tiny_skia::FillRule::Winding,
+                Transform::identity(),
+                None,
+            );
+        }
+        Ok(())
+    }
     fn check(&self) -> Result<(), CompositeError> {
         if self.cancelled.load(Ordering::Relaxed) {
             Err(CompositeError::Superseded)
@@ -163,6 +245,18 @@ impl Raster<'_> {
     ) -> Result<(), CompositeError> {
         self.check()?;
         if !node.visible || node.opacity == 0. {
+            return Ok(());
+        }
+        // Conservative, prepared ink bounds include strokes and descendants.
+        // Keep an AA guard; skipping a mask's ink still leaves its run marker
+        // in children(), so an offscreen alpha mask correctly masks everything.
+        if node.bounds.is_none_or(|b| {
+            let b = transformed(b, self.world_to_layer);
+            b[2] < -1.
+                || b[3] < -1.
+                || b[0] > self.width as f64 + 1.
+                || b[1] > self.height as f64 + 1.
+        }) {
             return Ok(());
         }
         let isolated = node.opacity < 1. || node.blend != BlendMode::PassThrough;
@@ -549,17 +643,21 @@ fn rasterize_inner(
     }
     let mut prep = Preparation::default();
     let root = prep.node(&source.root, budget.limits, images, texts)?;
-    let Some(world_bounds) = prep.bounds else {
-        return Ok(None);
-    };
     let scale = viewport.device_scale as f64;
-    let mut b = transformed(world_bounds, viewport.world_to_screen);
-    b = [
-        b[0] - 1. / scale,
-        b[1] - 1. / scale,
-        b[2] + 1. / scale,
-        b[3] + 1. / scale,
-    ];
+    let b = if source.canvas.is_some() {
+        bounds(viewport.canvas_bounds)
+    } else {
+        let Some(world_bounds) = prep.bounds else {
+            return Ok(None);
+        };
+        let b = transformed(world_bounds, viewport.world_to_screen);
+        [
+            b[0] - 1. / scale,
+            b[1] - 1. / scale,
+            b[2] + 1. / scale,
+            b[3] + 1. / scale,
+        ]
+    };
     let Some(mut b) = intersect(b, bounds(viewport.canvas_bounds))
         .and_then(|b| intersect(b, bounds(viewport.content_mask)))
     else {
@@ -614,6 +712,9 @@ fn rasterize_inner(
         cancelled,
     };
     let mut output = raster.surface()?;
+    if let Some(backdrop) = source.canvas {
+        raster.backdrop(&mut output, backdrop, viewport, [x0, y0], prep.points)?;
+    }
     raster.node(&root, &mut output, 0, None)?;
     raster.clip(&mut output, source)?;
     raster.check()?;

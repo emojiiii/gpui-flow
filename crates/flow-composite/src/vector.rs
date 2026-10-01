@@ -6,6 +6,7 @@ use std::sync::Arc;
 use tiny_skia::{Path, PathBuilder, Transform};
 
 pub(crate) struct PreparedNode {
+    pub bounds: Option<[f64; 4]>,
     pub visible: bool,
     pub opacity: f32,
     pub blend: BlendMode,
@@ -212,6 +213,7 @@ impl Preparation {
         // Invisible/zero-opacity subtrees do not require loaded image pixels.
         if !object.visible || object.style.opacity == 0. {
             return Ok(PreparedNode {
+                bounds: None,
                 visible: object.visible,
                 opacity: object.style.opacity,
                 blend: object.style.blend_mode,
@@ -402,7 +404,7 @@ impl Preparation {
                 (clipped[2] > clipped[0] && clipped[3] > clipped[1]).then_some(clipped)
             });
         }
-        self.bounds = [previous_bounds, own_bounds, children_bounds]
+        let node_bounds = [own_bounds, children_bounds]
             .into_iter()
             .flatten()
             .reduce(|a, b| {
@@ -413,7 +415,17 @@ impl Preparation {
                     a[3].max(b[3]),
                 ]
             });
+        self.bounds = match (previous_bounds, node_bounds) {
+            (Some(a), Some(b)) => Some([
+                a[0].min(b[0]),
+                a[1].min(b[1]),
+                a[2].max(b[2]),
+                a[3].max(b[3]),
+            ]),
+            (a, b) => a.or(b),
+        };
         Ok(PreparedNode {
+            bounds: node_bounds,
             visible: object.visible,
             opacity: object.style.opacity,
             blend: object.style.blend_mode,

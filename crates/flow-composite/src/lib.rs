@@ -112,3 +112,6 @@ pub struct CompositeIssue {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod canvas_tests;

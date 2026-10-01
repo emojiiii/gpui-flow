@@ -1,7 +1,24 @@
 use crate::{CompositeError, CompositeIssue, CompositeLimits};
 use gpui_flow_scene::{
-    Affine, BlendMode, ClipRegion, DisplayId, DisplayObject, MaskMode, Scene, SceneError, Shape,
+    Affine, BlendMode, ClipRegion, Color, DisplayId, DisplayObject, MaskMode, Point, Scene,
+    SceneError, Shape, display::Group,
 };
+
+/// An opaque canvas that the caller owns completely. This does not capture a
+/// toolkit window or any native elements painted behind this domain.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CanvasBackdrop {
+    pub color: Color,
+    pub grid: Option<CanvasGrid>,
+}
+/// One-logical-pixel dots, anchored relative to the canvas origin in screen
+/// coordinates. Pan/zoom are resolved by the host, independently of scene roots.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CanvasGrid {
+    pub color: Color,
+    pub spacing: f32,
+    pub offset: Point,
+}
 
 /// Ordered immutable domain input. Equality includes the complete presented
 /// values, local opacity, sibling order, transforms and inherited clips.
@@ -9,6 +26,7 @@ use gpui_flow_scene::{
 pub struct DomainSource {
     pub(crate) root: DomainNode,
     pub(crate) clips: Vec<ClipRegion>,
+    pub(crate) canvas: Option<CanvasBackdrop>,
 }
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DomainNode {
@@ -45,9 +63,58 @@ pub fn scene_units(scene: &Scene, limits: CompositeLimits) -> Result<Vec<SceneUn
     }
     Ok(units)
 }
+
+/// Capture the complete presented scene in stable tree paint order. The opaque
+/// canvas is the first contributor, so roots may blend against earlier roots.
+/// No canonical nodes, identities, hit testing or document history are changed.
+pub fn owned_canvas(
+    scene: &Scene,
+    backdrop: CanvasBackdrop,
+    limits: CompositeLimits,
+) -> Result<DomainSource, CompositeError> {
+    scene
+        .validate()
+        .map_err(|e| CompositeError::InvalidGeometry(e.to_string()))?;
+    if backdrop.color.a != 255 {
+        return Err(CompositeError::UnsupportedExternalBackdrop);
+    }
+    if backdrop
+        .grid
+        .is_some_and(|g| !g.spacing.is_finite() || g.spacing < 1. || !g.offset.is_finite())
+    {
+        return Err(CompositeError::InvalidGeometry("canvas grid".into()));
+    }
+    let limits = limits.bounded();
+    if limits.max_domains == 0 {
+        return Err(CompositeError::InputLimit);
+    }
+    let mut counts = Counts {
+        nodes: 1,
+        ..Default::default()
+    };
+    let children = ordered(scene, scene.roots())
+        .into_iter()
+        .map(|id| capture(scene, id, Affine::IDENTITY, &limits, &mut counts, 1))
+        .collect::<Result<_, _>>()?;
+    // Empty IDs are forbidden in a validated Scene. This runtime-only cache
+    // identity therefore cannot collide with any canonical display object.
+    Ok(DomainSource {
+        root: DomainNode {
+            object: DisplayObject::new("", Group::new()),
+            world_transform: Affine::IDENTITY,
+            children,
+        },
+        clips: vec![],
+        canvas: Some(backdrop),
+    })
+}
 impl DomainSource {
+    /// The empty ID denotes the runtime owned canvas, never a canonical node.
     pub fn root_id(&self) -> &DisplayId {
         &self.root.object.id
+    }
+    pub fn is_owned_canvas(&self) -> bool {
+        self.canvas.is_some()
     }
     /// Conservative stale-frame eligibility: paint/opacity-only changes may
     /// reuse a previous image; geometry, transform, clip, mask and order may not.
@@ -68,7 +135,7 @@ impl DomainSource {
                 && a.children.len() == b.children.len()
                 && a.children.iter().zip(&b.children).all(|(a, b)| same(a, b))
         }
-        self.clips == other.clips && same(&self.root, &other.root)
+        self.canvas == other.canvas && self.clips == other.clips && same(&self.root, &other.root)
     }
     pub fn images(&self) -> Vec<(&DisplayId, &gpui_flow_scene::display::Image)> {
         fn visit<'a>(
@@ -86,7 +153,13 @@ impl DomainSource {
             }
         }
         let mut out = Vec::new();
-        visit(&self.root, &mut out);
+        if self.is_owned_canvas() {
+            for child in &self.root.children {
+                visit(child, &mut out);
+            }
+        } else {
+            visit(&self.root, &mut out);
+        }
         out
     }
     /// Visible text producers with their exact presented style and world matrix.
@@ -114,7 +187,13 @@ impl DomainSource {
             }
         }
         let mut out = Vec::new();
-        visit(&self.root, &mut out);
+        if self.is_owned_canvas() {
+            for child in &self.root.children {
+                visit(child, &mut out);
+            }
+        } else {
+            visit(&self.root, &mut out);
+        }
         out
     }
 }
@@ -175,6 +254,7 @@ fn visit(
             Ok(root) => SceneUnit::Domain(Box::new(DomainSource {
                 root,
                 clips: clips.to_vec(),
+                canvas: None,
             })),
             Err(error) => SceneUnit::Rejected(CompositeIssue {
                 object: id.clone(),
@@ -220,6 +300,15 @@ fn capture(
     }
     if depth > limits.max_depth {
         return Err(CompositeError::NestingLimit);
+    }
+    // Keep the marker (a hidden alpha mask still starts a zero-coverage run),
+    // without demanding a producer for its invisible subtree.
+    if !o.visible || o.style.opacity == 0. {
+        return Ok(DomainNode {
+            object: o.clone(),
+            world_transform: parent * o.transform,
+            children: vec![],
+        });
     }
     let points = match &o.shape {
         Shape::Path(p) => p.commands.len(),
