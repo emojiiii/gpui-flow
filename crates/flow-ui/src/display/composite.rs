@@ -1279,6 +1279,51 @@ mod tests {
         assert!(!c.pending());
     }
     #[test]
+    fn container_inner_edit_retires_accepted_frame_and_rejects_late_success() {
+        use gpui_flow_engine::PropertyKey;
+        use gpui_flow_scene::{Color, Shadow};
+        let mut e = engine();
+        let mut c = CompositeController::default();
+        let first = key(&e);
+        let old = ready(&mut c, first.clone());
+        let domain: DisplayId = "g".into();
+        c.accepted(&first, &domain, &old.image);
+        let handle = e.handle(&"r".into()).unwrap();
+        e.set_property(
+            handle,
+            PropertyKey::Fill,
+            serde_json::to_value(gpui_flow_scene::Paint::solid(Color::rgb(0, 0, 255))).unwrap(),
+        )
+        .unwrap();
+        let pending = key(&e);
+        assert!(pending.compatible(&first, &domain));
+        c.request(pending.clone());
+        let work = c.take_work().unwrap();
+        let late = work.run();
+        let bounds = e.visible_bounds().unwrap();
+        e.set_property(
+            e.handle(&"g".into()).unwrap(),
+            PropertyKey::InnerShadowLayers,
+            serde_json::to_value([Shadow::new(2., 0., 0., Color::rgb(255, 0, 0))]).unwrap(),
+        )
+        .unwrap();
+        let current = key(&e);
+        assert_eq!(bounds, e.visible_bounds().unwrap());
+        assert!(!current.compatible(&first, &domain));
+        assert_eq!(c.request(current.clone()).len(), 1);
+        assert!(c.old_frame(&domain).is_none());
+        assert!(work.cancel.load(Ordering::Relaxed));
+        c.finish(pending, late);
+        assert!(c.frame(&domain).is_none());
+        let fresh = c.take_work().unwrap();
+        let result = fresh.run();
+        c.finish(current.clone(), result);
+        let candidate = c.frame(&domain).unwrap();
+        assert!(!Arc::ptr_eq(&candidate.0.image, &old.image));
+        c.accepted(&current, &domain, &candidate.0.image);
+        assert!(!c.pending());
+    }
+    #[test]
     fn retirement_pressure_blocks_candidate_before_any_upload_and_preserves_budget() {
         let mut e = engine();
         let mut c = CompositeController::default();

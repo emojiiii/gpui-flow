@@ -18,7 +18,7 @@ an array with default `[]` and PAINT-only invalidation. Adding, removing, editin
 or reordering layers supports the same serialization and Undo/Redo as the base.
 There are no inner, spread, box-only knockout, per-layer blend, scale-fixed or
 general filter semantics hidden behind this outer array. Inner layers use the
-separate [bounded leaf inner-shadow API](inner-shadows.md).
+separate [bounded inner-shadow API](inner-shadows.md).
 
 ## Exact composition contract
 
@@ -145,3 +145,8 @@ all old examples, CI, macOS/Windows and the ignored tests were not exercised.
 
 
 当前新增[有界叶节点多层内阴影](inner-shadows.md)。支持范围、真实paint alpha与Leafer几何shape的差别、fill/inner/stroke顺序、完整有界文字源和拒绝规则见该契约；此前阶段的内阴影缺项记录保留为历史验证范围。
+
+Current [bounded container inner shadows](container-inner-shadows.md) extend the
+leaf slice to Group/Box/Frame, preserving explicit paint phases, actual subtree
+alpha, independent own effects and existing budgets. See that contract for the
+current validation scope; older slice receipts above remain historical.

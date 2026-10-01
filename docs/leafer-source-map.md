@@ -33,7 +33,7 @@ Status: historical source research plus a separately labelled current source map
 |---|---|---|
 | 事件 | 实例持有、捕获/目标/冒泡、once、队列、默认动作前路由、KeyUp、不可取消Blur/Focus及related target | 多指/压力、双击/长按、IME及完整事件族 |
 | 交互 | 选择/拖动/缩放/捕获取消、Space平移、插件策略、程序焦点/有界重定向/native同步 | 专用内外编辑工具生命周期、复杂手势 |
-| 外观 | 多层矢量paint、线性/径向渐变、共享mesh的cap/join/dash描边、named/placeholder/button状态及fill/opacity过渡、Text/Image矩形祖先clip链、有界矢量整体opacity/内部blend/alpha mask | 开放轮廓inside/outside与scale-fixed stroke、geometry状态、复杂文字样式/变换、域内Custom、外部backdrop、更多mask、不安全PassThrough组阴影、Custom/container-inner/spread/box/scale-fixed shadow及通用filter |
+| 外观 | 多层矢量paint、线性/径向渐变、共享mesh的cap/join/dash描边、named/placeholder/button状态及fill/opacity过渡、Text/Image矩形祖先clip链、有界矢量整体opacity/内部blend/alpha mask | 开放轮廓inside/outside与scale-fixed stroke、geometry状态、复杂文字样式/变换、域内Custom、外部backdrop、更多mask、不安全PassThrough组阴影、Custom/spread/box/scale-fixed shadow及通用filter |
 | 布局 | 固定/内容轴、双轴reverse遍历/wrap-reverse、wrap测量、真实字体文字Natural/AutoHeight、嵌套有界收敛、opt-in提交前自动派生 | 帧合并/局部依赖调度、百分比、shrinkContent、文本baseline/富排版 |
 | 数据 | 类型属性/schema/default、原子变化、dirty分类、JSON | 完整input/computed分离及Leafer导入导出 |
 | 元素 | 主要原语、场景树、变换、矢量完整裁切及原生矩形clip、统一几何命中 | 命令式Canvas元素、各类型高级属性完全覆盖 |
@@ -491,3 +491,8 @@ no new typography or layout engine was introduced. See
 
 
 当前新增[有界叶节点多层内阴影](inner-shadows.md)。支持范围、真实paint alpha与Leafer几何shape的差别、fill/inner/stroke顺序、完整有界文字源和拒绝规则见该契约；此前阶段的内阴影缺项记录保留为历史验证范围。
+
+Current [bounded container inner shadows](container-inner-shadows.md) extend the
+leaf slice to Group/Box/Frame, preserving explicit paint phases, actual subtree
+alpha, independent own effects and existing budgets. See that contract for the
+current validation scope; older slice receipts above remain historical.

@@ -22,7 +22,7 @@
 
 - 矢量支持有序多层填充和居中描边，含实色/线性/径向渐变；文本、图像与无几何 Group 的额外 layers 会明确拒绝
 - 新源码已有居中local-space stroke的Butt/Square/Round cap、Bevel/Miter/Round join、miter limit、dash pattern/offset，复用Kurbo dash与Lyon三角化，同一受预算限制的mesh用于高级stroke绘制/命中；headless几何与UI适配器单测通过。闭合矢量Inside/Outside已通过i_overlay接入同一mesh；开放轮廓、Text/Image/Group及超预算/精度输入明确拒绝，[边界见此](stroke-alignment.md)。Scale-fixed描边仍未实现。`Path::from_svg` 已支持有界 SVG d 命令及椭圆弧转 cubic，详见[路径导入边界](display-scenes.md#svg-路径数据导入)；不等于完整 SVG 文档或精确弧往返支持
-- SceneView新增[有界矢量/静态及动画图片离屏合成](compositing.md)：整体组/多paint透明度、域内Normal/Multiply/Screen和alpha sibling mask；静态及GIF/WebP动画Image已复用GPUI资源/cache进入真实像素合成，并共享native/CPU选帧与运行时pause/seek；域内纯solid文字现可通过宿主显式共享原生字体后端桥进入合成（换行/wrap/对齐及正向均匀缩放）；默认无桥、复杂文字样式/变换、Custom与任意宿主GPUI背景混合仍整域明确报错；显式OwnedCanvas已支持SceneView自身底色/grid/完整Scene统一根域内的顶层背景混合，沿用硬预算且不做部分原生fallback，单个矢量/Image/Text叶节点外阴影已复用image Gaussian和真实alpha进入该域；Group/Box/Frame另支持[有界子树阴影](group-shadows.md)，不安全PassThrough组合拒绝；[最多8层多重外阴影](multiple-shadows.md)已接入相同预算与alpha路径；Custom、container-inner/spread/box/scale-fixed阴影、擦除及通用模糊仍缺
+- SceneView新增[有界矢量/静态及动画图片离屏合成](compositing.md)：整体组/多paint透明度、域内Normal/Multiply/Screen和alpha sibling mask；静态及GIF/WebP动画Image已复用GPUI资源/cache进入真实像素合成，并共享native/CPU选帧与运行时pause/seek；域内纯solid文字现可通过宿主显式共享原生字体后端桥进入合成（换行/wrap/对齐及正向均匀缩放）；默认无桥、复杂文字样式/变换、Custom与任意宿主GPUI背景混合仍整域明确报错；显式OwnedCanvas已支持SceneView自身底色/grid/完整Scene统一根域内的顶层背景混合，沿用硬预算且不做部分原生fallback，单个矢量/Image/Text叶节点外阴影已复用image Gaussian和真实alpha进入该域；Group/Box/Frame另支持[有界子树阴影](group-shadows.md)，不安全PassThrough组合拒绝；[最多8层多重外阴影](multiple-shadows.md)已接入相同预算与alpha路径；Custom、spread/box/scale-fixed阴影、擦除及通用模糊仍缺
 - 默认 paints 上限32，避免无界三角化/渐变纹理工作；具体边界见 [appearance.md](appearance.md)
 
 ## 媒体
@@ -91,3 +91,8 @@ CI 配置目标为 Ubuntu 24.04、macOS 15 和 Windows（windows-latest / MSVC�
 
 
 当前新增[有界叶节点多层内阴影](inner-shadows.md)。支持范围、真实paint alpha与Leafer几何shape的差别、fill/inner/stroke顺序、完整有界文字源和拒绝规则见该契约；此前阶段的内阴影缺项记录保留为历史验证范围。
+
+Current [bounded container inner shadows](container-inner-shadows.md) extend the
+leaf slice to Group/Box/Frame, preserving explicit paint phases, actual subtree
+alpha, independent own effects and existing budgets. See that contract for the
+current validation scope; older slice receipts above remain historical.

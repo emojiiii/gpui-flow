@@ -16,11 +16,12 @@ own fills/strokes. Box/Frame include their own fills and final stroke meshes.
 
 Each node follows this order:
 
-1. Compose its existing paints and descendants, omitting only its own shadow
+1. Compose its existing paints and descendants, omitting its own inner and outer effects
 2. Apply its child clip while composing children; own fill/stroke are not cut by
    that clip. Mask nodes only contribute through the existing masked-run result
 3. Extract that composed alpha, filter/offset/tint it, and draw the shadow behind
-   the same complete source. Child shadows therefore also cast the parent shadow
+   the complete phase stream. Own inner effects sample independently from that original
+   source; child effects do cast the parent shadow
 4. Apply the parent's opacity and blend once to shadow plus source, then its
    inherited antialiased clip once at the enclosing composition boundary
 
@@ -117,7 +118,7 @@ Those upstream branches are not copied or claimed as complete parity. Flow's
 composed-subtree alpha, explicit paint phases, conservative rejection and image
 Gaussian are its tested contract, not a browser/Leafer byte-equivalence promise.
 
-Custom, container-inner/spread/box-only/per-shadow-blend/scale-fixed shadows and
+Custom, spread/box-only/per-shadow-blend/scale-fixed shadows and
 general filters remain unsupported. Run the native lab with
 `cargo run --locked --offline -p flow-studio --bin group_shadows`.
 
@@ -168,3 +169,8 @@ relaxed to make that test pass.
 
 
 当前新增[有界叶节点多层内阴影](inner-shadows.md)。支持范围、真实paint alpha与Leafer几何shape的差别、fill/inner/stroke顺序、完整有界文字源和拒绝规则见该契约；此前阶段的内阴影缺项记录保留为历史验证范围。
+
+Current [bounded container inner shadows](container-inner-shadows.md) extend the
+leaf slice to Group/Box/Frame, preserving explicit paint phases, actual subtree
+alpha, independent own effects and existing budgets. See that contract for the
+current validation scope; older slice receipts above remain historical.

@@ -10,7 +10,7 @@ Group/Box/Frame外阴影使用完整子树alpha，包含子阴影、mask结果�
 
 新增[有界多重外阴影](docs/multiple-shadows.md)：旧 `style.shadow` 为底层，`shadow_layers` 按先后叠加，合计最多8层。每层独立取同一份未加自身阴影的真实source alpha，子效果仍进入父source；复用Gaussian和完整递归预算，无层间重复投影。支持PAINT属性、视觉damage/cache、Undo，几何layout/hit/selection保持不变；示例 `multiple_shadows`。本批847项headless（8项原有忽略）、93项UI、严格Clippy/格式、docs targets及原生构建通过；真实窗口验过顺序/offset/blur/alpha/clip/phase/Undo、拒绝恢复、选择和pan/zoom，正常退出0。
 
-新增[有界叶节点内阴影](docs/inner-shadows.md)：`inner_shadow_layers` 独立最多8层，采用真实墨迹alpha的反向投影，fill之后、stroke之前叠加。矢量/Image/窄Text支持，Group/Box/Frame/Custom显式拒绝；不扩张effect/layout/hit/selection边界。受影响的Text保留完整有界对齐框源，避免视口截口制造假边缘。示例 `inner_shadows` 与 `inner_shadow_text_probe`。 本片867项headless（8项原有忽略）、96项UI、严格Clippy/格式、docs targets及真实字体边界探针通过；原生已验图层/alpha/clip/Undo、拒绝恢复、选择和pan/zoom。首次较大示例触发共享WorkLimit后仅收窄示例默认值，预算保持不变，不宣称大规模性能已解决。
+新增[有界叶节点内阴影](docs/inner-shadows.md)：`inner_shadow_layers` 独立最多8层，采用真实墨迹alpha的反向投影，fill之后、stroke之前叠加。矢量/Image/窄Text支持，现扩展至[有界Group/Box/Frame内阴影](docs/container-inner-shadows.md)，Custom仍拒绝；不扩张effect/layout/hit/selection边界。受影响的Text保留完整有界对齐框源，避免视口截口制造假边缘。示例 `inner_shadows` 与 `inner_shadow_text_probe`。 此前叶节点片867项headless（8项原有忽略）、96项UI、严格Clippy/格式、docs targets及真实字体边界探针通过；原生已验图层/alpha/clip/Undo、拒绝恢复、选择和pan/zoom。首次较大示例触发共享WorkLimit后仅收窄示例默认值，预算保持不变，不宣称大规模性能已解决。
 
 ## 当前进展（2026-10-01）
 
@@ -169,3 +169,5 @@ cargo +1.98.1 run --locked -p flow-studio
 程序焦点：`SceneView::focus_element/clear_element_focus`与router/deferred listener入口保留selection独立，使用实例身份、Blur→Focus和有界重定向；见[焦点契约](docs/focus-routing.md)
 
 反向布局：`RowReverse/ColumnReverse`与`wrap_reverse`按Leafer遍历/行序契约工作，保持场景树与绘制顺序，支持内容尺寸与响应布局。详见[布局契约](docs/flow-layout.md)
+
+当前容器内阴影采用完整子树真实alpha。BeforeChildren与StrokeAfterChildren保持不同插入点，自身inner不回灌自身outer，子级最终效果进入父源；PassThrough隔离拒绝与预算保持不变。运行 `container_inner_shadows` 查看原生示例，本轮883项headless（8项原有忽略）、97项UI、共享预算fixture、严格Clippy/格式/docs、原生链接与目标窗口smoke通过；完整边界与未验项目见[契约](docs/container-inner-shadows.md#validation)。

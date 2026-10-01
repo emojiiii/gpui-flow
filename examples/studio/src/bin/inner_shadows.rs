@@ -97,10 +97,10 @@ impl Render for Lab {
                 .child(ControlButton::new("alpha","Source alpha").on_click(cx.listener(|this,_,_,cx|this.edit("ellipse",|o|{o.style.fill=Some(if o.style.fill==Some(Color::rgb(80,180,245).into()){Color::rgba(80,180,245,128)}else{Color::rgb(80,180,245)}.into());},cx))))
                 .child(ControlButton::new("opacity","Object opacity").on_click(cx.listener(|this,_,_,cx|this.edit("rounded",|o|o.style.opacity=if o.style.opacity==1.{0.5}else{1.},cx))))
                 .child(ControlButton::new("clip","Frame clip").on_click(cx.listener(|this,_,_,cx|this.edit("frame",|o|if let Shape::Frame(f)=&mut o.shape{f.clip_children = !f.clip_children;},cx))))
-                .child(ControlButton::new("reject","Unsupported frame").on_click(cx.listener(|this,_,_,cx|this.edit("frame",|o|if o.style.inner_shadow_layers.is_empty(){o.style.inner_shadow_layers=layers();}else{o.style.inner_shadow_layers.clear();},cx))))
+                .child(ControlButton::new("container","Frame inner").on_click(cx.listener(|this,_,_,cx|this.edit("frame",|o|if o.style.inner_shadow_layers.is_empty(){o.style.inner_shadow_layers=layers();}else{o.style.inner_shadow_layers.clear();},cx))))
                 .child(ControlButton::new("undo","Undo").on_click(cx.listener(|this,_,_,cx|this.view.update(cx,|v,cx|{v.editor.undo();cx.notify();})))))
             .child(div().flex_1().min_h_0().overflow_hidden().child(self.view.clone()))
-            .child(div().h(px(65.)).px_4().text_sm().child("Fill, inner layers, then white stroke. Black outer shadow samples original ink independently. Text follows glyph alpha.\nLower ellipse is clipped by a Frame. A Frame inner-shadow declaration explicitly rejects. Toggle back to recover.\nSelection remains geometric. Pan/zoom and Undo use the same retained Scene."))
+            .child(div().h(px(65.)).px_4().text_sm().child("Fill, inner layers, then white stroke. Black outer shadow samples original ink independently. Text follows glyph alpha.\nLower ellipse is clipped by a Frame. Frame inner tint uses the clipped subtree and its existing BeforeChildren order.\nSelection remains geometric. Pan/zoom and Undo use the same retained Scene."))
     }
 }
 fn main() {

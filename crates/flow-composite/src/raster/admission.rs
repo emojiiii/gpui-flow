@@ -101,6 +101,10 @@ impl Admission<'_> {
         shadow: bool,
     ) -> Result<(), CompositeError> {
         self.check()?;
+        // Effects may be inserted before or after children by the renderer.
+        // Child clip/mask scratch is fully released before either insertion
+        // point, so replaying effects first has identical peak/live-byte and
+        // cumulative-work charges. Every source still replays all children.
         for (&effect, inner) in node
             .shadows
             .iter()

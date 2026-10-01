@@ -74,3 +74,52 @@ fn inner_shadow_property_is_paint_only_atomic_and_damages_outer_ancestor() {
         Some(serde_json::json!([]))
     );
 }
+
+#[test]
+fn inner_only_ancestor_receives_unchanged_extent_descendant_damage() {
+    for shape in [
+        Shape::from(display::Group::new()),
+        display::Box::new(50., 50.).into(),
+        display::Frame::new(50., 50.).into(),
+    ] {
+        let mut s = Scene::new();
+        s.insert(
+            DisplayObject::new("g", shape).with_style(Style {
+                inner_shadow_layers: vec![Shadow::new(10., 0., 4., Color::BLACK)],
+                ..Default::default()
+            }),
+            None,
+            None,
+        )
+        .unwrap();
+        s.insert(
+            DisplayObject::new("mid", display::Group::new()),
+            Some("g".into()),
+            None,
+        )
+        .unwrap();
+        for (id, x) in [("ink", 0.), ("distant", 40.)] {
+            s.insert(
+                DisplayObject::new(id, display::Rect::new(10., 10.))
+                    .with_transform(Affine::translation(x, 0.)),
+                Some("mid".into()),
+                None,
+            )
+            .unwrap();
+        }
+        let mut e = SceneEngine::new(s).unwrap();
+        let extent = e.effect_bounds(&"g".into()).unwrap();
+        let geometry = e.world_bounds(&"g".into()).unwrap();
+        let change = e
+            .set_property(
+                e.handle(&"ink".into()).unwrap(),
+                PropertyKey::Fill,
+                serde_json::to_value(Paint::solid(Color::TRANSPARENT)).unwrap(),
+            )
+            .unwrap();
+        assert_eq!(e.effect_bounds(&"g".into()).unwrap(), extent);
+        assert_eq!(e.world_bounds(&"g".into()).unwrap(), geometry);
+        assert_eq!(change.layout.bounds_recomputed, 0);
+        assert!(change.damage_bounds().unwrap().max_x() >= 50.);
+    }
+}

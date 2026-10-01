@@ -222,7 +222,8 @@ impl Builder<'_> {
         if world_changed
             || bounds_changed
             || visually_dirty
-            || (descendant_dirty && object.style.has_visible_shadows())
+            || (descendant_dirty
+                && (object.style.has_visible_shadows() || object.style.has_visible_inner_shadows()))
             || old.is_none_or(|e| e.effect_bounds != entry.effect_bounds)
         {
             entry.revision = self.next.revision;

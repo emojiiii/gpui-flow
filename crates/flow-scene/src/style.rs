@@ -345,8 +345,9 @@ pub struct Style {
     /// Additional outer shadows in back-to-front order, sharing the same source
     /// alpha. Combined with `shadow`, at most MAX_SHADOW_LAYERS are accepted.
     pub shadow_layers: Vec<Shadow>,
-    /// Inner shadows in back-to-front order, supported on bounded leaf producers.
-    /// Every layer uses the same original ink alpha, between fill and stroke.
+    /// Inner shadows in back-to-front order on bounded leaf/container producers.
+    /// Every layer uses the same original composed alpha before own effects.
+    /// Effects precede own strokes and respect the container paint order.
     pub inner_shadow_layers: Vec<Shadow>,
 }
 impl Default for Style {
@@ -388,6 +389,9 @@ impl Style {
     }
     pub fn has_inner_shadows(&self) -> bool {
         !self.inner_shadow_layers.is_empty()
+    }
+    pub fn has_visible_inner_shadows(&self) -> bool {
+        self.inner_shadow_layers.iter().any(|s| s.is_visible())
     }
     /// Union each projection of the original source extent, never a chain of
     /// projections. Does not change geometric paint/hit/layout/selection bounds.

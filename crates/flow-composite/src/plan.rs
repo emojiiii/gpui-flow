@@ -193,12 +193,7 @@ impl DomainSource {
             }
             let effect = ancestor_effect
                 || node.object.style.has_visible_shadows()
-                || node
-                    .object
-                    .style
-                    .inner_shadow_layers
-                    .iter()
-                    .any(|s| s.is_visible());
+                || node.object.style.has_visible_inner_shadows();
             if matches!(node.object.shape, Shape::Text(_)) {
                 out.push((&node.object, node.world_transform, effect));
             }
@@ -417,7 +412,7 @@ fn capture(
     // A new effect surface must not silently sever a pass-through descendant
     // from its existing backdrop, even when the outer domain owns that backdrop.
     if o.shape.allows_children()
-        && o.style.has_visible_shadows()
+        && (o.style.has_visible_shadows() || o.style.has_visible_inner_shadows())
         && o.style.blend_mode == BlendMode::PassThrough
         && o.style.opacity == 1.
         && requires_parent_backdrop(&captured)

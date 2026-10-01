@@ -1,4 +1,4 @@
-# Bounded leaf inner shadows
+# Bounded inner shadows
 
 `Style::inner_shadow_layers: Vec<Shadow>` stores back-to-front inner effects.
 It defaults to `[]` for old documents and serializes even when empty, so removal
@@ -16,11 +16,11 @@ There is no single-only inner field that needs migration to add multiple layers.
 ## Supported producers and exact ordering
 
 Supported producers are the existing bounded vector leaves, Image pixels and
-narrow Text glyph pixels. Visible Group, Box, Frame and Custom declarations reject
-with `UnsupportedInnerShadow`, even when all colors are transparent. Dormant
+narrow Text glyph pixels, now extended to [Group/Box/Frame subtrees](container-inner-shadows.md).
+Visible Custom declarations reject with `UnsupportedInnerShadow`, even when all
+colors are transparent. Dormant
 invisible/zero-opacity subtrees retain the existing producer-skipping convention;
-revealing an unsupported declaration rejects. Containers may contain supported
-inner-shadowed leaves without having an inner effect themselves.
+revealing an unsupported declaration rejects. Container phase placement and source semantics are specified in the extension.
 
 1. Compose the leaf's original fill and stroke, or Image/Text ink, without any
    of that leaf's own inner or outer effects, and extract actual source alpha A
@@ -55,7 +55,7 @@ source alpha is zero. It is not equivalent to tinting an outer shadow on top.
 
 Inner effects add no external effect extent. Geometry, layout, hit testing,
 selection and existing outer bounds are unchanged. PAINT damage includes the
-original bounds and any outer-shadow-bearing ancestor that resamples the result.
+original bounds and any inner/outer-shadow-bearing ancestor that resamples the result.
 Layer changes/order participate in recursive cache identity and conservative
 placement equality. An incompatible accepted frame is retired, and a late old
 success cannot replace a newer request.
@@ -85,8 +85,8 @@ Only positive similarity transforms are supported for effects. Cancellation is
 checked around the bounded non-interruptible library Gaussian. Backend-private
 allocations and the OS remain outside a process-wide memory guarantee.
 
-Spread, box/knockout, per-layer blends, scale-fixed effects, container inner
-shadows, Custom producers and general filters remain unsupported. Text retains
+Spread, box/knockout, per-layer blends, scale-fixed effects, Custom producers
+and general filters remain unsupported. Text retains
 its existing style/transform/backend limits. This is not a Leafer JSON importer.
 
 ## Leafer reference and intentional boundary
@@ -102,14 +102,17 @@ special outside-stroke path. Its `__drawShape` normally draws opaque geometric
 fill/stroke, retaining pixel alpha for selected image paints. Flow deliberately
 uses actual paint alpha consistently with its existing outer effects, including
 translucent solids/gradients and glyph ink. Leafer Group and Box/Frame also take
-different content/source paths, so this slice explicitly does not support their
-inner effects. These are structural references, not browser-pixel equivalence.
+different content/source paths; the container extension documents the deliberate
+Flow composed-alpha and explicit-phase contract. These are structural references, not browser-pixel equivalence.
 
 Run `cargo run --locked --offline -p flow-studio --bin inner_shadows` for the lab.
 `inner_shadow_text_probe` exercises real-font viewport-boundary and ancestor
 projection fixtures at DPR 1/1.25/2, including an oversized complete-source refusal.
 
-## Validation
+## Historical leaf-slice validation
+
+The following receipts describe the earlier leaf-only slice. Current container
+validation is recorded in [its contract](container-inner-shadows.md#validation).
 
 The Linux aggregate passed 867 headless tests/doctests (8 pre-existing ignored),
 96 UI library tests, strict workspace/all-targets and documentation Clippy, both

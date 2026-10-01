@@ -89,7 +89,7 @@ pub enum CompositeError {
     UnsupportedExternalBackdrop,
     UnsupportedTransform,
     UnsupportedShadow(DisplayId),
-    /// Inner shadows are currently limited to vector, Image and narrow Text leaves.
+    /// Custom producers do not expose a supported inner-shadow alpha source.
     UnsupportedInnerShadow(DisplayId),
     /// A shadow would isolate a pass-through container whose descendants need
     /// its external backdrop. Select Normal explicitly or isolate those blends.
@@ -138,3 +138,6 @@ mod multi_shadow_tests;
 
 #[cfg(test)]
 mod inner_shadow_tests;
+
+#[cfg(test)]
+mod container_inner_shadow_tests;

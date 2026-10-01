@@ -250,33 +250,26 @@ fn parent_outer_source_includes_child_inner_but_never_extends_geometry() {
 }
 
 #[test]
-fn unsupported_container_declarations_reject_including_transparent_effects() {
-    for shape in [
-        Shape::Group(display::Group::new()),
-        display::Box::new(20., 20.).into(),
-        display::Frame::new(20., 20.).into(),
-        display::Custom::new(
-            "custom",
-            Bounds::new(Point::ZERO, Size::new(20., 20.)),
-            vec![],
+fn unsupported_custom_declarations_reject_including_transparent_effects() {
+    let shape = Shape::from(display::Custom::new(
+        "custom",
+        Bounds::new(Point::ZERO, Size::new(20., 20.)),
+        vec![],
+    ));
+    for color in [Color::BLACK, Color::TRANSPARENT] {
+        let mut s = Scene::new();
+        s.insert(
+            DisplayObject::new("bad", shape.clone()).with_style(Style {
+                inner_shadow_layers: vec![Shadow::new(0., 0., 0., color)],
+                ..Default::default()
+            }),
+            None,
+            None,
         )
-        .into(),
-    ] {
-        for color in [Color::BLACK, Color::TRANSPARENT] {
-            let mut s = Scene::new();
-            s.insert(
-                DisplayObject::new("bad", shape.clone()).with_style(Style {
-                    inner_shadow_layers: vec![Shadow::new(0., 0., 0., color)],
-                    ..Default::default()
-                }),
-                None,
-                None,
-            )
-            .unwrap();
-            assert!(
-                matches!(&scene_units(&s, CompositeLimits::default()).unwrap()[..], [SceneUnit::Rejected(CompositeIssue { error: CompositeError::UnsupportedInnerShadow(id), .. })] if id.as_str() == "bad")
-            );
-        }
+        .unwrap();
+        assert!(
+            matches!(&scene_units(&s, CompositeLimits::default()).unwrap()[..], [SceneUnit::Rejected(CompositeIssue { error: CompositeError::UnsupportedInnerShadow(id), .. })] if id.as_str() == "bad")
+        );
     }
 }
 
@@ -550,7 +543,15 @@ fn inner_mask_alpha_and_owned_blend_use_final_leaf_result() {
 #[test]
 fn dormant_unsupported_and_active_transform_rejection_are_explicit() {
     let mut s = Scene::new();
-    let mut object = DisplayObject::new("g", display::Group::new()).with_style(Style {
+    let mut object = DisplayObject::new(
+        "g",
+        display::Custom::new(
+            "custom",
+            Bounds::new(Point::ZERO, Size::new(20., 20.)),
+            vec![],
+        ),
+    )
+    .with_style(Style {
         inner_shadow_layers: vec![red(1., 0.)],
         ..Default::default()
     });

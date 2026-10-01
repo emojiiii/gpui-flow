@@ -326,7 +326,7 @@ impl Raster<'_> {
                 self.shadow(node, shadow, target, depth, false)?;
             }
         }
-        let (before, after) = node.paints.split_at(node.before_children);
+        let (before, after) = node.paints.split_at(node.fill_count);
         self.paints(before, target, clip)?;
         if let Some(p) = &node.image {
             self.check()?;
@@ -364,6 +364,31 @@ impl Raster<'_> {
                 clip,
             );
         }
+        if node.children_before_inner {
+            self.clipped_children(node, target, depth, clip)?;
+        }
+        // Inner effects always precede own strokes. BeforeChildren containers
+        // keep both operations before children; opaque children may hide them.
+        // Every layer samples the complete original phase stream, not whatever
+        // has already been painted at this insertion point.
+        if draw_shadow {
+            for &shadow in &node.inner_shadows {
+                self.shadow(node, shadow, target, depth, true)?;
+            }
+        }
+        self.paints(after, target, clip)?;
+        if !node.children_before_inner {
+            self.clipped_children(node, target, depth, clip)?;
+        }
+        Ok(())
+    }
+    fn clipped_children(
+        &mut self,
+        node: &PreparedNode,
+        target: &mut Pixmap,
+        depth: usize,
+        clip: Option<&Mask>,
+    ) -> Result<(), CompositeError> {
         if let Some(region) = &node.child_clip {
             if !node.children.is_empty() {
                 let child_clip = self.child_clip(region, clip)?;
@@ -373,14 +398,7 @@ impl Raster<'_> {
         } else {
             self.children(node, target, depth, clip)?;
         }
-        // Restore the ancestor clip after children. The container's child clip
-        // must never cut away its own outside/centered stroke.
-        if draw_shadow {
-            for &shadow in &node.inner_shadows {
-                self.shadow(node, shadow, target, depth, true)?;
-            }
-        }
-        self.paints(after, target, clip)?;
+        // The temporary child clip never clips own strokes or inner effects.
         Ok(())
     }
     fn paints(

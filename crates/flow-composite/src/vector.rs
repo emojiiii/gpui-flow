@@ -14,9 +14,11 @@ pub(crate) struct PreparedNode {
     pub blend: BlendMode,
     pub mask: MaskMode,
     pub paints: Vec<VectorPaint>,
-    /// Prefix before children; the remainder is painted after them. Geometry
-    /// is prepared once and every layer is submitted exactly once.
-    pub before_children: usize,
+    /// Fill prefix followed by stroke meshes. Geometry is prepared once.
+    pub fill_count: usize,
+    /// Group and StrokeAfterChildren: children then inner then stroke.
+    /// BeforeChildren: inner then stroke then children. Leaf children are empty.
+    pub children_before_inner: bool,
     pub image: Option<ImagePaint>,
     pub children: Vec<PreparedNode>,
     pub child_clip: Option<ClipRegion>,
@@ -228,7 +230,8 @@ impl Preparation {
                 blend: object.style.blend_mode,
                 mask: object.mask,
                 paints: vec![],
-                before_children: 0,
+                fill_count: 0,
+                children_before_inner: true,
                 image: None,
                 children: vec![],
                 child_clip: None,
@@ -491,13 +494,9 @@ impl Preparation {
             opacity: object.style.opacity,
             blend: object.style.blend_mode,
             mask: object.mask,
-            before_children: if object.shape.paint_phases().1.is_some()
-                || object.style.has_inner_shadows()
-            {
-                fill_count
-            } else {
-                paints.len()
-            },
+            fill_count,
+            children_before_inner: !matches!(object.shape, Shape::Box(_) | Shape::Frame(_))
+                || object.shape.paint_phases().1.is_some(),
             paints,
             image: image_paint,
             children,
