@@ -47,7 +47,8 @@ impl SceneView {
                 viewport,
                 window.window_handle().window_id().as_u64(),
             )
-            .with_resources(&self.editor.engine, self.resources.as_ref()),
+            .with_resources(&self.editor.engine, self.resources.as_ref())
+            .with_text_backend(self.text_rasterizer.as_ref()),
         );
         let mut retired = self.compositing.request(key.clone());
         for frame in retired.drain(..) {
@@ -85,7 +86,7 @@ impl SceneView {
         canvas(
             |_, _, _| (),
             move |bounds, _, window, cx| {
-                if geometry(bounds, viewport, window) != key.viewport {
+                if !key.text_current() || geometry(bounds, viewport, window) != key.viewport {
                     return;
                 }
                 // Query immediately before upload, after earlier domains may

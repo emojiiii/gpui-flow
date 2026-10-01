@@ -1,6 +1,6 @@
-# Bounded vector and image compositing in SceneView
+# Bounded vector, image and text compositing in SceneView
 
-Status: bounded vector, static-image and elapsed-time animated-image implementation. Validation checkpoints below distinguish the local Linux passes. The vector native-window smoke test below was recorded on 2026-09-30; static-image validation is reported separately. This is a bounded Leafer-inspired slice, not complete Leafer or GPU-backdrop compatibility. The first headless checkpoint is [9bd37d4](https://github.com/emojiiii/gpui-flow/commit/9bd37d479cf546e0d58b123465a2df07cf13bc3c); the subsequent integration adds the production SceneView consumer.
+Status: bounded vector, static-image, elapsed-time animated-image and host-opt-in same-backend text implementation. Validation checkpoints below distinguish the local Linux passes. The vector native-window smoke test below was recorded on 2026-09-30; static-image validation is reported separately. This is a bounded Leafer-inspired slice, not complete Leafer or GPU-backdrop compatibility. The first headless checkpoint is [9bd37d4](https://github.com/emojiiii/gpui-flow/commit/9bd37d479cf546e0d58b123465a2df07cf13bc3c); the subsequent integration adds the production SceneView consumer.
 
 ## Actual rendering path
 
@@ -36,6 +36,40 @@ This is current Scene-model compatibility, not complete Leafer Box/Frame parity.
 Alpha masks still require a direct Group parent. A Box/Frame can itself be that Group's mask, including its painted children, and it can contain a Group with mask runs. Direct mask children of Box/Frame remain a validation error. No mask/disclosure/resource permissions are widened.
 
 Run `cargo run --locked --offline -p flow-studio --bin composited_containers` for Box overflow, rounded Frame clipping/opacity, pass-through clipped blending, and Undo controls. Labels remain native outside domains.
+
+## Host-opt-in same-native-backend text
+
+The application host captures the public `PlatformTextSystem` before constructing its GPUI Application. Flow's helper passes that **same Platform instance** to `Application::with_platform` and retains the resulting native `TextSystem` together with its raster backend. It never creates a second font system, resolves glyph IDs against a guessed font file, or replaces shaping/fallback. Use the locked desktop platforms, whose `text_system()` returns the same Arc; custom Platform implementations must honor that stable-backend contract.
+
+```rust,ignore
+let platform = gpui_kit::platform::current_platform(false);
+let (app, rasterizer) = gpui_flow::GpuiTextRasterizer::application(platform);
+app.run(move |cx| {
+    // In the host's normal view-construction closure:
+    let scene = gpui_flow::scene::Scene::new();
+    let _view = cx.new(|cx| {
+        let mut view = gpui_flow::SceneView::new(scene, cx).unwrap();
+        view.set_text_rasterizer(Some(rasterizer.clone()), cx).unwrap();
+        view
+    });
+});
+```
+
+This is an explicit capability, not automatic support for arbitrary existing App/Window instances: GPUI keeps their raster handle private. `set_text_rasterizer` rejects a bridge belonging to a different Application. Passing `None` withdraws the capability. No new font dependency or GPUI fork is introduced. The current helper is for locked desktop platforms; Web raster calls are explicitly rejected. The default SceneView still has no CPU text producer.
+
+The supported subset is the current plain-text model with zero/one solid fill, explicit family/weight/size/line height, newline/empty-line handling, optional automatic wrap, and start/center/end alignment. The complete text transform in screen space must be positive axis-aligned uniform scale plus translation. Rotation, skew, reflection, nonuniform scale, text strokes, gradients and multiple fill layers are explicit whole-domain errors. Hidden/zero-opacity subtrees need no raster input. A fully transparent/no-fill text produces no ink.
+
+`flow-text::shape_text` supplies the same `WrappedLine` layouts used by native text, retaining actual fallback FontIds, glyph IDs, ligatures/clusters and GPUI wrap boundaries. A thin paint walker follows GPUI's baseline `(line_height - ascent - descent)/2 + ascent`, per-glyph vertical offsets and wrap/alignment origins. Fonts, glyph selection, bidi and language behavior remain whatever the locked GPUI backend supports; this does not claim new shaping-language support. Device-pixel origin quantization follows GPUI's 4×1 grid, with the integer-origin emoji special case.
+
+Transparent CPU layers use grayscale A8 coverage, never LCD RGB coverage. Normal glyph ink is multiplied by the solid color into premultiplied RGBA. Color glyphs retain backend RGB; the text fill alpha modulates their alpha, and complete group/node opacity is applied once by the compositor. This explicit color-glyph alpha behavior avoids tinting emoji; native GPUI's direct emoji API itself ignores text-run color. Emoji with a monochrome-only bitmap use its A8 coverage. macOS's possible extra fractional-origin row/column is accepted; unexpected dimensions/byte formats reject. Native opaque LCD text is not promised pixel-identical to grayscale CPU output.
+
+The immutable text bitmap enters `TextInputs` / `rasterize_with_inputs`, so actual transparent glyph gaps, rounded ancestor clips, text-as-alpha-mask, internal Multiply/Screen, and complete-domain opacity use the existing pixel implementation. Placement is generated at final screen DPI and mapped back into local coordinates. It does not draw the text layout rectangle as a mask, capture screenshots, or add a native overlay above the domain.
+
+The request key includes the backend identity/epoch, presented source, per-element text ResourceTicket, attachment, document, viewport, window and DPR. Source/font/capability/geometry changes cancel old work; stale font epochs are checked during glyph production, before accepting the job and immediately before paint/upload. Call `SceneView::invalidate_text_resources` after host font changes and notify each consuming view. Measurement/reflow caches still use their existing explicit invalidation API; this raster bridge does not secretly change layout or editor history.
+
+Text input is bounded to 64 KiB UTF-8, a 512-byte family, 8,192 shaped glyphs, font size ≤512 device pixels, glyph dimensions ≤1,025 pixels including fractional padding, and a clipped output ≤4,096 per axis / 4,194,304 pixels. Each raster call has a job-local cache of at most 256 glyphs / 4 MiB (larger admissible single glyphs remain uncached), which includes font/glyph ID, size, DPR, fractional variant, emoji and dilation via GPUI's `RenderGlyphParams`; backend/epoch cannot vary inside the call. No unbounded persistent Flow glyph cache exists. Combined image/text converted inputs and active glyph scratch stay under the 32 MiB input ceiling; producer pixel writes share the existing 32-million request work ceiling. The 128 MiB explicit working set still includes retained outputs, inputs, scratch and compositor surfaces. GPUI/platform-owned font/shaping/internal raster caches and GPU allocations remain outside that explicit Flow accounting.
+
+Run `cargo run --locked --offline -p flow-studio --bin text_raster_probe` for real-font/headless pixel checks and `cargo run --locked --offline -p flow-studio --bin composited_text` for the native comparison, text alpha mask, rounded clipping/Multiply, bridge withdrawal/recovery, font invalidation, alignment, opacity and Undo controls. Runtime verification is recorded separately below; API/source inspection alone is not a cross-platform test. Browser/Web text rasterization and macOS/Windows execution are not covered by the Linux evidence.
 
 ## Static decoded-image input
 
@@ -80,7 +114,7 @@ Run `cargo run --locked --offline -p flow-studio --bin animated_images`. The ori
 
 ## Honest boundaries
 
-A Text or Custom inside a required domain rejects the entire domain. Static and animated Image nodes have a real selected-frame pixel producer. The view shows a diagnostic; it does not silently omit the unsupported descendant or fall back to individually faded native children. Ordinary text/image/custom siblings outside domains retain their native route.
+Custom inside a required domain rejects the entire domain. Text requires the explicit same-platform bridge described above and rejects unsupported styles/transforms; without that bridge, `TextBackendRequired` rejects the entire domain. Static and animated Image nodes have a real selected-frame pixel producer. The view shows a diagnostic; it does not silently omit the unsupported descendant or fall back to individually faded native children. Ordinary text/image/custom siblings outside domains retain their native route.
 
 A domain root that needs multiply/screen against external content returns `UnsupportedExternalBackdrop`. A mask alone does not isolate a pass-through opacity-1 Group: a blend escaping an opaque mask run is rejected too. Explicit Normal groups and opacity isolation are supported, as are translucent mask runs that genuinely isolate their content. Put a required vector background inside the same Normal Group. Native siblings, host background, grid and selection decorations are not captured.
 
@@ -102,7 +136,7 @@ A previous complete frame may remain for conservative paint/opacity-only changes
 
 `SceneView::composite_diagnostics` and `compositing_pending` expose status independently from resource readiness. Resource `Complete` is still its existing resource/paint receipt; it is not redefined as composite success or a GPU fence.
 
-Raster work uses GPUI's background executor, but full Scene validation, snapshot preparation and some shared stroke validation still happen on the UI thread. This slice does not promise a frame-time bound, incremental damage rasterization or large-scene interactive performance.
+Raster work uses GPUI's background executor, but full Scene validation, snapshot preparation, existing native resource-preflight text shaping and some shared stroke validation still happen on the UI thread. This slice does not promise a frame-time bound, incremental damage rasterization or large-scene interactive performance.
 
 ## Validation and reproduction
 
@@ -161,3 +195,15 @@ Final local Linux checks passed: 709 headless tests/doctests (46 CPU-composite f
 The linked demo was opened on the cloud Linux desktop. Its native and CPU panels visibly changed beyond frame zero. Global CUA input was required because target-bound X11 button events did not activate the controls. Pausing changed the control to Play. Paused red, green and blue seeks settled to the corresponding numbered/color pixels in native, 50%-alpha group and internal Multiply panels; the animated alpha mask adopted the matching full/left/right footprint. Hide removed all four panels; show restored the paused blue state. Resolver denial removed native and CPU image content with explicit diagnostics, and authorization recovery restored animated content. The test window was closed normally and its disappearance verified.
 
 These are visible asynchronous-upload smoke observations, not synchronized pixel-golden comparisons or frame-time guarantees. CPU output can lag the native playhead while an admitted job finishes. This pass did not exercise the static/animated switch button, live minimize/reduced-motion toggles, playback-rate/finite-loop controls, DPI changes, native resize, live GPU error injection, cross-platform behavior, ignored-media tests or standalone documentation executables. Unit coverage of resource A/B/A and freeze/resume does not replace those unrun native scenarios. No dependency, serialized scene schema or CI setting changed; the GIF is an original repository fixture.
+
+## Same-backend text validation, 2026-10-01
+
+The local Linux checkpoint passed 714 headless tests/doctests (51 CPU-composite fixtures included; 8 existing ignored tests remained ignored), 76 UI library tests, 8 GPUI-enabled font/measurement unit tests and the text doctest, workspace/all-targets strict Clippy, formatting, and the `composited_text` native build. Counts describe each aggregate, not a sum of repeated runs. The headless default-members suite does not enable the optional GPUI text feature; its eight tests were run separately. Locked/offline dependencies, the existing single target, one build job, disabled debug/incremental and the 3 GiB disk guard were used. No CI configuration or dependency version changed.
+
+The `text_raster_probe` used 258 installed font families and exercised Latin ligatures/combining marks, mixed CJK/Latin, ZWJ/color emoji, Arabic/Hebrew, a deliberately missing family with native fallback, automatic wrapping, explicit/empty/trailing lines, spaces and empty content under all three alignments. CJK and the other nonempty fixture runs reported no missing-glyph IDs; installed color emoji produced real non-gray pixels. Empty/space-only fixtures contained no ink. Row/glyph counts matched GPUI's own `WrappedLine` results. A real single-glyph grayscale reference from the exact retained platform backend matched every output pixel at DPR 1, 1.25 and 2. A worker-thread call using the same Arc pair and rejection/recovery after font-epoch invalidation passed. These checks preserve native shaping behavior; they do not independently certify full Unicode, every font, or all color-glyph font formats.
+
+CPU fixtures verify real input alpha holes, one-time group opacity, text alpha-mask silhouettes, internal Multiply against preceding siblings, hidden/empty dependencies, unsupported styles, premultiplication validation and cumulative memory/work failure with no partial output. UI tests cover font/resource generation, wrong-Application identity, bridge withdrawal/restoration, stale completion and actual real-font pixels entering the compositor at fractional scale/DPR (at most one byte of bilinear rounding difference from the producer input).
+
+The demo was opened on the cloud Linux desktop and its target-window screenshots were inspected. Native and CPU panels showed matching Latin/CJK/newline/wrap placement and actual emoji. The bottom panels visibly demonstrated the two-color glyph-alpha “REAL INK” mask and text clipped at a rounded Frame with internal Multiply. The group-alpha control dimmed the complete CPU text panel, including emoji, to 50%. Withdrawing the bridge removed all three affected domains and displayed `TextBackendRequired`, while the ordinary native panel remained. Re-enabling the bridge, invalidating fonts and Undo restored the complete original output after the pending frame settled. Center alignment moved the CPU lines within their original text box without changing wrapping. Target-bound X11 clicks were ineffective, so verified cloud desktop input was used. The demo window was then closed; its disappearance and absence of the demo process were verified.
+
+The native observations are smoke evidence, not screenshot pixel-goldens or latency benchmarks. This pass did not exercise native pan/zoom, window resize, DPI/multi-monitor changes, end alignment via the demo button, close-during-worker/reopen, live GPU failures, CI, macOS/Windows, ignored-media tests or all standalone documentation executables. Web raster calls are explicitly unsupported. Font installation/replacement itself was not performed; epoch invalidation and stale-result handling were tested. Existing GPUI font/shaping caches remain outside Flow's explicit surface budget, and the host must use GPUI's supported font update mechanisms before invalidating consumers.

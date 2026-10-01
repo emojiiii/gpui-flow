@@ -2,6 +2,7 @@
 //! Vector tessellation supports affine transforms and nested rounded frame clipping.
 mod clip;
 pub(crate) mod composite;
+pub(crate) mod composite_text;
 mod diagnostics;
 mod gradient;
 mod image;

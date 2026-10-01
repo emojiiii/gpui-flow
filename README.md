@@ -4,15 +4,17 @@
 
 私有早期开发版本，API 尚未承诺稳定。以 Leafer 的显示对象/容器分层和 React Flow 的节点扩展思路为参考，独立实现；不宣称完整 Leafer 功能或 API 兼容。
 
-## 当前批次状态（2026-09-30）
+## 当前进展（2026-10-01）
 
-新增[有界矢量合成](docs/compositing.md)已接入真实SceneView：整体组/多paint透明度、域内Normal/Multiply/Screen及alpha sibling mask，复用tiny-skia和现有stroke mesh。583项headless测试（含doctest）、47项UI库单测、全workspace/all-targets严格clippy及专用原生示例链接通过。已在Linux云端真实窗口验过透明度/混合/遮罩切换、Undo、pan/zoom及关闭重开；CI保持暂停。
+首个[有界矢量合成](docs/compositing.md)检查点已接入真实SceneView：整体组/多paint透明度、域内Normal/Multiply/Screen及alpha sibling mask，复用tiny-skia和现有stroke mesh。583项headless测试（含doctest）、47项UI库单测、全workspace/all-targets严格clippy及专用原生示例链接通过。已在Linux云端真实窗口验过透明度/混合/遮罩切换、Undo、pan/zoom及关闭重开；CI保持暂停。
 
 静态Image现已通过现有GPUI资源加载/cache接入合成：支持真实像素alpha、Contain/Cover/Fill、组透明度、域内混合与遮罩。新增`composited_images`原生示例；验证范围与资源/内存边界见[compositing.md](docs/compositing.md)。
 
 固定尺寸Box/Frame已接入真实CPU合成：自身fill/stroke后绘制children、整体透明度、圆角子级clip及域内混合。保持现有native顺序；尚未实现Leafer特有fill→children→stroke阶段。新增`composited_containers`示例，见[语义边界](docs/compositing.md#fixed-size-painted-containers)。
 
-域内Text/动画Image/Custom、外部backdrop混合、擦除和shadow/filter仍未覆盖，会整域明确报错。Inside/outside与scale-fixed描边、完整嵌套timeline和motion path仍缺。此次窗口烟测不代替跨平台、大规模性能或所有旧示例交互验收。详细约束与实际操作见[compositing.md](docs/compositing.md)。
+动画Image已复用GPUI解码帧接入native/CPU合成，支持实例暂停、seek和隐藏冻结。Text新增宿主显式接入的同原生字体后端桥，支持solid纯文字、换行/wrap/对齐及正向均匀缩放，真实glyph alpha可参与mask/clip/组透明度与域内混合；不是任意现有App自动开启。缺少文字桥、不支持的文字样式/变换、Custom和外部backdrop混合仍整域明确报错，擦除和shadow/filter仍缺。Inside/outside与scale-fixed描边、完整嵌套timeline和motion path仍缺。此次窗口烟测不代替跨平台、大规模性能或所有旧示例交互验收。详细约束与实际操作见[compositing.md](docs/compositing.md)。
+
+最新文字检查点通过714项headless（另有8项原有忽略）、76项UI库单测、单独的8项GPUI字体单测、严格Clippy/格式和原生构建。真实字体探针覆盖CJK/组合音标/RTL/emoji/wrap，并在DPR 1/1.25/2对同后端灰度glyph逐像素验证；原生窗口验证了文字mask/clip/混合、整体透明度、桥撤销恢复、字体失效、对齐与Undo。详细范围与未验场景见[文字验证](docs/compositing.md#same-backend-text-validation-2026-10-01)。
 
 此前资源/布局/动画/状态源码批次的媒体、字体、14个二进制及文档记录见[历史本地验证](docs/local-validation-2026-09-30.md)。API迁移见[源码批次状态](docs/source-only-status.md)：旧JSON读取默认兼容不等于Rust穷尽字面量/枚举match源码兼容。
 

@@ -2,7 +2,7 @@
 use gpui::{App, Bounds, Corners, RenderImage, Window, px};
 use gpui_flow_composite::{
     CompositeError, CompositeIssue, CompositeLimits, CpuFrame, DomainSource, ImageInputs,
-    PixelBudget, RasterViewport, StaticImage, rasterize_with_images,
+    PixelBudget, RasterViewport, StaticImage, TextInputs, rasterize_with_inputs,
 };
 use gpui_flow_engine::{ElementHandle, SceneEngine};
 use gpui_flow_scene::DisplayId;
@@ -14,6 +14,8 @@ use std::{
     },
 };
 
+use super::composite_text::{TextBackendSnapshot, TextPreparation};
+
 const MAX_ENTRIES: usize = 8;
 const MAX_FAILED_SAMPLES: usize = 128;
 const MAX_RETAINED: u64 = 32 * 1024 * 1024;
@@ -22,6 +24,7 @@ const MAX_RETIRED: u64 = 32 * 1024 * 1024;
 pub(crate) struct DomainKey {
     pub source: DomainSource,
     identities: Vec<(ElementHandle, u64)>,
+    text_tickets: Vec<Option<gpui_flow_engine::ResourceTicket>>,
     images: BTreeMap<DisplayId, crate::resources::CompositeImageObservation>,
 }
 #[derive(Clone, Debug, PartialEq)]
@@ -31,6 +34,7 @@ pub(crate) struct RequestKey {
     pub window: u64,
     revision: u64,
     document_epoch: u64,
+    text_backend: Option<TextBackendSnapshot>,
 }
 impl RequestKey {
     pub fn new(
@@ -56,6 +60,7 @@ impl RequestKey {
                 DomainKey {
                     source,
                     identities,
+                    text_tickets: vec![],
                     images: BTreeMap::new(),
                 }
             })
@@ -66,6 +71,7 @@ impl RequestKey {
             window,
             revision: engine.revision(),
             document_epoch: engine.document_epoch(),
+            text_backend: None,
         }
     }
     pub fn with_resources(
@@ -74,6 +80,16 @@ impl RequestKey {
         resources: Option<&crate::resources::SceneResourceAdapter>,
     ) -> Self {
         for domain in &mut self.domains {
+            domain.text_tickets = domain
+                .source
+                .texts()
+                .iter()
+                .map(|(object, _)| {
+                    engine
+                        .handle(&object.id)
+                        .and_then(|h| resources?.tracker().ticket(engine, h))
+                })
+                .collect();
             for (id, image) in domain.source.images() {
                 let observation = resources
                     .map(|r| r.composite_image(engine, id, &image.source))
@@ -88,16 +104,32 @@ impl RequestKey {
         }
         self
     }
+    pub fn with_text_backend(
+        mut self,
+        bridge: Option<&Arc<gpui_flow_text::GpuiTextRasterizer>>,
+    ) -> Self {
+        if self.domains.iter().any(|d| !d.source.texts().is_empty()) {
+            self.text_backend = bridge.map(TextBackendSnapshot::new);
+        }
+        self
+    }
+    pub fn text_current(&self) -> bool {
+        self.text_backend
+            .as_ref()
+            .is_none_or(TextBackendSnapshot::current)
+    }
     // Frame selection is soft invalidation. Everything else is semantic and
     // cancels stale work, including a seek/pause generation and A/B/A resources.
     fn animation_only(&self, other: &Self) -> bool {
-        self.window == other.window
+        self.text_backend == other.text_backend
+            && self.window == other.window
             && self.viewport == other.viewport
             && self.document_epoch == other.document_epoch
             && self.revision == other.revision
             && self.domains.len() == other.domains.len()
             && self.domains.iter().zip(&other.domains).all(|(a, b)| {
                 a.source == b.source
+                    && a.text_tickets == b.text_tickets
                     && a.identities == b.identities
                     && same_resources(&a.images, &b.images)
             })
@@ -110,25 +142,30 @@ impl RequestKey {
             .unwrap_or_default()
     }
     fn domain_semantic_eq(&self, other: &Self, id: &DisplayId) -> bool {
-        self.domains
-            .iter()
-            .find(|d| d.source.root_id() == id)
-            .zip(other.domains.iter().find(|d| d.source.root_id() == id))
-            .is_some_and(|(a, b)| {
-                a.source == b.source
-                    && a.identities == b.identities
-                    && same_resources(&a.images, &b.images)
-            })
+        self.text_backend == other.text_backend
+            && self
+                .domains
+                .iter()
+                .find(|d| d.source.root_id() == id)
+                .zip(other.domains.iter().find(|d| d.source.root_id() == id))
+                .is_some_and(|(a, b)| {
+                    a.source == b.source
+                        && a.text_tickets == b.text_tickets
+                        && a.identities == b.identities
+                        && same_resources(&a.images, &b.images)
+                })
     }
     fn same_domain_sample(&self, other: &Self, id: &DisplayId) -> bool {
-        self.window == other.window
+        self.text_backend == other.text_backend
+            && self.window == other.window
             && self.viewport == other.viewport
             && self.document_epoch == other.document_epoch
             && self.domains.iter().find(|d| d.source.root_id() == id)
                 == other.domains.iter().find(|d| d.source.root_id() == id)
     }
     fn compatible(&self, other: &Self, id: &DisplayId) -> bool {
-        self.window == other.window
+        self.text_backend == other.text_backend
+            && self.window == other.window
             && self.viewport == other.viewport
             && self.document_epoch == other.document_epoch
             && self
@@ -137,7 +174,8 @@ impl RequestKey {
                 .find(|d| d.source.root_id() == id)
                 .zip(other.domains.iter().find(|d| d.source.root_id() == id))
                 .is_some_and(|(a, b)| {
-                    a.identities == b.identities
+                    a.text_tickets == b.text_tickets
+                        && a.identities == b.identities
                         && same_resources(&a.images, &b.images)
                         && a.source.placement_eq(&b.source)
                 })
@@ -291,6 +329,23 @@ impl Work {
                 images.insert(id.clone(), input);
             }
         }
+        let mut texts = TextInputs::default();
+        let mut remaining_work = CompositeLimits::default().max_surface_writes;
+        {
+            let mut producer = TextPreparation {
+                backend: self.key.text_backend.as_ref(),
+                viewport: self.key.viewport,
+                cancelled: &self.cancel,
+                retained: self.retained,
+                source_bytes: &mut source_bytes,
+                remaining_work: &mut remaining_work,
+            };
+            for domain in &self.key.domains {
+                if !self.settled.contains(domain.source.root_id()) {
+                    producer.domain(&domain.source, &mut texts);
+                }
+            }
+        }
         // GPUI/cache-owned decoded originals are outside this adapter's surface
         // budget. Our converted copies are charged by rasterize_with_images.
         let mut budget = match PixelBudget::new(CompositeLimits::default(), self.retained) {
@@ -305,6 +360,18 @@ impl Work {
                     .collect();
             }
         };
+        // Glyph production and compositor writes share the request work ceiling.
+        if let Err(e) =
+            budget.charge_input_work(CompositeLimits::default().max_surface_writes - remaining_work)
+        {
+            return self
+                .key
+                .domains
+                .iter()
+                .filter(|d| !self.settled.contains(d.source.root_id()))
+                .map(|d| (d.source.root_id().clone(), Err(e.clone())))
+                .collect();
+        }
         let mut retained = self.settled_bytes;
         self.key
             .domains
@@ -315,9 +382,10 @@ impl Work {
                 let result = if index >= MAX_ENTRIES {
                     Err(CompositeError::InputLimit)
                 } else {
-                    rasterize_with_images(
+                    rasterize_with_inputs(
                         &d.source,
                         &images,
+                        &texts,
                         self.key.viewport,
                         &mut budget,
                         &self.cancel,
@@ -423,7 +491,7 @@ impl CompositeController {
     }
     pub fn take_work(&mut self) -> Option<Work> {
         let key = self.requested.as_ref()?;
-        if self.running || self.completed.as_ref() == Some(key) {
+        if !key.text_current() || self.running || self.completed.as_ref() == Some(key) {
             return None;
         }
         if key.domains.is_empty() {
@@ -480,7 +548,10 @@ impl CompositeController {
     }
     pub fn finish(&mut self, key: Arc<RequestKey>, result: WorkResult) {
         self.running = false;
-        if self.requested.as_ref() != Some(&key) || self.cancel.load(Ordering::Relaxed) {
+        if !key.text_current()
+            || self.requested.as_ref() != Some(&key)
+            || self.cancel.load(Ordering::Relaxed)
+        {
             return;
         }
         self.completed = Some(key.clone());
@@ -572,7 +643,9 @@ impl CompositeController {
                 <= MAX_RETAINED
     }
     pub fn frame(&self, id: &DisplayId) -> Option<(ImageFrame, bool)> {
-        if self.blocked_uploads.contains(id) {
+        if self.requested.as_ref().is_some_and(|k| !k.text_current())
+            || self.blocked_uploads.contains(id)
+        {
             return None;
         }
         match self.candidates.get(id) {
@@ -590,7 +663,7 @@ impl CompositeController {
         id: &DisplayId,
         image: &Arc<RenderImage>,
     ) -> Option<ImageFrame> {
-        if self.requested.as_ref() != Some(key) {
+        if !key.text_current() || self.requested.as_ref() != Some(key) {
             return None;
         }
         let Some(Some(candidate)) = self.candidates.get(id) else {
@@ -621,7 +694,7 @@ impl CompositeController {
             .map(|a| a.frame)
     }
     pub fn upload_failed(&mut self, key: &Arc<RequestKey>, id: &DisplayId, error: String) {
-        if self.requested.as_ref() != Some(key) {
+        if !key.text_current() || self.requested.as_ref() != Some(key) {
             return;
         }
         let released = self
@@ -1606,5 +1679,198 @@ mod tests {
         );
         controller.finish(k, result);
         assert!(controller.errors.is_empty());
+    }
+    #[test]
+    fn text_resource_generation_is_semantic_and_missing_bridge_rejects_whole_domain() {
+        use gpui_flow_scene::{Color, DisplayObject, Size, Style, display};
+        let mut e = engine();
+        e.transaction(|scene| {
+            scene.insert(
+                DisplayObject::new(
+                    "text",
+                    display::Text::new("same native glyphs", Size::new(80., 30.)),
+                )
+                .with_style(Style::fill(Color::WHITE)),
+                Some("g".into()),
+                None,
+            )
+        })
+        .unwrap();
+        let mut resources = gpui_flow_engine::SceneResources::new(&mut e).unwrap();
+        resources.synchronize(&mut e).unwrap();
+        let handle = e.handle(&"text".into()).unwrap();
+        let mut first_key = (*key(&e)).clone();
+        first_key.domains[0].text_tickets = vec![resources.ticket(&e, handle)];
+        let first = Arc::new(first_key);
+        assert!(first.domains[0].text_tickets[0].is_some());
+        let mut controller = CompositeController::default();
+        controller.request(first.clone());
+        let work = controller.take_work().unwrap();
+        let result = work.run();
+        assert!(matches!(
+            &result[0].1,
+            Err(CompositeError::TextBackendRequired(_))
+        ));
+        resources
+            .invalidate(&e, gpui_flow_engine::ResourceKind::Text)
+            .unwrap();
+        resources.synchronize(&mut e).unwrap();
+        let mut second_key = (*key(&e)).clone();
+        second_key.domains[0].text_tickets = vec![resources.ticket(&e, handle)];
+        let second = Arc::new(second_key);
+        assert!(!first.compatible(&second, &"g".into()));
+        assert!(!first.animation_only(&second));
+        assert!(!first.same_domain_sample(&second, &"g".into()));
+        controller.request(second);
+        controller.finish(first, result);
+        assert!(controller.frame(&"g".into()).is_none());
+        assert!(controller.take_work().is_some());
+    }
+
+    #[test]
+    fn same_backend_text_font_epoch_and_capability_withdrawal_reject_real_stale_work() {
+        use gpui_flow_scene::{Color, DisplayObject, Size, Style, display};
+        let (app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
+            gpui_kit::platform::current_platform(true),
+        );
+        assert!(bridge.matches_text_system(&app.text_system()));
+        let other = gpui_kit::platform::headless();
+        assert!(!bridge.matches_text_system(&other.text_system()));
+        let mut e = engine();
+        e.transaction(|scene| {
+            scene.insert(
+                DisplayObject::new("text", display::Text::new("A ffi", Size::new(80., 30.)))
+                    .with_style(Style::fill(Color::WHITE)),
+                Some("g".into()),
+                None,
+            )
+        })
+        .unwrap();
+        let first = Arc::new((*key(&e)).clone().with_text_backend(Some(&bridge)));
+        let mut controller = CompositeController::default();
+        controller.request(first.clone());
+        let work = controller.take_work().unwrap();
+        let result = work.run();
+        assert!(result[0].1.as_ref().unwrap().is_some());
+        bridge.invalidate();
+        assert!(!first.text_current());
+        controller.finish(first.clone(), result);
+        assert!(controller.candidates.is_empty());
+        let fresh = Arc::new((*key(&e)).clone().with_text_backend(Some(&bridge)));
+        assert!(!fresh.compatible(&first, &"g".into()));
+        assert!(!fresh.animation_only(&first));
+        let frame = ready(&mut controller, fresh.clone());
+        controller.accepted(&fresh, &"g".into(), &frame.image);
+        let withdrawn = key(&e);
+        assert!(!withdrawn.compatible(&fresh, &"g".into()));
+        let retired = controller.request(withdrawn.clone());
+        assert_eq!(retired.len(), 1);
+        assert!(controller.frame(&"g".into()).is_none());
+        let work = controller.take_work().unwrap();
+        controller.finish(withdrawn, work.run());
+        assert!(matches!(
+            controller.errors[0].error,
+            CompositeError::TextBackendRequired(_)
+        ));
+        let restored = Arc::new((*key(&e)).clone().with_text_backend(Some(&bridge)));
+        assert!(ready(&mut controller, restored).bytes > 0);
+    }
+    #[test]
+    fn real_text_bitmap_survives_fractional_dpr_compositor_placement() {
+        use gpui_flow_scene::{
+            Affine, BlendMode, Color, DisplayObject, Scene, Size, Style, display,
+        };
+        let (_app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
+            gpui_kit::platform::current_platform(true),
+        );
+        let mut scene = Scene::new();
+        scene
+            .insert(
+                DisplayObject::new("g", display::Group::new()).with_style(Style {
+                    blend_mode: BlendMode::Normal,
+                    ..Default::default()
+                }),
+                None,
+                None,
+            )
+            .unwrap();
+        let mut text = display::Text::new("A ffi", Size::new(60., 30.));
+        text.font_family = "DejaVu Sans".into();
+        text.font_size = 20.;
+        text.line_height = 1.4;
+        scene
+            .insert(
+                DisplayObject::new("text", text)
+                    .with_transform(Affine::translation(10.25, 7.5) * Affine::scale(1.25, 1.25))
+                    .with_style(Style::fill(Color::WHITE)),
+                Some("g".into()),
+                None,
+            )
+            .unwrap();
+        let e = SceneEngine::new(scene).unwrap();
+        let mut k = (*key(&e)).clone().with_text_backend(Some(&bridge));
+        k.viewport.device_scale = 1.25;
+        let k = Arc::new(k);
+        let mut controller = CompositeController::default();
+        controller.request(k);
+        let work = controller.take_work().unwrap();
+        let mut result = work.run();
+        let actual = result.remove(0).1.unwrap().unwrap();
+        let request = gpui_flow_text::TextRasterRequest {
+            text: gpui_flow_text::TextMeasureRequest {
+                content: "A ffi".into(),
+                font_family: "DejaVu Sans".into(),
+                font_size: 25.,
+                font_weight: 400,
+                line_height: 35.,
+                wrap_width: Some(75.),
+            },
+            align: gpui::TextAlign::Left,
+            bounds: [10.25, 7.5, 75., 37.5],
+            clip: [0., 0., 100., 100.],
+            device_scale: 1.25,
+            color: [255; 4],
+        };
+        let mut remaining = 32_000_000;
+        let expected = bridge
+            .rasterize(
+                &request,
+                bridge.epoch(),
+                &AtomicBool::new(false),
+                32 * 1024 * 1024,
+                &mut remaining,
+            )
+            .unwrap()
+            .unwrap();
+        let origin = [
+            (actual.screen_bounds.origin.x * 1.25).round() as i32,
+            (actual.screen_bounds.origin.y * 1.25).round() as i32,
+        ];
+        let mut ink = 0;
+        for y in 0..actual.height {
+            for x in 0..actual.width {
+                let ex = x as i32 + origin[0] - expected.origin[0];
+                let ey = y as i32 + origin[1] - expected.origin[1];
+                let reference = if ex >= 0
+                    && ey >= 0
+                    && ex < expected.width as i32
+                    && ey < expected.height as i32
+                {
+                    expected.premul_rgba
+                        [((ey as u32 * expected.width + ex as u32) * 4 + 3) as usize]
+                } else {
+                    0
+                };
+                let alpha = actual.premul_rgba[((y * actual.width + x) * 4 + 3) as usize];
+                assert!(
+                    alpha.abs_diff(reference) <= 1,
+                    "pixel ({x},{y}): {alpha} vs {reference}"
+                );
+                if alpha > 0 {
+                    ink += 1;
+                }
+            }
+        }
+        assert!(ink > 0);
     }
 }

@@ -34,6 +34,7 @@ pub struct SceneView {
     pub compositing_pending: bool,
     pub(crate) compositing: crate::display::composite::CompositeController,
     composite_geometry: Option<gpui_flow_composite::RasterViewport>,
+    text_rasterizer: Option<std::sync::Arc<gpui_flow_text::GpuiTextRasterizer>>,
     resources: Option<crate::resources::SceneResourceAdapter>,
     pub resource_error: Option<String>,
     pub renderers: crate::display::DisplayRegistry,
@@ -82,6 +83,7 @@ impl SceneView {
             compositing_pending: false,
             compositing: Default::default(),
             composite_geometry: None,
+            text_rasterizer: None,
             resources,
             resource_error,
             renderers: crate::display::DisplayRegistry::default(),
@@ -165,11 +167,32 @@ impl SceneView {
         }
         changed
     }
+    /// Opt into CPU text using the bridge captured while constructing this App.
+    /// A bridge from another App is rejected before any FontId can cross backends.
+    /// Passing None removes the capability and invalidates all text-domain jobs.
+    pub fn set_text_rasterizer(
+        &mut self,
+        bridge: Option<std::sync::Arc<gpui_flow_text::GpuiTextRasterizer>>,
+        cx: &mut Context<Self>,
+    ) -> Result<(), String> {
+        if bridge
+            .as_ref()
+            .is_some_and(|b| !b.matches_text_system(cx.text_system()))
+        {
+            return Err("text rasterizer belongs to a different GPUI Application".into());
+        }
+        self.text_rasterizer = bridge;
+        cx.notify();
+        Ok(())
+    }
     /// Call after the host changes its installed fonts/fallback resources.
     pub fn invalidate_text_resources(
         &mut self,
         cx: &mut Context<Self>,
     ) -> Result<(), gpui_flow_engine::ResourceError> {
+        if let Some(bridge) = &self.text_rasterizer {
+            bridge.invalidate();
+        }
         self.resources
             .as_mut()
             .ok_or(gpui_flow_engine::ResourceError::Disposed)?
