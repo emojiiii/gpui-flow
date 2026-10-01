@@ -7,6 +7,7 @@ use tiny_skia::{Path, PathBuilder, Transform};
 
 pub(crate) struct PreparedNode {
     pub bounds: Option<[f64; 4]>,
+    pub shadow: Option<crate::shadow::PreparedShadow>,
     pub visible: bool,
     pub opacity: f32,
     pub blend: BlendMode,
@@ -31,6 +32,7 @@ pub(crate) struct VectorPaint {
 #[derive(Default)]
 pub(crate) struct Preparation {
     pub triangles: usize,
+    pub has_shadows: bool,
     nodes: usize,
     masks: usize,
     source_points: usize,
@@ -214,6 +216,7 @@ impl Preparation {
         if !object.visible || object.style.opacity == 0. {
             return Ok(PreparedNode {
                 bounds: None,
+                shadow: None,
                 visible: object.visible,
                 opacity: object.style.opacity,
                 blend: object.style.blend_mode,
@@ -404,7 +407,7 @@ impl Preparation {
                 (clipped[2] > clipped[0] && clipped[3] > clipped[1]).then_some(clipped)
             });
         }
-        let node_bounds = [own_bounds, children_bounds]
+        let mut node_bounds = [own_bounds, children_bounds]
             .into_iter()
             .flatten()
             .reduce(|a, b| {
@@ -415,6 +418,33 @@ impl Preparation {
                     a[3].max(b[3]),
                 ]
             });
+        let shadow = if let Some(effect) = object.style.shadow {
+            crate::shadow::validate_shape(&object.id, &object.shape)?;
+            if effect.is_visible() {
+                self.has_shadows = true;
+                node_bounds.map(|ink_bounds| {
+                    let world = source.world_transform;
+                    let dx = world.a as f64 * effect.x as f64 + world.c as f64 * effect.y as f64;
+                    let dy = world.b as f64 * effect.x as f64 + world.d as f64 * effect.y as f64;
+                    let halo = effect.blur as f64 * 2. * world.max_scale() as f64;
+                    node_bounds = Some([
+                        ink_bounds[0].min(ink_bounds[0] + dx - halo),
+                        ink_bounds[1].min(ink_bounds[1] + dy - halo),
+                        ink_bounds[2].max(ink_bounds[2] + dx + halo),
+                        ink_bounds[3].max(ink_bounds[3] + dy + halo),
+                    ]);
+                    crate::shadow::PreparedShadow {
+                        effect,
+                        world,
+                        ink_bounds,
+                    }
+                })
+            } else {
+                None
+            }
+        } else {
+            None
+        };
         self.bounds = match (previous_bounds, node_bounds) {
             (Some(a), Some(b)) => Some([
                 a[0].min(b[0]),
@@ -426,6 +456,7 @@ impl Preparation {
         };
         Ok(PreparedNode {
             bounds: node_bounds,
+            shadow,
             visible: object.visible,
             opacity: object.style.opacity,
             blend: object.style.blend_mode,

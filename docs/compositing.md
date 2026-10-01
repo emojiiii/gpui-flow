@@ -159,17 +159,17 @@ Custom inside a required domain rejects the entire domain. Text requires the exp
 
 In the default `SceneCompositing::Domains` mode, a domain root that needs multiply/screen against external content returns `UnsupportedExternalBackdrop`. A mask alone does not isolate a pass-through opacity-1 Group: a blend escaping an opaque mask run is rejected too. Explicit Normal groups and opacity isolation are supported, as are translucent mask runs that genuinely isolate their content. Put a required vector background inside the same Normal Group. Native siblings, host background, grid and selection decorations are not captured by that default mode. The explicit owned-canvas mode below includes only pixels owned by SceneView; arbitrary host GPUI content remains unsupported.
 
-No text raster producer, eraser, shadows, blur/filter, grayscale/path/clipping masks, arbitrary blend modes, inside/outside or scale-fixed stroke, pixel picking, automatic resolution reduction or tiling is claimed. The engine's hit testing and conservative selection/layout bounds still include geometry beyond transparent mask pixels. Alpha-mask bounds do not become Leafer-style layout bounds. Rounded contours and stroke expansion retain the existing 0.1 local-unit approximation; gradient/AA bytes need not match the older native renderer. There is no wide-gamut, ICC or linear-light guarantee.
+No eraser, inner/group/container/spread/box/scale-fixed shadows, general blur/background filters, grayscale/path/clipping masks, scale-fixed stroke, pixel picking, automatic resolution reduction or tiling is claimed. The single leaf-shadow subset is described below; supported text, artistic blends and closed aligned strokes are covered in their dedicated sections. The engine's hit testing and conservative selection/layout bounds still include geometry beyond transparent mask pixels. Alpha-mask bounds do not become Leafer-style layout bounds. Rounded contours and stroke expansion retain the existing 0.1 local-unit approximation; gradient/AA bytes need not match the older native renderer. There is no wide-gamut, ICC or linear-light guarantee.
 
 ## Budget, invalidation and lifecycle
 
 Per request: at most 8 domain boundaries; each domain has at most 512 nodes, 16 tree levels, 64 mask runs, 65,536 source commands/points per shape, 262,144 total source commands/points and 262,144 generated stroke triangles. Gradients have at most 256 stops; paints retain the existing 32-layer limit. Domain snapshots beyond the count limit are rejected before cloning.
 
-A domain and each converted static input are at most 4096 pixels per axis and 4,194,304 pixels total. Adapter-owned converted pixels, explicit CPU surfaces, accepted/candidate images and retired images share a 128 MiB ceiling. GPUI/cache-owned decoded originals, including originals kept alive by request keys, are outside this adapter budget; it is not a total process-memory bound. SceneView additionally limits converted static input copies to 32 MiB, each accepted/candidate output batch to 32 MiB, and retirement to 32 MiB. Identical `(ImageId, frame_index)` pairs share one converted input per worker request. Discarding an over-cap output releases its surface charge before considering later domains. Capacity is checked immediately before upload using the live state after earlier domain paints. One CPU job runs at a time. Semantic changes replace/cancel its request; newer animation-only samples coalesce while one admitted snapshot finishes and uploads. Cancel is checked between kernel calls, not inside a tiny-skia call.
+A domain and each converted static input are at most 4096 pixels per axis and 4,194,304 pixels total. Adapter-owned converted pixels, explicit CPU surfaces, accepted/candidate images and retired images share a 128 MiB ceiling. GPUI/cache-owned decoded originals, including originals kept alive by request keys, are outside this adapter budget; it is not a total process-memory bound. SceneView additionally limits converted static input copies to 32 MiB, each accepted/candidate output batch to 32 MiB, and retirement to 32 MiB. Identical `(ImageId, frame_index)` pairs share one converted input per worker request. Discarding an over-cap output releases its surface charge before considering later domains. Capacity is checked immediately before upload using the live state after earlier domain paints. One CPU job runs at a time. Semantic changes replace/cancel its request; newer animation-only samples coalesce while one admitted snapshot finishes and uploads. Cancel is checked between kernel calls, not inside a tiny-skia call or the bounded image Gaussian call.
 
 Returning to an earlier request after supersession invalidates the completion marker even when canonical revision is unchanged. Cleared/unaccepted candidates, prior failed completions and blocked uploads can therefore retry after an A → B → A viewport/presentation sequence; two regressions reproduced the bug before the fix and pass afterward.
 
-A request permits at most 32,000,000 conservative full-surface write pixels across domains. Full-surface accounting can reject a large surface with many tiny paints. Nonfinite/singular matrices, tiny-skia-rejected inverses and control points outside ±1,000,000 device pixels fail explicitly. Dimensions and surface buffers use checked arithmetic and fallible reserve before allocation. Private scan-conversion allocations, geometry snapshots and GPU atlas/driver allocations are not a hard whole-process memory guarantee.
+A request permits at most 32,000,000 conservative full-surface write pixels and shadow-filter work units across domains. Full-surface accounting can reject a large surface with many tiny paints. Nonfinite/singular matrices, tiny-skia-rejected inverses and control points outside ±1,000,000 device pixels fail explicitly. Dimensions and surface buffers use checked arithmetic and fallible reserve before allocation. Private scan-conversion allocations, geometry snapshots and GPU atlas/driver allocations are not a hard whole-process memory guarantee.
 
 Keys use the complete presented domain values/order, ancestor clips, all relevant ancestor/descendant engine handles and attachment epochs, document epoch/revision, window, viewport/origin/content mask and DPR. There are no cross-view global composite caches. Paint-only presentation changes cannot be hidden behind a canonical revision. Geometry, clips, order, attachment or document changes cannot reuse a stale placement.
 
@@ -280,3 +280,125 @@ Accepted animation refreshes no longer continuously show a loading badge; edits
 can still briefly show the explicitly marked stale compatible frame while a
 replacement is computed. No smooth-frame-rate, full color management,
 Windows/macOS, or arbitrary host-backdrop acceptance is claimed.
+
+## Bounded leaf outer shadows
+
+`Style::shadow: Option<Shadow>` and `PropertyKey::Shadow` are retained document
+properties, not SceneView decorations. Legacy documents default to no shadow.
+`Shadow::new(x, y, blur, color)` describes one local-space outer drop shadow.
+Unknown shadow-object fields are rejected, including `spread`, `box`,
+`scaleFixed` and per-shadow blending. This is a bounded subset of the
+[Leafer shadow contract](https://www.leaferjs.com/ui/en/reference/UI/shadow.html),
+not a Leafer JSON importer or browser-byte-equivalence claim.
+
+Visible vector leaves, Image and producer-backed plain Text with a declared shadow become real
+CPU domains even when otherwise native. Vectors use the composed alpha of every
+fill and final stroke mesh, including aligned/dashed geometry. Images use the
+current decoded frame alpha and text uses real glyph ink, preserving holes. The
+filter does not synthesize a shape/layout rectangle. A zero-alpha shadow adds no
+pixels and allocates no filter scratch; declaring it still selects the CPU domain
+and its usual producer requirements. Zero blur bypasses the filter. Shadow+source are isolated together so node
+opacity, artistic blending and inherited antialiased clips each apply once.
+The shadow draws behind its source, then the complete object participates in
+stable sibling order. If used as an alpha mask, the rendered shadow coverage is
+part of that mask's alpha. Missing producers and unsupported required domains
+still reject all output; there is no native fallback that loses the effect.
+
+Blur uses the already locked `image` 0.25.10
+[`imageops::blur`](https://docs.rs/image/0.25.10/image/imageops/fn.blur.html) on an
+A8 plane. This API chooses `sigma = blur * effective_device_scale / 2`; it does
+not promise the same kernel as browser Canvas. The library constructs an odd
+kernel from sigma (minimum width 3; the pinned implementation's radius is at
+most `ceil(4*sigma)`). Source scratch has `ceil(4*sigma) + 2` transparent pixels
+on each side before filtering, so its clamp padding cannot extend opaque edge
+pixels. Fractional offsets reuse image's bilinear A8 sampler before tinting and an integer
+blit. The locked tiny-skia translate-only pattern fast path rounds fractional
+offsets to nearest even when Bilinear is requested, so that path is not used for
+subpixel shifting.
+The source scratch is not clipped to the viewport or ancestor before filtering:
+ink just outside either region can cast an in-bounds shadow. The finished result
+is clipped afterward. Source ink plus halo must itself fit the limits; a huge
+mostly offscreen source can therefore reject rather than being tiled.
+
+Document inputs require finite offsets within ±4096 and blur in [0,256]. The
+renderer additionally permits device sigma 0 or [0.001,64], device offsets within
+±8192, and positive similarity transforms (translation, rotation, uniform scale).
+Reflections, skew and non-uniform scale reject explicitly. Text retains the
+existing stricter positive axis-aligned uniform transform restriction. Image,
+font and viewport/DPR keys still apply. Changes to any shadow field invalidate
+stale placement conservatively. There is no hidden resolution reduction.
+
+`DisplayObject::effect_bounds()` is a conservative local visual extent;
+`SceneEngine::effect_bounds(id)` is the cached conservative world subtree extent,
+including descendant effects and ancestor-container child restrictions. They are
+separate from `paint_bounds`, `local_bounds`, `world_bounds`, layout
+`ItemBox::Stroke`, geometric picking and selection boxes. Shadow-only edits are
+PAINT dirty, update old/new visual damage, do not run layout providers and are
+restored by ordinary SceneEditor Undo. Visual bounds do not imply pixel picking
+and may include transparent ink holes or hidden descendants. Device AA support
+is handled separately by the compositor's three-pixel output guard.
+
+Before any shadow scratch allocation or filter call, the worker admits its RGBA
+source, A8 input/output, known float intermediates, both possible image filter
+scratch paths, row/padding/kernel/reference tables and conservative convolution
+work. The existing 4096-axis / 4,194,304-pixel scratch limit, 128 MiB explicit
+working-set limit and cumulative 32-million work limit apply, including active
+outer layers, inputs and retained outputs. The accounting deliberately
+overestimates library scratch. The image library's internal allocations are not
+fallible APIs, so the budget is admission control, not an OS-allocation-failure
+recovery guarantee. Cancellation is checked before/after the bounded Gaussian
+and per extraction/tint row; the library call itself is not interruptible. Large
+blur, zoom/DPR or combined scenes can fail with `TooLarge`, `WorkingSetLimit` or
+`WorkLimit`, leaving no partial published frame.
+
+Group, Box, Frame and Custom shadows are rejected as `UnsupportedShadow` in this
+slice; supported leaves may still sit inside those normal supported containers.
+Multiple shadows, inner shadow, spread, box-only knockout, per-shadow blend,
+scale-fixed shadows and general filters remain unsupported. The native example
+is `cargo run --locked --offline -p flow-studio --bin outer_shadows`.
+
+## Outer-shadow validation, 2026-10-01
+
+The local Linux checks passed 786 headless tests/doctests (95 compositor tests,
+including 17 shadow fixtures; 8 existing ignored tests remain ignored), 86 UI
+library tests, workspace/all-targets strict Clippy, formatting and the linked
+`outer_shadows` example. Tests cover alpha holes for images and supplied text ink,
+zero blur/alpha, aligned hollow stroke silhouettes, layered alpha, opacity once,
+offset/rotation, equivalent blur under zoom/DPR/object scale, offscreen source
+sampling, rounded ancestor and fractional-DPR child clipping, owned-backdrop
+blending, alpha masks, failure budgets, cancellation, cache placement,
+serialization, atomic properties, visual damage versus geometry, layout-provider
+invalidation and Undo pixel restoration. These are aggregate counts, not sums of
+repeated focused runs. The existing image version remains 0.25.10; this crate now
+pins that exact version because its filter allocation accounting was audited
+against that source. Locked/offline builds used the shared target, one job,
+disabled incremental/debug info and the existing 3 GiB disk guard. CI was not run.
+
+Two implementation defects were caught and fixed before completion: repeated
+coverage at antialiased parent clip edges when source and shadow were painted
+separately, and tiny-skia's nearest-only translate fast path for fractional
+shadow offsets. Dedicated exact-pixel regressions cover both.
+
+The native cloud Linux window showed actual vector+aligned-stroke, transparent
+SVG image and native glyph-alpha shadows. Blur 6→0 changed a soft edge to a hard
+one; flipping the offset and 50% object opacity changed the complete effect;
+three Undo actions restored the original vector pixels. Rounded Frame clipping
+could be disabled/restored to reveal/remove child-shadow overflow. A non-uniform
+vector transform explicitly removed that domain with `UnsupportedTransform`,
+and restore recovered it. Withdrawing the text bridge removed text+shadow with
+`TextBackendRequired`, and reconnecting restored both. Clicking shadow-only ink
+did not select the source; clicking the source selected only its geometric box.
+Dragging eventually moved source+shadow together, and wheel pan / Ctrl+wheel
+zoom retained image/text/native-label/effect alignment. The window was closed
+normally, its disappearance verified and the process reported exit code 0.
+Only exact target-window screenshots were used for verification. CUA's bound
+X11 click did not activate the custom controls; focused native input did.
+
+The native checks are visible smoke observations, not screenshot-golden or
+frame-rate evidence; worker output can appear asynchronously after interaction.
+This pass did not verify reopening/close-during-work, live DPI or monitor changes,
+GPU-failure injection, an animated shadow demo, other platforms, every existing
+example, ignored media tests or standalone documentation executables. Synthetic
+text-alpha fixtures and the native glyph example do not add a new typography
+certification. All earlier unsupported-shadow and resource/budget boundaries
+still apply.

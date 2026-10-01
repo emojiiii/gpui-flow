@@ -157,6 +157,15 @@ impl DisplayObject {
         }
         bounds
     }
+    /// Conservative local visual bounds, including the outer shadow.
+    /// Do not use these for picking, ItemBox::Stroke, layout or selection.
+    pub fn effect_bounds(&self) -> Option<Bounds> {
+        self.paint_bounds().map(|b| {
+            self.style
+                .shadow
+                .map_or(b, |s| s.expand_bounds(b, Affine::IDENTITY))
+        })
+    }
     pub fn validate(&self) -> Result<(), String> {
         if self.id.as_str().trim().is_empty() {
             return Err("display id cannot be empty".into());
@@ -197,7 +206,7 @@ impl DisplayObject {
                     .stroke_mesh_with_rule(stroke, self.style.fill_rule)?;
             }
         }
-        if self.paint_bounds().is_some_and(|b| !b.is_valid()) {
+        if self.effect_bounds().is_some_and(|b| !b.is_valid()) {
             return Err("paint bounds overflow".into());
         }
         Ok(())

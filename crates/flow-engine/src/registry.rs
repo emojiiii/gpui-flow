@@ -379,6 +379,7 @@ pub enum PropertyKey {
     Opacity,
     FillRule,
     BlendMode,
+    Shadow,
     Mask,
     Shape,
     Custom(String),
@@ -403,6 +404,7 @@ impl PropertyKey {
             Self::Opacity => "style.opacity".into(),
             Self::FillRule => "style.fill_rule".into(),
             Self::BlendMode => "style.blend_mode".into(),
+            Self::Shadow => "style.shadow".into(),
             Self::Mask => "mask".into(),
             Self::Shape => "shape".into(),
         }
@@ -439,7 +441,7 @@ pub(crate) fn apply_property(
 }
 pub(crate) fn property_dirty(name: &str) -> DirtyFlags {
     match name {
-        "style.blend_mode" => DirtyFlags::PAINT,
+        "style.blend_mode" | "style.shadow" => DirtyFlags::PAINT,
         "mask" => DirtyFlags::PAINT | DirtyFlags::GEOMETRY,
         "transform" => DirtyFlags::TRANSFORM | DirtyFlags::HIT,
         "shape" => DirtyFlags::GEOMETRY | DirtyFlags::PAINT | DirtyFlags::HIT,
@@ -488,6 +490,7 @@ impl PropertyKey {
             ),
             Self::BlendMode => (PropertyType::String, Some(json!("pass_through"))),
             Self::Mask => (PropertyType::String, Some(json!("none"))),
+            Self::Shadow => (PropertyType::Any, Some(Value::Null)),
             Self::HitPolicy | Self::FillRule => (PropertyType::String, None),
             Self::Shape => (PropertyType::Object, None),
             Self::Data | Self::Fill | Self::Stroke => (PropertyType::Any, None),

@@ -8,6 +8,7 @@ mod image;
 mod nonseparable;
 mod plan;
 mod raster;
+mod shadow;
 mod text;
 mod vector;
 pub use image::*;
@@ -87,6 +88,7 @@ pub enum CompositeError {
     },
     UnsupportedExternalBackdrop,
     UnsupportedTransform,
+    UnsupportedShadow(DisplayId),
     InvalidGeometry(String),
     TooLarge,
     WorkingSetLimit,
@@ -116,3 +118,6 @@ mod tests;
 
 #[cfg(test)]
 mod canvas_tests;
+
+#[cfg(test)]
+mod shadow_tests;

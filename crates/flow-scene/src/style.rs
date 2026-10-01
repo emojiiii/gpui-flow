@@ -280,6 +280,51 @@ impl BlendMode {
         !matches!(self, Self::PassThrough | Self::Normal)
     }
 }
+/// One outer, alpha-derived drop shadow. Local-space `blur` maps to 2σ in
+/// the bounded CPU renderer; this is not a browser-pixel-equivalence promise.
+/// Inner, spread, box, scale-fixed and per-shadow blend fields are unsupported.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Shadow {
+    pub x: f32,
+    pub y: f32,
+    pub blur: f32,
+    pub color: Color,
+}
+impl Shadow {
+    pub const fn new(x: f32, y: f32, blur: f32, color: Color) -> Self {
+        Self { x, y, blur, color }
+    }
+    pub fn is_visible(self) -> bool {
+        self.color.a != 0
+    }
+    /// Conservative visual extent, excluding the renderer's device-pixel AA
+    /// guard. Geometric paint/hit/layout/selection bounds remain unchanged.
+    pub fn expand_bounds(self, bounds: crate::Bounds, transform: crate::Affine) -> crate::Bounds {
+        if !self.is_visible() {
+            return bounds;
+        }
+        let offset = transform.transform_vector(crate::Point::new(self.x, self.y));
+        let halo = self.blur as f64 * 2. * transform.max_scale() as f64;
+        if !halo.is_finite() || halo > f32::MAX as f64 {
+            return crate::Bounds::new(crate::Point::new(f32::NAN, f32::NAN), bounds.size);
+        }
+        let shadow = crate::Bounds::new(bounds.origin + offset, bounds.size).expanded(halo as f32);
+        bounds.union(shadow)
+    }
+    fn validate(self) -> Result<(), String> {
+        if !self.x.is_finite()
+            || !self.y.is_finite()
+            || !self.blur.is_finite()
+            || self.x.abs() > 4096.
+            || self.y.abs() > 4096.
+            || !(0.0..=256.0).contains(&self.blur)
+        {
+            return Err("shadow requires finite offsets within ±4096 and blur in [0,256]".into());
+        }
+        Ok(())
+    }
+}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Style {
@@ -294,6 +339,8 @@ pub struct Style {
     pub opacity: f32,
     pub fill_rule: FillRule,
     pub blend_mode: BlendMode,
+    /// A bounded single outer shadow; absent in legacy documents.
+    pub shadow: Option<Shadow>,
 }
 impl Default for Style {
     fn default() -> Self {
@@ -305,6 +352,7 @@ impl Default for Style {
             opacity: 1.0,
             fill_rule: FillRule::NonZero,
             blend_mode: BlendMode::PassThrough,
+            shadow: None,
         }
     }
 }
@@ -354,6 +402,9 @@ impl Style {
             return Err(format!(
                 "appearance exceeds {MAX_PAINT_LAYERS} paint layers"
             ));
+        }
+        if let Some(shadow) = self.shadow {
+            shadow.validate()?;
         }
         for fill in self.fills() {
             fill.validate()?;

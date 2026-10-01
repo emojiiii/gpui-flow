@@ -128,6 +128,7 @@ impl DomainSource {
                 && a.object.style.stroke == b.object.style.stroke
                 && a.object.style.stroke_layers == b.object.style.stroke_layers
                 && a.object.style.fill_rule == b.object.style.fill_rule
+                && a.object.style.shadow == b.object.style.shadow
                 && a.object.style.fills().map(|p| p.is_visible()).eq(b
                     .object
                     .style
@@ -208,7 +209,8 @@ fn boundary(scene: &Scene, id: &DisplayId) -> bool {
         return false;
     };
     let o = &node.object;
-    o.style.blend_mode != BlendMode::PassThrough
+    o.style.shadow.is_some()
+        || o.style.blend_mode != BlendMode::PassThrough
         || (o.style.opacity < 1.0
             && (o.shape.allows_children()
                 || o.style.fills().count() + o.style.strokes().count() > 1))
@@ -310,6 +312,11 @@ fn capture(
             world_transform: parent * o.transform,
             children: vec![],
         });
+    }
+    if o.style.shadow.is_some()
+        && (o.shape.allows_children() || matches!(o.shape, Shape::Custom(_)))
+    {
+        return Err(CompositeError::UnsupportedShadow(o.id.clone()));
     }
     let points = match &o.shape {
         Shape::Path(p) => p.commands.len(),

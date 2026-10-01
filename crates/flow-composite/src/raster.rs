@@ -77,6 +77,16 @@ impl PixelBudget {
     pub fn charge_input_work(&mut self, n: u64) -> Result<(), CompositeError> {
         self.write(n)
     }
+    fn admit_work(&self, n: u64) -> Result<(), CompositeError> {
+        if self
+            .writes
+            .checked_add(n)
+            .is_none_or(|v| v > self.limits.max_surface_writes)
+        {
+            return Err(CompositeError::WorkLimit);
+        }
+        Ok(())
+    }
     fn write(&mut self, n: u64) -> Result<(), CompositeError> {
         self.writes = self
             .writes
@@ -294,17 +304,18 @@ impl Raster<'_> {
         }) {
             return Ok(());
         }
-        let isolated = node.opacity < 1. || node.blend != BlendMode::PassThrough;
+        let isolated =
+            node.shadow.is_some() || node.opacity < 1. || node.blend != BlendMode::PassThrough;
         if isolated {
             if depth >= self.budget.limits.max_depth {
                 return Err(CompositeError::NestingLimit);
             }
             let mut layer = self.surface()?;
-            self.contents(node, &mut layer, depth + 1, None)?;
+            self.contents(node, &mut layer, depth + 1, None, true)?;
             self.composite(target, &layer, node.opacity, node.blend, clip)?;
             self.release(layer);
         } else {
-            self.contents(node, target, depth, clip)?;
+            self.contents(node, target, depth, clip, true)?;
         }
         Ok(())
     }
@@ -314,7 +325,11 @@ impl Raster<'_> {
         target: &mut Pixmap,
         depth: usize,
         clip: Option<&Mask>,
+        draw_shadow: bool,
     ) -> Result<(), CompositeError> {
+        if draw_shadow && node.shadow.is_some() {
+            self.shadow(node, target, clip)?;
+        }
         for p in &node.paints {
             self.check()?;
             let a = self.world_to_layer * p.world;
@@ -376,6 +391,119 @@ impl Raster<'_> {
         } else {
             self.children(node, target, depth, clip)?;
         }
+        Ok(())
+    }
+    fn shadow(
+        &mut self,
+        node: &PreparedNode,
+        target: &mut Pixmap,
+        clip: Option<&Mask>,
+    ) -> Result<(), CompositeError> {
+        use crate::shadow::FilterPlan;
+        let shadow = node.shadow.expect("shadow branch");
+        let filter = FilterPlan::new(shadow, self.world_to_layer)?;
+        let ink = transformed(shadow.ink_bounds, self.world_to_layer);
+        let x0 = ink[0].floor() - filter.halo;
+        let y0 = ink[1].floor() - filter.halo;
+        let w = ink[2].ceil() + filter.halo - x0;
+        let h = ink[3].ceil() + filter.halo - y0;
+        if [x0, y0, w, h].iter().any(|n| !n.is_finite())
+            || w <= 0.
+            || h <= 0.
+            || w > self.budget.limits.max_dimension as f64
+            || h > self.budget.limits.max_dimension as f64
+            || w * h > self.budget.limits.max_pixels as f64
+            || x0.abs() > 1_000_000.
+            || y0.abs() > 1_000_000.
+        {
+            return Err(CompositeError::TooLarge);
+        }
+        let (width, height) = (w as u32, h as u32);
+        let pixels = width as u64 * height as u64;
+        let scratch_bytes = filter.bytes(pixels, width);
+        let filter_work = filter.work(pixels);
+        let paint_work = pixels * (node.paints.len() as u64 + u64::from(node.image.is_some()));
+        self.check()?;
+        // Admit every filter/source allocation and all source/filter/destination
+        // work before constructing even the first temporary surface.
+        self.budget
+            .admit_work(filter_work + paint_work + self.pixels)?;
+        self.budget.reserve(scratch_bytes)?;
+        self.budget.write(filter_work)?;
+        let mut source = Pixmap::from_vec(
+            bytes(pixels * 4)?,
+            tiny_skia::IntSize::from_wh(width, height).ok_or(CompositeError::TooLarge)?,
+        )
+        .ok_or(CompositeError::AllocationFailed)?;
+        let mut scratch = Raster {
+            width,
+            height,
+            pixels,
+            world_to_layer: Affine::translation(-x0 as f32, -y0 as f32) * self.world_to_layer,
+            budget: self.budget,
+            cancelled: self.cancelled,
+        };
+        scratch.contents(node, &mut source, 0, None, false)?;
+        let mut alpha = bytes(pixels)?;
+        for (row, input) in alpha
+            .chunks_mut(width as usize)
+            .zip(source.data().chunks(width as usize * 4))
+        {
+            scratch.check()?;
+            for (a, p) in row.iter_mut().zip(input.as_chunks::<4>().0) {
+                *a = p[3];
+            }
+        }
+        let alpha = image::GrayImage::from_raw(width, height, alpha)
+            .ok_or(CompositeError::AllocationFailed)?;
+        scratch.check()?;
+        let alpha = if filter.sigma == 0. {
+            alpha
+        } else {
+            image::imageops::blur(&alpha, filter.sigma)
+        };
+        scratch.check()?;
+        let c = shadow.effect.color;
+        let position = [x0 + filter.offset[0], y0 + filter.offset[1]];
+        let origin = [position[0].floor(), position[1].floor()];
+        let fraction = [
+            (position[0] - origin[0]) as f32,
+            (position[1] - origin[1]) as f32,
+        ];
+        // tiny-skia 0.11.4 unconditionally lowers translate-only patterns to
+        // nearest, even for fractional offsets. Reuse image's bilinear A8
+        // sampler into our already-admitted RGBA scratch, then integer-blit.
+        for (y, row) in source.data_mut().chunks_mut(width as usize * 4).enumerate() {
+            scratch.check()?;
+            for (x, p) in row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+                let coverage = image::imageops::interpolate_bilinear(
+                    &alpha,
+                    x as f32 - fraction[0],
+                    y as f32 - fraction[1],
+                )
+                .map_or(0, |p| p[0]);
+                let a = (coverage as u32 * c.a as u32 + 127) / 255;
+                *p = [
+                    ((c.r as u32 * a + 127) / 255) as u8,
+                    ((c.g as u32 * a + 127) / 255) as u8,
+                    ((c.b as u32 * a + 127) / 255) as u8,
+                    a as u8,
+                ];
+            }
+        }
+        self.budget.write(self.pixels)?;
+        target.draw_pixmap(
+            0,
+            0,
+            source.as_ref(),
+            &PixmapPaint::default(),
+            Transform::from_translate(origin[0] as f32, origin[1] as f32),
+            clip,
+        );
+        self.check()?;
+        drop(alpha);
+        drop(source);
+        self.budget.in_use -= scratch_bytes;
         Ok(())
     }
     fn children(
@@ -683,11 +811,12 @@ fn rasterize_inner(
             return Ok(None);
         };
         let b = transformed(world_bounds, viewport.world_to_screen);
+        let guard = if prep.has_shadows { 3. } else { 1. };
         [
-            b[0] - 1. / scale,
-            b[1] - 1. / scale,
-            b[2] + 1. / scale,
-            b[3] + 1. / scale,
+            b[0] - guard / scale,
+            b[1] - guard / scale,
+            b[2] + guard / scale,
+            b[3] + guard / scale,
         ]
     };
     let Some(mut b) = intersect(b, bounds(viewport.canvas_bounds))

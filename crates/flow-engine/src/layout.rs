@@ -10,6 +10,9 @@ pub struct LayoutEntry {
     pub content_bounds: Option<Bounds>,
     pub local_bounds: Option<Bounds>,
     pub world_bounds: Option<Bounds>,
+    /// Conservative world-space visual bounds, including descendant shadows.
+    /// Kept separate from geometric layout, selection and hit bounds.
+    pub effect_bounds: Option<Bounds>,
     pub opacity: f32,
     pub visible: bool,
     pub locked: bool,
@@ -108,6 +111,7 @@ impl Builder<'_> {
                 content_bounds: None,
                 local_bounds: None,
                 world_bounds: None,
+                effect_bounds: None,
                 opacity: parent.opacity * object.style.opacity,
                 visible: parent.visible && object.visible,
                 locked: parent.locked || object.locked,
@@ -175,6 +179,27 @@ impl Builder<'_> {
         {
             return Err(SceneError::InvalidGeometry("cached bounds overflow".into()));
         }
+        entry.effect_bounds = entry.world_bounds.map(|b| {
+            object
+                .style
+                .shadow
+                .map_or(b, |s| s.expand_bounds(b, entry.world_transform))
+        });
+        for child in &children {
+            let mut bounds = self.next.entries[child].effect_bounds;
+            if let Some((c, _)) = clip {
+                bounds =
+                    bounds.and_then(|b| intersection(b, entry.world_transform.transform_bounds(c)));
+            }
+            if let Some(b) = bounds {
+                entry.effect_bounds = Some(entry.effect_bounds.map_or(b, |a| a.union(b)));
+            }
+        }
+        if entry.effect_bounds.is_some_and(|b| !b.is_valid()) {
+            return Err(SceneError::InvalidGeometry(
+                "cached effect bounds overflow".into(),
+            ));
+        }
         let visually_dirty = flags.intersects(
             DirtyFlags::PAINT
                 | DirtyFlags::TRANSFORM
@@ -186,7 +211,11 @@ impl Builder<'_> {
         if flags.intersects(DirtyFlags::PAINT) {
             self.next.stats.paint_invalidated += 1;
         }
-        if world_changed || bounds_changed || visually_dirty {
+        if world_changed
+            || bounds_changed
+            || visually_dirty
+            || old.is_none_or(|e| e.effect_bounds != entry.effect_bounds)
+        {
             entry.revision = self.next.revision;
             self.affected.insert(id.clone());
         }
@@ -224,7 +253,7 @@ pub(crate) fn update_layout(
             if !entry.visible || entry.opacity <= 0. {
                 continue;
             }
-            let mut bounds = entry.world_bounds;
+            let mut bounds = entry.effect_bounds;
             for clip in &entry.clips {
                 bounds = bounds.and_then(|b| intersection(b, clip.world_bounds()));
             }

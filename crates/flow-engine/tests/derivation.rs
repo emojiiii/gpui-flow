@@ -83,6 +83,16 @@ fn paint_and_metadata_skip_provider_but_geometry_runs_before_one_notification() 
     let a = e.handle(&"a".into()).unwrap();
     for (key, value) in [
         (PropertyKey::Opacity, json!(0.5)),
+        (
+            PropertyKey::Shadow,
+            serde_json::to_value(gpui_flow_scene::Shadow::new(
+                10.,
+                5.,
+                4.,
+                gpui_flow_scene::Color::BLACK,
+            ))
+            .unwrap(),
+        ),
         (PropertyKey::Name, json!("name")),
         (PropertyKey::Data, json!({"app":1})),
     ] {

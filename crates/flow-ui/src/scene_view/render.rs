@@ -855,6 +855,83 @@ mod state_tests {
         }
     }
     #[test]
+    fn shadow_property_edit_undo_and_hover_share_the_presented_scene_domain() {
+        use gpui_flow_scene::{Affine, Shadow, Style};
+        let mut scene = Scene::new();
+        scene
+            .insert(
+                DisplayObject::new("shadow", display::Rect::new(10., 10.))
+                    .with_transform(Affine::translation(20., 20.))
+                    .with_style(Style {
+                        shadow: Some(Shadow::new(20., 0., 2., Color::BLACK)),
+                        ..Default::default()
+                    }),
+                None,
+                None,
+            )
+            .unwrap();
+        let mut editor = SceneEditor::new(scene).unwrap();
+        let mut styles = SceneStateStyles::new(&editor.engine);
+        let router = SceneEventRouter::new();
+        let (before, error) =
+            super::state_render_frame(&editor, &router, &mut styles, std::time::Duration::ZERO);
+        assert!(error.is_none());
+        assert!(matches!(
+            &before.units[..],
+            [gpui_flow_composite::SceneUnit::Domain(_)]
+        ));
+        let original = raster_container(&before);
+        let geometry = editor.engine.world_bounds(&"shadow".into()).unwrap();
+        editor
+            .transaction(|s| {
+                s.update_object(&"shadow".into(), |o| {
+                    o.style.shadow.as_mut().unwrap().x = 40.
+                })
+            })
+            .unwrap();
+        let (after, error) =
+            super::state_render_frame(&editor, &router, &mut styles, std::time::Duration::ZERO);
+        assert!(error.is_none());
+        assert_ne!(
+            raster_container(&after).screen_bounds,
+            original.screen_bounds
+        );
+        assert_eq!(
+            editor.engine.world_bounds(&"shadow".into()).unwrap(),
+            geometry
+        );
+        assert!(
+            editor
+                .engine
+                .hit_test(Point::new(45., 25.), Default::default())
+                .unwrap()
+                .is_none()
+        );
+        assert!(editor.undo());
+        let (restored, error) =
+            super::state_render_frame(&editor, &router, &mut styles, std::time::Duration::ZERO);
+        assert!(error.is_none());
+        assert_eq!(restored.units, before.units);
+        let restored = raster_container(&restored);
+        assert_eq!(restored.screen_bounds, original.screen_bounds);
+        assert_eq!(restored.premul_rgba, original.premul_rgba);
+        // State overlay preserves the canonical shadow while changing its alpha source.
+        let object = &editor.scene().get(&"shadow".into()).unwrap().object;
+        let next = gpui_flow_interaction::scene::StateStyles {
+            hover: gpui_flow_interaction::scene::StatePaint::fill(Color::TRANSPARENT),
+            ..Default::default()
+        }
+        .resolve(
+            &object.style,
+            gpui_flow_interaction::scene::VisualState {
+                hover: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(next.shadow, object.style.shadow);
+        assert_eq!(next.fill, Some(Color::TRANSPARENT.into()));
+    }
+    #[test]
     fn container_clip_edit_and_undo_restore_the_actual_composite_pixels() {
         use gpui_flow_scene::{Shape, Style};
         let mut s = Scene::new();

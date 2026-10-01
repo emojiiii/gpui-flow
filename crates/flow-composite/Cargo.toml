@@ -7,6 +7,8 @@ publish.workspace = true
 [dependencies]
 gpui-flow-core.workspace = true
 gpui-flow-scene.workspace = true
+# Reuse the locked, audited A8 Gaussian implementation without image codecs.
+image = { version = "=0.25.10", default-features = false }
 tiny-skia = { version = "=0.11.4", default-features = false, features = ["std", "simd"] }
 
 [dev-dependencies]

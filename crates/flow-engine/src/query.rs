@@ -15,6 +15,10 @@ impl SceneEngine {
     pub fn world_bounds(&self, id: &DisplayId) -> Result<Option<Bounds>, EngineError> {
         Ok(self.entry(id)?.world_bounds)
     }
+    /// Conservative visual subtree extent. Geometry APIs deliberately exclude shadows.
+    pub fn effect_bounds(&self, id: &DisplayId) -> Result<Option<Bounds>, EngineError> {
+        Ok(self.entry(id)?.effect_bounds)
+    }
     fn entry(&self, id: &DisplayId) -> Result<&LayoutEntry, EngineError> {
         self.layout()
             .get(id)
