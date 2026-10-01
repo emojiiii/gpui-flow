@@ -70,6 +70,25 @@ impl DomainSource {
         }
         self.clips == other.clips && same(&self.root, &other.root)
     }
+    pub fn images(&self) -> Vec<(&DisplayId, &gpui_flow_scene::display::Image)> {
+        fn visit<'a>(
+            node: &'a DomainNode,
+            out: &mut Vec<(&'a DisplayId, &'a gpui_flow_scene::display::Image)>,
+        ) {
+            if !node.object.visible || node.object.style.opacity == 0. {
+                return;
+            }
+            if let Shape::Image(image) = &node.object.shape {
+                out.push((&node.object.id, image));
+            }
+            for child in &node.children {
+                visit(child, out);
+            }
+        }
+        let mut out = Vec::new();
+        visit(&self.root, &mut out);
+        out
+    }
     pub fn ids(&self) -> Vec<&DisplayId> {
         fn visit<'a>(node: &'a DomainNode, out: &mut Vec<&'a DisplayId>) {
             out.push(&node.object.id);
@@ -190,7 +209,9 @@ fn capture(
         Shape::Pen(p) => p.path.commands.len(),
         Shape::Polygon(p) => p.points.len(),
         Shape::Star(s) => s.points.saturating_mul(2),
-        Shape::Rect(_) | Shape::Ellipse(_) | Shape::Line(_) | Shape::Group(_) => 0,
+        Shape::Rect(_) | Shape::Ellipse(_) | Shape::Line(_) | Shape::Group(_) | Shape::Image(_) => {
+            0
+        }
         other => return Err(CompositeError::UnsupportedShape(other.tag().into())),
     };
     counts.points = counts.points.saturating_add(points);
@@ -236,6 +257,9 @@ fn capture(
 // already protected by a real isolation or a translucent mask run can ignore
 // a native backdrop outside this CPU domain.
 fn requires_parent_backdrop(node: &DomainNode) -> bool {
+    if !node.object.visible || node.object.style.opacity == 0. {
+        return false;
+    }
     if matches!(
         node.object.style.blend_mode,
         BlendMode::Multiply | BlendMode::Screen
@@ -248,7 +272,7 @@ fn requires_parent_backdrop(node: &DomainNode) -> bool {
     let mut translucent_run = false;
     for child in &node.children {
         if child.object.mask != MaskMode::None {
-            translucent_run = child.object.style.opacity < 1.;
+            translucent_run = !child.object.visible || child.object.style.opacity < 1.;
             continue;
         }
         if !translucent_run && requires_parent_backdrop(child) {

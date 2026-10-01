@@ -40,12 +40,15 @@ impl SceneView {
                 viewport.canvas_bounds.origin.y,
             ) * Affine::translation(self.editor.viewport.pan.x, self.editor.viewport.pan.y)
                 * Affine::scale(self.editor.viewport.zoom, self.editor.viewport.zoom);
-        let key = Arc::new(RequestKey::new(
-            domains,
-            &self.editor.engine,
-            viewport,
-            window.window_handle().window_id().as_u64(),
-        ));
+        let key = Arc::new(
+            RequestKey::new(
+                domains,
+                &self.editor.engine,
+                viewport,
+                window.window_handle().window_id().as_u64(),
+            )
+            .with_resources(&self.editor.engine, self.resources.as_ref()),
+        );
         let mut retired = self.compositing.request(key.clone());
         for frame in retired.drain(..) {
             self.compositing

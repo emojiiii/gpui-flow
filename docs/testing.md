@@ -2,7 +2,7 @@
 
 ## 最新：有界合成与原生窗口验证（2026-09-30）
 
-合成已接入SceneView真实RenderImage上传。583项headless（含doctest，8个既有ignored未在本轮补跑）、47项UI库单测、严格全workspace/all-targets clippy及专用原生窗口控制切换/Undo/pan/zoom的验证范围见[compositing.md](compositing.md)。CI仍暂停，跨平台与性能未验。
+矢量与静态图片合成已接入SceneView真实RenderImage上传。最新自动化与专用原生窗口验证范围见[compositing.md](compositing.md)；旧检查点计数保留为历史记录，不与新结果累加。CI仍暂停，跨平台与性能未验。
 
 ## 此前源码批次：本地Linux验证（2026-09-30）
 

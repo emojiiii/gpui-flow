@@ -429,3 +429,346 @@ fn excess_domains_reject_before_cloning_another_domain_snapshot() {
         })
     ));
 }
+
+fn static_pixels(width: u32, height: u32, bgra: &[u8]) -> std::sync::Arc<StaticImage> {
+    std::sync::Arc::new(
+        StaticImage::from_straight_bgra(width, height, bgra, CompositeLimits::default()).unwrap(),
+    )
+}
+fn image_scene(fit: display::ImageFit, opacity: f32) -> Scene {
+    let mut s = Scene::new();
+    s.insert(group("g", opacity), None, None).unwrap();
+    let mut image = display::Image::new("fixture.png", Size::new(20., 20.));
+    image.fit = fit;
+    // Deliberately wrong: native GPUI uses decoded image dimensions for fit.
+    image.natural_size = Some(Size::new(1., 8.));
+    insert(&mut s, DisplayObject::new("image", image), "g");
+    s
+}
+fn render_pixels(s: &Scene, pixels: std::sync::Arc<StaticImage>) -> CpuFrame {
+    let mut images = ImageInputs::default();
+    images.insert("image".into(), Ok(pixels));
+    rasterize_with_images(
+        &source(s),
+        &images,
+        viewport(),
+        &mut PixelBudget::new(CompositeLimits::default(), 0).unwrap(),
+        &AtomicBool::new(false),
+    )
+    .unwrap()
+    .unwrap()
+}
+#[test]
+fn static_bgra_input_validates_and_premultiplies_channels_once() {
+    let i = static_pixels(3, 1, &[0, 0, 255, 128, 255, 0, 0, 64, 99, 88, 77, 0]);
+    assert_eq!(
+        i.premultiplied_rgba(),
+        &[128, 0, 0, 128, 0, 0, 64, 64, 0, 0, 0, 0]
+    );
+    assert!(matches!(
+        StaticImage::from_straight_bgra(1, 1, &[0; 3], CompositeLimits::default()),
+        Err(CompositeError::InvalidImage)
+    ));
+    assert!(matches!(
+        StaticImage::from_straight_bgra(0, 1, &[], CompositeLimits::default()),
+        Err(CompositeError::InvalidImage)
+    ));
+    assert!(matches!(
+        StaticImage::from_straight_bgra(u32::MAX, u32::MAX, &[], CompositeLimits::default()),
+        Err(CompositeError::TooLarge)
+    ));
+}
+#[test]
+fn static_image_fit_uses_decoded_aspect_and_clips_cover_to_layout_box() {
+    let pixels = static_pixels(2, 1, &[0, 0, 255, 255, 255, 0, 0, 255]);
+    for fit in [
+        display::ImageFit::Contain,
+        display::ImageFit::Cover,
+        display::ImageFit::Fill,
+    ] {
+        let f = render_pixels(&image_scene(fit, 1.), pixels.clone());
+        assert_eq!(at(&f, 1, 10)[3], 255);
+        assert_eq!(at(&f, 19, 10)[3], 255);
+        assert_eq!(at(&f, 20, 10), [0; 4]);
+        if fit == display::ImageFit::Contain {
+            assert_eq!(f.screen_bounds.origin.y, 4.);
+            assert_eq!(at(&f, 10, 4), [0; 4]);
+            assert_eq!(at(&f, 10, 15), [0; 4]);
+        } else {
+            assert_eq!(at(&f, 10, 1)[3], 255);
+        }
+    }
+}
+#[test]
+fn static_image_opacity_and_native_style_semantics_match() {
+    let mut s = image_scene(display::ImageFit::Fill, 0.5);
+    s.update_object(&"image".into(), |o| {
+        o.style.opacity = 0.5;
+        o.style.fill = Some(gpui_flow_scene::Paint::Solid {
+            color: Color::hex(0x00ff00),
+        });
+    })
+    .unwrap();
+    let f = render_pixels(&s, static_pixels(1, 1, &[0, 0, 255, 128]));
+    assert_eq!(at(&f, 10, 10), [32, 0, 0, 32]);
+}
+#[test]
+fn static_image_is_real_alpha_mask_not_its_bounds() {
+    let mut s = image_scene(display::ImageFit::Fill, 1.);
+    s.update_object(&"image".into(), |o| o.mask = MaskMode::Alpha)
+        .unwrap();
+    insert(&mut s, rect("blue", 0., Color::hex(0x0000ff)), "g");
+    let f = render_pixels(&s, static_pixels(2, 1, &[0, 0, 255, 0, 0, 0, 255, 128]));
+    assert_eq!(at(&f, 1, 10), [0; 4]);
+    assert_eq!(at(&f, 18, 10), [0, 0, 128, 128]);
+}
+#[test]
+fn static_image_blends_with_actual_vector_backdrop() {
+    for (blend, expected) in [
+        (BlendMode::Multiply, [0, 0, 0, 255]),
+        (BlendMode::Screen, [255, 0, 255, 255]),
+    ] {
+        let mut s = image_scene(display::ImageFit::Fill, 1.);
+        let mut back = rect("back", 0., Color::hex(0xff0000));
+        back.z_index = -1;
+        insert(&mut s, back, "g");
+        s.update_object(&"image".into(), |o| o.style.blend_mode = blend)
+            .unwrap();
+        assert_eq!(
+            at(
+                &render_pixels(&s, static_pixels(1, 1, &[255, 0, 0, 255])),
+                10,
+                10
+            ),
+            expected
+        );
+    }
+}
+#[test]
+fn static_image_pattern_follows_full_affine_without_double_transform() {
+    let mut s = image_scene(display::ImageFit::Fill, 1.);
+    s.update_object(&"image".into(), |o| {
+        o.transform = Affine::new(0., 1., -1., 0., 40., 0.)
+    })
+    .unwrap();
+    let f = render_pixels(&s, static_pixels(2, 1, &[0, 0, 255, 255, 255, 0, 0, 255]));
+    assert_eq!(at(&f, 30, 1), [255, 0, 0, 255]);
+    assert_eq!(at(&f, 30, 18), [0, 0, 255, 255]);
+}
+#[test]
+fn missing_or_failed_static_image_rejects_entire_domain() {
+    let mut s = image_scene(display::ImageFit::Fill, 1.);
+    insert(&mut s, rect("vector", 0., Color::WHITE), "g");
+    assert!(matches!(
+        rasterize(
+            &source(&s),
+            viewport(),
+            &mut PixelBudget::new(CompositeLimits::default(), 0).unwrap(),
+            &AtomicBool::new(false)
+        ),
+        Err(CompositeError::ImagePending(_))
+    ));
+    let mut inputs = ImageInputs::default();
+    inputs.insert(
+        "image".into(),
+        Err(CompositeError::UnsupportedAnimatedImage),
+    );
+    assert!(matches!(
+        rasterize_with_images(
+            &source(&s),
+            &inputs,
+            viewport(),
+            &mut PixelBudget::new(CompositeLimits::default(), 0).unwrap(),
+            &AtomicBool::new(false)
+        ),
+        Err(CompositeError::UnsupportedAnimatedImage)
+    ));
+}
+#[test]
+fn static_image_inputs_share_the_working_set_budget_and_deduplicate() {
+    let pixels = static_pixels(1, 1, &[0, 0, 255, 255]);
+    let mut inputs = ImageInputs::default();
+    inputs.insert("image".into(), Ok(pixels.clone()));
+    inputs.insert("duplicate".into(), Ok(pixels));
+    assert_eq!(inputs.byte_len(), 4);
+    let mut budget = PixelBudget::new(
+        CompositeLimits {
+            max_surface_bytes: 3,
+            ..Default::default()
+        },
+        0,
+    )
+    .unwrap();
+    assert!(matches!(
+        rasterize_with_images(
+            &source(&image_scene(display::ImageFit::Fill, 1.)),
+            &inputs,
+            viewport(),
+            &mut budget,
+            &AtomicBool::new(false)
+        ),
+        Err(CompositeError::WorkingSetLimit)
+    ));
+    assert_eq!(budget.retained_bytes(), 0);
+}
+
+#[test]
+fn hidden_images_and_ancestors_do_not_need_pixels_but_hidden_masks_still_mask() {
+    for zero_opacity in [false, true] {
+        let mut s = image_scene(display::ImageFit::Fill, 1.);
+        s.update_object(&"image".into(), |o| {
+            if zero_opacity {
+                o.style.opacity = 0.
+            } else {
+                o.visible = false
+            }
+        })
+        .unwrap();
+        insert(&mut s, rect("white", 0., Color::WHITE), "g");
+        assert!(source(&s).images().is_empty());
+        assert_eq!(at(&render(&s), 10, 10), [255; 4]);
+        s.update_object(&"image".into(), |o| o.mask = MaskMode::Alpha)
+            .unwrap();
+        assert_eq!(at(&render(&s), 10, 10), [0; 4]);
+    }
+    let mut s = image_scene(display::ImageFit::Fill, 1.);
+    insert(&mut s, group("hidden", 0.), "g");
+    s.reparent(&"image".into(), Some("hidden".into()), None, false)
+        .unwrap();
+    insert(&mut s, rect("white", 0., Color::WHITE), "g");
+    assert!(source(&s).images().is_empty());
+    assert_eq!(at(&render(&s), 10, 10), [255; 4]);
+}
+
+#[test]
+fn decoded_aspect_fit_overflow_is_an_explicit_error() {
+    let mut s = image_scene(display::ImageFit::Cover, 1.);
+    s.update_object(&"image".into(), |o| {
+        if let gpui_flow_scene::Shape::Image(i) = &mut o.shape {
+            i.size = Size::new(f32::MAX, f32::MAX);
+            i.natural_size = None;
+        }
+    })
+    .unwrap();
+    let mut images = ImageInputs::default();
+    images.insert("image".into(), Ok(static_pixels(2, 1, &[0; 8])));
+    assert!(matches!(
+        rasterize_with_images(
+            &source(&s),
+            &images,
+            viewport(),
+            &mut PixelBudget::new(CompositeLimits::default(), 0).unwrap(),
+            &AtomicBool::new(false)
+        ),
+        Err(CompositeError::InvalidImage)
+    ));
+}
+
+#[test]
+fn static_pixels_respect_inherited_rounded_clip_after_transform() {
+    let mut scene = image_scene(display::ImageFit::Fill, 0.5);
+    scene
+        .insert(
+            DisplayObject::new("frame", display::Frame::new(20., 20.).rounded(8.))
+                .with_transform(Affine::translation(5., 5.)),
+            None,
+            None,
+        )
+        .unwrap();
+    scene
+        .reparent(&"g".into(), Some("frame".into()), None, false)
+        .unwrap();
+    let domain = scene_units(&scene, CompositeLimits::default())
+        .unwrap()
+        .into_iter()
+        .find_map(|unit| {
+            if let SceneUnit::Domain(domain) = unit {
+                Some(domain)
+            } else {
+                None
+            }
+        })
+        .unwrap();
+    let mut images = ImageInputs::default();
+    images.insert("image".into(), Ok(static_pixels(1, 1, &[0, 0, 255, 128])));
+    let mut budget = PixelBudget::new(CompositeLimits::default(), 16).unwrap();
+    let frame = rasterize_with_images(
+        &domain,
+        &images,
+        viewport(),
+        &mut budget,
+        &AtomicBool::new(false),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(at(&frame, 5, 5), [0; 4]);
+    assert_eq!(at(&frame, 15, 15), [64, 0, 0, 64]);
+    assert_eq!(at(&frame, 24, 5), [0; 4]);
+    let peak = budget.peak_bytes();
+    let writes = budget.surface_writes();
+    assert!(budget.retained_bytes() > 16);
+    budget.discard_frame(frame);
+    assert_eq!(budget.retained_bytes(), 16);
+    assert_eq!(budget.peak_bytes(), peak);
+    assert_eq!(budget.surface_writes(), writes);
+}
+
+#[test]
+fn hidden_blend_image_cannot_reject_visible_masked_siblings() {
+    for zero_opacity in [false, true] {
+        let mut scene = image_scene(display::ImageFit::Fill, 1.);
+        scene
+            .update_object(&"g".into(), |o| o.style.blend_mode = BlendMode::PassThrough)
+            .unwrap();
+        let mut mask = rect("mask", 0., Color::WHITE).with_mask(MaskMode::Alpha);
+        mask.z_index = -1;
+        insert(&mut scene, mask, "g");
+        scene
+            .update_object(&"image".into(), |o| {
+                o.style.blend_mode = BlendMode::Multiply;
+                if zero_opacity {
+                    o.style.opacity = 0.;
+                } else {
+                    o.visible = false;
+                }
+            })
+            .unwrap();
+        insert(&mut scene, rect("red", 0., Color::hex(0xff0000)), "g");
+        assert!(source(&scene).images().is_empty());
+        assert_eq!(at(&render(&scene), 10, 10), [255, 0, 0, 255]);
+    }
+}
+
+#[test]
+fn hidden_mask_preserves_zero_alpha_without_requiring_external_backdrop() {
+    let mut scene = Scene::new();
+    let mut root = group("g", 1.);
+    root.style.blend_mode = BlendMode::PassThrough;
+    scene.insert(root, None, None).unwrap();
+    let mut mask = rect("mask", 0., Color::WHITE).with_mask(MaskMode::Alpha);
+    mask.visible = false;
+    insert(&mut scene, mask, "g");
+    let mut red = rect("red", 0., Color::hex(0xff0000));
+    red.style.blend_mode = BlendMode::Multiply;
+    insert(&mut scene, red, "g");
+    assert_eq!(at(&render(&scene), 10, 10), [0; 4]);
+}
+
+#[test]
+fn hidden_mask_retains_zero_alpha_run_without_external_backdrop_dependency() {
+    let mut scene = image_scene(display::ImageFit::Fill, 1.);
+    scene
+        .update_object(&"g".into(), |o| o.style.blend_mode = BlendMode::PassThrough)
+        .unwrap();
+    scene
+        .update_object(&"image".into(), |o| {
+            o.style.blend_mode = BlendMode::Multiply
+        })
+        .unwrap();
+    let mut mask = rect("mask", 0., Color::WHITE).with_mask(MaskMode::Alpha);
+    mask.z_index = -1;
+    mask.visible = false;
+    insert(&mut scene, mask, "g");
+    let frame = render_pixels(&scene, static_pixels(1, 1, &[0, 0, 255, 255]));
+    assert_eq!(at(&frame, 10, 10), [0; 4]);
+}

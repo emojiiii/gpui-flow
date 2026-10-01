@@ -1,5 +1,5 @@
 use crate::{
-    CompositeError, CompositeLimits, DomainSource,
+    CompositeError, CompositeLimits, DomainSource, ImageInputs,
     vector::{Preparation, PreparedNode, transform},
 };
 use gpui_flow_scene::{Affine, BlendMode, Bounds, MaskMode, Point, Shape, Size, display::Rect};
@@ -53,6 +53,11 @@ impl PixelBudget {
     }
     pub fn retained_bytes(&self) -> u64 {
         self.in_use
+    }
+    /// Discard an output produced using this same budget. Consuming the frame
+    /// releases its retained-byte charge while preserving cumulative work/peak.
+    pub fn discard_frame(&mut self, frame: CpuFrame) {
+        self.in_use = self.in_use.saturating_sub(frame.premul_rgba.len() as u64);
     }
     fn reserve(&mut self, n: u64) -> Result<(), CompositeError> {
         let next = self
@@ -187,6 +192,42 @@ impl Raster<'_> {
             }
             self.budget.write(self.pixels)?;
             target.fill_path(&p.path, &p.paint, p.rule, transform(a), None);
+        }
+        if let Some(p) = &node.image {
+            self.check()?;
+            let a = self.world_to_layer * p.world;
+            let texture = a * p.texture_to_local;
+            for matrix in [a, texture] {
+                if matrix.inverse().is_none()
+                    || transform(matrix).invert().is_none_or(|t| !t.is_finite())
+                {
+                    return Err(CompositeError::UnsupportedTransform);
+                }
+            }
+            for point in p.path.points() {
+                let q = a.transform_point(Point::new(point.x, point.y));
+                if !q.is_finite() || q.x.abs() > 1_000_000. || q.y.abs() > 1_000_000. {
+                    return Err(CompositeError::UnsupportedTransform);
+                }
+            }
+            let paint = tiny_skia::Paint {
+                shader: tiny_skia::Pattern::new(
+                    p.image.pixmap.as_ref(),
+                    tiny_skia::SpreadMode::Pad,
+                    tiny_skia::FilterQuality::Bilinear,
+                    1.,
+                    transform(p.texture_to_local),
+                ),
+                ..Default::default()
+            };
+            self.budget.write(self.pixels)?;
+            target.fill_path(
+                &p.path,
+                &paint,
+                tiny_skia::FillRule::Winding,
+                transform(a),
+                None,
+            );
         }
         let mut i = 0;
         while i < node.children.len() {
@@ -355,8 +396,20 @@ pub fn rasterize(
     budget: &mut PixelBudget,
     cancelled: &AtomicBool,
 ) -> Result<Option<CpuFrame>, CompositeError> {
+    rasterize_with_images(source, &ImageInputs::default(), viewport, budget, cancelled)
+}
+/// Rasterize with current static pixels. Inputs share the explicit working-set
+/// budget with retained outputs and all temporary raster surfaces.
+pub fn rasterize_with_images(
+    source: &DomainSource,
+    images: &ImageInputs,
+    viewport: RasterViewport,
+    budget: &mut PixelBudget,
+    cancelled: &AtomicBool,
+) -> Result<Option<CpuFrame>, CompositeError> {
     let before = budget.in_use;
-    let result = rasterize_inner(source, viewport, budget, cancelled);
+    budget.reserve(images.byte_len())?;
+    let result = rasterize_inner(source, images, viewport, budget, cancelled);
     budget.in_use = before
         + result
             .as_ref()
@@ -367,6 +420,7 @@ pub fn rasterize(
 }
 fn rasterize_inner(
     source: &DomainSource,
+    images: &ImageInputs,
     viewport: RasterViewport,
     budget: &mut PixelBudget,
     cancelled: &AtomicBool,
@@ -389,7 +443,7 @@ fn rasterize_inner(
         return Err(CompositeError::UnsupportedTransform);
     }
     let mut prep = Preparation::default();
-    let root = prep.node(&source.root, budget.limits)?;
+    let root = prep.node(&source.root, budget.limits, images)?;
     let Some(world_bounds) = prep.bounds else {
         return Ok(None);
     };

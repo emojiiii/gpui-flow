@@ -2,10 +2,13 @@
 //!
 //! A domain is all-or-nothing: unsupported descendants, unsafe coordinates or
 //! exhausted budgets return an error before an output can be published. Native
-//! text/images/custom renderers must remain outside these vector domains.
+//! text/custom renderers must remain outside these domains. Static image pixels
+//! are supplied by the host, never fetched or decoded by this crate.
+mod image;
 mod plan;
 mod raster;
 mod vector;
+pub use image::*;
 pub use plan::*;
 pub use raster::*;
 
@@ -66,6 +69,13 @@ impl CompositeLimits {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CompositeError {
     UnsupportedShape(String),
+    ImagePending(DisplayId),
+    ImageUnavailable {
+        image: DisplayId,
+        reason: String,
+    },
+    UnsupportedAnimatedImage,
+    InvalidImage,
     UnsupportedExternalBackdrop,
     UnsupportedTransform,
     InvalidGeometry(String),

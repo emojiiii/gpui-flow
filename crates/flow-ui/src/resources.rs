@@ -29,6 +29,12 @@ pub enum SceneImagePresentation {
     Failed(String),
     Cancelled,
 }
+/// Immutable observation bound to a live resource generation, never only a path.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct CompositeImageObservation {
+    pub ticket: Option<ResourceTicket>,
+    pub image: Result<Arc<RenderImage>, gpui_flow_composite::CompositeError>,
+}
 /// Runtime-only state; no decoded image or authorization enters Scene JSON.
 pub struct SceneResourceAdapter {
     tracker: SceneResources,
@@ -216,6 +222,39 @@ impl SceneResourceAdapter {
             .and_then(|ticket| self.images.get(&ticket).cloned())
             .unwrap_or(SceneImagePresentation::Pending)
     }
+    pub(crate) fn composite_image(
+        &self,
+        engine: &SceneEngine,
+        id: &gpui_flow_scene::DisplayId,
+        expected_source: &str,
+    ) -> CompositeImageObservation {
+        use gpui_flow_composite::CompositeError;
+        let ticket = engine
+            .handle(id)
+            .and_then(|h| self.tracker.ticket(engine, h));
+        let unavailable = |reason: String| CompositeError::ImageUnavailable {
+            image: id.clone(),
+            reason,
+        };
+        let canonical_matches = engine.scene().get(id).is_some_and(
+            |n| matches!(&n.object.shape, Shape::Image(i) if i.source == expected_source),
+        );
+        let image = if !canonical_matches {
+            Err(unavailable(
+                "presented source has no current canonical resource producer".into(),
+            ))
+        } else {
+            match ticket.and_then(|t| self.images.get(&t)) {
+                Some(SceneImagePresentation::Loaded(image)) => Ok(image.clone()),
+                Some(SceneImagePresentation::Failed(error)) => Err(unavailable(error.clone())),
+                Some(SceneImagePresentation::Cancelled) => {
+                    Err(unavailable("not authorized by host".into()))
+                }
+                _ => Err(CompositeError::ImagePending(id.clone())),
+            }
+        };
+        CompositeImageObservation { ticket, image }
+    }
     pub fn frame(&self, engine: &SceneEngine) -> Option<ResourceFrame> {
         self.tracker.frame(engine)
     }
@@ -340,5 +379,105 @@ mod tests {
         assert_eq!(request.wrap_width, Some(84.));
         text.wrap = false;
         assert_eq!(text_request(&text).wrap_width, None);
+    }
+    fn image_engine() -> (SceneEngine, SceneResourceAdapter) {
+        let mut s = gpui_flow_scene::Scene::new();
+        s.insert(
+            gpui_flow_scene::DisplayObject::new(
+                "image",
+                gpui_flow_scene::display::Image::new("a.png", gpui_flow_scene::Size::new(10., 10.)),
+            ),
+            None,
+            None,
+        )
+        .unwrap();
+        let mut e = SceneEngine::new(s).unwrap();
+        let mut r = SceneResourceAdapter::new(&mut e).unwrap();
+        r.tracker.synchronize(&mut e).unwrap();
+        (e, r)
+    }
+    fn loaded_image() -> SceneImagePresentation {
+        SceneImagePresentation::Loaded(Arc::new(RenderImage::new(vec![image::Frame::new(
+            image::RgbaImage::from_pixel(1, 1, image::Rgba([0, 0, 255, 255])),
+        )])))
+    }
+    #[::core::prelude::v1::test]
+    fn composite_observation_rejects_stale_source_a_b_a_completion() {
+        let (mut e, mut r) = image_engine();
+        let id = "image".into();
+        let a = r.composite_image(&e, &id, "a.png");
+        assert!(matches!(
+            a.image,
+            Err(gpui_flow_composite::CompositeError::ImagePending(_))
+        ));
+        let ticket = a.ticket.unwrap();
+        for source in ["b.png", "a.png"] {
+            e.transaction(|s| {
+                s.update_object(&id, |o| {
+                    if let Shape::Image(i) = &mut o.shape {
+                        i.source = source.into()
+                    }
+                })
+            })
+            .unwrap();
+        }
+        r.settle(
+            &mut e,
+            ticket,
+            ResourceOutcome::Loaded,
+            Some(loaded_image()),
+            &mut vec![],
+        )
+        .unwrap();
+        r.tracker.synchronize(&mut e).unwrap();
+        let current = r.composite_image(&e, &id, "a.png");
+        assert_ne!(a.ticket, current.ticket);
+        assert!(current.image.is_err());
+        r.settle(
+            &mut e,
+            current.ticket.unwrap(),
+            ResourceOutcome::Loaded,
+            Some(loaded_image()),
+            &mut vec![],
+        )
+        .unwrap();
+        assert!(r.composite_image(&e, &id, "a.png").image.is_ok());
+        assert!(matches!(
+            r.composite_image(&e, &id, "b.png").image,
+            Err(gpui_flow_composite::CompositeError::ImageUnavailable { .. })
+        ));
+    }
+    #[::core::prelude::v1::test]
+    fn composite_observation_resolver_revocation_cannot_retain_loaded_content() {
+        let (mut e, mut r) = image_engine();
+        let id = "image".into();
+        let ticket = r.composite_image(&e, &id, "a.png").ticket.unwrap();
+        r.settle(
+            &mut e,
+            ticket,
+            ResourceOutcome::Loaded,
+            Some(loaded_image()),
+            &mut vec![],
+        )
+        .unwrap();
+        let loaded = r.composite_image(&e, &id, "a.png");
+        assert!(loaded.image.is_ok());
+        r.set_image_resolver(&e, Rc::new(|_| None)).unwrap();
+        r.tracker.synchronize(&mut e).unwrap();
+        let pending = r.composite_image(&e, &id, "a.png");
+        assert_ne!(loaded.ticket, pending.ticket);
+        assert!(pending.image.is_err());
+        r.settle(
+            &mut e,
+            pending.ticket.unwrap(),
+            ResourceOutcome::Cancelled(ResourceCancellation::NotAuthorized),
+            Some(SceneImagePresentation::Cancelled),
+            &mut vec![],
+        )
+        .unwrap();
+        assert!(matches!(
+            r.composite_image(&e, &id, "a.png").image,
+            Err(gpui_flow_composite::CompositeError::ImageUnavailable { .. })
+        ));
     }
 }

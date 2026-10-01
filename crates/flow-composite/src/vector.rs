@@ -1,5 +1,6 @@
-use crate::{CompositeError, CompositeLimits, DomainNode};
+use crate::{CompositeError, CompositeLimits, DomainNode, ImageInputs, StaticImage};
 use gpui_flow_scene::{Affine, BlendMode, FillRule, MaskMode, Paint, Shape, display::PathCommand};
+use std::sync::Arc;
 use tiny_skia::{Path, PathBuilder, Transform};
 
 pub(crate) struct PreparedNode {
@@ -8,7 +9,14 @@ pub(crate) struct PreparedNode {
     pub blend: BlendMode,
     pub mask: MaskMode,
     pub paints: Vec<VectorPaint>,
+    pub image: Option<ImagePaint>,
     pub children: Vec<PreparedNode>,
+}
+pub(crate) struct ImagePaint {
+    pub image: Arc<StaticImage>,
+    pub path: Path,
+    pub texture_to_local: Affine,
+    pub world: Affine,
 }
 pub(crate) struct VectorPaint {
     pub path: Path,
@@ -173,13 +181,15 @@ impl Preparation {
         &mut self,
         source: &DomainNode,
         limits: CompositeLimits,
+        images: &ImageInputs,
     ) -> Result<PreparedNode, CompositeError> {
-        self.node_at(source, limits, 0)
+        self.node_at(source, limits, images, 0)
     }
     fn node_at(
         &mut self,
         source: &DomainNode,
         limits: CompositeLimits,
+        images: &ImageInputs,
         depth: usize,
     ) -> Result<PreparedNode, CompositeError> {
         self.nodes += 1;
@@ -190,6 +200,19 @@ impl Preparation {
             return Err(CompositeError::NestingLimit);
         }
         let object = &source.object;
+        // Preserve mask-run markers even when their contents contribute zero.
+        // Invisible/zero-opacity subtrees do not require loaded image pixels.
+        if !object.visible || object.style.opacity == 0. {
+            return Ok(PreparedNode {
+                visible: object.visible,
+                opacity: object.style.opacity,
+                blend: object.style.blend_mode,
+                mask: object.mask,
+                paints: vec![],
+                image: None,
+                children: vec![],
+            });
+        }
         if object.mask != MaskMode::None {
             self.masks += 1;
         }
@@ -208,7 +231,42 @@ impl Preparation {
             return Err(CompositeError::InputLimit);
         }
         let mut paints = Vec::new();
-        if !matches!(object.shape, Shape::Group(_)) {
+        let mut image_paint = None;
+        if let Shape::Image(image) = &object.shape {
+            let pixels = images.get(&object.id)?;
+            // Native GPUI object-fit uses decoded dimensions, not optional
+            // document metadata. Reuse the scene fit geometry with those facts.
+            let mut fitted = image.clone();
+            fitted.natural_size = Some(gpui_flow_scene::Size::new(
+                pixels.width() as f32,
+                pixels.height() as f32,
+            ));
+            let content = fitted.content_bounds();
+            if !content.is_valid() {
+                return Err(CompositeError::InvalidImage);
+            }
+            let fitted_rect = tiny_skia::Rect::from_xywh(
+                content.origin.x,
+                content.origin.y,
+                content.size.width,
+                content.size.height,
+            );
+            let box_rect = tiny_skia::Rect::from_xywh(0., 0., image.size.width, image.size.height);
+            if let Some(rect) = fitted_rect.zip(box_rect).and_then(|(a, b)| a.intersect(&b)) {
+                let path = PathBuilder::from_rect(rect);
+                self.add_path(&path, source.world_transform, limits)?;
+                image_paint = Some(ImagePaint {
+                    texture_to_local: Affine::translation(content.origin.x, content.origin.y)
+                        * Affine::scale(
+                            content.size.width / pixels.width() as f32,
+                            content.size.height / pixels.height() as f32,
+                        ),
+                    image: pixels,
+                    path,
+                    world: source.world_transform,
+                });
+            }
+        } else if !matches!(object.shape, Shape::Group(_)) {
             if let Some(path) = path(&object.shape)? {
                 for fill in object.style.fills().filter(|p| p.is_visible()) {
                     self.add_path(&path, source.world_transform, limits)?;
@@ -273,7 +331,7 @@ impl Preparation {
         let children = source
             .children
             .iter()
-            .map(|child| self.node_at(child, limits, depth + 1))
+            .map(|child| self.node_at(child, limits, images, depth + 1))
             .collect::<Result<_, _>>()?;
         Ok(PreparedNode {
             visible: object.visible,
@@ -281,6 +339,7 @@ impl Preparation {
             blend: object.style.blend_mode,
             mask: object.mask,
             paints,
+            image: image_paint,
             children,
         })
     }
