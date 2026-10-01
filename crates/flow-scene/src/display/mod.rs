@@ -155,7 +155,7 @@ impl Shape {
             .strokes()
             .filter(|s| s.width > 0.0 && s.paint.is_visible() && s.uses_advanced_geometry())
             .any(|stroke| {
-                self.stroke_mesh(stroke)
+                self.stroke_mesh_with_rule(stroke, style.fill_rule)
                     .is_ok_and(|mesh| mesh.hit_test(point, tolerance))
             })
     }

@@ -12,13 +12,15 @@
 
 固定尺寸Box/Frame已接入真实CPU合成：自身fill/stroke后绘制children、整体透明度、圆角子级clip及域内混合。保持现有native顺序；尚未实现Leafer特有fill→children→stroke阶段。新增`composited_containers`示例，见[语义边界](docs/compositing.md#fixed-size-painted-containers)。
 
-动画Image已复用GPUI解码帧接入native/CPU合成，支持实例暂停、seek和隐藏冻结。Text新增宿主显式接入的同原生字体后端桥，支持solid纯文字、换行/wrap/对齐及正向均匀缩放，真实glyph alpha可参与mask/clip/组透明度与域内混合；不是任意现有App自动开启。缺少文字桥、不支持的文字样式/变换、Custom和任意宿主GPUI背景混合仍整域明确报错，擦除和shadow/filter仍缺。Inside/outside与scale-fixed描边、完整嵌套timeline和motion path仍缺。此次窗口烟测不代替跨平台、大规模性能或所有旧示例交互验收。详细约束与实际操作见[compositing.md](docs/compositing.md)。
+动画Image已复用GPUI解码帧接入native/CPU合成，支持实例暂停、seek和隐藏冻结。Text新增宿主显式接入的同原生字体后端桥，支持solid纯文字、换行/wrap/对齐及正向均匀缩放，真实glyph alpha可参与mask/clip/组透明度与域内混合；不是任意现有App自动开启。缺少文字桥、不支持的文字样式/变换、Custom和任意宿主GPUI背景混合仍整域明确报错，擦除和shadow/filter仍缺。闭合矢量Inside/Outside描边已新增共享有界Boolean mesh；scale-fixed描边、完整嵌套timeline和motion path仍缺。此次窗口烟测不代替跨平台、大规模性能或所有旧示例交互验收。详细约束与实际操作见[compositing.md](docs/compositing.md)。
 
 最新文字检查点通过714项headless（另有8项原有忽略）、76项UI库单测、单独的8项GPUI字体单测、严格Clippy/格式和原生构建。真实字体探针覆盖CJK/组合音标/RTL/emoji/wrap，并在DPR 1/1.25/2对同后端灰度glyph逐像素验证；原生窗口验证了文字mask/clip/混合、整体透明度、桥撤销恢复、字体失效、对齐与Undo。详细范围与未验场景见[文字验证](docs/compositing.md#same-backend-text-validation-2026-10-01)。
 
 此前资源/布局/动画/状态源码批次的媒体、字体、14个二进制及文档记录见[历史本地验证](docs/local-validation-2026-09-30.md)。API迁移见[源码批次状态](docs/source-only-status.md)：旧JSON读取默认兼容不等于Rust穷尽字面量/枚举match源码兼容。
 
 显式`SceneCompositing::OwnedCanvas`现将SceneView自己的不透明主题底色、网格和完整presented Scene纳入同一CPU域，支持顶层对象读取这些真实背景及更早root进行Multiply/Screen；默认逐域模式保持不变。缺producer/资源/预算错误整画布拒绝，不支持任意宿主GPUI背景捕获。新增`owned_canvas`示例，见[范围和预算](docs/compositing.md#explicit-owned-canvas-backdrop)。本轮731项headless、81项UI、严格Clippy/格式与原生链接通过；真实窗口验证底色/grid/混合、整域拒绝恢复、默认模式边界、拖动及pan/zoom。硬失效重算会暂时隐藏旧画布，不宣称流畅帧率；见[实际验收](docs/compositing.md#owned-canvas-validation-2026-10-01)。
+
+新增闭合轮廓`StrokeAlignment::Inside/Outside`，旧JSON保持Center；native/CPU、命中、bounds与stroke-box布局共用最终mesh，开放轮廓和超预算/精度输入原子拒绝。契约及原生比较示例见[描边对齐](docs/stroke-alignment.md)。本轮云端本地764项headless（8项原有忽略）、85项UI、严格Clippy/格式与原生链接通过；真实窗口验证两种后端的对齐/填充规则/dash/变换/clip/Undo/pan/zoom。未触发GitHub Actions。
 
 ## 架构层次
 
@@ -36,6 +38,7 @@
 ```bash
 cargo run --locked -p flow-studio
 cargo run --locked -p flow-studio --bin primitives
+cargo run --locked -p flow-studio --bin stroke_alignment
 cargo run --locked -p flow-studio --bin composition
 cargo run --locked -p flow-studio --bin interactions
 cargo run --locked -p flow-studio --bin gradients

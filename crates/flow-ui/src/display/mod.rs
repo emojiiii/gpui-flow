@@ -69,7 +69,12 @@ impl RenderObject {
             report(UnsupportedFeature::LayeredPaint);
         }
         if self.object.style.strokes().any(|stroke| {
-            stroke.uses_advanced_geometry() && self.object.shape.stroke_mesh(stroke).is_err()
+            stroke.uses_advanced_geometry()
+                && self
+                    .object
+                    .shape
+                    .stroke_mesh_with_rule(stroke, self.object.style.fill_rule)
+                    .is_err()
         }) {
             report(UnsupportedFeature::StrokeGeometry);
         }

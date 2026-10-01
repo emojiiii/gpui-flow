@@ -332,7 +332,7 @@ impl Preparation {
             {
                 let mesh = object
                     .shape
-                    .stroke_mesh(stroke)
+                    .stroke_mesh_with_rule(stroke, object.style.fill_rule)
                     .map_err(CompositeError::InvalidGeometry)?;
                 self.triangles = self.triangles.saturating_add(mesh.triangles().len());
                 if self.triangles > limits.max_triangles {

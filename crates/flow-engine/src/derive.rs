@@ -45,7 +45,8 @@ pub(crate) fn inputs_changed(old: &Scene, next: &Scene, stroke_bounds: bool) -> 
                 || a.object.transform != b.object.transform
                 || (stroke_bounds
                     && (a.object.style.stroke != b.object.style.stroke
-                        || a.object.style.stroke_layers != b.object.style.stroke_layers))
+                        || a.object.style.stroke_layers != b.object.style.stroke_layers
+                        || a.object.style.fill_rule != b.object.style.fill_rule))
         })
 }
 fn validate_scope(before: &Scene, after: &Scene) -> Result<(), EngineError> {

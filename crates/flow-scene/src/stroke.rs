@@ -1,13 +1,21 @@
-//! Shared centered-stroke geometry for non-default cap/join/dash styles.
+//! Shared stroke geometry for alignment and non-default cap/join/dash styles.
 //!
 //! Kurbo 0.11.3 supplies dash splitting; Lyon 1.0.22 supplies all stroke
 //! expansion/tessellation. Both are MIT OR Apache-2.0. This adapter only owns
 //! shape conversion, limits, finite checks, and picking of the resulting mesh.
-use crate::{Bounds, Contour, FlattenOptions, Point, Shape, Stroke, StrokeCap, StrokeJoin};
+use crate::{
+    Bounds, Contour, FillRule, FlattenOptions, Point, Shape, Stroke, StrokeAlignment, StrokeCap,
+    StrokeJoin,
+};
+use i_overlay::{
+    core::{fill_rule::FillRule as OverlayFillRule, overlay::Overlay, overlay_rule::OverlayRule},
+    i_float::{adapter::FloatPointAdapter, float::rect::FloatRect, int::point::IntPoint},
+};
 use kurbo::{PathEl, Shape as _};
 use lyon_tessellation::{
-    GeometryBuilder, GeometryBuilderError, StrokeGeometryBuilder, StrokeOptions, StrokeTessellator,
-    StrokeVertex, VertexId,
+    FillGeometryBuilder, FillOptions, FillTessellator, FillVertex, GeometryBuilder,
+    GeometryBuilderError, StrokeGeometryBuilder, StrokeOptions, StrokeTessellator, StrokeVertex,
+    VertexId,
     math::point,
     path::{LineCap, LineJoin, Path},
 };
@@ -22,6 +30,19 @@ pub const MAX_STROKE_POINTS: usize = 65_536;
 pub const MAX_STROKE_EVENTS: usize = 262_144;
 /// Per-stroke tessellated vertices and triangles (each independently bounded).
 pub const MAX_STROKE_MESH_ITEMS: usize = 262_144;
+/// Aligned strokes additionally bound Boolean input edges and output vertices.
+pub const MAX_ALIGNED_STROKE_EDGES: usize = 4096;
+pub const MAX_ALIGNED_STROKE_OUTPUT_POINTS: usize = 16_384;
+/// Combined precision point/edge tests, worst-case Boolean pair tests
+/// n*(n-1)/2 and edge work, checked BEFORE each operation (not output-only).
+pub const MAX_ALIGNED_STROKE_INTERSECTION_WORK: usize = 2_097_152;
+/// Coordinates of source and expanded stroke must stay in this local range.
+/// The 1/4096 Boolean grid plus f32 conversion error is below 0.004 local units.
+pub const MAX_ALIGNED_STROKE_COORDINATE: f32 = 65_536.0;
+/// Smaller nonzero aligned widths cannot reliably survive f32 extrusion at
+/// the supported coordinate limit. Centered strokes keep their old contract.
+pub const MIN_ALIGNED_STROKE_WIDTH: f32 = 1.0 / 64.0;
+const ALIGNED_STROKE_GRID_SCALE: f64 = 4096.0;
 
 /// Complete local-space triangle union, shared by picking and vector rendering.
 /// Geometry exceeding the source, dash, or tessellation limits returns an error;
@@ -58,19 +79,42 @@ impl StrokeMesh {
     }
 }
 impl Shape {
-    /// Build a bounded centered-stroke mesh. Text, image and group do not have
-    /// vector stroke semantics and are explicitly unsupported here.
+    /// Backward-compatible entry point using NonZero fill semantics. Scene
+    /// consumers must use `stroke_mesh_with_rule` with their Style's fill rule.
     pub fn stroke_mesh(&self, stroke: &Stroke) -> Result<StrokeMesh, String> {
+        self.stroke_mesh_with_rule(stroke, FillRule::NonZero)
+    }
+    /// Build the shared local stroke triangle union. Inside/Outside clip a
+    /// doubled centered stroke against the geometry's filled region, regardless
+    /// of whether the object has a fill paint. Text/Image/Group are unsupported.
+    pub fn stroke_mesh_with_rule(
+        &self,
+        stroke: &Stroke,
+        fill_rule: FillRule,
+    ) -> Result<StrokeMesh, String> {
         stroke.validate()?;
         check_source_budget(self)?;
         self.validate()?;
-        if stroke.width == 0.0 || !stroke.paint.is_visible() {
+        let aligned = stroke.alignment != StrokeAlignment::Center;
+        // Keep legacy inactive centered strokes free of flatten/tessellation
+        // requirements. Aligned inputs still validate their closed domain.
+        if !aligned && (stroke.width == 0.0 || !stroke.paint.is_visible()) {
             return Ok(StrokeMesh::default());
         }
         let contours = centerline(self)?;
+        if aligned {
+            check_aligned_contours(&contours, stroke)?;
+        }
+        if stroke.width == 0.0 || !stroke.paint.is_visible() {
+            return Ok(StrokeMesh::default());
+        }
         let path = stroke_path(&contours, stroke)?;
         let options = StrokeOptions::default()
-            .with_line_width(stroke.width)
+            .with_line_width(if aligned {
+                stroke.width * 2.0
+            } else {
+                stroke.width
+            })
             .with_line_cap(match stroke.cap {
                 StrokeCap::Butt => LineCap::Butt,
                 StrokeCap::Square => LineCap::Square,
@@ -90,8 +134,12 @@ impl Shape {
         if output.exceeded {
             return Err("stroke mesh budget exceeded".into());
         }
-        let mesh = StrokeMesh {
-            triangles: output.triangles,
+        let mesh = if aligned {
+            align_mesh(output.triangles, &contours, stroke.alignment, fill_rule)?
+        } else {
+            StrokeMesh {
+                triangles: output.triangles,
+            }
         };
         if mesh.bounds().is_some_and(|bounds| !bounds.is_valid()) {
             return Err("stroke mesh bounds overflow".into());
@@ -288,4 +336,264 @@ impl StrokeGeometryBuilder for MeshBuilder {
         self.vertices.push(point);
         Ok(id)
     }
+}
+
+impl FillGeometryBuilder for MeshBuilder {
+    fn add_fill_vertex(&mut self, vertex: FillVertex) -> Result<VertexId, GeometryBuilderError> {
+        if self.exceeded || self.vertices.len() == MAX_STROKE_MESH_ITEMS {
+            self.exceeded = true;
+            return Err(GeometryBuilderError::TooManyVertices);
+        }
+        let p = vertex.position();
+        let point = Point::new(p.x, p.y);
+        if !point.is_finite() {
+            return Err(GeometryBuilderError::InvalidVertex);
+        }
+        let id = VertexId(self.vertices.len() as u32);
+        self.vertices.push(point);
+        Ok(id)
+    }
+}
+
+fn check_aligned_point(p: Point) -> Result<(), String> {
+    if !p.is_finite() || p.x.abs().max(p.y.abs()) > MAX_ALIGNED_STROKE_COORDINATE {
+        return Err("aligned stroke coordinate precision limit exceeded".into());
+    }
+    Ok(())
+}
+fn check_aligned_contours(contours: &[Contour], stroke: &Stroke) -> Result<(), String> {
+    let edges = contours.iter().map(|c| c.points.len()).sum::<usize>();
+    if edges > MAX_ALIGNED_STROKE_EDGES {
+        return Err("aligned stroke Boolean input edge budget exceeded".into());
+    }
+    if contours.is_empty() || contours.iter().any(|c| !c.closed || c.points.len() < 3) {
+        return Err("aligned strokes require nonempty closed vector contours".into());
+    }
+    if stroke.width > MAX_ALIGNED_STROKE_COORDINATE {
+        return Err("aligned stroke width exceeds the coordinate precision limit".into());
+    }
+    if stroke.width > 0.0 && stroke.width < MIN_ALIGNED_STROKE_WIDTH {
+        return Err("aligned stroke width is below the precision limit".into());
+    }
+    for c in contours {
+        for &p in &c.points {
+            check_aligned_point(p)?;
+        }
+        // Signed area alone would incorrectly reject a self-intersecting bow tie.
+        let a = c.points[0];
+        let noncollinear = c.points.windows(2).any(|p| {
+            let (b, d) = (p[0], p[1]);
+            (b.x as f64 - a.x as f64) * (d.y as f64 - a.y as f64)
+                != (b.y as f64 - a.y as f64) * (d.x as f64 - a.x as f64)
+        });
+        if !noncollinear {
+            return Err("aligned stroke contour is degenerate".into());
+        }
+    }
+    Ok(())
+}
+struct OverlayBudget(usize);
+impl OverlayBudget {
+    fn charge(&mut self, edges: usize) -> Result<(), String> {
+        if edges > MAX_ALIGNED_STROKE_EDGES {
+            return Err("aligned stroke Boolean input edge budget exceeded".into());
+        }
+        let work = edges.saturating_mul(edges.saturating_sub(1)) / 2 + edges;
+        self.0 = self
+            .0
+            .checked_sub(work)
+            .ok_or("aligned stroke Boolean intersection work budget exceeded")?;
+        Ok(())
+    }
+}
+type IntContours = Vec<Vec<IntPoint<i32>>>;
+fn output_budget(shapes: &[IntContours]) -> Result<(), String> {
+    let count = shapes.iter().flatten().map(Vec::len).sum::<usize>();
+    if count > MAX_ALIGNED_STROKE_OUTPUT_POINTS {
+        Err("aligned stroke Boolean output point budget exceeded".into())
+    } else {
+        Ok(())
+    }
+}
+fn align_mesh(
+    triangles: Vec<[Point; 3]>,
+    contours: &[Contour],
+    alignment: StrokeAlignment,
+    fill_rule: FillRule,
+) -> Result<StrokeMesh, String> {
+    // Bound conversion and overlay allocations before collecting another copy.
+    let source_edges = contours.iter().map(|c| c.points.len()).sum::<usize>();
+    let stroke_edges = triangles.len().saturating_mul(3);
+    if source_edges.saturating_add(stroke_edges) > MAX_ALIGNED_STROKE_EDGES {
+        return Err("aligned stroke Boolean input edge budget exceeded".into());
+    }
+    for &p in triangles.iter().flatten() {
+        check_aligned_point(p)?;
+    }
+    // The grid origin is fixed too: independently aligned layers must not
+    // acquire different filled boundaries merely because their widths differ.
+    let limit = MAX_ALIGNED_STROKE_COORDINATE as f64;
+    let rect = FloatRect::new(-limit, limit, -limit, limit)
+        .map_err(|e| format!("aligned stroke precision bounds failed: {e:?}"))?;
+    let adapter = FloatPointAdapter::<[f64; 2], i32>::try_with_scale_conservative(
+        rect,
+        ALIGNED_STROKE_GRID_SCALE,
+    )
+    .map_err(|e| format!("aligned stroke precision conversion failed: {e:?}"))?;
+    let convert = |p: Point| {
+        adapter
+            .try_float_to_int(&[p.x as f64, p.y as f64])
+            .map_err(|e| format!("aligned stroke coordinate conversion failed: {e:?}"))
+    };
+    let fill = contours
+        .iter()
+        .map(|c| c.points.iter().copied().map(&convert).collect())
+        .collect::<Result<IntContours, String>>()?;
+    let mut budget = OverlayBudget(MAX_ALIGNED_STROKE_INTERSECTION_WORK);
+    // Precision guard is quadratic too, and is charged before examining pairs.
+    budget.0 = budget
+        .0
+        .checked_sub(source_edges.saturating_mul(source_edges))
+        .ok_or("aligned stroke precision work budget exceeded")?;
+    check_fill_precision(contours, &fill)?;
+    budget.charge(source_edges)?;
+    // Canonicalize the fill first: its winding may differ from the stroke union.
+    let region = Overlay::from_subj(&fill).overlay(
+        OverlayRule::Subject,
+        match fill_rule {
+            FillRule::EvenOdd => OverlayFillRule::EvenOdd,
+            FillRule::NonZero => OverlayFillRule::NonZero,
+        },
+    );
+    output_budget(&region)?;
+    let mut stroke = Vec::with_capacity(triangles.len());
+    for triangle in triangles {
+        let [a, mut b, mut c] = [
+            convert(triangle[0])?,
+            convert(triangle[1])?,
+            convert(triangle[2])?,
+        ];
+        let area = (b.x as i64 - a.x as i64) * (c.y as i64 - a.y as i64)
+            - (b.y as i64 - a.y as i64) * (c.x as i64 - a.x as i64);
+        if area == 0 {
+            let [x, y, z] = triangle;
+            let original_area = (y.x as f64 - x.x as f64) * (z.y as f64 - x.y as f64)
+                - (y.y as f64 - x.y as f64) * (z.x as f64 - x.x as f64);
+            if original_area != 0.0 {
+                return Err("aligned stroke triangle collapses below grid precision".into());
+            }
+            continue;
+        }
+        if area < 0 {
+            std::mem::swap(&mut b, &mut c);
+        }
+        stroke.push(vec![a, b, c]);
+    }
+    if stroke.is_empty() {
+        return Err("aligned stroke extrusion is below precision limit".into());
+    }
+    let region_edges = region.iter().flatten().map(Vec::len).sum::<usize>();
+    budget.charge(stroke.len() * 3 + region_edges)?;
+    // All triangles have the same winding. NonZero unions overlap instead of
+    // punching EvenOdd holes at joins, dash caps and self-intersections.
+    let result = Overlay::from_subj_and_clip(&stroke, &region).overlay(
+        match alignment {
+            StrokeAlignment::Inside => OverlayRule::Intersect,
+            StrokeAlignment::Outside => OverlayRule::Difference,
+            StrokeAlignment::Center => {
+                unreachable!("only aligned meshes enter the Boolean adapter")
+            }
+        },
+        OverlayFillRule::NonZero,
+    );
+    output_budget(&result)?;
+    let mut builder = Path::builder();
+    for contour in result.iter().flatten() {
+        let converted = contour
+            .iter()
+            .map(|p| {
+                let f = adapter
+                    .try_int_to_float(p)
+                    .map_err(|e| format!("aligned stroke output conversion failed: {e:?}"))?;
+                let p = Point::new(f[0] as f32, f[1] as f32);
+                check_aligned_point(p)?;
+                Ok(p)
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        if converted.len() < 3 {
+            return Err("aligned stroke output contour is degenerate".into());
+        }
+        for i in 0..converted.len() {
+            let next = (i + 1) % converted.len();
+            if converted[i] == converted[next] && contour[i] != contour[next] {
+                return Err("aligned stroke output edge collapses below f32 precision".into());
+            }
+        }
+        let a = converted[0];
+        if !converted.windows(2).any(|p| {
+            (p[0].x as f64 - a.x as f64) * (p[1].y as f64 - a.y as f64)
+                != (p[0].y as f64 - a.y as f64) * (p[1].x as f64 - a.x as f64)
+        }) {
+            return Err("aligned stroke output contour collapses below f32 precision".into());
+        }
+        builder.begin(point(a.x, a.y));
+        for p in &converted[1..] {
+            builder.line_to(point(p.x, p.y));
+        }
+        builder.end(true);
+    }
+    let mut output = MeshBuilder::default();
+    FillTessellator::new()
+        .tessellate_path(
+            &builder.build(),
+            &FillOptions::default()
+                .with_fill_rule(lyon_tessellation::FillRule::NonZero)
+                .with_tolerance(STROKE_GEOMETRY_TOLERANCE),
+            &mut output,
+        )
+        .map_err(|e| format!("aligned stroke tessellation failed: {e}"))?;
+    if output.exceeded {
+        return Err("aligned stroke mesh budget exceeded".into());
+    }
+    Ok(StrokeMesh {
+        triangles: output.triangles,
+    })
+}
+
+/// Refuse input features close enough to merge on the fixed Boolean grid.
+/// Exact coincident points/edges and real crossings remain legal (fill rules
+/// decide their meaning). Curve flattening still uses the documented 0.1 unit
+/// approximation; topology below that curve approximation is not guaranteed.
+fn check_fill_precision(contours: &[Contour], quantized: &IntContours) -> Result<(), String> {
+    for (source, ints) in contours.iter().zip(quantized) {
+        for i in 0..ints.len() {
+            let next = (i + 1) % ints.len();
+            if source.points[i] != source.points[next] && ints[i] == ints[next] {
+                return Err("aligned stroke contour edge collapses below grid precision".into());
+            }
+        }
+        let a = ints[0];
+        if !ints.windows(2).any(|p| {
+            (p[0].x as i64 - a.x as i64) * (p[1].y as i64 - a.y as i64)
+                != (p[0].y as i64 - a.y as i64) * (p[1].x as i64 - a.x as i64)
+        }) {
+            return Err("aligned stroke contour collapses below grid precision".into());
+        }
+    }
+    let clearance = (4.0 / ALIGNED_STROKE_GRID_SCALE) as f32;
+    for &p in contours.iter().flat_map(|c| &c.points) {
+        for c in contours {
+            for i in 0..c.points.len() {
+                let (a, b) = (c.points[i], c.points[(i + 1) % c.points.len()]);
+                if p == a || p == b {
+                    continue;
+                }
+                let distance = crate::geometry::distance_to_segment(p, a, b);
+                if distance > 0.0 && distance < clearance {
+                    return Err("aligned stroke contour clearance is below grid precision".into());
+                }
+            }
+        }
+    }
+    Ok(())
 }

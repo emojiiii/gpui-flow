@@ -127,6 +127,7 @@ impl DomainSource {
                 && a.object.mask == b.object.mask
                 && a.object.style.stroke == b.object.style.stroke
                 && a.object.style.stroke_layers == b.object.style.stroke_layers
+                && a.object.style.fill_rule == b.object.style.fill_rule
                 && a.object.style.fills().map(|p| p.is_visible()).eq(b
                     .object
                     .style

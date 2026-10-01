@@ -1,4 +1,4 @@
-# Ordered vector paint stacks and centered stroke styles
+# Ordered vector paint stacks and stroke styles
 
 Local Linux validation (2026-09-30): headless regressions and workspace/all-targets
 check/strict clippy pass. See [local validation](local-validation-2026-09-30.md)
@@ -12,11 +12,12 @@ not Leafer API compatibility or its full compositing/effect pipeline.
 `Style` retains the existing optional `fill` and `stroke` and adds two vectors:
 
 - `fill_layers: Vec<Paint>`: extra fills, in back-to-front order
-- `stroke_layers: Vec<Stroke>`: extra centered strokes, in back-to-front order
+- `stroke_layers: Vec<Stroke>`: extra strokes, in back-to-front order
 
 The precise order for one vector object is **base fill → fill layers → base
 stroke → stroke layers**. Each fill uses the object's `fill_rule`. Each stroke
-has its own paint, width and centered local-space stroke style. The defaults
+has its own paint, width and local-space stroke style, including opt-in
+[closed-contour Inside/Outside alignment](stroke-alignment.md). The defaults
 remain solid with round caps/joins; opt-in cap/join/miter/dash options are
 described below. Every layer supports the
 existing solid, multi-stop linear and radial paints. Coordinates remain local
@@ -54,17 +55,18 @@ the same validation as the singular fields. Invalid mutations are atomic.
 
 ## Bounds, picking, and engine changes
 
-`Style::stroke_extent()` conservatively accounts for visible centered stroke
-widths, square caps and miter limits; default round strokes retain half-width
-extent. `DisplayObject::paint_bounds()` also unions the advanced mesh bounds
-so finite-precision extrusion cannot fall outside the conservative box.
-Transparent solid paints, gradients whose stops are all transparent, and zero-width strokes do not extend bounds or create stroke
-hits. `DisplayObject::paint_bounds()` expands intrinsic geometry by this extent;
-these remain conservative geometric bounds, including intrinsic content even
-when all paints are transparent. Parent aggregate bounds, transformed bounds,
-clips and damage planning consume the same result.
+`Style::stroke_extent()` conservatively accounts for visible stroke widths,
+square caps, miter limits and alignment (Inside has no outward extent).
+`DisplayObject::paint_bounds()` keeps conservative legacy Center bounds and
+unions the final advanced/aligned mesh bounds. Outside therefore uses its real
+mesh extent; Inside adds no external padding. Transparent solid paints,
+gradients whose stops are all transparent, and zero-width strokes do not extend
+bounds or create stroke hits. Intrinsic content is retained even when all paints
+are transparent. Parent aggregate bounds, transformed bounds, clips and damage
+planning consume the same result. See [alignment](stroke-alignment.md) for the
+closed-contour, Boolean-work and numerical admission limits.
 
-Painted hit testing considers every fill and the union of active centered
+Painted hit testing considers every fill and the union of active
 strokes. Fills keep the existing winding rule. Default solid-round strokes keep
 the existing flattened distance test; advanced styles use the same bounded local
 triangle union as rendering, including actual dash gaps and cap/join geometry. It is geometric paint-presence picking: a gradient with
@@ -115,8 +117,8 @@ Limits per stroke are 256 input dash entries, 65,536 source/flattened points,
 nonfinite visible advanced geometry rejects scene commits atomically. Text,
 Image and Group reject advanced stroke styles. Direct unsupported render inputs
 report `UnsupportedFeature::StrokeGeometry`; no partial stroke is advertised.
-This source has not been compiled or executed, and repeated tessellation work
-has not been benchmarked.
+Repeated tessellation work has not been benchmarked. Current alignment budgets
+and validation are documented in [stroke alignment](stroke-alignment.md).
 
 ## Compatibility and boundaries
 
@@ -130,7 +132,9 @@ use the old solid-round defaults, while external Rust `Stroke { paint, width }`
 literals need new fields, a constructor or `..Stroke::default()`. New serializers
 include the stroke fields: backward reading does not mean byte-identical JSON.
 
-SceneView now routes required vector boundaries through [bounded CPU compositing](compositing.md): complete Group/multi-paint opacity, internal Normal/Multiply/Screen, and sibling alpha masks are real pixel operations. Static and selected animated-image pixels reuse the GPUI loader/cache and join the bounded CPU path with Contain/Cover/Fill, transforms and alpha. Text can join domains through the explicit same-platform raster bridge for solid plain text with positive uniform scale; missing bridges, unsupported text styles and Custom domains fail as a whole, and arbitrary host-GPUI blend backdrops are explicitly rejected. Opt-in `SceneCompositing::OwnedCanvas` includes the view-owned opaque theme background, grid and whole presented Scene for top-level backdrop mixing; the default per-domain path remains unchanged. Ordinary native objects keep their previous route; standalone DisplayElement reports when SceneView compositing is required. Shadow/filter effects and inside/outside/scale-fixed strokes remain absent. Paint-only states and property animation remain separate inputs to the presented tree.
+SceneView now routes required vector boundaries through [bounded CPU compositing](compositing.md): complete Group/multi-paint opacity, internal Normal/Multiply/Screen, and sibling alpha masks are real pixel operations. Static and selected animated-image pixels reuse the GPUI loader/cache and join the bounded CPU path with Contain/Cover/Fill, transforms and alpha. Text can join domains through the explicit same-platform raster bridge for solid plain text with positive uniform scale; missing bridges, unsupported text styles and Custom domains fail as a whole, and arbitrary host-GPUI blend backdrops are explicitly rejected. Opt-in `SceneCompositing::OwnedCanvas` includes the view-owned opaque theme background, grid and whole presented Scene for top-level backdrop mixing; the default per-domain path remains unchanged. Ordinary native objects keep their previous route; standalone DisplayElement reports when SceneView compositing is required. Closed-contour Inside/Outside strokes now share the bounded final mesh described
+in [stroke alignment](stroke-alignment.md). Shadow/filter effects and scale-fixed
+strokes remain absent. Paint-only states and property animation remain separate inputs to the presented tree.
 CPU damage preparation is not partial GPU rendering.
 
 ## Verification and source alignment

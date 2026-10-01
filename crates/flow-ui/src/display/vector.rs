@@ -153,7 +153,7 @@ fn prepare_vector_paints(
             object
                 .object
                 .shape
-                .stroke_mesh(stroke)
+                .stroke_mesh_with_rule(stroke, object.object.style.fill_rule)
                 .ok()
                 .map(|mesh| transformed_path(mesh_path(&mesh), screen, &clips))
         } else {
@@ -615,5 +615,111 @@ mod tests {
                 .iter()
                 .any(|issue| issue.feature == super::super::UnsupportedFeature::StrokeGeometry)
         );
+    }
+
+    #[test]
+    fn aligned_native_triangles_are_the_final_mesh_under_every_affine_and_fill_rule() {
+        for alignment in [
+            scene::StrokeAlignment::Inside,
+            scene::StrokeAlignment::Outside,
+        ] {
+            for rule in [scene::FillRule::NonZero, scene::FillRule::EvenOdd] {
+                let stroke = Stroke::new(Color::WHITE, 4.).with_alignment(alignment);
+                let mut obj = object(Style {
+                    fill: None,
+                    fill_rule: rule,
+                    stroke: Some(stroke.clone()),
+                    ..Default::default()
+                });
+                obj.object.shape = scene::display::Path::from_svg("M0 0H40V40H0Z M10 10H30V30H10Z")
+                    .unwrap()
+                    .into();
+                obj.screen_transform = Affine::translation(52., 18.)
+                    * Affine::rotation(14.)
+                    * Affine::scale(-1.7, 0.8);
+                let mesh = obj
+                    .object
+                    .shape
+                    .stroke_mesh_with_rule(&stroke, rule)
+                    .unwrap();
+                let expected: Vec<_> = mesh
+                    .triangles()
+                    .iter()
+                    .map(|t| t.map(|p| obj.screen_transform.transform_point(p)))
+                    .collect();
+                for dpr in [1., 1.5, 2.] {
+                    let paints = prepare_vector_paints(&obj, point(px(0.), px(0.)), dpr);
+                    assert_eq!(paints.len(), 1);
+                    assert_eq!(triangles(&paints[0].path), expected);
+                }
+            }
+        }
+    }
+    #[test]
+    fn independently_aligned_gradient_layers_keep_order_and_nested_clip_geometry() {
+        let mut obj = object(Style {
+            fill: None,
+            stroke: Some(Stroke {
+                paint: linear(Color::rgba(255, 0, 0, 128)),
+                ..Stroke::new(Color::WHITE, 4.).with_alignment(scene::StrokeAlignment::Inside)
+            }),
+            stroke_layers: vec![Stroke {
+                paint: linear(Color::rgba(0, 0, 255, 128)),
+                ..Stroke::new(Color::WHITE, 4.).with_alignment(scene::StrokeAlignment::Outside)
+            }],
+            ..Default::default()
+        });
+        obj.screen_transform = Affine::translation(10., 10.);
+        obj.clips = vec![
+            scene::ClipRegion {
+                local_bounds: scene::Bounds::new(
+                    ScenePoint::new(8., 8.),
+                    scene::Size::new(30., 30.),
+                ),
+                corner_radius: 4.,
+                world_transform: Affine::IDENTITY,
+            },
+            scene::ClipRegion {
+                local_bounds: scene::Bounds::new(
+                    ScenePoint::new(9., 9.),
+                    scene::Size::new(24., 24.),
+                ),
+                corner_radius: 2.,
+                world_transform: Affine::IDENTITY,
+            },
+        ];
+        let paints = prepare_vector_paints(&obj, point(px(0.), px(0.)), 1.5);
+        assert_eq!(
+            paints.iter().map(|p| p.layer).collect::<Vec<_>>(),
+            vec![PaintLayer::Stroke(0), PaintLayer::Stroke(1)]
+        );
+        assert_eq!(
+            sample(
+                &paints[0],
+                obj.screen_transform,
+                ScenePoint::new(11.5, 20.5),
+                1.
+            ),
+            Color::rgba(255, 0, 0, 128)
+        );
+        assert_eq!(
+            sample(
+                &paints[1],
+                obj.screen_transform,
+                ScenePoint::new(31.5, 20.5),
+                1.
+            ),
+            Color::rgba(0, 0, 255, 128)
+        );
+        for paint in &paints {
+            for p in triangles(&paint.path).iter().flatten() {
+                assert!(
+                    p.x >= 9. - 0.001
+                        && p.x <= 33. + 0.001
+                        && p.y >= 9. - 0.001
+                        && p.y <= 33. + 0.001
+                );
+            }
+        }
     }
 }

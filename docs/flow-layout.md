@@ -431,7 +431,9 @@ feeds a stroke-box ratio into
 That differs from this adapter's intrinsic-size allocation contract, especially
 for text and advanced stroke meshes. This slice rejects the unsupported resize
 instead of approximating it by subtracting guessed margins or treating stroke
-presentation dimensions as content. Inside/outside/scale-fixed strokes,
+presentation dimensions as content. Closed Inside/Outside strokes now use the
+shared final mesh for position-only stroke slots, including reactive edits and
+Undo/Redo ([alignment contract](stroke-alignment.md)). Scale-fixed strokes,
 Group slots, stroke-text rendering and full upstream resize parity remain open.
 
 ## Ratio-locked main-axis allocation

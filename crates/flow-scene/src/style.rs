@@ -112,18 +112,30 @@ pub enum StrokeJoin {
     #[default]
     Round,
 }
+/// Side of a closed vector boundary on which the stroke is painted.
+/// Center is the legacy default, including when old JSON omits this field.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StrokeAlignment {
+    #[default]
+    Center,
+    Inside,
+    Outside,
+}
 fn default_miter_limit() -> f32 {
     4.0
 }
 /// Maximum dash entries before odd patterns are repeated to form an even period.
 pub const MAX_STROKE_DASH_ENTRIES: usize = 256;
-/// Centered local-space stroke. Missing style fields retain the original solid,
-/// round-cap, round-join appearance. Inside/outside and scale-fixed strokes are
-/// not supported. Advanced geometry has the budgets documented on `StrokeMesh`.
+/// Local-space stroke. Missing fields retain the original centered, solid,
+/// round-cap, round-join appearance. Inside/outside require closed vector
+/// contours. Advanced geometry has the budgets documented on `StrokeMesh`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Stroke {
     pub paint: Paint,
     pub width: f32,
+    #[serde(default)]
+    pub alignment: StrokeAlignment,
     #[serde(default)]
     pub cap: StrokeCap,
     #[serde(default)]
@@ -148,12 +160,17 @@ impl Stroke {
         Self {
             paint: color.into(),
             width,
+            alignment: StrokeAlignment::Center,
             cap: StrokeCap::Round,
             join: StrokeJoin::Round,
             miter_limit: default_miter_limit(),
             dash_pattern: Vec::new(),
             dash_offset: 0.0,
         }
+    }
+    pub fn with_alignment(mut self, alignment: StrokeAlignment) -> Self {
+        self.alignment = alignment;
+        self
     }
     pub fn with_cap(mut self, cap: StrokeCap) -> Self {
         self.cap = cap;
@@ -175,11 +192,15 @@ impl Stroke {
     /// Whether rendering and picking require the shared advanced-stroke mesh.
     /// An unused miter limit or dash offset does not change solid round geometry.
     pub fn uses_advanced_geometry(&self) -> bool {
-        self.cap != StrokeCap::Round
+        self.alignment != StrokeAlignment::Center
+            || self.cap != StrokeCap::Round
             || self.join != StrokeJoin::Round
             || !self.dash_pattern.is_empty()
     }
     pub(crate) fn extent(&self) -> f32 {
+        if self.alignment == StrokeAlignment::Inside {
+            return 0.0;
+        }
         let mut factor = 0.5f64;
         if self.cap == StrokeCap::Square {
             factor = std::f64::consts::SQRT_2 * 0.5;
@@ -188,6 +209,9 @@ impl Stroke {
             // Lyon 1.0.22 limits normal length to 2 * miter_limit. With
             // half-width extrusion, width * limit is a conservative reach.
             factor = factor.max(self.miter_limit as f64);
+        }
+        if self.alignment == StrokeAlignment::Outside {
+            factor *= 2.0;
         }
         (self.width as f64 * factor) as f32
     }
@@ -297,8 +321,9 @@ impl Style {
     pub fn strokes(&self) -> impl Iterator<Item = &Stroke> {
         self.stroke.iter().chain(self.stroke_layers.iter())
     }
-    /// Conservative centered-stroke extent. Fully transparent paints and zero
-    /// widths neither render nor enlarge painted bounds or stroke picking.
+    /// Conservative outward stroke extent. Inside strokes have zero extent.
+    /// Fully transparent paints and zero widths neither render nor enlarge
+    /// painted bounds or stroke picking.
     pub fn stroke_extent(&self) -> f32 {
         self.strokes()
             .filter(|stroke| stroke.paint.is_visible())

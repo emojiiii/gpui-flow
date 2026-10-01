@@ -928,3 +928,42 @@ fn reactive_layers_and_stroke_paint_visibility_recompute_selected_slots() {
     assert_slot(editor.scene(), "b", 24., 0., 20., 10.);
     assert!(!editor.undo());
 }
+
+#[test]
+fn aligned_stroke_boxes_reflow_on_alignment_width_and_restore_in_one_undo() {
+    use gpui_flow_scene::{FillRule, StrokeAlignment};
+    let (mut scene, layout) = fixture(200., 50.);
+    add(&mut scene, "a", 20., 20., 4.);
+    add(&mut scene, "b", 20., 20., 4.);
+    scene
+        .update_object(&"a".into(), |o| {
+            o.style.stroke.as_mut().unwrap().alignment = StrokeAlignment::Inside
+        })
+        .unwrap();
+    layout.apply_to_scene(&mut scene).unwrap();
+    assert_slot(&scene, "a", 0., 0., 20., 20.);
+    assert_slot(&scene, "b", 20., 0., 24., 24.);
+    let before = scene.clone();
+    let mut editor = SceneEditor::new(scene).unwrap();
+    layout.install_reactive(&mut editor.engine).unwrap();
+    editor
+        .transaction(|s| {
+            s.update_object(&"a".into(), |o| {
+                let stroke = o.style.stroke.as_mut().unwrap();
+                stroke.alignment = StrokeAlignment::Outside;
+                stroke.join = StrokeJoin::Miter;
+                stroke.width = 6.;
+                o.style.fill_rule = FillRule::EvenOdd;
+            })
+        })
+        .unwrap();
+    assert_slot(editor.scene(), "a", 0., 0., 32., 32.);
+    assert_slot(editor.scene(), "b", 32., 0., 24., 24.);
+    let after = editor.scene().clone();
+    assert!(editor.undo());
+    assert_eq!(editor.scene(), &before);
+    assert!(!editor.undo());
+    assert!(editor.redo());
+    assert_eq!(editor.scene(), &after);
+    assert_stable(&layout, editor.scene());
+}

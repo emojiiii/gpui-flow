@@ -121,17 +121,27 @@ impl DisplayObject {
         self
     }
     pub fn paint_bounds(&self) -> Option<Bounds> {
-        let mut bounds = self
-            .shape
-            .local_bounds()
-            .map(|b| b.expanded(self.style.stroke_extent()));
+        let mut bounds = self.shape.local_bounds().map(|b| {
+            // Preserve legacy centered conservative bounds. Aligned strokes
+            // use their final mesh below, not a miter-limit-sized padding.
+            let extent = self
+                .style
+                .strokes()
+                .filter(|s| s.paint.is_visible() && s.alignment == crate::StrokeAlignment::Center)
+                .map(crate::Stroke::extent)
+                .fold(0.0, f32::max);
+            b.expanded(extent)
+        });
         for stroke in self.style.strokes().filter(|stroke| {
             stroke.width > 0.0 && stroke.paint.is_visible() && stroke.uses_advanced_geometry()
         }) {
             // Retain conservative local geometry bounds, including unpainted
             // dash gaps. Union the actual mesh as well, so f32 rounding of an
             // expanded AABB can never clip a square cap or miter tip.
-            match self.shape.stroke_mesh(stroke) {
+            match self
+                .shape
+                .stroke_mesh_with_rule(stroke, self.style.fill_rule)
+            {
                 Ok(mesh) => {
                     if let Some(mesh_bounds) = mesh.bounds() {
                         bounds = Some(bounds.map_or(mesh_bounds, |b| b.union(mesh_bounds)));
@@ -178,10 +188,13 @@ impl DisplayObject {
             ) {
                 return Err("advanced strokes require vector geometry".into());
             }
-            if stroke.width > 0.0 && stroke.paint.is_visible() {
+            if stroke.alignment != crate::StrokeAlignment::Center
+                || (stroke.width > 0.0 && stroke.paint.is_visible())
+            {
                 // Scene insert/update/deserialization validate candidates before
                 // committing, including all geometry budgets and finite output.
-                self.shape.stroke_mesh(stroke)?;
+                self.shape
+                    .stroke_mesh_with_rule(stroke, self.style.fill_rule)?;
             }
         }
         if self.paint_bounds().is_some_and(|b| !b.is_valid()) {

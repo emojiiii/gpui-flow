@@ -443,13 +443,11 @@ pub(crate) fn property_dirty(name: &str) -> DirtyFlags {
         "mask" => DirtyFlags::PAINT | DirtyFlags::GEOMETRY,
         "transform" => DirtyFlags::TRANSFORM | DirtyFlags::HIT,
         "shape" => DirtyFlags::GEOMETRY | DirtyFlags::PAINT | DirtyFlags::HIT,
-        "style.stroke" | "style.stroke_layers" => {
+        "style.stroke" | "style.stroke_layers" | "style.fill_rule" => {
             DirtyFlags::GEOMETRY | DirtyFlags::PAINT | DirtyFlags::HIT
         }
         "style.opacity" | "visible" => DirtyFlags::OPACITY | DirtyFlags::PAINT | DirtyFlags::HIT,
-        "style.fill" | "style.fill_layers" | "style.fill_rule" => {
-            DirtyFlags::PAINT | DirtyFlags::HIT
-        }
+        "style.fill" | "style.fill_layers" => DirtyFlags::PAINT | DirtyFlags::HIT,
         "locked" | "hit_policy" | "hit_children" => DirtyFlags::HIT,
         "z_index" => DirtyFlags::ORDER | DirtyFlags::PAINT | DirtyFlags::HIT,
         _ => DirtyFlags::DATA,

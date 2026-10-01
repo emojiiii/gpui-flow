@@ -476,3 +476,37 @@ fn panicking_dependency_declaration_retains_previous_provider_and_document() {
     assert_eq!(e.scene(), &before);
     assert_eq!(e.revision(), revision);
 }
+
+#[test]
+fn fill_rule_is_a_reactive_stroke_box_input_only_for_opted_in_providers() {
+    struct StrokeBoxes {
+        calls: Arc<AtomicUsize>,
+        stroke: bool,
+    }
+    impl LayoutProvider for StrokeBoxes {
+        fn derive(&self, _: &SceneEngine, candidate: &Scene) -> Result<Scene, EngineError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Ok(candidate.clone())
+        }
+        fn uses_stroke_bounds(&self) -> bool {
+            self.stroke
+        }
+    }
+    for stroke in [false, true] {
+        let mut e = engine();
+        let calls = Arc::new(AtomicUsize::new(0));
+        e.install_layout_provider(StrokeBoxes {
+            calls: calls.clone(),
+            stroke,
+        })
+        .unwrap();
+        let initial = calls.load(Ordering::SeqCst);
+        e.set_property(
+            e.handle(&"a".into()).unwrap(),
+            PropertyKey::FillRule,
+            json!("even_odd"),
+        )
+        .unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst) > initial, stroke);
+    }
+}

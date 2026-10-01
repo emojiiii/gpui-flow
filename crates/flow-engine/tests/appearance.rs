@@ -202,3 +202,59 @@ fn closure_edits_classify_layer_reordering_and_restoration() {
         *engine.scene()
     );
 }
+
+#[test]
+fn aligned_fill_rule_updates_geometry_damage_and_picking_atomically() {
+    use gpui_flow_scene::{FillRule, StrokeAlignment};
+    let mut e = engine();
+    e.transaction(|s| {
+        s.update_object(&"rect".into(), |o| {
+            o.shape = display::Path::from_svg("M0 0H40V40H0Z M10 10H30V30H10Z")
+                .unwrap()
+                .into();
+            o.style.stroke =
+                Some(Stroke::new(Color::BLACK, 4.).with_alignment(StrokeAlignment::Outside));
+        })
+    })
+    .unwrap();
+    let h = e.handle(&"rect".into()).unwrap();
+    assert!(
+        e.hit_test(Point::new(11., 20.), HitTestOptions::default())
+            .unwrap()
+            .is_none()
+    );
+    let change = e
+        .set_property(h, PropertyKey::FillRule, json!("even_odd"))
+        .unwrap();
+    assert!(
+        change.dirty[&"rect".into()]
+            .contains(DirtyFlags::GEOMETRY | DirtyFlags::HIT | DirtyFlags::PAINT)
+    );
+    assert_eq!(change.layout.bounds_recomputed, 2);
+    assert!(change.damage_bounds().is_some());
+    assert_eq!(
+        e.hit_test(Point::new(11., 20.), HitTestOptions::default())
+            .unwrap()
+            .unwrap()
+            .id
+            .as_str(),
+        "rect"
+    );
+    let before = e.scene().clone();
+    let rev = e.revision();
+    let cache = e.layout().clone();
+    assert!(
+        e.set_property(h, PropertyKey::FillRule, json!("invalid"))
+            .is_err()
+    );
+    assert_eq!(e.scene(), &before);
+    assert_eq!(e.revision(), rev);
+    assert_eq!(e.layout(), &cache);
+    e.transaction(|s| s.update_object(&"rect".into(), |o| o.style.fill_rule = FillRule::NonZero))
+        .unwrap();
+    assert!(
+        e.hit_test(Point::new(11., 20.), HitTestOptions::default())
+            .unwrap()
+            .is_none()
+    );
+}
