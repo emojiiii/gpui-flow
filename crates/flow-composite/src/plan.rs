@@ -89,6 +89,23 @@ impl DomainSource {
         visit(&self.root, &mut out);
         out
     }
+    /// Visible text producers with their exact presented style and world matrix.
+    pub fn texts(&self) -> Vec<(&DisplayObject, Affine)> {
+        fn visit<'a>(node: &'a DomainNode, out: &mut Vec<(&'a DisplayObject, Affine)>) {
+            if !node.object.visible || node.object.style.opacity == 0. {
+                return;
+            }
+            if matches!(node.object.shape, Shape::Text(_)) {
+                out.push((&node.object, node.world_transform));
+            }
+            for child in &node.children {
+                visit(child, out);
+            }
+        }
+        let mut out = Vec::new();
+        visit(&self.root, &mut out);
+        out
+    }
     pub fn ids(&self) -> Vec<&DisplayId> {
         fn visit<'a>(node: &'a DomainNode, out: &mut Vec<&'a DisplayId>) {
             out.push(&node.object.id);
@@ -214,6 +231,7 @@ fn capture(
         | Shape::Line(_)
         | Shape::Group(_)
         | Shape::Image(_)
+        | Shape::Text(_)
         | Shape::Box(_)
         | Shape::Frame(_) => 0,
         other => return Err(CompositeError::UnsupportedShape(other.tag().into())),

@@ -5,6 +5,10 @@
 pub mod gpui_backend;
 #[cfg(feature = "gpui")]
 pub use gpui_backend::GpuiTextMeasurer;
+#[cfg(feature = "gpui")]
+pub mod gpui_raster;
+#[cfg(feature = "gpui")]
+pub use gpui_raster::{GpuiTextRasterizer, RasterizedText, TextRasterRequest};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextMeasureRequest {

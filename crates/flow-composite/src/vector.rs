@@ -1,4 +1,4 @@
-use crate::{CompositeError, CompositeLimits, DomainNode, ImageInputs, StaticImage};
+use crate::{CompositeError, CompositeLimits, DomainNode, ImageInputs, StaticImage, TextInputs};
 use gpui_flow_scene::{
     Affine, BlendMode, ClipRegion, FillRule, MaskMode, Paint, Shape, display::PathCommand,
 };
@@ -188,14 +188,16 @@ impl Preparation {
         source: &DomainNode,
         limits: CompositeLimits,
         images: &ImageInputs,
+        texts: &TextInputs,
     ) -> Result<PreparedNode, CompositeError> {
-        self.node_at(source, limits, images, 0)
+        self.node_at(source, limits, images, texts, 0)
     }
     fn node_at(
         &mut self,
         source: &DomainNode,
         limits: CompositeLimits,
         images: &ImageInputs,
+        texts: &TextInputs,
         depth: usize,
     ) -> Result<PreparedNode, CompositeError> {
         self.nodes += 1;
@@ -240,7 +242,36 @@ impl Preparation {
         let previous_bounds = self.bounds.take();
         let mut paints = Vec::new();
         let mut image_paint = None;
-        if let Shape::Image(image) = &object.shape {
+        if matches!(object.shape, Shape::Text(_)) {
+            // A complete narrow subset. Never silently ignore unsupported paint.
+            if object.style.strokes().next().is_some()
+                || object.style.fills().count() > 1
+                || object
+                    .style
+                    .fills()
+                    .any(|p| !matches!(p, Paint::Solid { .. }))
+            {
+                return Err(CompositeError::UnsupportedTextStyle(object.id.clone()));
+            }
+            if let Some(text) = texts.get(&object.id)? {
+                let b = text.local_bounds;
+                let rect =
+                    tiny_skia::Rect::from_xywh(b.origin.x, b.origin.y, b.size.width, b.size.height)
+                        .ok_or_else(|| CompositeError::InvalidGeometry("text ink bounds".into()))?;
+                let path = PathBuilder::from_rect(rect);
+                self.add_path(&path, source.world_transform, limits)?;
+                image_paint = Some(ImagePaint {
+                    texture_to_local: Affine::translation(b.origin.x, b.origin.y)
+                        * Affine::scale(
+                            b.size.width / text.image.width() as f32,
+                            b.size.height / text.image.height() as f32,
+                        ),
+                    image: text.image.clone(),
+                    path,
+                    world: source.world_transform,
+                });
+            }
+        } else if let Shape::Image(image) = &object.shape {
             let pixels = images.get(&object.id)?;
             // Native GPUI object-fit uses decoded dimensions, not optional
             // document metadata. Reuse the scene fit geometry with those facts.
@@ -348,7 +379,7 @@ impl Preparation {
         let children = source
             .children
             .iter()
-            .map(|child| self.node_at(child, limits, images, depth + 1))
+            .map(|child| self.node_at(child, limits, images, texts, depth + 1))
             .collect::<Result<_, _>>()?;
         let mut children_bounds = self.bounds.take();
         if child_clip.is_some() {

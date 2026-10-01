@@ -1,16 +1,18 @@
-//! Bounded, toolkit-independent vector isolation using tiny-skia 0.11.4.
+//! Bounded, toolkit-independent vector/image/text-ink isolation using tiny-skia 0.11.4.
 //!
 //! A domain is all-or-nothing: unsupported descendants, unsafe coordinates or
 //! exhausted budgets return an error before an output can be published. Native
-//! text/custom renderers must remain outside these domains. Static image pixels
-//! are supplied by the host, never fetched or decoded by this crate.
+//! custom renderers must remain outside these domains. Image and text ink pixels
+//! are supplied by the host, never fetched, decoded or shaped by this crate.
 mod image;
 mod plan;
 mod raster;
+mod text;
 mod vector;
 pub use image::*;
 pub use plan::*;
 pub use raster::*;
+pub use text::*;
 
 use gpui_flow_scene::DisplayId;
 use std::fmt;
@@ -76,6 +78,12 @@ pub enum CompositeError {
     },
     UnsupportedAnimatedImage,
     InvalidImage,
+    TextBackendRequired(DisplayId),
+    UnsupportedTextStyle(DisplayId),
+    TextRasterization {
+        text: DisplayId,
+        reason: String,
+    },
     UnsupportedExternalBackdrop,
     UnsupportedTransform,
     InvalidGeometry(String),

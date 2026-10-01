@@ -1,5 +1,5 @@
 use crate::{
-    CompositeError, CompositeLimits, DomainSource, ImageInputs,
+    CompositeError, CompositeLimits, DomainSource, ImageInputs, TextInputs,
     vector::{Preparation, PreparedNode, transform},
 };
 use gpui_flow_scene::{
@@ -72,6 +72,10 @@ impl PixelBudget {
         self.in_use = next;
         self.peak = self.peak.max(next);
         Ok(())
+    }
+    /// Charge producer work performed before rasterization (for example glyph pixels).
+    pub fn charge_input_work(&mut self, n: u64) -> Result<(), CompositeError> {
+        self.write(n)
     }
     fn write(&mut self, n: u64) -> Result<(), CompositeError> {
         self.writes = self
@@ -482,9 +486,28 @@ pub fn rasterize_with_images(
     budget: &mut PixelBudget,
     cancelled: &AtomicBool,
 ) -> Result<Option<CpuFrame>, CompositeError> {
+    rasterize_with_inputs(
+        source,
+        images,
+        &TextInputs::default(),
+        viewport,
+        budget,
+        cancelled,
+    )
+}
+/// Rasterize the same complete domain with immutable image AND text ink inputs.
+/// All input buffers, masks, intermediate layers and outputs share one budget.
+pub fn rasterize_with_inputs(
+    source: &DomainSource,
+    images: &ImageInputs,
+    texts: &TextInputs,
+    viewport: RasterViewport,
+    budget: &mut PixelBudget,
+    cancelled: &AtomicBool,
+) -> Result<Option<CpuFrame>, CompositeError> {
     let before = budget.in_use;
-    budget.reserve(images.byte_len())?;
-    let result = rasterize_inner(source, images, viewport, budget, cancelled);
+    budget.reserve(images.byte_len().saturating_add(texts.byte_len()))?;
+    let result = rasterize_inner(source, images, texts, viewport, budget, cancelled);
     budget.in_use = before
         + result
             .as_ref()
@@ -496,6 +519,7 @@ pub fn rasterize_with_images(
 fn rasterize_inner(
     source: &DomainSource,
     images: &ImageInputs,
+    texts: &TextInputs,
     viewport: RasterViewport,
     budget: &mut PixelBudget,
     cancelled: &AtomicBool,
@@ -517,8 +541,14 @@ fn rasterize_inner(
     {
         return Err(CompositeError::UnsupportedTransform);
     }
+    for (_, world) in source.texts() {
+        let m = viewport.world_to_screen * world;
+        if m.a <= 0. || m.d <= 0. || m.b != 0. || m.c != 0. || (m.a - m.d).abs() > m.a * 0.00001 {
+            return Err(CompositeError::UnsupportedTransform);
+        }
+    }
     let mut prep = Preparation::default();
-    let root = prep.node(&source.root, budget.limits, images)?;
+    let root = prep.node(&source.root, budget.limits, images, texts)?;
     let Some(world_bounds) = prep.bounds else {
         return Ok(None);
     };

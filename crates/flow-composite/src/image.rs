@@ -50,6 +50,45 @@ impl StaticImage {
             pixmap: tiny_skia::Pixmap::from_vec(rgba, size).ok_or(CompositeError::InvalidImage)?,
         })
     }
+    /// Consume an already premultiplied RGBA buffer without an additional copy.
+    pub fn from_premultiplied_rgba(
+        width: u32,
+        height: u32,
+        data: Vec<u8>,
+        limits: CompositeLimits,
+    ) -> Result<Self, CompositeError> {
+        let limits = limits.bounded();
+        let pixels = u64::from(width) * u64::from(height);
+        if width == 0 || height == 0 {
+            return Err(CompositeError::InvalidImage);
+        }
+        if width > limits.max_dimension
+            || height > limits.max_dimension
+            || pixels > limits.max_pixels
+        {
+            return Err(CompositeError::TooLarge);
+        }
+        let bytes = pixels.checked_mul(4).ok_or(CompositeError::TooLarge)?;
+        if data.len() as u64 != bytes {
+            return Err(CompositeError::InvalidImage);
+        }
+        if bytes > limits.max_surface_bytes {
+            return Err(CompositeError::WorkingSetLimit);
+        }
+        if data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .any(|p| p[..3].iter().any(|v| *v > p[3]))
+        {
+            return Err(CompositeError::InvalidImage);
+        }
+        let size =
+            tiny_skia::IntSize::from_wh(width, height).ok_or(CompositeError::InvalidImage)?;
+        Ok(Self {
+            pixmap: tiny_skia::Pixmap::from_vec(data, size).ok_or(CompositeError::InvalidImage)?,
+        })
+    }
     pub fn width(&self) -> u32 {
         self.pixmap.width()
     }

@@ -120,11 +120,13 @@ fn external_blend_rejected_and_unsupported_descendant_rejects_whole_domain() {
         "g",
     );
     assert!(matches!(
-        &scene_units(&s, CompositeLimits::default()).unwrap()[0],
-        SceneUnit::Rejected(CompositeIssue {
-            error: CompositeError::UnsupportedShape(_),
-            ..
-        })
+        rasterize(
+            &source(&s),
+            viewport(),
+            &mut PixelBudget::new(CompositeLimits::default(), 0).unwrap(),
+            &AtomicBool::new(false)
+        ),
+        Err(CompositeError::TextBackendRequired(_))
     ));
 }
 #[test]
@@ -1046,9 +1048,15 @@ fn container_unsupported_descendants_and_external_backdrop_remain_explicit_error
         ),
         "container",
     );
-    assert!(
-        matches!(&scene_units(&s, CompositeLimits::default()).unwrap()[0], SceneUnit::Rejected(CompositeIssue {error: CompositeError::UnsupportedShape(tag), ..}) if tag == "text")
-    );
+    assert!(matches!(
+        rasterize(
+            &source(&s),
+            viewport(),
+            &mut PixelBudget::new(CompositeLimits::default(), 0).unwrap(),
+            &AtomicBool::new(false)
+        ),
+        Err(CompositeError::TextBackendRequired(_))
+    ));
     let mut s = Scene::new();
     let mut f = unpainted_container("frame", display::Frame::new(30., 30.));
     f.style.blend_mode = BlendMode::Multiply;
@@ -1220,4 +1228,151 @@ fn nested_clip_screen_blend_keeps_parent_pixels_and_releases_temporary_masks() {
     assert_eq!(at(&f, 18, 8), [255, 0, 0, 255]);
     assert_eq!(budget.retained_bytes(), 16 + f.premul_rgba.len() as u64);
     assert!(budget.peak_bytes() > budget.retained_bytes());
+}
+
+fn text_fixture() -> TextInputs {
+    // Synthetic A8-like ink fixture exercises composition independently of fonts.
+    // Real glyph production is covered by text_raster_probe, never substituted here.
+    let mut rgba = vec![0u8; 20 * 20 * 4];
+    for y in 5..15 {
+        for x in 5..15 {
+            rgba[(y * 20 + x) * 4..(y * 20 + x) * 4 + 4].copy_from_slice(&[0, 0, 255, 255]);
+        }
+    }
+    let image = std::sync::Arc::new(
+        StaticImage::from_premultiplied_rgba(20, 20, rgba, CompositeLimits::default()).unwrap(),
+    );
+    let mut inputs = TextInputs::default();
+    inputs.insert(
+        "text".into(),
+        Ok(Some(std::sync::Arc::new(TextImage {
+            image,
+            local_bounds: Bounds::new(Point::ZERO, Size::new(20., 20.)),
+        }))),
+    );
+    inputs
+}
+fn text_scene() -> Scene {
+    let mut scene = Scene::new();
+    scene.insert(group("g", 0.5), None, None).unwrap();
+    insert(
+        &mut scene,
+        DisplayObject::new("text", display::Text::new("ink", Size::new(20., 20.)))
+            .with_style(Style::fill(Color::WHITE)),
+        "g",
+    );
+    scene
+}
+fn render_text_fixture(
+    scene: &Scene,
+    inputs: &TextInputs,
+) -> Result<Option<CpuFrame>, CompositeError> {
+    rasterize_with_inputs(
+        &source(scene),
+        &ImageInputs::default(),
+        inputs,
+        viewport(),
+        &mut PixelBudget::new(CompositeLimits::default(), 0).unwrap(),
+        &AtomicBool::new(false),
+    )
+}
+#[test]
+fn text_pixels_have_real_transparent_gaps_and_group_alpha_is_applied_once() {
+    let frame = render_text_fixture(&text_scene(), &text_fixture())
+        .unwrap()
+        .unwrap();
+    assert_eq!(at(&frame, 10, 10), [0, 0, 128, 128]);
+    assert_eq!(at(&frame, 2, 2), [0, 0, 0, 0]);
+}
+#[test]
+fn text_mask_uses_glyph_alpha_and_never_its_layout_rectangle() {
+    let mut s = text_scene();
+    s.update_object(&"text".into(), |o| o.mask = MaskMode::Alpha)
+        .unwrap();
+    insert(&mut s, rect("red", 0., Color::hex(0xff0000)), "g");
+    let frame = render_text_fixture(&s, &text_fixture()).unwrap().unwrap();
+    assert_eq!(at(&frame, 10, 10), [128, 0, 0, 128]);
+    assert_eq!(at(&frame, 2, 2), [0, 0, 0, 0]);
+}
+#[test]
+fn text_internal_multiply_sees_preceding_siblings_and_keeps_ink_holes() {
+    let mut s = text_scene();
+    s.update_object(&"g".into(), |o| o.style.opacity = 1.)
+        .unwrap();
+    s.update_object(&"text".into(), |o| {
+        o.style.blend_mode = BlendMode::Multiply;
+        o.z_index = 1;
+    })
+    .unwrap();
+    insert(&mut s, rect("red", 0., Color::hex(0xff0000)), "g");
+    let frame = render_text_fixture(&s, &text_fixture()).unwrap().unwrap();
+    assert_eq!(at(&frame, 10, 10), [0, 0, 0, 255]);
+    assert_eq!(at(&frame, 2, 2), [255, 0, 0, 255]);
+}
+#[test]
+fn text_empty_hidden_unsupported_and_bad_pixel_inputs_fail_or_skip_explicitly() {
+    let mut s = text_scene();
+    let mut none = TextInputs::default();
+    none.insert("text".into(), Ok(None));
+    assert!(render_text_fixture(&s, &none).unwrap().is_none());
+    s.update_object(&"text".into(), |o| o.visible = false)
+        .unwrap();
+    assert!(
+        render_text_fixture(&s, &TextInputs::default())
+            .unwrap()
+            .is_none()
+    );
+    s.update_object(&"text".into(), |o| {
+        o.visible = true;
+        o.style.stroke = Some(gpui_flow_scene::Stroke::new(Color::WHITE, 1.));
+    })
+    .unwrap();
+    assert!(matches!(
+        render_text_fixture(&s, &text_fixture()),
+        Err(CompositeError::UnsupportedTextStyle(_))
+    ));
+    assert!(
+        StaticImage::from_premultiplied_rgba(1, 1, vec![255, 0, 0, 20], CompositeLimits::default())
+            .is_err()
+    );
+}
+#[test]
+fn text_pixels_share_working_set_budget_and_failed_domain_leaves_no_partial_output() {
+    let s = text_scene();
+    let inputs = text_fixture();
+    assert_eq!(inputs.byte_len(), 1600);
+    let mut budget = PixelBudget::new(
+        CompositeLimits {
+            max_surface_bytes: 2000,
+            ..Default::default()
+        },
+        20,
+    )
+    .unwrap();
+    assert!(matches!(
+        rasterize_with_inputs(
+            &source(&s),
+            &ImageInputs::default(),
+            &inputs,
+            viewport(),
+            &mut budget,
+            &AtomicBool::new(false)
+        ),
+        Err(CompositeError::WorkingSetLimit)
+    ));
+    assert_eq!(budget.retained_bytes(), 20);
+    let mut budget = PixelBudget::new(CompositeLimits::default(), 0).unwrap();
+    budget.charge_input_work(32_000_000).unwrap();
+    assert!(matches!(
+        rasterize_with_inputs(
+            &source(&s),
+            &ImageInputs::default(),
+            &inputs,
+            viewport(),
+            &mut budget,
+            &AtomicBool::new(false)
+        ),
+        Err(CompositeError::WorkLimit)
+    ));
+    assert_eq!(budget.retained_bytes(), 0);
 }
