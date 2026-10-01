@@ -2,7 +2,9 @@ use crate::{
     CompositeError, CompositeLimits, DomainSource, ImageInputs,
     vector::{Preparation, PreparedNode, transform},
 };
-use gpui_flow_scene::{Affine, BlendMode, Bounds, MaskMode, Point, Shape, Size, display::Rect};
+use gpui_flow_scene::{
+    Affine, BlendMode, Bounds, ClipRegion, MaskMode, Point, Shape, Size, display::Rect,
+};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tiny_skia::{Mask, PathBuilder, Pixmap, PixmapPaint, Transform};
 
@@ -126,6 +128,7 @@ impl Raster<'_> {
         source: &Pixmap,
         opacity: f32,
         blend: BlendMode,
+        clip: Option<&Mask>,
     ) -> Result<(), CompositeError> {
         self.check()?;
         self.budget.write(self.pixels)?;
@@ -143,7 +146,7 @@ impl Raster<'_> {
                 ..Default::default()
             },
             Transform::identity(),
-            None,
+            clip,
         );
         Ok(())
     }
@@ -152,6 +155,7 @@ impl Raster<'_> {
         node: &PreparedNode,
         target: &mut Pixmap,
         depth: usize,
+        clip: Option<&Mask>,
     ) -> Result<(), CompositeError> {
         self.check()?;
         if !node.visible || node.opacity == 0. {
@@ -163,11 +167,11 @@ impl Raster<'_> {
                 return Err(CompositeError::NestingLimit);
             }
             let mut layer = self.surface()?;
-            self.contents(node, &mut layer, depth + 1)?;
-            self.composite(target, &layer, node.opacity, node.blend)?;
+            self.contents(node, &mut layer, depth + 1, None)?;
+            self.composite(target, &layer, node.opacity, node.blend, clip)?;
             self.release(layer);
         } else {
-            self.contents(node, target, depth)?;
+            self.contents(node, target, depth, clip)?;
         }
         Ok(())
     }
@@ -176,6 +180,7 @@ impl Raster<'_> {
         node: &PreparedNode,
         target: &mut Pixmap,
         depth: usize,
+        clip: Option<&Mask>,
     ) -> Result<(), CompositeError> {
         for p in &node.paints {
             self.check()?;
@@ -191,7 +196,7 @@ impl Raster<'_> {
                 }
             }
             self.budget.write(self.pixels)?;
-            target.fill_path(&p.path, &p.paint, p.rule, transform(a), None);
+            target.fill_path(&p.path, &p.paint, p.rule, transform(a), clip);
         }
         if let Some(p) = &node.image {
             self.check()?;
@@ -226,20 +231,38 @@ impl Raster<'_> {
                 &paint,
                 tiny_skia::FillRule::Winding,
                 transform(a),
-                None,
+                clip,
             );
         }
+        if let Some(region) = &node.child_clip {
+            if !node.children.is_empty() {
+                let child_clip = self.child_clip(region, clip)?;
+                self.children(node, target, depth, Some(&child_clip))?;
+                self.budget.in_use -= self.pixels;
+            }
+        } else {
+            self.children(node, target, depth, clip)?;
+        }
+        Ok(())
+    }
+    fn children(
+        &mut self,
+        node: &PreparedNode,
+        target: &mut Pixmap,
+        depth: usize,
+        clip: Option<&Mask>,
+    ) -> Result<(), CompositeError> {
         let mut i = 0;
         while i < node.children.len() {
             let child = &node.children[i];
             if child.mask == MaskMode::None {
-                self.node(child, target, depth)?;
+                self.node(child, target, depth, clip)?;
                 i += 1;
                 continue;
             }
             let mask_node = child;
             let mut mask_surface = self.surface()?;
-            self.node(mask_node, &mut mask_surface, depth)?;
+            self.node(mask_node, &mut mask_surface, depth, None)?;
             self.budget.reserve(self.pixels)?;
             let mut alpha = bytes(self.pixels)?;
             for (a, p) in alpha
@@ -264,15 +287,15 @@ impl Raster<'_> {
                 // instead composites the entire run before applying alpha.
                 let flush = mask_node.opacity == 1. && c.blend != BlendMode::PassThrough;
                 if flush {
-                    self.masked(target, &mut content, &mask, BlendMode::Normal)?;
+                    self.masked(target, &mut content, &mask, BlendMode::Normal, clip)?;
                 }
-                self.node(c, &mut content, depth)?;
+                self.node(c, &mut content, depth, None)?;
                 if flush {
-                    self.masked(target, &mut content, &mask, c.blend)?;
+                    self.masked(target, &mut content, &mask, c.blend, clip)?;
                 }
                 i += 1;
             }
-            self.masked(target, &mut content, &mask, BlendMode::Normal)?;
+            self.masked(target, &mut content, &mask, BlendMode::Normal, clip)?;
             self.release(content);
             self.budget.in_use -= self.pixels;
             drop(mask);
@@ -285,15 +308,66 @@ impl Raster<'_> {
         content: &mut Pixmap,
         mask: &Mask,
         blend: BlendMode,
+        clip: Option<&Mask>,
     ) -> Result<(), CompositeError> {
         self.check()?;
         self.budget.write(self.pixels)?;
         // Exact common dimensions/origin are guaranteed by this raster owner.
         content.apply_mask(mask);
-        self.composite(target, content, 1., blend)?;
+        self.composite(target, content, 1., blend, clip)?;
         self.budget.write(self.pixels)?;
         content.fill(tiny_skia::Color::TRANSPARENT);
         Ok(())
+    }
+    // A clip is not an isolation boundary: pass-through children must still
+    // blend against preceding pixels in the actual parent surface.
+    fn child_clip(
+        &mut self,
+        region: &ClipRegion,
+        inherited: Option<&Mask>,
+    ) -> Result<Mask, CompositeError> {
+        self.check()?;
+        self.budget.reserve(self.pixels)?;
+        let mut mask = Mask::from_vec(
+            bytes(self.pixels)?,
+            tiny_skia::IntSize::from_wh(self.width, self.height).ok_or(CompositeError::TooLarge)?,
+        )
+        .ok_or(CompositeError::AllocationFailed)?;
+        let shape = Shape::Rect(
+            Rect::new(
+                region.local_bounds.size.width,
+                region.local_bounds.size.height,
+            )
+            .rounded(region.corner_radius),
+        );
+        let Some(path) = crate::vector::path(&shape)? else {
+            return Ok(mask);
+        };
+        let a = self.world_to_layer
+            * region.world_transform
+            * Affine::translation(region.local_bounds.origin.x, region.local_bounds.origin.y);
+        if a.inverse().is_none() || transform(a).invert().is_none_or(|t| !t.is_finite()) {
+            return Err(CompositeError::UnsupportedTransform);
+        }
+        for p in path.points() {
+            let q = a.transform_point(Point::new(p.x, p.y));
+            if !q.is_finite() || q.x.abs() > 1_000_000. || q.y.abs() > 1_000_000. {
+                return Err(CompositeError::UnsupportedTransform);
+            }
+        }
+        self.budget.write(self.pixels)?;
+        if let Some(inherited) = inherited {
+            // Copy, temporary fill and intersection each touch the surface.
+            self.budget.write(self.pixels * 2)?;
+            mask.data_mut().copy_from_slice(inherited.data());
+            // tiny-skia intersect_path has a temporary one-byte-per-pixel mask.
+            self.budget.reserve(self.pixels)?;
+            mask.intersect_path(&path, tiny_skia::FillRule::Winding, true, transform(a));
+            self.budget.in_use -= self.pixels;
+        } else {
+            mask.fill_path(&path, tiny_skia::FillRule::Winding, true, transform(a));
+        }
+        Ok(mask)
     }
     fn clip(&mut self, output: &mut Pixmap, source: &DomainSource) -> Result<(), CompositeError> {
         if source.clips.is_empty() {
@@ -339,7 +413,8 @@ impl Raster<'_> {
             if index == 0 {
                 mask.fill_path(&path, tiny_skia::FillRule::Winding, true, transform(a));
             } else {
-                // intersect_path allocates one temporary mask internally.
+                // intersect_path fills a temporary mask and intersects it.
+                self.budget.write(self.pixels)?;
                 self.budget.reserve(self.pixels)?;
                 mask.intersect_path(&path, tiny_skia::FillRule::Winding, true, transform(a));
                 self.budget.in_use -= self.pixels;
@@ -509,7 +584,7 @@ fn rasterize_inner(
         cancelled,
     };
     let mut output = raster.surface()?;
-    raster.node(&root, &mut output, 0)?;
+    raster.node(&root, &mut output, 0, None)?;
     raster.clip(&mut output, source)?;
     raster.check()?;
     Ok(Some(CpuFrame {

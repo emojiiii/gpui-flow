@@ -209,9 +209,13 @@ fn capture(
         Shape::Pen(p) => p.path.commands.len(),
         Shape::Polygon(p) => p.points.len(),
         Shape::Star(s) => s.points.saturating_mul(2),
-        Shape::Rect(_) | Shape::Ellipse(_) | Shape::Line(_) | Shape::Group(_) | Shape::Image(_) => {
-            0
-        }
+        Shape::Rect(_)
+        | Shape::Ellipse(_)
+        | Shape::Line(_)
+        | Shape::Group(_)
+        | Shape::Image(_)
+        | Shape::Box(_)
+        | Shape::Frame(_) => 0,
         other => return Err(CompositeError::UnsupportedShape(other.tag().into())),
     };
     counts.points = counts.points.saturating_add(points);

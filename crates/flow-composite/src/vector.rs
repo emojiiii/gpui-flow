@@ -1,5 +1,7 @@
 use crate::{CompositeError, CompositeLimits, DomainNode, ImageInputs, StaticImage};
-use gpui_flow_scene::{Affine, BlendMode, FillRule, MaskMode, Paint, Shape, display::PathCommand};
+use gpui_flow_scene::{
+    Affine, BlendMode, ClipRegion, FillRule, MaskMode, Paint, Shape, display::PathCommand,
+};
 use std::sync::Arc;
 use tiny_skia::{Path, PathBuilder, Transform};
 
@@ -11,6 +13,7 @@ pub(crate) struct PreparedNode {
     pub paints: Vec<VectorPaint>,
     pub image: Option<ImagePaint>,
     pub children: Vec<PreparedNode>,
+    pub child_clip: Option<ClipRegion>,
 }
 pub(crate) struct ImagePaint {
     pub image: Arc<StaticImage>,
@@ -75,7 +78,7 @@ fn shader(paint: &Paint) -> Result<tiny_skia::Shader<'static>, CompositeError> {
     };
     shader.ok_or_else(|| CompositeError::InvalidGeometry("gradient cannot be represented".into()))
 }
-fn path(shape: &Shape) -> Result<Option<Path>, CompositeError> {
+pub(crate) fn path(shape: &Shape) -> Result<Option<Path>, CompositeError> {
     let commands = match shape {
         Shape::Path(p) => Some(&p.commands),
         Shape::Pen(p) => Some(&p.path.commands),
@@ -108,7 +111,10 @@ fn path(shape: &Shape) -> Result<Option<Path>, CompositeError> {
     if matches!(shape, Shape::Group(_) | Shape::Line(_)) {
         return Ok(None);
     }
-    if !matches!(shape, Shape::Rect(_) | Shape::Star(_) | Shape::Polygon(_)) {
+    if !matches!(
+        shape,
+        Shape::Rect(_) | Shape::Box(_) | Shape::Frame(_) | Shape::Star(_) | Shape::Polygon(_)
+    ) {
         return Err(CompositeError::UnsupportedShape(shape.tag().into()));
     }
     let mut b = PathBuilder::new();
@@ -133,7 +139,7 @@ impl Preparation {
         path: &Path,
         world: Affine,
         limits: CompositeLimits,
-    ) -> Result<(), CompositeError> {
+    ) -> Result<[f64; 4], CompositeError> {
         self.points = self.points.saturating_add(path.points().len());
         if path.points().len() > limits.max_points.saturating_mul(12)
             || self.points
@@ -175,7 +181,7 @@ impl Preparation {
                 b[3].max(bounds[3]),
             ],
         });
-        Ok(())
+        Ok(bounds)
     }
     pub fn node(
         &mut self,
@@ -211,6 +217,7 @@ impl Preparation {
                 paints: vec![],
                 image: None,
                 children: vec![],
+                child_clip: None,
             });
         }
         if object.mask != MaskMode::None {
@@ -230,6 +237,7 @@ impl Preparation {
         {
             return Err(CompositeError::InputLimit);
         }
+        let previous_bounds = self.bounds.take();
         let mut paints = Vec::new();
         let mut image_paint = None;
         if let Shape::Image(image) = &object.shape {
@@ -328,11 +336,52 @@ impl Preparation {
                 }
             }
         }
+        let own_bounds = self.bounds.take();
+        let child_clip = object
+            .shape
+            .child_clip()
+            .map(|(local_bounds, corner_radius)| ClipRegion {
+                local_bounds,
+                corner_radius,
+                world_transform: source.world_transform,
+            });
         let children = source
             .children
             .iter()
             .map(|child| self.node_at(child, limits, images, depth + 1))
             .collect::<Result<_, _>>()?;
+        let mut children_bounds = self.bounds.take();
+        if child_clip.is_some() {
+            // Count clip geometry, retaining f64 world bounds so a large
+            // translation cancelled by the viewport cannot erase small clips.
+            let clip_bounds = if let Some(path) = path(&object.shape)? {
+                let bounds = self.add_path(&path, source.world_transform, limits)?;
+                self.bounds = None;
+                Some(bounds)
+            } else {
+                None
+            };
+            children_bounds = children_bounds.zip(clip_bounds).and_then(|(c, b)| {
+                let clipped = [
+                    c[0].max(b[0]),
+                    c[1].max(b[1]),
+                    c[2].min(b[2]),
+                    c[3].min(b[3]),
+                ];
+                (clipped[2] > clipped[0] && clipped[3] > clipped[1]).then_some(clipped)
+            });
+        }
+        self.bounds = [previous_bounds, own_bounds, children_bounds]
+            .into_iter()
+            .flatten()
+            .reduce(|a, b| {
+                [
+                    a[0].min(b[0]),
+                    a[1].min(b[1]),
+                    a[2].max(b[2]),
+                    a[3].max(b[3]),
+                ]
+            });
         Ok(PreparedNode {
             visible: object.visible,
             opacity: object.style.opacity,
@@ -341,6 +390,7 @@ impl Preparation {
             paints,
             image: image_paint,
             children,
+            child_clip,
         })
     }
 }

@@ -9,7 +9,7 @@ Status: historical source research plus a separately labelled current source map
 ## 当前增量状态（源码能力，不覆盖历史基线）
 
 - 引擎实例、生命周期、registry/schema、dirty 缓存、默认动作前事件路由：已实现，见 [engine.md](engine.md)
-- 外观：有序多层矢量 fill/stroke、渐变纹理逐层缓存、可见描边 bounds/hit、原子属性更新；新源码增加居中local-space cap/join/miter/dash，Kurbo负责dash、Lyon负责stroke mesh，并用于绘制/命中。文本/图像不接受新layers；inside/outside、scale-fixed仍缺。新增[有界矢量/静态图片隔离合成](compositing.md)已接入SceneView，覆盖整体opacity、域内Normal/Multiply/Screen及alpha sibling mask；域内Text/Custom/Box/Frame及多帧动画图片、外部backdrop、阴影/擦除仍不支持
+- 外观：有序多层矢量 fill/stroke、渐变纹理逐层缓存、可见描边 bounds/hit、原子属性更新；新源码增加居中local-space cap/join/miter/dash，Kurbo负责dash、Lyon负责stroke mesh，并用于绘制/命中。文本/图像不接受新layers；inside/outside、scale-fixed仍缺。新增[有界矢量/静态图片隔离合成](compositing.md)已接入SceneView，覆盖整体opacity、域内Normal/Multiply/Screen及alpha sibling mask；域内Text/Custom及多帧动画图片、外部backdrop、阴影/擦除仍不支持
 - 视觉布局：可选 `gpui-flow-layout`，固定/内容尺寸 Box/Frame 的行/列、换行、padding/gap、对齐、grow/尺寸范围、隐藏与排除区别、嵌套测量/安排、一次事务/撤销和独立配置持久化。显式pass、编辑+布局事务或opt-in提交前自动派生，具备内容auto-size和嵌套测量固定点；已有可选真实文字测量与响应高度；没有全局响应式调度、百分比或shrink，见 [flow-layout.md](flow-layout.md)
 - 新原生示例 `layout_appearance` 将布局输出送入同一 SceneView；编译/模型测试不等于新窗口视觉验收
 - 键盘增量：KeyUp/Space进入同一路由，首按可取消、Up/取消/失焦必清状态、重复键和焦点按实例隔离，见 [keyboard-routing.md](keyboard-routing.md)。没有新增双击/触摸/IME支持
@@ -33,7 +33,7 @@ Status: historical source research plus a separately labelled current source map
 |---|---|---|
 | 事件 | 实例持有、捕获/目标/冒泡、once、队列、默认动作前路由、KeyUp、不可取消Blur/Focus及related target | 多指/压力、双击/长按、IME及完整事件族 |
 | 交互 | 选择/拖动/缩放/捕获取消、Space平移、插件策略、程序焦点/有界重定向/native同步 | 专用内外编辑工具生命周期、复杂手势 |
-| 外观 | 多层矢量paint、线性/径向渐变、共享mesh的cap/join/dash描边、named/placeholder/button状态及fill/opacity过渡、Text/Image矩形祖先clip链、有界矢量整体opacity/内部blend/alpha mask | inside/outside与scale-fixed stroke、geometry状态、域内Text/Custom/Box/Frame及多帧动画图片、外部backdrop、更多blend/mask、shadow/filter |
+| 外观 | 多层矢量paint、线性/径向渐变、共享mesh的cap/join/dash描边、named/placeholder/button状态及fill/opacity过渡、Text/Image矩形祖先clip链、有界矢量整体opacity/内部blend/alpha mask | inside/outside与scale-fixed stroke、geometry状态、域内Text/Custom及多帧动画图片、外部backdrop、更多blend/mask、shadow/filter |
 | 布局 | 固定/内容轴、双轴reverse遍历/wrap-reverse、wrap测量、真实字体文字Natural/AutoHeight、嵌套有界收敛、opt-in提交前自动派生 | 帧合并/局部依赖调度、百分比、shrinkContent、文本baseline/富排版 |
 | 数据 | 类型属性/schema/default、原子变化、dirty分类、JSON | 完整input/computed分离及Leafer导入导出 |
 | 元素 | 主要原语、场景树、变换、矢量完整裁切及原生矩形clip、统一几何命中 | 命令式Canvas元素、各类型高级属性完全覆盖 |

@@ -18,11 +18,24 @@ At the GPUI boundary, those bytes pass once through `swap_rgba_pa_to_bgra` into 
 - Group opacity and multi-paint primitive opacity apply once after the object's complete contents, including overlaps
 - Normal groups isolate; pass-through groups reuse their actual CPU parent. Internal multiply/screen blend against preceding pixels in the same domain
 - Alpha masks are hidden and affect following stable z-ordered siblings until another mask. Opaque-mask independent blends flush against the CPU parent; translucent-mask runs composite first, then apply alpha once
-- Rect, rounded Rect, Ellipse, Line, Polygon, Star, Path, Pen and nested Group are supported, including current fills/gradients and centered stroke meshes
+- Rect, rounded Rect, Ellipse, Line, Polygon, Star, Path, Pen, nested Group and fixed-size Box/Frame are supported, including current fills/gradients and centered stroke meshes
 - Static Image uses decoded pixel dimensions for Contain/Cover/Fill, with bilinear sampling, layout-box clipping for Cover, full affine placement, image alpha masks and the same group/blend/clip path as vectors
-- Rounded Box/Frame clips inherited from outside the domain are applied to the finished output; transforms are baked into physical pixels
+- Fixed-size Box/Frame paint their own fill and centered stroke layers before children, matching current native Scene order. Opacity applies once to the complete container; rounded child clips do not clip its own outer stroke
+- Box overflow is visible by default; Frame clips descendants by default. Nested rounded child clips intersect under affine transforms, without turning pass-through containers into isolated blend groups. Inherited clips outside the domain still apply to the finished output
 
 Missing JSON fields retain old defaults. Rust `Style` and `DisplayObject` exhaustive literals need the new fields or constructor/default syntax; new enum variants may require updating exhaustive matches. This is backward JSON reading, not Leafer JSON import compatibility or compatibility with older renderers.
+
+## Fixed-size painted containers
+
+Box and Frame now enter the real planner, tiny-skia vector preparation and raster worker. They reuse existing shape contours, fill gradients and centered stroke meshes; there is no second renderer or replacement hit tree. SceneView consumes the whole domain at its normal subtree substitution point. Presented hover/focus styles and Undo use that same path.
+
+Child clipping uses an 8-bit mask on each actual paint or isolated-layer composite, not a synthetic isolated child surface. A pass-through Frame's Multiply/Screen children therefore still see the preceding CPU backdrop. Isolated children and alpha-mask runs receive the inherited clip once when returned to the parent. Nested masks and their intersection scratch storage/work are budgeted. Clipped child bounds reduce output allocation; own fill/stroke bounds remain outside this child restriction. Clip bounds retain f64 world precision before viewport cancellation, including large translations.
+
+This is current Scene-model compatibility, not complete Leafer Box/Frame parity. The pinned Leafer `BoxData.__drawAfterFill` path can use fill → children → stroke for isolated/clipped boxes. The current native Scene paints fill → stroke → children, and this CPU implementation deliberately keeps that same order; a child can cover the inner portion of a parent stroke. No new paint-phase schema is introduced. Frame keeps the existing Scene style defaults rather than adopting Leafer's default white fill. Auto-sizing/scrolling/path-input boxes and other Leafer-only properties are not added here.
+
+Alpha masks still require a direct Group parent. A Box/Frame can itself be that Group's mask, including its painted children, and it can contain a Group with mask runs. Direct mask children of Box/Frame remain a validation error. No mask/disclosure/resource permissions are widened.
+
+Run `cargo run --locked --offline -p flow-studio --bin composited_containers` for Box overflow, rounded Frame clipping/opacity, pass-through clipped blending, and Undo controls. Labels remain native outside domains.
 
 ## Static decoded-image input
 
@@ -42,7 +55,7 @@ The headless producer accepts `StaticImage::from_straight_bgra`, `ImageInputs` k
 
 ## Honest boundaries
 
-A Text, Custom, Box or Frame inside a required domain rejects the entire domain. Static Image nodes now have a real pixel producer; multiframe animated images remain explicitly unsupported. The view shows a diagnostic; it does not silently omit the unsupported descendant or fall back to individually faded native children. In particular, opacity on a Box/Frame rejects that necessary parent boundary instead of incorrectly isolating only a Group beneath it. Ordinary text/image/custom siblings outside domains retain their native route.
+A Text or Custom inside a required domain rejects the entire domain. Static Image nodes now have a real pixel producer; multiframe animated images remain explicitly unsupported. The view shows a diagnostic; it does not silently omit the unsupported descendant or fall back to individually faded native children. Ordinary text/image/custom siblings outside domains retain their native route.
 
 A domain root that needs multiply/screen against external content returns `UnsupportedExternalBackdrop`. A mask alone does not isolate a pass-through opacity-1 Group: a blend escaping an opaque mask run is rejected too. Explicit Normal groups and opacity isolation are supported, as are translucent mask runs that genuinely isolate their content. Put a required vector background inside the same Normal Group. Native siblings, host background, grid and selection decorations are not captured.
 
@@ -104,4 +117,14 @@ The static-image pass did not rerun the separate ignored-media tests, standalone
 
 ## Source references
 
-[Leafer blendMode](https://www.leaferjs.com/ui/reference/UI/blendMode.html), [mask](https://www.leaferjs.com/ui/reference/UI/mask.html), [pinned mask implementation](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/mask/src/index.ts), [pinned LeafData isolation](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/display-module/data/src/LeafData.ts), [GPUI paint_image](https://github.com/longbridge/gpui-fast/blob/10d005166a9f9e079d55ebfb700035f3860c3e71/crates/gpui/src/window.rs). These sources establish the intended bounded semantics; they do not turn this adapter into full Leafer compatibility.
+[Leafer blendMode](https://www.leaferjs.com/ui/reference/UI/blendMode.html), [mask](https://www.leaferjs.com/ui/reference/UI/mask.html), [pinned mask implementation](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/mask/src/index.ts), [pinned Box implementation](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/Box.ts), [pinned BoxData phases](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display-module/data/src/BoxData.ts), [pinned Frame defaults](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/Frame.ts), [pinned LeafData isolation](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/display-module/data/src/LeafData.ts), [GPUI paint_image](https://github.com/longbridge/gpui-fast/blob/10d005166a9f9e079d55ebfb700035f3860c3e71/crates/gpui/src/window.rs). These sources establish the intended bounded semantics; they do not turn this adapter into full Leafer compatibility.
+
+## Container validation, 2026-10-01
+
+The fixed-size container slice passed 709 headless tests/doctests (46 CPU-composite fixtures included; 8 existing ignored tests remain ignored) and 58 UI library tests. New coverage includes fill/stroke/children ordering, outer-stroke preservation, visible overflow versus rounded clipping, local opacity, nested transforms and fractional DPR, inherited hover and unchanged canonical hit/focus, Undo pixel restoration, container alpha masks, grouped masks inside a clipped container, Multiply/Screen backdrops, bounded allocation, large translated clips, static-image descendants and hidden dependencies, and working-set/work/input failures with no retained temporary bytes. Earlier static-image retry, cancellation and source-authorization fixtures remain in the aggregate.
+
+Formatting, workspace/all-targets strict Clippy, and the `composited_containers` native binary build passed using locked/offline dependencies, one build job, debug info/incremental off and the existing 3 GiB disk guard. A final UI command took 254 seconds end-to-end during shared-host load; its test harness reported 58 passes in 14.45 seconds. Earlier and final receipts are retained locally; no timeout was changed and this is not a performance result.
+
+The linked native app was opened on the cloud Linux desktop and inspected only through its target-window screenshots. The smoke check verified initial Box overflow versus rounded Frame clipping, parent outer strokes, Frame clip off/on, complete Frame alpha 50%/100%, Multiply/Screen against the actual internal yellow backdrop, and three Undo actions restoring the original pixels. Wheel pan and Ctrl+wheel zoom kept native labels and composite output aligned and canvas-clipped. Four repeated clip toggles settled on the correct rounded output. A temporary `StaleFrame` notice cleared after recomputation. The app window was closed and its disappearance verified.
+
+These are visible smoke observations, not pixel-golden or latency tests. This slice did not rerun standalone documentation executables, ignored-media tests, all older example interactions, close-during-work/reopen, native resize, CI, user-computer, cross-platform, DPI/multi-monitor, performance or live GPU-failure checks.

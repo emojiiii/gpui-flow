@@ -10,7 +10,9 @@
 
 静态Image现已通过现有GPUI资源加载/cache接入合成：支持真实像素alpha、Contain/Cover/Fill、组透明度、域内混合与遮罩。新增`composited_images`原生示例；验证范围与资源/内存边界见[compositing.md](docs/compositing.md)。
 
-域内Text/动画Image/Custom/Box/Frame、外部backdrop混合、擦除和shadow/filter仍未覆盖，会整域明确报错。Inside/outside与scale-fixed描边、完整嵌套timeline和motion path仍缺。此次窗口烟测不代替跨平台、大规模性能或所有旧示例交互验收。详细约束与实际操作见[compositing.md](docs/compositing.md)。
+固定尺寸Box/Frame已接入真实CPU合成：自身fill/stroke后绘制children、整体透明度、圆角子级clip及域内混合。保持现有native顺序；尚未实现Leafer特有fill→children→stroke阶段。新增`composited_containers`示例，见[语义边界](docs/compositing.md#fixed-size-painted-containers)。
+
+域内Text/动画Image/Custom、外部backdrop混合、擦除和shadow/filter仍未覆盖，会整域明确报错。Inside/outside与scale-fixed描边、完整嵌套timeline和motion path仍缺。此次窗口烟测不代替跨平台、大规模性能或所有旧示例交互验收。详细约束与实际操作见[compositing.md](docs/compositing.md)。
 
 此前资源/布局/动画/状态源码批次的媒体、字体、14个二进制及文档记录见[历史本地验证](docs/local-validation-2026-09-30.md)。API迁移见[源码批次状态](docs/source-only-status.md)：旧JSON读取默认兼容不等于Rust穷尽字面量/枚举match源码兼容。
 

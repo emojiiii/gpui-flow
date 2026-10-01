@@ -604,8 +604,8 @@ mod state_tests {
         );
     }
     #[test]
-    fn opacity_on_unsupported_frame_rejects_that_entire_boundary() {
-        use gpui_flow_composite::{CompositeError, CompositeIssue, SceneUnit};
+    fn opacity_on_frame_produces_one_complete_domain() {
+        use gpui_flow_composite::SceneUnit;
         let mut s = Scene::new();
         let mut f = DisplayObject::new("f", display::Frame::new(100., 100.));
         f.style.opacity = 0.5;
@@ -630,10 +630,152 @@ mod state_tests {
         assert!(error.is_none());
         assert!(matches!(
             &frame.units[..],
-            [SceneUnit::Rejected(CompositeIssue {
-                error: CompositeError::UnsupportedShape(_),
-                ..
-            })]
+            [SceneUnit::Domain(d)] if d.root_id().as_str() == "f" && d.ids().len() == 2
         ));
+    }
+    fn raster_container(frame: &super::StateFrame) -> gpui_flow_composite::CpuFrame {
+        use gpui_flow_composite::*;
+        use gpui_flow_scene::{Affine, Bounds, Size};
+        let [SceneUnit::Domain(d)] = frame.units.as_slice() else {
+            panic!("one domain expected")
+        };
+        let bounds = Bounds::new(Point::ZERO, Size::new(100., 100.));
+        rasterize(
+            d,
+            RasterViewport {
+                world_to_screen: Affine::IDENTITY,
+                canvas_bounds: bounds,
+                content_mask: bounds,
+                device_scale: 1.,
+            },
+            &mut PixelBudget::new(CompositeLimits::default(), 0).unwrap(),
+            &std::sync::atomic::AtomicBool::new(false),
+        )
+        .unwrap()
+        .unwrap()
+    }
+    #[test]
+    fn presented_container_inherits_hover_and_keeps_canonical_hit_and_focus() {
+        use gpui_flow_scene::{Shape, Style};
+        for shape in [
+            Shape::Box(display::Box::new(30., 30.)),
+            Shape::Frame(display::Frame::new(30., 30.).rounded(8.)),
+        ] {
+            let mut s = Scene::new();
+            s.insert(
+                DisplayObject::new("container", shape).with_style(Style::fill(Color::BLACK)),
+                None,
+                None,
+            )
+            .unwrap();
+            s.insert(
+                DisplayObject::new("child", display::Rect::new(50., 50.))
+                    .with_style(Style::fill(Color::WHITE)),
+                Some("container".into()),
+                None,
+            )
+            .unwrap();
+            let mut editor = SceneEditor::new(s).unwrap();
+            let canonical = editor.scene().clone();
+            let h = editor.engine.handle(&"container".into()).unwrap();
+            let child = editor.engine.handle(&"child".into()).unwrap();
+            let mut styles = SceneStateStyles::new(&editor.engine);
+            styles
+                .bind(
+                    &editor.engine,
+                    h,
+                    StateStyles {
+                        hover: StatePaint {
+                            fill: None,
+                            opacity: Some(0.5),
+                        },
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            let mut router = SceneEventRouter::new();
+            let mut host = ScenePluginHost::new();
+            router.dispatch(
+                &mut editor,
+                &mut host,
+                CanvasEvent::PointerMove(PointerInput::left(
+                    Point::new(15., 15.),
+                    HitTarget::Object("child".into()),
+                )),
+            );
+            router
+                .set_focus(&mut editor, &mut host, Some(child))
+                .unwrap();
+            let hit = editor
+                .scene()
+                .hit_test(Point::new(15., 15.), Default::default())
+                .unwrap();
+            let (frame, error) =
+                super::state_render_frame(&editor, &router, &mut styles, std::time::Duration::ZERO);
+            assert!(error.is_none());
+            assert_eq!(frame.units.len(), 1);
+            let pixels = raster_container(&frame);
+            assert!(pixels.premul_rgba.as_chunks::<4>().0.contains(&[128; 4]));
+            assert_eq!(editor.scene(), &canonical);
+            assert_eq!(router.focused(&editor.engine), Some(child));
+            assert_eq!(
+                editor
+                    .scene()
+                    .hit_test(Point::new(15., 15.), Default::default())
+                    .unwrap(),
+                hit
+            );
+        }
+    }
+    #[test]
+    fn container_clip_edit_and_undo_restore_the_actual_composite_pixels() {
+        use gpui_flow_scene::{Shape, Style};
+        let mut s = Scene::new();
+        s.insert(
+            DisplayObject::new("container", display::Frame::new(20., 20.).rounded(6.)).with_style(
+                Style {
+                    fill: None,
+                    opacity: 0.5,
+                    ..Default::default()
+                },
+            ),
+            None,
+            None,
+        )
+        .unwrap();
+        s.insert(
+            DisplayObject::new("child", display::Rect::new(40., 40.))
+                .with_style(Style::fill(Color::WHITE)),
+            Some("container".into()),
+            None,
+        )
+        .unwrap();
+        let mut editor = SceneEditor::new(s).unwrap();
+        let mut styles = SceneStateStyles::new(&editor.engine);
+        let router = SceneEventRouter::new();
+        let (before, _) =
+            super::state_render_frame(&editor, &router, &mut styles, std::time::Duration::ZERO);
+        let original = raster_container(&before);
+        editor
+            .transaction(|s| {
+                s.update_object(&"container".into(), |o| {
+                    if let Shape::Frame(f) = &mut o.shape {
+                        f.clip_children = false;
+                    }
+                })
+            })
+            .unwrap();
+        let (after, error) =
+            super::state_render_frame(&editor, &router, &mut styles, std::time::Duration::ZERO);
+        assert!(error.is_none());
+        assert!(raster_container(&after).width > original.width);
+        assert!(editor.undo());
+        let (restored, error) =
+            super::state_render_frame(&editor, &router, &mut styles, std::time::Duration::ZERO);
+        assert!(error.is_none());
+        assert_eq!(restored.units, before.units);
+        let restored = raster_container(&restored);
+        assert_eq!(restored.screen_bounds, original.screen_bounds);
+        assert_eq!(restored.premul_rgba, original.premul_rgba);
     }
 }
