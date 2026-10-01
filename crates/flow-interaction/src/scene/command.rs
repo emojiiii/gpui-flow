@@ -58,6 +58,11 @@ pub enum SceneCommand {
     SetResizeTransforms {
         transforms: Vec<(gpui_flow_engine::ElementHandle, Affine)>,
     },
+    /// Uses the same atomic frozen-root batch as resize, with the stricter
+    /// vector-only rotation subtree contract. Single selections are allowed.
+    SetRotationTransforms {
+        transforms: Vec<(gpui_flow_engine::ElementHandle, Affine)>,
+    },
     RotateSelection {
         degrees: f32,
     },

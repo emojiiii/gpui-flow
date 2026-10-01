@@ -31,6 +31,9 @@ pub enum HitTarget {
     /// Retained-scene object ID for a SceneEditor-backed plugin host.
     Object(String),
     ObjectResize(String),
+    /// One center-pivot rotation handle for the complete selection, including
+    /// a sole object. No arbitrary root owns the shared tree-event target.
+    SelectionRotateHandle,
     /// Shared world-axis box for the complete current selection; no arbitrary
     /// primary object owns its input or capture.
     SelectionResizeHandle {

@@ -1,4 +1,4 @@
-//! Shared multi-selection transform box, with single-selection retained. Optional --trace prints
+//! Shared resize and center-pivot rotation, with single-selection retained. Optional --trace prints
 //! accepted selected-target matrices, never text contents or image bytes.
 use gpui::{prelude::*, *};
 use gpui_flow::{
@@ -114,7 +114,7 @@ impl Lab {
                 let view = view.read(cx);
                 for id in &view.editor.selection.ids {
                     if let Some(node) = view.editor.scene().get(id) {
-                        eprintln!("resize: {id} {:?}", node.object.transform);
+                        eprintln!("transform: {id} {:?}", node.object.transform);
                     }
                 }
             }
@@ -167,7 +167,8 @@ impl Render for Lab {
                 .children([
                     ("vectors", "Vectors", vec!["rect", "rotated"]),
                     ("native", "Mixed native", vec!["rect", "text", "image"]),
-                    ("dedup", "Parent + child", vec!["rect", "mixed", "mixed-text"]),
+                    ("vector-dedup", "Vector roots", vec!["rect", "affine-parent", "rotated"]),
+                    ("dedup", "Native roots", vec!["rect", "mixed", "mixed-text"]),
                     ("single", "Single", vec!["rect"]),
                     ("text", "Text", vec!["text"]),
                 ].into_iter().map(|(id, label, ids)| ControlButton::new(id, label).on_click(cx.listener(move |this, _, window, cx| {
@@ -185,7 +186,7 @@ impl Render for Lab {
                     this.command(SceneCommand::Zoom { position: ScenePoint::new(350., 220.), zoom }, window, cx);
                 })))
                 .child(ControlButton::new("reset", "Reset").on_click(cx.listener(|this, _, window, cx| this.command(SceneCommand::LoadScene(scene()), window, cx)))))
-            .child(div().px_3().text_sm().child("Shared world-axis box · Shift: uniform · Native members force uniform · Escape: roll back · Space: pan · Ctrl+wheel: zoom"))
+            .child(div().px_3().text_sm().child("Circle: rotate · Shift: 45° snap / uniform resize · Native: uniform resize only · Escape: roll back · Space: pan"))
             .child(div().flex_1().min_h_0().child(self.view.clone()))
             .child(div().p_3().text_sm().text_color(rgb(theme.muted)).child(format!("{} selected · zoom {:.2} · {}", view.editor.selection.ids.len(), view.editor.viewport.zoom, status)))
     }
@@ -206,7 +207,7 @@ fn main() {
                 },
                 cx,
                 |window, cx| {
-                    window.set_window_title("gpui-flow · Shared selection resize");
+                    window.set_window_title("gpui-flow · Shared selection transforms");
                     cx.new(|cx| Lab::new(window, cx))
                 },
             )

@@ -23,6 +23,7 @@ Status: historical source research plus a separately labelled current source map
 - 原生裁切增量：Text/Image共享矩形clip链，嵌套Frame/Box、平移与正等比缩放，Text保留完整对齐框、Image保留fit框并负偏移裁切；空交集不paint不hit，矢量圆角/仿射裁切保持。原生圆角/任意路径mask仍缺，见[native-clipping.md](native-clipping.md)
 - 复用增量：Kit Button负责外围控制激活；petgraph 0.8.3负责图可达/拓扑遍历；Kurbo 0.11.3负责tight curve bounds；Taffy 0.13.0私有适配器处理普通行内数值分配，Flow仍保留分行/内容测量/reverse/事务及极端数值f64 fallback。均待编译/运行验证
 - 资源增量：新SceneResources身份/attachment epoch/源generation票据与SceneView原生image/text结果、资源事件、Ready/ViewReady/Complete receipt已接入源码。Complete含失败/取消，ViewReady为GPUI paint回执，不是GPU呈现fence；媒体桥接、共享加载硬取消和字节预算仍缺，见[resource-lifecycle.md](resource-lifecycle.md)
+- 编辑旋转增量：[中心旋转手柄](rotation-handles.md)用于单选/多选vector子树，沿用共享root/capture/batch/history，默认45°可配置Shift吸附；Text/Image/Custom子树整体隐藏并拒绝，未扩大native变换能力
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
 ## 九类能力当前边界（含待验证源码增量）

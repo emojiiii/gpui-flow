@@ -322,6 +322,19 @@ impl SceneView {
                 .screen_handles(&self.editor)?;
         Some((Some(id), handles))
     }
+    fn rotation_handle(&self) -> Option<gpui_flow_interaction::scene::SceneRotationHandle> {
+        if self.text_editor_active()
+            || !self.is_editable()
+            || !self.interactions.is_enabled("rotate")
+            || self.tools.as_ref().is_some_and(|tools| {
+                !tools.outer_tool_active(gpui_flow_interaction::scene::DEFAULT_OUTER_TOOL)
+            })
+        {
+            return None;
+        }
+        gpui_flow_interaction::scene::SceneRotationGeometry::for_selection(&self.editor)?
+            .screen_handle(&self.editor)
+    }
     fn selection_corners(&self, id: &DisplayId) -> Option<[WorldPoint; 4]> {
         let bounds = self.editor.engine.local_bounds(id).ok()??;
         let transform = self.editor.engine.world_transform(id).ok()?;

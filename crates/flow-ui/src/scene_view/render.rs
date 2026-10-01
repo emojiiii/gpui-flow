@@ -276,6 +276,7 @@ impl Render for SceneView {
             }
             handles
         });
+        let rotation_handle = self.rotation_handle();
         let overlay = canvas(
             |_, _, _| (),
             move |bounds, _, window, _| {
@@ -306,6 +307,26 @@ impl Render for SceneView {
                             rgb(theme.accent),
                         ));
                     }
+                }
+                if let Some(handle) = rotation_handle {
+                    let p = |p: WorldPoint| bounds.origin + point(px(p.x), px(p.y));
+                    let mut path = PathBuilder::stroke(px(1.5));
+                    path.move_to(p(handle.stem));
+                    path.line_to(p(handle.position));
+                    if let Ok(path) = path.build() {
+                        window.paint_path(path, rgb(theme.accent));
+                    }
+                    let r = gpui_flow_interaction::scene::ROTATION_HANDLE_RADIUS;
+                    window.paint_quad(
+                        fill(
+                            Bounds::new(
+                                p(handle.position) - point(px(r), px(r)),
+                                size(px(r * 2.), px(r * 2.)),
+                            ),
+                            rgb(theme.accent),
+                        )
+                        .corner_radii(px(r)),
+                    );
                 }
                 if let Some(rect) = marquee {
                     let r = viewport.world_rect_to_screen(rect);

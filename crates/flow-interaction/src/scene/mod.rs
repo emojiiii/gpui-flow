@@ -58,3 +58,5 @@ pub use tools::*;
 
 mod resize_handles;
 pub use resize_handles::*;
+mod rotation_handles;
+pub use rotation_handles::*;

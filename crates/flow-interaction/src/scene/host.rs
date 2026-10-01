@@ -494,8 +494,10 @@ impl ScenePluginHost {
             SceneCommand::SetResizeTransform { target, .. } => Some(*target),
             _ => None,
         };
+        let rotation_batch = matches!(command, SceneCommand::SetRotationTransforms { .. });
         let resize_batch_identity = match &command {
-            SceneCommand::SetResizeTransforms { transforms } => Some(
+            SceneCommand::SetResizeTransforms { transforms }
+            | SceneCommand::SetRotationTransforms { transforms } => Some(
                 transforms
                     .iter()
                     .map(|(target, _)| *target)
@@ -559,11 +561,13 @@ impl ScenePluginHost {
             ));
         }
         if let Some(targets) = &resize_batch_identity
-            && !matches!(&command, SceneCommand::SetResizeTransforms { transforms }
+            && !(matches!(&command, SceneCommand::SetResizeTransforms { transforms }
+                | SceneCommand::SetRotationTransforms { transforms }
                 if transforms.iter().map(|(target, _)| target).eq(targets.iter()))
+                && rotation_batch == matches!(command, SceneCommand::SetRotationTransforms { .. }))
         {
             return Err(InteractionError::InvalidInput(
-                "middleware cannot change resize batch membership".into(),
+                "middleware cannot change transform batch kind or membership".into(),
             ));
         }
         if let Some((pointer, targets)) = &capture_selection_identity
@@ -629,6 +633,7 @@ impl ScenePluginHost {
                 )))
             }
         };
+        let rotation_batch = matches!(command, SceneCommand::SetRotationTransforms { .. });
         match command {
             SceneCommand::CapturePointer { pointer_id }
             | SceneCommand::CapturePointerForTarget { pointer_id, .. } => {
@@ -679,7 +684,7 @@ impl ScenePluginHost {
                     .iter()
                     .filter_map(|id| editor.engine.handle(id))
                     .collect();
-                if editor.selection.ids.len() < 2
+                if editor.selection.ids.is_empty()
                     || targets.is_empty()
                     || targets != expected
                     || editor
@@ -823,14 +828,20 @@ impl ScenePluginHost {
                     scene.update_object(&id, |object| object.transform = transform)
                 })?;
             }
-            SceneCommand::SetResizeTransforms { transforms } => {
+            SceneCommand::SetResizeTransforms { transforms }
+            | SceneCommand::SetRotationTransforms { transforms } => {
+                if rotation_batch && super::SceneRotationGeometry::for_selection(editor).is_none() {
+                    return Err(InteractionError::InvalidInput(
+                        "unsupported rotation selection".into(),
+                    ));
+                }
                 if self.capture_target_stale(editor) {
                     return Err(InteractionError::InvalidInput(
                         "stale resize selection".into(),
                     ));
                 }
                 let expected = editor.selection.roots(editor.scene());
-                if editor.selection.ids.len() < 2
+                if editor.selection.ids.len() < if rotation_batch { 1 } else { 2 }
                     || transforms.len() != expected.len()
                     || transforms.is_empty()
                     || editor
@@ -873,6 +884,8 @@ impl ScenePluginHost {
                         .ok()
                         .flatten()
                         .is_some_and(|bounds| bounds.size.is_positive())
+                        || (rotation_batch
+                            && !super::SceneRotationGeometry::accepts_subtree(editor.scene(), id))
                         || !super::SceneResizeGeometry::accepts_scene_transform(
                             editor.scene(),
                             id,
@@ -901,6 +914,8 @@ impl ScenePluginHost {
                                 .get(id)
                                 .ok_or_else(|| SceneError::MissingNode(id.clone()))?;
                             if !object_editable(scene, id)
+                                || (rotation_batch
+                                    && !super::SceneRotationGeometry::accepts_subtree(scene, id))
                                 || !super::SceneResizeGeometry::accepts_scene_transform(
                                     scene,
                                     id,

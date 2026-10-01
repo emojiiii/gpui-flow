@@ -204,7 +204,14 @@ pub struct SceneResizeRoot {
 }
 impl SceneSelectionResizeGeometry {
     pub fn for_selection(editor: &SceneEditor) -> Option<Self> {
-        if editor.selection.ids.len() < 2
+        if editor.selection.ids.len() < 2 {
+            return None;
+        }
+        Self::for_nonempty_selection(editor)
+    }
+    /// Shared frozen-root machinery also serves single-object pointer rotation.
+    pub(crate) fn for_nonempty_selection(editor: &SceneEditor) -> Option<Self> {
+        if editor.selection.ids.is_empty()
             || editor
                 .selection
                 .ids

@@ -88,7 +88,8 @@ Compared read-only with official Leafer plugin commit
 - [SimulateElement: safe shared transform changes](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/editor/src/display/SimulateElement.ts)
 
 This independent implementation adds no dependency, second selection framework
-or persisted simulated object. Rotation/skew/pivot controls, intrinsic resizing,
+or persisted simulated object. The later [rotation slice](rotation-handles.md) adds
+a shared center-pivot handle. Skew/pivot controls, intrinsic resizing,
 Alt-center, path/line control points, multi-selection Text editing and arbitrary
 custom tool views remain outside this slice. New public enum variants require
 updates to downstream exhaustive Rust matches; document formats do not change.

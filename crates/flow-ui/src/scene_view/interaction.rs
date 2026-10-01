@@ -20,6 +20,11 @@ fn button(value: MouseButton) -> Option<input::PointerButton> {
 }
 impl SceneView {
     fn input_hit(&self, local: WorldPoint, _control: bool) -> input::HitTarget {
+        if let Some(handle) = self.rotation_handle()
+            && input::scene::hit_rotation_handle(handle, local)
+        {
+            return input::HitTarget::SelectionRotateHandle;
+        }
         if let Some((id, handles)) = self.resize_handles()
             && let Some(hit) = input::scene::hit_resize_handle(&handles, local)
         {
@@ -404,6 +409,7 @@ mod tests {
         for hit in [
             HitTarget::Background,
             HitTarget::ObjectResize("text".into()),
+            HitTarget::SelectionRotateHandle,
             HitTarget::SelectionResizeHandle {
                 handle: gpui_flow_editor::ResizeHandle::TopLeft,
             },
