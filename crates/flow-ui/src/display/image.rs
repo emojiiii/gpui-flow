@@ -37,6 +37,7 @@ pub(super) fn image_element(
     image: &Image,
     object: &RenderObject,
     prepared: Option<crate::resources::SceneImagePresentation>,
+    frame_index: Option<usize>,
 ) -> AnyElement {
     let Some(plan) = image_box(image, object) else {
         return div().into_any_element();
@@ -51,10 +52,40 @@ pub(super) fn image_element(
         .overflow_hidden()
         .opacity(object.opacity);
     use crate::resources::SceneImagePresentation;
+    let native_id = SharedString::from(format!("flow-image:{}:{}", object.object.id, image.source));
     let content = match prepared {
-        Some(SceneImagePresentation::Loaded(image)) => content
-            .child(img(image).size_full().object_fit(fit))
-            .into_any_element(),
+        Some(SceneImagePresentation::Loaded(image)) => {
+            if let Some(index) = frame_index {
+                content
+                    .child(
+                        canvas(
+                            |_, _, _| (),
+                            move |bounds, _, window, _| {
+                                let fitted = fit.get_bounds(bounds, image.size(index));
+                                let _ = window.paint_image(
+                                    bounds,
+                                    fitted,
+                                    Corners::all(px(0.)),
+                                    image,
+                                    index,
+                                    false,
+                                );
+                            },
+                        )
+                        .size_full(),
+                    )
+                    .into_any_element()
+            } else {
+                content
+                    .child(
+                        img(image.clone())
+                            .id(SharedString::from(format!("{native_id}:{:?}", image.id)))
+                            .size_full()
+                            .object_fit(fit),
+                    )
+                    .into_any_element()
+            }
+        }
         Some(SceneImagePresentation::Pending) => content.child("Loading image…").into_any_element(),
         Some(SceneImagePresentation::Failed(error)) => content
             .text_color(rgb(0xf5b971))
@@ -68,6 +99,7 @@ pub(super) fn image_element(
             Some(resource) => content
                 .child(
                     img(ImageSource::Resource(resource))
+                        .id(native_id)
                         .size_full()
                         .object_fit(fit),
                 )

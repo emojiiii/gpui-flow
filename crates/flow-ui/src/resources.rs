@@ -10,10 +10,11 @@ use gpui_flow_engine::{
 use gpui_flow_scene::{Shape, display::Text};
 use gpui_flow_text::TextMeasureRequest;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     panic::{AssertUnwindSafe, catch_unwind},
     rc::Rc,
     sync::Arc,
+    time::Duration,
 };
 
 /// A host's explicit authorization/mapping decision. Return None to deny a
@@ -34,6 +35,15 @@ pub enum SceneImagePresentation {
 pub(crate) struct CompositeImageObservation {
     pub ticket: Option<ResourceTicket>,
     pub image: Result<Arc<RenderImage>, gpui_flow_composite::CompositeError>,
+    pub frame_index: usize,
+    pub playback_generation: u64,
+}
+impl CompositeImageObservation {
+    pub(crate) fn resource_eq(&self, other: &Self) -> bool {
+        self.ticket == other.ticket
+            && self.image == other.image
+            && self.playback_generation == other.playback_generation
+    }
 }
 /// Runtime-only state; no decoded image or authorization enters Scene JSON.
 pub struct SceneResourceAdapter {
@@ -42,6 +52,11 @@ pub struct SceneResourceAdapter {
     cache: Option<AnyImageCache>,
     resolved: BTreeMap<ResourceTicket, Resource>,
     images: BTreeMap<ResourceTicket, SceneImagePresentation>,
+    playbacks: BTreeMap<ResourceTicket, crate::image_playback::Playback>,
+    timelines: BTreeMap<
+        gpui::ImageId,
+        Result<Arc<crate::image_playback::Timeline>, gpui_flow_composite::CompositeError>,
+    >,
 }
 impl SceneResourceAdapter {
     pub fn new(engine: &mut SceneEngine) -> Result<Self, ResourceError> {
@@ -51,6 +66,8 @@ impl SceneResourceAdapter {
             cache: None,
             resolved: BTreeMap::new(),
             images: BTreeMap::new(),
+            playbacks: BTreeMap::new(),
+            timelines: BTreeMap::new(),
         })
     }
     pub fn tracker(&self) -> &SceneResources {
@@ -66,6 +83,8 @@ impl SceneResourceAdapter {
         self.resolver = resolver;
         self.resolved.clear();
         self.images.clear();
+        self.playbacks.clear();
+        self.timelines.clear();
         Ok(())
     }
     /// Optional host-owned GPUI ImageCache. No independent image cache is
@@ -79,6 +98,8 @@ impl SceneResourceAdapter {
         self.cache = cache;
         self.resolved.clear();
         self.images.clear();
+        self.playbacks.clear();
+        self.timelines.clear();
         Ok(())
     }
     /// Font installation/replacement has no public GPUI resource notification;
@@ -195,6 +216,7 @@ impl SceneResourceAdapter {
             };
             self.settle(engine, ticket, outcome, presentation, &mut events)?;
         }
+        self.synchronize_playbacks();
         Ok(events)
     }
     fn settle(
@@ -216,11 +238,151 @@ impl SceneResourceAdapter {
         }
         Ok(())
     }
-    pub fn image(&self, engine: &SceneEngine, handle: ElementHandle) -> SceneImagePresentation {
+    fn synchronize_playbacks(&mut self) {
+        use crate::image_playback::{MAX_TIMELINE_FRAMES, Playback, Timeline};
+        let live = self
+            .images
+            .iter()
+            .filter_map(|(ticket, presentation)| {
+                if let SceneImagePresentation::Loaded(image) = presentation {
+                    Some((*ticket, image.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        let image_ids = live
+            .iter()
+            .map(|(_, image)| image.id)
+            .collect::<BTreeSet<_>>();
+        let old_frames = self
+            .timelines
+            .values()
+            .filter_map(|t| t.as_ref().ok())
+            .map(|t| t.frames())
+            .sum::<usize>();
+        self.timelines.retain(|id, _| image_ids.contains(id));
+        let retained_frames = self
+            .timelines
+            .values()
+            .filter_map(|t| t.as_ref().ok())
+            .map(|t| t.frames())
+            .sum::<usize>();
+        if retained_frames < old_frames {
+            // Aggregate admission can recover only after a real schedule release.
+            // Permanent errors may be rechecked once too; no polling retry loop.
+            self.timelines.retain(|_, timeline| timeline.is_ok());
+        }
+        let live_tickets = live
+            .iter()
+            .map(|(ticket, _)| *ticket)
+            .collect::<BTreeSet<_>>();
+        self.playbacks
+            .retain(|ticket, _| live_tickets.contains(ticket));
+        let mut count = self
+            .timelines
+            .values()
+            .filter_map(|t| t.as_ref().ok())
+            .map(|t| t.frames())
+            .sum::<usize>();
+        for (ticket, image) in live {
+            let timeline = self.timelines.entry(image.id).or_insert_with(|| {
+                if image.frame_count() > MAX_TIMELINE_FRAMES.saturating_sub(count) {
+                    return Err(gpui_flow_composite::CompositeError::InputLimit);
+                }
+                let timeline = Timeline::new(&image)?;
+                count += timeline.frames();
+                Ok(Arc::new(timeline))
+            });
+            if let Ok(timeline) = timeline {
+                self.playbacks
+                    .entry(ticket)
+                    .and_modify(|playback| {
+                        if playback.image != image.id {
+                            *playback = Playback::new(image.id, timeline.clone());
+                        }
+                    })
+                    .or_insert_with(|| Playback::new(image.id, timeline.clone()));
+            }
+        }
+    }
+    /// Select one immutable frame per live instance from a shared monotonic time.
+    /// Hidden/rejected nodes do not drive frames and resume from their frozen phase.
+    pub(crate) fn sample_images(
+        &mut self,
+        engine: &SceneEngine,
+        visible: &BTreeSet<gpui_flow_scene::DisplayId>,
+        now: Duration,
+        active: bool,
+    ) -> bool {
+        let tickets = visible
+            .iter()
+            .filter_map(|id| engine.handle(id))
+            .filter_map(|h| self.tracker.ticket(engine, h))
+            .collect::<BTreeSet<_>>();
+        let mut animate = false;
+        for (ticket, playback) in &mut self.playbacks {
+            animate |= playback.sample(now, active && tickets.contains(ticket));
+        }
+        animate
+    }
+    pub(crate) fn freeze_images(&mut self, now: Duration) {
+        for playback in self.playbacks.values_mut() {
+            playback.freeze(now);
+        }
+    }
+    /// Returns false until this handle's current image generation is loaded.
+    pub(crate) fn set_image_playing(
+        &mut self,
+        engine: &SceneEngine,
+        handle: ElementHandle,
+        now: Duration,
+        playing: bool,
+    ) -> bool {
+        let Some(playback) = self
+            .tracker
+            .ticket(engine, handle)
+            .and_then(|t| self.playbacks.get_mut(&t))
+        else {
+            return false;
+        };
+        playback.set_playing(now, playing);
+        true
+    }
+    pub(crate) fn seek_image(
+        &mut self,
+        engine: &SceneEngine,
+        handle: ElementHandle,
+        time: Duration,
+    ) -> bool {
+        let Some(playback) = self
+            .tracker
+            .ticket(engine, handle)
+            .and_then(|t| self.playbacks.get_mut(&t))
+        else {
+            return false;
+        };
+        playback.seek(time);
+        true
+    }
+    pub(crate) fn image_frame(&self, engine: &SceneEngine, handle: ElementHandle) -> usize {
         self.tracker
             .ticket(engine, handle)
+            .and_then(|t| self.playbacks.get(&t))
+            .map_or(0, |p| p.index())
+    }
+    pub fn image(&self, engine: &SceneEngine, handle: ElementHandle) -> SceneImagePresentation {
+        let image = self
+            .tracker
+            .ticket(engine, handle)
             .and_then(|ticket| self.images.get(&ticket).cloned())
-            .unwrap_or(SceneImagePresentation::Pending)
+            .unwrap_or(SceneImagePresentation::Pending);
+        if let SceneImagePresentation::Loaded(image) = &image
+            && let Some(Err(error)) = self.timelines.get(&image.id)
+        {
+            return SceneImagePresentation::Failed(error.to_string());
+        }
+        image
     }
     pub(crate) fn composite_image(
         &self,
@@ -253,7 +415,20 @@ impl SceneResourceAdapter {
                 _ => Err(CompositeError::ImagePending(id.clone())),
             }
         };
-        CompositeImageObservation { ticket, image }
+        let image = image.and_then(|image| {
+            if let Some(Err(error)) = self.timelines.get(&image.id) {
+                Err(error.clone())
+            } else {
+                Ok(image)
+            }
+        });
+        let playback = ticket.and_then(|t| self.playbacks.get(&t));
+        CompositeImageObservation {
+            ticket,
+            image,
+            frame_index: playback.map_or(0, |p| p.index()),
+            playback_generation: playback.map_or(0, |p| p.generation),
+        }
     }
     pub fn frame(&self, engine: &SceneEngine) -> Option<ResourceFrame> {
         self.tracker.frame(engine)
@@ -274,6 +449,8 @@ impl SceneResourceAdapter {
     ) -> Result<Vec<ResourceEvent>, ResourceError> {
         self.resolved.clear();
         self.images.clear();
+        self.playbacks.clear();
+        self.timelines.clear();
         self.tracker.dispose(engine)
     }
 }
@@ -479,5 +656,106 @@ mod tests {
             r.composite_image(&e, &id, "a.png").image,
             Err(gpui_flow_composite::CompositeError::ImageUnavailable { .. })
         ));
+    }
+    #[::core::prelude::v1::test]
+    fn playback_is_ticket_bound_and_seek_source_reset_cannot_reuse_old_samples() {
+        let (mut e, mut r) = image_engine();
+        let id = "image".into();
+        let handle = e.handle(&id).unwrap();
+        let ticket = r.composite_image(&e, &id, "a.png").ticket.unwrap();
+        let image = Arc::new(RenderImage::new(vec![
+            image::Frame::from_parts(
+                image::RgbaImage::new(1, 1),
+                0,
+                0,
+                image::Delay::from_numer_denom_ms(20, 1),
+            ),
+            image::Frame::from_parts(
+                image::RgbaImage::new(1, 1),
+                0,
+                0,
+                image::Delay::from_numer_denom_ms(80, 1),
+            ),
+        ]));
+        r.settle(
+            &mut e,
+            ticket,
+            ResourceOutcome::Loaded,
+            Some(SceneImagePresentation::Loaded(image)),
+            &mut vec![],
+        )
+        .unwrap();
+        r.synchronize_playbacks();
+        let visible = BTreeSet::from([id.clone()]);
+        assert!(r.sample_images(&e, &visible, Duration::ZERO, true));
+        r.sample_images(&e, &visible, Duration::from_millis(20), true);
+        let playing = r.composite_image(&e, &id, "a.png");
+        assert_eq!(playing.frame_index, 1);
+        assert_eq!(r.image_frame(&e, handle), playing.frame_index);
+        assert!(r.set_image_playing(&e, handle, Duration::from_millis(30), false));
+        assert!(!r.sample_images(&e, &visible, Duration::from_secs(30), true));
+        assert_eq!(r.image_frame(&e, handle), 1);
+        assert!(r.seek_image(&e, handle, Duration::ZERO));
+        let sought = r.composite_image(&e, &id, "a.png");
+        assert_eq!(sought.frame_index, 0);
+        assert!(!playing.resource_eq(&sought));
+        r.set_image_resolver(&e, Rc::new(|_| None)).unwrap();
+        r.tracker.synchronize(&mut e).unwrap();
+        assert!(r.playbacks.is_empty());
+        assert_ne!(r.composite_image(&e, &id, "a.png").ticket, Some(ticket));
+        assert!(!r.seek_image(&e, handle, Duration::ZERO));
+    }
+
+    #[::core::prelude::v1::test]
+    fn released_timeline_capacity_recovers_a_still_loaded_rejected_image() {
+        let mut scene = gpui_flow_scene::Scene::new();
+        for i in 0..17 {
+            scene
+                .insert(
+                    gpui_flow_scene::DisplayObject::new(
+                        format!("i{i}"),
+                        gpui_flow_scene::display::Image::new(
+                            format!("{i}.gif"),
+                            gpui_flow_scene::Size::new(1., 1.),
+                        ),
+                    ),
+                    None,
+                    None,
+                )
+                .unwrap();
+        }
+        let mut engine = SceneEngine::new(scene).unwrap();
+        let mut r = SceneResourceAdapter::new(&mut engine).unwrap();
+        r.tracker.synchronize(&mut engine).unwrap();
+        let mut tickets = vec![];
+        for i in 0..17 {
+            let handle = engine.handle(&format!("i{i}").into()).unwrap();
+            let ticket = r.tracker.ticket(&engine, handle).unwrap();
+            tickets.push(ticket);
+            let image = Arc::new(RenderImage::new(
+                (0..crate::image_playback::MAX_IMAGE_FRAMES)
+                    .map(|_| image::Frame::new(image::RgbaImage::new(1, 1)))
+                    .collect::<Vec<_>>(),
+            ));
+            r.settle(
+                &mut engine,
+                ticket,
+                ResourceOutcome::Loaded,
+                Some(SceneImagePresentation::Loaded(image)),
+                &mut vec![],
+            )
+            .unwrap();
+        }
+        r.synchronize_playbacks();
+        assert_eq!(r.playbacks.len(), 16);
+        let rejected = *tickets
+            .iter()
+            .find(|t| !r.playbacks.contains_key(t))
+            .unwrap();
+        let admitted = *r.playbacks.keys().next().unwrap();
+        r.images.remove(&admitted);
+        r.synchronize_playbacks();
+        assert!(r.playbacks.contains_key(&rejected));
+        assert_eq!(r.playbacks.len(), 16);
     }
 }

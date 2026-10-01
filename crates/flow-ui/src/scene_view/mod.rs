@@ -126,6 +126,45 @@ impl SceneView {
         cx.notify();
         Ok(())
     }
+    /// Pause/resume this loaded image instance on both native and composited
+    /// routes. Returns false for a stale handle or a not-yet-loaded generation.
+    /// Runtime state is not serialized or linked to the editor animation timeline.
+    pub fn set_image_playing(
+        &mut self,
+        handle: gpui_flow_engine::ElementHandle,
+        playing: bool,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let changed = self.resources.as_mut().is_some_and(|r| {
+            r.set_image_playing(
+                &self.editor.engine,
+                handle,
+                self.state_clock.elapsed(),
+                playing,
+            )
+        });
+        if changed {
+            cx.notify();
+        }
+        changed
+    }
+    /// Seek to elapsed time within an infinitely looping decoded animation.
+    /// The new playback generation rejects old CPU jobs and displayed snapshots.
+    pub fn seek_image(
+        &mut self,
+        handle: gpui_flow_engine::ElementHandle,
+        time: std::time::Duration,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let changed = self
+            .resources
+            .as_mut()
+            .is_some_and(|r| r.seek_image(&self.editor.engine, handle, time));
+        if changed {
+            cx.notify();
+        }
+        changed
+    }
     /// Call after the host changes its installed fonts/fallback resources.
     pub fn invalidate_text_resources(
         &mut self,

@@ -15,6 +15,7 @@ use std::{
 };
 
 const MAX_ENTRIES: usize = 8;
+const MAX_FAILED_SAMPLES: usize = 128;
 const MAX_RETAINED: u64 = 32 * 1024 * 1024;
 const MAX_RETIRED: u64 = 32 * 1024 * 1024;
 #[derive(Clone, Debug, PartialEq)]
@@ -79,11 +80,52 @@ impl RequestKey {
                     .unwrap_or_else(|| crate::resources::CompositeImageObservation {
                         ticket: None,
                         image: Err(CompositeError::ImagePending(id.clone())),
+                        frame_index: 0,
+                        playback_generation: 0,
                     });
                 domain.images.insert(id.clone(), observation);
             }
         }
         self
+    }
+    // Frame selection is soft invalidation. Everything else is semantic and
+    // cancels stale work, including a seek/pause generation and A/B/A resources.
+    fn animation_only(&self, other: &Self) -> bool {
+        self.window == other.window
+            && self.viewport == other.viewport
+            && self.document_epoch == other.document_epoch
+            && self.revision == other.revision
+            && self.domains.len() == other.domains.len()
+            && self.domains.iter().zip(&other.domains).all(|(a, b)| {
+                a.source == b.source
+                    && a.identities == b.identities
+                    && same_resources(&a.images, &b.images)
+            })
+    }
+    fn sample(&self, id: &DisplayId) -> Vec<usize> {
+        self.domains
+            .iter()
+            .find(|d| d.source.root_id() == id)
+            .map(|d| d.images.values().map(|i| i.frame_index).collect())
+            .unwrap_or_default()
+    }
+    fn domain_semantic_eq(&self, other: &Self, id: &DisplayId) -> bool {
+        self.domains
+            .iter()
+            .find(|d| d.source.root_id() == id)
+            .zip(other.domains.iter().find(|d| d.source.root_id() == id))
+            .is_some_and(|(a, b)| {
+                a.source == b.source
+                    && a.identities == b.identities
+                    && same_resources(&a.images, &b.images)
+            })
+    }
+    fn same_domain_sample(&self, other: &Self, id: &DisplayId) -> bool {
+        self.window == other.window
+            && self.viewport == other.viewport
+            && self.document_epoch == other.document_epoch
+            && self.domains.iter().find(|d| d.source.root_id() == id)
+                == other.domains.iter().find(|d| d.source.root_id() == id)
     }
     fn compatible(&self, other: &Self, id: &DisplayId) -> bool {
         self.window == other.window
@@ -96,10 +138,19 @@ impl RequestKey {
                 .zip(other.domains.iter().find(|d| d.source.root_id() == id))
                 .is_some_and(|(a, b)| {
                     a.identities == b.identities
-                        && a.images == b.images
+                        && same_resources(&a.images, &b.images)
                         && a.source.placement_eq(&b.source)
                 })
     }
+}
+fn same_resources(
+    a: &BTreeMap<DisplayId, crate::resources::CompositeImageObservation>,
+    b: &BTreeMap<DisplayId, crate::resources::CompositeImageObservation>,
+) -> bool {
+    a.len() == b.len()
+        && a.iter()
+            .zip(b)
+            .all(|((id, a), (other, b))| id == other && a.resource_eq(b))
 }
 #[derive(Clone)]
 pub(crate) struct ImageFrame {
@@ -140,6 +191,9 @@ pub(crate) struct CompositeController {
     retired_bytes: u64,
     budget_epoch: u64,
     running_budget_epoch: u64,
+    // Frame-local failures are memoized by selected-frame vector, not promoted
+    // to resource-wide failure. Metadata stays bounded even for many images.
+    failed_samples: BTreeMap<DisplayId, BTreeMap<Vec<usize>, (u64, CompositeError)>>,
 }
 impl Default for CompositeController {
     fn default() -> Self {
@@ -155,6 +209,7 @@ impl Default for CompositeController {
             retired_bytes: 0,
             budget_epoch: 0,
             running_budget_epoch: 0,
+            failed_samples: BTreeMap::new(),
         }
     }
 }
@@ -166,21 +221,21 @@ pub(crate) struct Work {
     settled_bytes: u64,
 }
 pub(crate) type WorkResult = Vec<(DisplayId, Result<Option<CpuFrame>, CompositeError>)>;
-// GPUI owns fetching/decoding/cache. Only frame_count == 1 has a truthful
-// producer here; native img's private animated frame cursor is not guessed.
-fn static_image(
+// Convert only the admitted frame snapshot. GPUI still owns decoded originals;
+// never clone all frames, and share a (resource, frame) conversion within a job.
+fn selected_image(
     image: &RenderImage,
+    frame_index: usize,
     bytes: &mut u64,
     capacity: u64,
 ) -> Result<Arc<StaticImage>, CompositeError> {
-    if image.frame_count() > 1 {
-        return Err(CompositeError::UnsupportedAnimatedImage);
-    }
-    if image.frame_count() != 1 {
+    if frame_index >= image.frame_count() {
         return Err(CompositeError::InvalidImage);
     }
-    let size = image.size(0);
-    let data = image.as_bytes(0).ok_or(CompositeError::InvalidImage)?;
+    let size = image.size(frame_index);
+    let data = image
+        .as_bytes(frame_index)
+        .ok_or(CompositeError::InvalidImage)?;
     let next = bytes
         .checked_add(data.len() as u64)
         .ok_or(CompositeError::WorkingSetLimit)?;
@@ -199,8 +254,10 @@ fn static_image(
 impl Work {
     pub fn run(&self) -> WorkResult {
         let mut images = ImageInputs::default();
-        let mut converted: BTreeMap<gpui::ImageId, Result<Arc<StaticImage>, CompositeError>> =
-            BTreeMap::new();
+        let mut converted: BTreeMap<
+            (gpui::ImageId, usize),
+            Result<Arc<StaticImage>, CompositeError>,
+        > = BTreeMap::new();
         let mut source_bytes = 0u64;
         for domain in &self.key.domains {
             if self.settled.contains(domain.source.root_id()) {
@@ -215,14 +272,20 @@ impl Work {
                         if self.cancel.load(Ordering::Relaxed) {
                             return Err(CompositeError::Superseded);
                         }
-                        if let Some(input) = converted.get(&image.id) {
+                        let snapshot = (image.id, observation.frame_index);
+                        if let Some(input) = converted.get(&snapshot) {
                             return input.clone();
                         }
                         let capacity = CompositeLimits::default()
                             .max_surface_bytes
                             .saturating_sub(self.retained);
-                        let input = static_image(image, &mut source_bytes, capacity);
-                        converted.insert(image.id, input.clone());
+                        let input = selected_image(
+                            image,
+                            observation.frame_index,
+                            &mut source_bytes,
+                            capacity,
+                        );
+                        converted.insert(snapshot, input.clone());
                         input
                     });
                 images.insert(id.clone(), input);
@@ -277,6 +340,12 @@ impl Work {
             .collect()
     }
 }
+fn frame_local_error(error: &CompositeError) -> bool {
+    matches!(
+        error,
+        CompositeError::WorkingSetLimit | CompositeError::InvalidImage | CompositeError::TooLarge
+    )
+}
 impl CompositeController {
     /// Replaces the one pending request; an old worker is only cooperatively
     /// cancelled and must finish before another worker can start.
@@ -284,13 +353,42 @@ impl CompositeController {
         if self.requested.as_ref() == Some(&key) {
             return vec![];
         }
+        let animation_only = self
+            .requested
+            .as_ref()
+            .is_some_and(|old| key.animation_only(old));
+        if animation_only && (self.running || self.candidates.values().any(Option::is_some)) {
+            // One admitted snapshot can finish and upload even when every newer
+            // vsync chooses another frame. The next render samples latest time;
+            // there is no per-tick queue and no starvation of a slow worker.
+            return vec![];
+        }
         self.cancel.store(true, Ordering::Relaxed);
         // A -> B -> A may return to the same presented values/revision after
         // A's unaccepted candidate was cleared. Completion is request-local.
         self.completed = None;
         self.candidates.clear();
-        self.errors.clear();
-        self.blocked_uploads.clear();
+        if !animation_only {
+            self.errors.clear();
+            self.blocked_uploads.clear();
+            self.failed_samples.clear();
+        } else {
+            self.errors.retain(|issue| !frame_local_error(&issue.error));
+            for domain in &key.domains {
+                let id = domain.source.root_id();
+                if let Some((epoch, error)) = self
+                    .failed_samples
+                    .get(id)
+                    .and_then(|f| f.get(&key.sample(id)))
+                    && (*error != CompositeError::WorkingSetLimit || *epoch == self.budget_epoch)
+                {
+                    self.errors.push(CompositeIssue {
+                        object: id.clone(),
+                        error: error.clone(),
+                    });
+                }
+            }
+        }
         self.requested = Some(key);
         self.drain_obsolete()
     }
@@ -342,18 +440,32 @@ impl CompositeController {
             if let Some(candidate) = self.candidates.get(id) {
                 settled.insert(id.clone());
                 settled_bytes += candidate.as_ref().map_or(0, |frame| frame.bytes);
-            } else if let Some(accepted) = self.accepted.get(id).filter(|a| a.key == *key) {
+            } else if let Some(accepted) = self
+                .accepted
+                .get(id)
+                .filter(|a| key.same_domain_sample(&a.key, id))
+            {
                 settled.insert(id.clone());
                 settled_bytes += accepted.frame.bytes;
             } else if self.blocked_uploads.contains(id)
                 || self.errors.iter().any(|issue| {
-                    &issue.object == id && issue.error != CompositeError::WorkingSetLimit
+                    &issue.object == id
+                        && (issue.error != CompositeError::WorkingSetLimit
+                            || self
+                                .failed_samples
+                                .get(id)
+                                .and_then(|f| f.get(&key.sample(id)))
+                                .is_some_and(|(epoch, _)| *epoch == self.budget_epoch))
                 })
             {
                 // Only budget failures may change after a byte release. Preserve
                 // terminal diagnostics and never bypass an upload block here.
                 settled.insert(id.clone());
             }
+        }
+        if settled.len() == key.domains.len() {
+            self.completed = Some(key.clone());
+            return None;
         }
         self.running = true;
         self.running_budget_epoch = self.budget_epoch;
@@ -371,14 +483,27 @@ impl CompositeController {
         if self.requested.as_ref() != Some(&key) || self.cancel.load(Ordering::Relaxed) {
             return;
         }
-        self.completed = Some(key);
+        self.completed = Some(key.clone());
         for (id, result) in result {
             self.errors.retain(|issue| issue.object != id);
+
             match result.and_then(|frame| frame.map(into_image).transpose()) {
                 Ok(frame) => {
                     self.candidates.insert(id, frame);
                 }
-                Err(error) => self.errors.push(CompositeIssue { object: id, error }),
+                Err(error) => {
+                    let mut error = error;
+                    if frame_local_error(&error) {
+                        let failures = self.failed_samples.entry(id.clone()).or_default();
+                        let sample = key.sample(&id);
+                        if failures.len() >= MAX_FAILED_SAMPLES && !failures.contains_key(&sample) {
+                            error = CompositeError::InputLimit;
+                        } else {
+                            failures.insert(sample, (self.running_budget_epoch, error.clone()));
+                        }
+                    }
+                    self.errors.push(CompositeIssue { object: id, error });
+                }
             }
         }
         // A release can happen while the worker is using its older, more
@@ -405,11 +530,21 @@ impl CompositeController {
             }
         }
     }
+    pub(crate) fn can_animate_domain(&self, id: &DisplayId) -> bool {
+        !self.blocked_uploads.contains(id)
+            && !self
+                .errors
+                .iter()
+                .any(|issue| &issue.object == id && !frame_local_error(&issue.error))
+    }
     pub fn diagnostics(&self) -> Vec<CompositeIssue> {
         let mut out = self.errors.clone();
         if let Some(key) = &self.requested {
             for (id, old) in &self.accepted {
-                if old.key != *key && key.compatible(&old.key, id) {
+                if old.key != *key
+                    && key.compatible(&old.key, id)
+                    && !key.domain_semantic_eq(&old.key, id)
+                {
                     out.push(CompositeIssue {
                         object: id.clone(),
                         error: CompositeError::StaleFrame,
@@ -471,11 +606,15 @@ impl CompositeController {
             return None;
         };
         self.errors.retain(|e| &e.object != id);
+        // An accepted domain must not retain decoded images from unrelated,
+        // later removed/revoked domains in the same request batch.
+        let mut domain_key = (**key).clone();
+        domain_key.domains.retain(|d| d.source.root_id() == id);
         self.accepted
             .insert(
                 id.clone(),
                 Accepted {
-                    key: key.clone(),
+                    key: Arc::new(domain_key),
                     frame,
                 },
             )
@@ -700,14 +839,18 @@ mod tests {
     }
     #[test]
     fn retirement_pressure_blocks_candidate_before_any_upload_and_preserves_budget() {
-        let e = engine();
+        let mut e = engine();
         let mut c = CompositeController::default();
         let first = key(&e);
         let image = ready(&mut c, first.clone());
         c.accepted(&first, &"g".into(), &image.image);
-        let mut next = (*first).clone();
-        next.revision += 1;
-        let candidate = ready(&mut c, Arc::new(next));
+        e.set_property(
+            e.handle(&"r".into()).unwrap(),
+            gpui_flow_engine::PropertyKey::Opacity,
+            serde_json::json!(0.5),
+        )
+        .unwrap();
+        let candidate = ready(&mut c, key(&e));
         c.retired_bytes = MAX_RETIRED;
         let frame = c.frame(&"g".into()).unwrap();
         assert!(!frame.1);
@@ -782,23 +925,23 @@ mod tests {
         ))
     }
     #[test]
-    fn static_gpui_adapter_rejects_animated_empty_and_over_budget_before_copy() {
+    fn selected_gpui_adapter_validates_index_empty_and_budget_before_copy() {
         let mut bytes = 0;
         assert!(matches!(
-            static_image(&input_image(2), &mut bytes, MAX_RETAINED),
-            Err(CompositeError::UnsupportedAnimatedImage)
-        ));
-        assert!(matches!(
-            static_image(&input_image(0), &mut bytes, MAX_RETAINED),
+            selected_image(&input_image(2), 2, &mut bytes, MAX_RETAINED),
             Err(CompositeError::InvalidImage)
         ));
         assert!(matches!(
-            static_image(&input_image(1), &mut bytes, 3),
+            selected_image(&input_image(0), 0, &mut bytes, MAX_RETAINED),
+            Err(CompositeError::InvalidImage)
+        ));
+        assert!(matches!(
+            selected_image(&input_image(1), 0, &mut bytes, 3),
             Err(CompositeError::WorkingSetLimit)
         ));
         assert_eq!(bytes, 0);
         assert_eq!(
-            static_image(&input_image(1), &mut bytes, 4)
+            selected_image(&input_image(1), 0, &mut bytes, 4)
                 .unwrap()
                 .premultiplied_rgba(),
             &[128, 0, 0, 128]
@@ -842,6 +985,8 @@ mod tests {
             "r".into(),
             crate::resources::CompositeImageObservation {
                 ticket: None,
+                frame_index: 0,
+                playback_generation: 0,
                 image: Ok(input_image(1)),
             },
         );
@@ -915,6 +1060,8 @@ mod tests {
                 format!("i{index}").into(),
                 crate::resources::CompositeImageObservation {
                     ticket: None,
+                    frame_index: 0,
+                    playback_generation: 0,
                     image: Ok(shared.clone()),
                 },
             );
@@ -1041,6 +1188,7 @@ mod tests {
             let previous_image = ready(&mut c, previous.clone());
             c.accepted(&previous, &"g".into(), &previous_image.image);
             e.transaction(|s| {
+                s.update_object(&"r".into(), |o| o.style.opacity = 0.5)?;
                 s.insert(
                     DisplayObject::new("g2", display::Group::new()).with_style(Style {
                         blend_mode: BlendMode::Normal,
@@ -1070,6 +1218,8 @@ mod tests {
                     "large".into(),
                     crate::resources::CompositeImageObservation {
                         ticket: None,
+                        frame_index: 0,
+                        playback_generation: 0,
                         // A real decoded input exceeding the static conversion cap.
                         // This domain remains memory-limited even after all retired
                         // images have been released; its failure is not mocked.
@@ -1158,5 +1308,303 @@ mod tests {
             assert!(c.take_work().is_none());
             drop(retry);
         }
+    }
+    fn animated_key() -> Arc<RequestKey> {
+        let mut e = engine();
+        e.transaction(|s| {
+            s.update_object(&"r".into(), |o| {
+                o.shape = gpui_flow_scene::display::Image::new(
+                    "animated.gif",
+                    gpui_flow_scene::Size::new(20., 20.),
+                )
+                .into();
+            })
+        })
+        .unwrap();
+        let image = Arc::new(RenderImage::new(vec![
+            image::Frame::new(image::RgbaImage::from_pixel(
+                1,
+                1,
+                image::Rgba([0, 0, 255, 255]),
+            )),
+            image::Frame::new(image::RgbaImage::from_pixel(
+                2,
+                1,
+                image::Rgba([0, 255, 0, 255]),
+            )),
+        ]));
+        let mut k = (*key(&e)).clone();
+        k.domains[0].images.insert(
+            "r".into(),
+            crate::resources::CompositeImageObservation {
+                ticket: None,
+                image: Ok(image),
+                frame_index: 0,
+                playback_generation: 0,
+            },
+        );
+        Arc::new(k)
+    }
+    fn next_frame(k: &Arc<RequestKey>, index: usize) -> Arc<RequestKey> {
+        let mut k = (**k).clone();
+        k.domains[0]
+            .images
+            .get_mut(&"r".into())
+            .unwrap()
+            .frame_index = index;
+        Arc::new(k)
+    }
+    #[test]
+    fn slow_animation_worker_publishes_admitted_pixels_before_latest_sample() {
+        let first = animated_key();
+        let next = next_frame(&first, 1);
+        let mut c = CompositeController::default();
+        c.request(first.clone());
+        let work = c.take_work().unwrap();
+        for _ in 0..20 {
+            c.request(next.clone());
+            assert!(!work.cancel.load(Ordering::Relaxed));
+            assert!(c.take_work().is_none());
+        }
+        c.finish(first.clone(), work.run());
+        let red = c.frame(&"g".into()).unwrap().0;
+        assert_eq!(red.image.as_bytes(0).unwrap()[0..4], [0, 0, 255, 255]);
+        c.request(next.clone()); // Preserve candidate until real upload acceptance.
+        assert_eq!(c.requested, Some(first.clone()));
+        c.accepted(&first, &"g".into(), &red.image);
+        c.request(next.clone());
+        assert!(c.old_frame(&"g".into()).is_some());
+        assert!(
+            !c.diagnostics()
+                .iter()
+                .any(|i| i.error == CompositeError::StaleFrame)
+        );
+        let work = c.take_work().unwrap();
+        assert_eq!(work.key, next);
+        c.finish(next.clone(), work.run());
+        let green = c.frame(&"g".into()).unwrap().0;
+        assert_eq!(
+            green.image.as_bytes(0).unwrap()[(10 * 20 + 10) * 4..(10 * 20 + 10) * 4 + 4],
+            [0, 255, 0, 255]
+        );
+        assert!(c.accepted(&next, &"g".into(), &green.image).is_some());
+    }
+    #[test]
+    fn animation_seek_resource_and_geometry_changes_hard_cancel_and_hide_old_pixels() {
+        for change in 0..3 {
+            let first = animated_key();
+            let mut c = CompositeController::default();
+            let old = ready(&mut c, first.clone());
+            c.accepted(&first, &"g".into(), &old.image);
+            let next = next_frame(&first, 1);
+            c.request(next.clone());
+            let work = c.take_work().unwrap();
+            let mut hard = (*next).clone();
+            match change {
+                0 => {
+                    hard.domains[0]
+                        .images
+                        .get_mut(&"r".into())
+                        .unwrap()
+                        .playback_generation += 1
+                }
+                1 => {
+                    hard.domains[0].images.get_mut(&"r".into()).unwrap().image = Ok(input_image(2))
+                }
+                _ => hard.viewport.device_scale = 2.,
+            }
+            c.request(Arc::new(hard));
+            assert!(work.cancel.load(Ordering::Relaxed));
+            assert!(c.old_frame(&"g".into()).is_none());
+            c.finish(next, work.run());
+            assert!(c.frame(&"g".into()).is_none());
+            assert!(c.take_work().is_some());
+        }
+    }
+    #[test]
+    fn animation_ticks_memoize_each_failed_sample_without_blocking_other_frames() {
+        let first = animated_key();
+        let next = next_frame(&first, 1);
+        let mut c = CompositeController::default();
+        c.request(first.clone());
+        c.take_work().unwrap();
+        c.finish(
+            first.clone(),
+            vec![("g".into(), Err(CompositeError::WorkingSetLimit))],
+        );
+        c.request(next.clone());
+        let work = c.take_work().expect("another selected frame can fit");
+        c.finish(next.clone(), work.run());
+        let green = c.frame(&"g".into()).unwrap().0;
+        c.accepted(&next, &"g".into(), &green.image);
+        for index in [0, 1, 0, 1] {
+            c.request(next_frame(&first, index));
+            assert!(c.take_work().is_none());
+        }
+        c.request(first.clone());
+        c.retired_bytes = 4;
+        c.release_retired(4);
+        assert!(c.take_work().is_some());
+        let mut c = CompositeController::default();
+        c.request(first.clone());
+        c.take_work().unwrap();
+        c.finish(
+            first.clone(),
+            vec![("g".into(), Err(CompositeError::UploadFailed("test".into())))],
+        );
+        for index in [1, 0, 1, 0] {
+            c.request(next_frame(&first, index));
+            assert!(c.take_work().is_none());
+        }
+        assert!(!c.can_animate_domain(&"g".into()));
+    }
+
+    #[test]
+    fn selected_frames_have_independent_dimensions_and_conversion_budget() {
+        let k = animated_key();
+        let image = k.domains[0].images[&"r".into()].image.as_ref().unwrap();
+        let mut bytes = 0;
+        let a = selected_image(image, 0, &mut bytes, 12).unwrap();
+        let b = selected_image(image, 1, &mut bytes, 12).unwrap();
+        assert_eq!((a.width(), b.width(), bytes), (1, 2, 12));
+        assert_eq!(a.premultiplied_rgba(), &[255, 0, 0, 255]);
+        assert_eq!(b.premultiplied_rgba(), &[0, 255, 0, 255, 0, 255, 0, 255]);
+        assert!(matches!(
+            selected_image(image, 1, &mut bytes, 12),
+            Err(CompositeError::WorkingSetLimit)
+        ));
+    }
+
+    #[test]
+    fn accepted_other_domain_does_not_pin_removed_decoded_animation() {
+        let mut c = CompositeController::default();
+        let mut first = (*animated_key()).clone();
+        let image = first.domains[0].images[&"r".into()].image.as_ref().unwrap();
+        let weak = Arc::downgrade(image);
+        // Domain identities are deliberately opaque; construct a second source
+        // from a genuinely independent scene with its own root ID.
+        let mut scene = gpui_flow_scene::Scene::new();
+        scene
+            .insert(
+                gpui_flow_scene::DisplayObject::new(
+                    "other",
+                    gpui_flow_scene::display::Rect::new(10., 10.),
+                )
+                .with_style(gpui_flow_scene::Style {
+                    blend_mode: gpui_flow_scene::BlendMode::Normal,
+                    ..Default::default()
+                }),
+                None,
+                None,
+            )
+            .unwrap();
+        let e = SceneEngine::new(scene).unwrap();
+        first.domains.extend(key(&e).domains.clone());
+        let first = Arc::new(first);
+        c.request(first.clone());
+        let work = c.take_work().unwrap();
+        c.finish(first.clone(), work.run());
+        drop(work);
+        for id in ["g", "other"] {
+            let frame = c.frame(&id.into()).unwrap().0;
+            c.accepted(&first, &id.into(), &frame.image);
+        }
+        let mut next = (*first).clone();
+        next.domains
+            .retain(|d| d.source.root_id().as_str() == "other");
+        next.revision += 1;
+        let removed = c.request(Arc::new(next));
+        drop(removed);
+        drop(first);
+        assert!(c.take_work().is_none());
+        assert!(
+            weak.upgrade().is_none(),
+            "surviving accepted domain must not retain the removed source"
+        );
+    }
+    #[test]
+    fn semantic_recovery_reusing_a_frame_reenables_animation_without_a_worker() {
+        let first = animated_key();
+        let mut controller = CompositeController::default();
+        let frame = ready(&mut controller, first.clone());
+        controller.accepted(&first, &"g".into(), &frame.image);
+        let mut changed = (*first).clone();
+        changed.revision += 1;
+        let changed = Arc::new(changed);
+        controller.request(changed.clone());
+        controller.upload_failed(&changed, &"g".into(), "simulated paint failure".into());
+        assert!(!controller.can_animate_domain(&"g".into()));
+        let image = first.domains[0].images[&"r".into()].image.as_ref().unwrap();
+        let mut playback = crate::image_playback::Playback::new(
+            image.id,
+            Arc::new(crate::image_playback::Timeline::new(image).unwrap()),
+        );
+        let now = std::time::Duration::from_millis(5);
+        assert!(!playback.sample(now, controller.can_animate_domain(&"g".into())));
+        controller.request(first);
+        assert!(
+            controller.take_work().is_none(),
+            "recovery reuses an existing accepted frame"
+        );
+        // SceneView resamples at exactly the same timestamp after request reset.
+        assert!(playback.sample(now, controller.can_animate_domain(&"g".into())));
+        assert!(controller.errors.is_empty());
+    }
+
+    #[test]
+    fn shared_decoded_image_at_different_playheads_keeps_distinct_worker_pixels() {
+        use gpui_flow_scene::{BlendMode, DisplayObject, Scene, Size, Style, display};
+        let mut scene = Scene::new();
+        for (group, id) in [("a", "ia"), ("b", "ib")] {
+            scene
+                .insert(
+                    DisplayObject::new(group, display::Group::new()).with_style(Style {
+                        blend_mode: BlendMode::Normal,
+                        ..Default::default()
+                    }),
+                    None,
+                    None,
+                )
+                .unwrap();
+            let mut image = display::Image::new("shared.gif", Size::new(20., 20.));
+            image.fit = display::ImageFit::Fill;
+            scene
+                .insert(DisplayObject::new(id, image), Some(group.into()), None)
+                .unwrap();
+        }
+        let e = SceneEngine::new(scene).unwrap();
+        let mut k = (*key(&e)).clone();
+        let source = animated_key().domains[0].images[&"r".into()]
+            .image
+            .as_ref()
+            .unwrap()
+            .clone();
+        for (index, domain) in k.domains.iter_mut().enumerate() {
+            let id = if index == 0 { "ia" } else { "ib" };
+            domain.images.insert(
+                id.into(),
+                crate::resources::CompositeImageObservation {
+                    ticket: None,
+                    image: Ok(source.clone()),
+                    frame_index: index,
+                    playback_generation: 0,
+                },
+            );
+        }
+        let mut controller = CompositeController::default();
+        let k = Arc::new(k);
+        controller.request(k.clone());
+        let work = controller.take_work().unwrap();
+        let result = work.run();
+        assert_eq!(
+            result[0].1.as_ref().unwrap().as_ref().unwrap().premul_rgba[..4],
+            [255, 0, 0, 255]
+        );
+        assert_eq!(
+            result[1].1.as_ref().unwrap().as_ref().unwrap().premul_rgba[..4],
+            [0, 255, 0, 255]
+        );
+        controller.finish(k, result);
+        assert!(controller.errors.is_empty());
     }
 }

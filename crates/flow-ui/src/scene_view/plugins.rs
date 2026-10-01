@@ -112,8 +112,21 @@ impl SceneView {
         self.subscriptions
             .push(cx.observe_window_activation(window, |this, window, cx| {
                 if !window.is_window_active() {
+                    if let Some(resources) = &mut this.resources {
+                        resources.freeze_images(this.state_clock.elapsed());
+                    }
                     this.focus_lost(cx);
                 }
+                cx.notify();
+            }));
+        self.subscriptions
+            .push(cx.observe_window_visibility(window, |this, _, window, cx| {
+                if !window.is_visible()
+                    && let Some(resources) = &mut this.resources
+                {
+                    resources.freeze_images(this.state_clock.elapsed());
+                }
+                cx.notify();
             }));
     }
 }

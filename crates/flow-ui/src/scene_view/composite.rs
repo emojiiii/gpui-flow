@@ -72,7 +72,7 @@ impl SceneView {
             })
             .detach();
         }
-        Some(key)
+        self.compositing.requested.clone()
     }
     pub(super) fn composite_element(
         &self,

@@ -37,6 +37,12 @@ impl RenderObject {
             clips: item.clips.clone(),
         }
     }
+    pub(crate) fn native_renderable(&self) -> bool {
+        !self
+            .diagnostics()
+            .iter()
+            .any(|issue| rejects_native(&issue.feature))
+    }
     pub fn diagnostics(&self) -> Vec<RenderIssue> {
         let mut issues = vec![];
         let mut report = |feature| {
@@ -101,6 +107,18 @@ impl RenderObject {
         issues
     }
 }
+fn rejects_native(feature: &UnsupportedFeature) -> bool {
+    matches!(
+        feature,
+        UnsupportedFeature::LayeredPaint
+            | UnsupportedFeature::CompositingDomain
+            | UnsupportedFeature::StrokeGeometry
+            | UnsupportedFeature::TransformedText
+            | UnsupportedFeature::TransformedImage
+            | UnsupportedFeature::ClippedText
+            | UnsupportedFeature::ClippedImage
+    )
+}
 /// One independently renderable retained object. Use SceneView for picking, tree dispatch and editing.
 #[derive(IntoElement)]
 pub struct DisplayElement {
@@ -120,6 +138,7 @@ impl DisplayElement {
         PreparedDisplayElement {
             object: self.object,
             image,
+            frame_index: None,
         }
     }
 }
@@ -128,39 +147,35 @@ impl DisplayElement {
 pub struct PreparedDisplayElement {
     object: RenderObject,
     image: crate::resources::SceneImagePresentation,
+    frame_index: Option<usize>,
+}
+impl PreparedDisplayElement {
+    pub(crate) fn selected_frame(mut self, index: usize) -> Self {
+        self.frame_index = Some(index);
+        self
+    }
 }
 impl RenderOnce for DisplayElement {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        render_display(self.object, None)
+        render_display(self.object, None, None)
     }
 }
 impl RenderOnce for PreparedDisplayElement {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        render_display(self.object, Some(self.image))
+        render_display(self.object, Some(self.image), self.frame_index)
     }
 }
 fn render_display(
     object: RenderObject,
     image: Option<crate::resources::SceneImagePresentation>,
+    frame_index: Option<usize>,
 ) -> AnyElement {
-    let issues = object.diagnostics();
-    if issues.iter().any(|i| {
-        matches!(
-            i.feature,
-            UnsupportedFeature::LayeredPaint
-                | UnsupportedFeature::CompositingDomain
-                | UnsupportedFeature::StrokeGeometry
-                | UnsupportedFeature::TransformedText
-                | UnsupportedFeature::TransformedImage
-                | UnsupportedFeature::ClippedText
-                | UnsupportedFeature::ClippedImage
-        )
-    }) {
+    if !object.native_renderable() {
         return div().into_any_element();
     }
     match &object.object.shape {
         Shape::Text(text) => text::text_element(text, &object),
-        Shape::Image(source) => image::image_element(source, &object, image),
+        Shape::Image(source) => image::image_element(source, &object, image, frame_index),
         _ => canvas(
             |_, _, _| (),
             move |bounds, _, window, cx| vector::paint_vector(&object, bounds.origin, window, cx),
@@ -173,6 +188,19 @@ fn render_display(
 
 #[cfg(test)]
 mod resource_compatibility_tests {
+    #[::core::prelude::v1::test]
+    fn animation_visibility_uses_rejections_not_warning_only_diagnostics() {
+        assert!(!super::rejects_native(
+            &super::UnsupportedFeature::GradientPaint
+        ));
+        assert!(super::rejects_native(
+            &super::UnsupportedFeature::TransformedImage
+        ));
+        assert!(super::rejects_native(
+            &super::UnsupportedFeature::ClippedImage
+        ));
+    }
+
     use super::*;
     #[::core::prelude::v1::test]
     fn legacy_display_element_literal_wraps_without_changing_the_render_object() {

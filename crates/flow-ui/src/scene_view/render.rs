@@ -5,6 +5,30 @@ struct StateFrame {
     objects: Vec<RenderObject>,
     units: Vec<SceneUnit>,
 }
+fn animation_images(
+    frame: &StateFrame,
+    controller: &crate::display::composite::CompositeController,
+) -> std::collections::BTreeSet<DisplayId> {
+    let mut visible = std::collections::BTreeSet::new();
+    for unit in &frame.units {
+        match unit {
+            SceneUnit::Domain(domain) if controller.can_animate_domain(domain.root_id()) => {
+                visible.extend(domain.images().into_iter().map(|(id, _)| id.clone()));
+            }
+            SceneUnit::Native(id)
+                if frame.objects.iter().any(|o| {
+                    &o.object.id == id
+                        && matches!(o.object.shape, gpui_flow_scene::Shape::Image(_))
+                        && o.native_renderable()
+                }) =>
+            {
+                visible.insert(id.clone());
+            }
+            _ => {}
+        }
+    }
+    visible
+}
 fn state_render_frame(
     editor: &SceneEditor,
     router: &gpui_flow_interaction::scene::SceneEventRouter,
@@ -158,7 +182,22 @@ impl Render for SceneView {
                 _ => None,
             })
             .collect();
+        let now = self.state_clock.elapsed();
+        let active = window.is_visible() && window.is_window_active() && !cx.reduce_motion();
+        let visible = animation_images(&frame, &self.compositing);
+        if let Some(resources) = &mut self.resources {
+            resources.sample_images(&self.editor.engine, &visible, now, active);
+        }
         let composite_key = self.request_composites(domains, window, cx);
+        // Semantic recovery can clear an upload/domain error without starting a
+        // job (an unchanged accepted frame is reusable). Re-evaluate after the
+        // reset so playback wakes even when no worker completion will notify us.
+        let visible = animation_images(&frame, &self.compositing);
+        if let Some(resources) = &mut self.resources
+            && resources.sample_images(&self.editor.engine, &visible, now, active)
+        {
+            window.request_animation_frame();
+        }
         self.composite_diagnostics = frame
             .units
             .iter()
@@ -275,9 +314,21 @@ impl Render for SceneView {
                 } else {
                     None
                 };
+                let selected_frame = self
+                    .editor
+                    .engine
+                    .handle(&object.object.id)
+                    .and_then(|handle| {
+                        self.resources
+                            .as_ref()
+                            .map(|r| r.image_frame(&self.editor.engine, handle))
+                    })
+                    .unwrap_or(0);
                 let element = DisplayElement::new(object);
                 view = match image {
-                    Some(image) => view.child(element.with_image(image)),
+                    Some(image) => {
+                        view.child(element.with_image(image).selected_frame(selected_frame))
+                    }
                     None => view.child(element),
                 };
             }
@@ -418,6 +469,32 @@ impl Render for SceneView {
 
 #[cfg(test)]
 mod state_tests {
+    #[::core::prelude::v1::test]
+    fn rejected_native_image_is_not_an_animation_driver() {
+        let mut object = crate::display::RenderObject {
+            object: gpui_flow_scene::DisplayObject::new(
+                "image",
+                gpui_flow_scene::display::Image::new(
+                    "animated.gif",
+                    gpui_flow_scene::Size::new(20., 20.),
+                ),
+            ),
+            screen_transform: gpui_flow_scene::Affine::IDENTITY,
+            viewport_transform: gpui_flow_scene::Affine::IDENTITY,
+            opacity: 1.,
+            clips: vec![],
+        };
+        let controller = crate::display::composite::CompositeController::default();
+        let mut frame = super::StateFrame {
+            objects: vec![object.clone()],
+            units: vec![gpui_flow_composite::SceneUnit::Native("image".into())],
+        };
+        assert!(super::animation_images(&frame, &controller).contains(&"image".into()));
+        object.screen_transform.b = 0.5;
+        frame.objects = vec![object];
+        assert!(super::animation_images(&frame, &controller).is_empty());
+    }
+
     use super::state_render_objects;
     use gpui_flow_editor::SceneEditor;
     use gpui_flow_interaction::{CanvasEvent, HitTarget, PointerInput, scene::*};

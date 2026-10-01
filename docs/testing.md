@@ -2,7 +2,7 @@
 
 ## 最新：有界合成与原生窗口验证（2026-09-30）
 
-矢量与静态图片合成已接入SceneView真实RenderImage上传。最新自动化与专用原生窗口验证范围见[compositing.md](compositing.md)；旧检查点计数保留为历史记录，不与新结果累加。CI仍暂停，跨平台与性能未验。
+矢量与静态及动画图片合成已接入SceneView真实RenderImage上传。最新自动化与专用原生窗口验证范围见[compositing.md](compositing.md)；旧检查点计数保留为历史记录，不与新结果累加。CI仍暂停，跨平台与性能未验。
 
 ## 此前源码批次：本地Linux验证（2026-09-30）
 
