@@ -77,7 +77,7 @@ impl Admission<'_> {
             return Ok(());
         }
         let isolated =
-            node.shadow.is_some() || node.opacity < 1. || node.blend != BlendMode::PassThrough;
+            !node.shadows.is_empty() || node.opacity < 1. || node.blend != BlendMode::PassThrough;
         if isolated {
             if depth >= self.budget.limits.max_depth {
                 return Err(CompositeError::NestingLimit);
@@ -99,7 +99,7 @@ impl Admission<'_> {
         shadow: bool,
     ) -> Result<(), CompositeError> {
         self.check()?;
-        if let Some(effect) = node.shadow.filter(|_| shadow) {
+        for &effect in node.shadows.iter().filter(|_| shadow) {
             let plan =
                 crate::shadow::SourcePlan::new(effect, self.world_to_layer, self.budget.limits)?;
             let bytes = plan.filter.bytes(plan.pixels, plan.width);

@@ -193,12 +193,9 @@ impl Builder<'_> {
                 entry.effect_bounds = Some(entry.effect_bounds.map_or(b, |a| a.union(b)));
             }
         }
-        entry.effect_bounds = entry.effect_bounds.map(|b| {
-            object
-                .style
-                .shadow
-                .map_or(b, |s| s.expand_bounds(b, entry.world_transform))
-        });
+        entry.effect_bounds = entry
+            .effect_bounds
+            .map(|b| object.style.expand_shadow_bounds(b, entry.world_transform));
         if entry.effect_bounds.is_some_and(|b| !b.is_valid()) {
             return Err(SceneError::InvalidGeometry(
                 "cached effect bounds overflow".into(),
@@ -225,7 +222,7 @@ impl Builder<'_> {
         if world_changed
             || bounds_changed
             || visually_dirty
-            || (descendant_dirty && object.style.shadow.is_some_and(|s| s.is_visible()))
+            || (descendant_dirty && object.style.has_visible_shadows())
             || old.is_none_or(|e| e.effect_bounds != entry.effect_bounds)
         {
             entry.revision = self.next.revision;

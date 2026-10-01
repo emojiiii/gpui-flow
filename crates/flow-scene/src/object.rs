@@ -157,14 +157,11 @@ impl DisplayObject {
         }
         bounds
     }
-    /// Conservative local visual bounds, including the outer shadow.
+    /// Conservative local visual bounds, including outer shadows.
     /// Do not use these for picking, ItemBox::Stroke, layout or selection.
     pub fn effect_bounds(&self) -> Option<Bounds> {
-        self.paint_bounds().map(|b| {
-            self.style
-                .shadow
-                .map_or(b, |s| s.expand_bounds(b, Affine::IDENTITY))
-        })
+        self.paint_bounds()
+            .map(|b| self.style.expand_shadow_bounds(b, Affine::IDENTITY))
     }
     pub fn validate(&self) -> Result<(), String> {
         if self.id.as_str().trim().is_empty() {

@@ -38,17 +38,23 @@ Separable modes reuse tiny-skia; the four non-separable modes use a narrowly
 scoped W3C pixel adapter correcting the locked backend's lower-gamut clipping.
 See [implementation and verification](../../docs/compositing.md#additional-artistic-blends).
 
-## Single outer shadow
+## Bounded outer shadows
 
-`style.shadow` promotes a vector/Image/Text leaf or supported Group/Box/Frame subtree into an actual CPU domain. A8
+`style.shadow` or `style.shadow_layers` promotes a vector/Image/Text leaf or supported Group/Box/Frame subtree into an actual CPU domain. A8
 ink is filtered by locked image 0.25.10 Gaussian, offset/tinted behind its source,
 then opacity/blend/clip apply once to the isolated result. All known filter
 scratch and conservative convolution work are admitted up front. Bounds remain
 separate from hit/layout/selection geometry. This excludes custom,
-inner/spread/box/multiple/scale-fixed shadows. See the [full contract and limits](../../docs/compositing.md#bounded-leaf-outer-shadows).
+inner/spread/box/scale-fixed shadows. See the [full contract and limits](../../docs/compositing.md#bounded-leaf-outer-shadows).
 
 Subtree effects include child effects, masked contents and selected container
 paint phases. Unsafe full-opacity PassThrough isolation rejects explicitly,
 including in OwnedCanvas. A recursive no-pixel-allocation admission pass counts
-both subtree renders, all nested scratch/filters/masks and isolation depth before
+every per-layer source rendering, final source rendering, nested scratch/filters/masks and isolation depth before
 allocating the output. See [the subtree contract](../../docs/group-shadows.md).
+
+[Multiple outer shadows](../../docs/multiple-shadows.md) support at most eight
+combined base/additional layers, in back-to-front order. Every layer samples the
+same own-effects-free source, including child effects; layers never project each
+other. Independent per-layer replay reuses the Gaussian and full admission
+budget, without a shared alpha cache.

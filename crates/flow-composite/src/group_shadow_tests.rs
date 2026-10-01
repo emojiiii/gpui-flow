@@ -457,6 +457,24 @@ fn recursive_admission_runtime_matrix_covers_mask_shadows_clips_and_phase_order(
                     20.,
                     Color::rgba(0, 255, 0, 160),
                 );
+                if enabled {
+                    for (id, x, blur) in [
+                        ("root", -4., 1.),
+                        ("frame", 3., 2.),
+                        ("mask", 2., 0.),
+                        ("ink", 1., 0.),
+                    ] {
+                        s.update_object(&id.into(), |o| {
+                            o.style.shadow_layers.push(Shadow::new(
+                                x,
+                                1.5,
+                                blur,
+                                Color::rgba(20, 60, 100, 140),
+                            ))
+                        })
+                        .unwrap();
+                    }
+                }
                 let source = source(&s);
                 let mut reference = PixelBudget::new(CompositeLimits::default(), 5).unwrap();
                 let f = rasterize(&source, viewport(), &mut reference, &AtomicBool::new(false))

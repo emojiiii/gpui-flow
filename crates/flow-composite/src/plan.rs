@@ -135,6 +135,7 @@ impl DomainSource {
                 && a.object.style.stroke_layers == b.object.style.stroke_layers
                 && a.object.style.fill_rule == b.object.style.fill_rule
                 && a.object.style.shadow == b.object.style.shadow
+                && a.object.style.shadow_layers == b.object.style.shadow_layers
                 && a.object.style.fills().map(|p| p.is_visible()).eq(b
                     .object
                     .style
@@ -215,7 +216,7 @@ fn boundary(scene: &Scene, id: &DisplayId) -> bool {
         return false;
     };
     let o = &node.object;
-    o.style.shadow.is_some()
+    o.style.has_shadows()
         || o.style.blend_mode != BlendMode::PassThrough
         || (o.style.opacity < 1.0
             && (o.shape.allows_children()
@@ -332,7 +333,7 @@ fn capture(
             children: vec![],
         });
     }
-    if o.style.shadow.is_some() && matches!(o.shape, Shape::Custom(_)) {
+    if o.style.has_shadows() && matches!(o.shape, Shape::Custom(_)) {
         return Err(CompositeError::UnsupportedShadow(o.id.clone()));
     }
     let points = match &o.shape {
@@ -390,7 +391,7 @@ fn capture(
     // A new effect surface must not silently sever a pass-through descendant
     // from its existing backdrop, even when the outer domain owns that backdrop.
     if o.shape.allows_children()
-        && o.style.shadow.is_some_and(|shadow| shadow.is_visible())
+        && o.style.has_visible_shadows()
         && o.style.blend_mode == BlendMode::PassThrough
         && o.style.opacity == 1.
         && requires_parent_backdrop(&captured)

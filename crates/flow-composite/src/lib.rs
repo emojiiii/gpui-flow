@@ -130,3 +130,6 @@ mod container_phase_tests;
 
 #[cfg(test)]
 mod group_shadow_tests;
+
+#[cfg(test)]
+mod multi_shadow_tests;

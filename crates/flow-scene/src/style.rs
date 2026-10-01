@@ -339,8 +339,11 @@ pub struct Style {
     pub opacity: f32,
     pub fill_rule: FillRule,
     pub blend_mode: BlendMode,
-    /// A bounded single outer shadow; absent in legacy documents.
+    /// Legacy/base outer shadow, painted before `shadow_layers`.
     pub shadow: Option<Shadow>,
+    /// Additional outer shadows in back-to-front order, sharing the same source
+    /// alpha. Combined with `shadow`, at most MAX_SHADOW_LAYERS are accepted.
+    pub shadow_layers: Vec<Shadow>,
 }
 impl Default for Style {
     fn default() -> Self {
@@ -353,14 +356,47 @@ impl Default for Style {
             fill_rule: FillRule::NonZero,
             blend_mode: BlendMode::PassThrough,
             shadow: None,
+            shadow_layers: Vec::new(),
         }
     }
 }
 /// Maximum combined base and additional fill/stroke paints per object.
 /// This bounds tessellation and texture work without truncating user input.
 pub const MAX_PAINT_LAYERS: usize = 32;
+/// Maximum combined base and additional outer shadows, including transparent layers.
+pub const MAX_SHADOW_LAYERS: usize = 8;
 
 impl Style {
+    /// Base shadow followed by additional shadows, in painter order. Every layer
+    /// samples the same source; earlier shadows never feed later shadows.
+    pub fn shadows(&self) -> impl Iterator<Item = &Shadow> {
+        self.shadow.iter().chain(self.shadow_layers.iter())
+    }
+    pub fn has_shadows(&self) -> bool {
+        self.shadow.is_some() || !self.shadow_layers.is_empty()
+    }
+    pub fn has_visible_shadows(&self) -> bool {
+        self.shadows().any(|s| s.is_visible())
+    }
+    /// Union each projection of the original source extent, never a chain of
+    /// projections. Does not change geometric paint/hit/layout/selection bounds.
+    pub fn expand_shadow_bounds(
+        &self,
+        source: crate::Bounds,
+        transform: crate::Affine,
+    ) -> crate::Bounds {
+        let mut bounds = source;
+        for shadow in self.shadows() {
+            let expanded = shadow.expand_bounds(source, transform);
+            // f32 min/max discard NaN; preserve overflow sentinels instead of
+            // silently shrinking invalid visual extents to the source rectangle.
+            if !expanded.is_valid() {
+                return expanded;
+            }
+            bounds = bounds.union(expanded);
+        }
+        bounds
+    }
     /// Base fill followed by additional fills, in painter order.
     pub fn fills(&self) -> impl Iterator<Item = &Paint> {
         self.fill.iter().chain(self.fill_layers.iter())
@@ -403,7 +439,12 @@ impl Style {
                 "appearance exceeds {MAX_PAINT_LAYERS} paint layers"
             ));
         }
-        if let Some(shadow) = self.shadow {
+        if self.shadows().count() > MAX_SHADOW_LAYERS {
+            return Err(format!(
+                "appearance exceeds {MAX_SHADOW_LAYERS} shadow layers"
+            ));
+        }
+        for shadow in self.shadows() {
             shadow.validate()?;
         }
         for fill in self.fills() {

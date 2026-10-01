@@ -297,7 +297,7 @@ impl Raster<'_> {
             return Ok(());
         }
         let isolated =
-            node.shadow.is_some() || node.opacity < 1. || node.blend != BlendMode::PassThrough;
+            !node.shadows.is_empty() || node.opacity < 1. || node.blend != BlendMode::PassThrough;
         if isolated {
             if depth >= self.budget.limits.max_depth {
                 return Err(CompositeError::NestingLimit);
@@ -319,8 +319,10 @@ impl Raster<'_> {
         clip: Option<&Mask>,
         draw_shadow: bool,
     ) -> Result<(), CompositeError> {
-        if draw_shadow && node.shadow.is_some() {
-            self.shadow(node, target, depth, clip)?;
+        if draw_shadow {
+            for &shadow in &node.shadows {
+                self.shadow(node, shadow, target, depth, clip)?;
+            }
         }
         let (before, after) = node.paints.split_at(node.before_children);
         self.paints(before, target, clip)?;
@@ -401,11 +403,11 @@ impl Raster<'_> {
     fn shadow(
         &mut self,
         node: &PreparedNode,
+        shadow: crate::shadow::PreparedShadow,
         target: &mut Pixmap,
         depth: usize,
         clip: Option<&Mask>,
     ) -> Result<(), CompositeError> {
-        let shadow = node.shadow.expect("shadow branch");
         let plan = crate::shadow::SourcePlan::new(shadow, self.world_to_layer, self.budget.limits)?;
         let (width, height, pixels) = (plan.width, plan.height, plan.pixels);
         let [x0, y0] = plan.origin;

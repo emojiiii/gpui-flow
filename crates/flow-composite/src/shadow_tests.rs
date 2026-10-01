@@ -140,6 +140,7 @@ fn image_and_text_shadow_preserve_transparent_ink_holes() {
                 .with_transform(Affine::translation(20., 20.))
                 .with_style(Style {
                     shadow: Some(Shadow::new(20., 0., 0., Color::hex(0xff0000))),
+                    shadow_layers: vec![Shadow::new(40., 0., 0., Color::hex(0x00ff00))],
                     ..Default::default()
                 }),
             None,
@@ -172,6 +173,9 @@ fn image_and_text_shadow_preserve_transparent_ink_holes() {
         assert_eq!(pixel(&f, 42., 22., 1.), [255, 0, 0, 255]);
         assert_eq!(pixel(&f, 46., 26., 1.), [0; 4]);
         assert_eq!(pixel(&f, 26., 26., 1.), [0; 4]);
+        assert_eq!(pixel(&f, 62., 22., 1.), [0, 255, 0, 255]);
+        assert_eq!(pixel(&f, 66., 26., 1.), [0; 4]);
+        assert_eq!(pixel(&f, 82., 22., 1.), [0; 4]);
     }
 }
 #[test]

@@ -1,9 +1,9 @@
 # Bounded subtree outer shadows
 
 This extends the [leaf shadow contract](compositing.md#bounded-leaf-outer-shadows)
-to Group, fixed-size Box and fixed-size Frame. There is still only one local-space
-outer shadow per object, using the existing `Shadow` document property and locked
-image Gaussian. No new renderer, paint type, dependency or implicit container
+to Group, fixed-size Box and fixed-size Frame. The original single-shadow slice
+is now extended by [bounded multiple layers](multiple-shadows.md), using the same
+`Shadow` value and locked image Gaussian. No new renderer, paint type, dependency or implicit container
 paint-order choice is introduced.
 
 ## Alpha source and order
@@ -62,7 +62,7 @@ against a private ledger. Prepared geometry and caller-provided input snapshots
 already exist. The pass covers output and retained input/output charges, all live
 isolation layers, child/ancestor clip masks and temporary intersections, sibling
 mask/content surfaces, alpha extraction, every filter's padded source and known
-scratch, filter work, destination compositing and both source renderings.
+scratch, filter work, destination compositing, every per-layer source replay and the final source rendering.
 
 It deliberately revisits child effects when sampled into a parent shadow and
 when painted normally. Deep chains can have exponential work; the ledger rejects
@@ -100,7 +100,7 @@ serialization and live-object identities as before.
 
 The official [shadow](https://www.leaferjs.com/ui/en/reference/UI/shadow.html) API
 includes outer shadows and additional spread, box, multiple and scale-fixed
-options. Flow retains only its one-shadow subset. The official
+options. Flow now supports its [bounded multi-layer subset](multiple-shadows.md). The official
 [blendMode](https://www.leaferjs.com/ui/en/reference/UI/blendMode.html) contract
 allows PassThrough descendants to blend with underlying content and describes
 Normal as isolation; that is why new unsafe isolation is rejected here.
@@ -117,7 +117,7 @@ Those upstream branches are not copied or claimed as complete parity. Flow's
 composed-subtree alpha, explicit paint phases, conservative rejection and image
 Gaussian are its tested contract, not a browser/Leafer byte-equivalence promise.
 
-Custom, inner/spread/box-only/multiple/per-shadow-blend/scale-fixed shadows and
+Custom, inner/spread/box-only/per-shadow-blend/scale-fixed shadows and
 general filters remain unsupported. Run the native lab with
 `cargo run --locked --offline -p flow-studio --bin group_shadows`.
 

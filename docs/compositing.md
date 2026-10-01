@@ -358,7 +358,8 @@ blur, zoom/DPR or combined scenes can fail with `TooLarge`, `WorkingSetLimit` or
 Group, Box and Frame now support [bounded composed-subtree shadows](group-shadows.md),
 including child effects and explicit PassThrough rejection. Custom shadows remain
 `UnsupportedShadow`. The validation checkpoint below records the earlier leaf-only slice.
-Multiple shadows, inner shadow, spread, box-only knockout, per-shadow blend,
+[Bounded multiple outer shadows](multiple-shadows.md) now extend the base property.
+Inner shadow, spread, box-only knockout, per-shadow blend,
 scale-fixed shadows and general filters remain unsupported. The native example
 is `cargo run --locked --offline -p flow-studio --bin outer_shadows`.
 
