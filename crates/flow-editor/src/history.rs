@@ -446,6 +446,13 @@ impl SceneEditor {
             self.record(before);
         }
     }
+    /// Drop an invalidated generic gesture without replaying its old document
+    /// or recording it in a different engine/document. Owned sessions are not
+    /// affected. Input adapters use this only after identity replacement.
+    pub fn abandon_edit(&mut self) {
+        self.reconcile_external();
+        self.pending = None;
+    }
     /// Returns false if no edit exists or a restore is rejected; rejected history remains intact.
     pub fn cancel_edit(&mut self) -> bool {
         self.reconcile_external();

@@ -20,12 +20,13 @@ fn button(value: MouseButton) -> Option<input::PointerButton> {
 }
 impl SceneView {
     fn input_hit(&self, local: WorldPoint, _control: bool) -> input::HitTarget {
-        if let Some(id) = self.resize_target()
-            && self
-                .selection_corners(&id)
-                .is_some_and(|p| p[2].distance(local) <= 10.)
+        if let Some((id, handles)) = self.resize_handles()
+            && let Some(hit) = input::scene::hit_resize_handle(&handles, local)
         {
-            return input::HitTarget::ObjectResize(id.to_string());
+            return input::HitTarget::ObjectResizeHandle {
+                id: id.to_string(),
+                handle: hit.handle,
+            };
         }
         let world = self.editor.viewport.screen_to_world(local);
         if let Some(id) = self.hit(world) {
@@ -263,6 +264,9 @@ impl SceneView {
             input::CanvasCursor::Grab => CursorStyle::OpenHand,
             input::CanvasCursor::Grabbing => CursorStyle::ClosedHand,
             input::CanvasCursor::Resize => CursorStyle::ResizeUpLeftDownRight,
+            input::CanvasCursor::ResizeHorizontal => CursorStyle::ResizeLeftRight,
+            input::CanvasCursor::ResizeVertical => CursorStyle::ResizeUpDown,
+            input::CanvasCursor::ResizeOtherDiagonal => CursorStyle::ResizeUpRightDownLeft,
             input::CanvasCursor::Crosshair => CursorStyle::Crosshair,
             input::CanvasCursor::NotAllowed => CursorStyle::OperationNotAllowed,
         }
@@ -397,6 +401,10 @@ mod tests {
         for hit in [
             HitTarget::Background,
             HitTarget::ObjectResize("text".into()),
+            HitTarget::ObjectResizeHandle {
+                id: "text".into(),
+                handle: gpui_flow_editor::ResizeHandle::TopLeft,
+            },
         ] {
             assert_eq!(native_text_activation(&event, &hit, false), None);
         }

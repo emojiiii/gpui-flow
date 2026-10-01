@@ -299,20 +299,27 @@ impl SceneView {
             || !self.is_editable()
             || !self.interactions.is_enabled("resize")
             || self.editor.selection.ids.len() != 1
+            || self.tools.as_ref().is_some_and(|tools| {
+                !tools.outer_tool_active(gpui_flow_interaction::scene::DEFAULT_OUTER_TOOL)
+            })
         {
             return None;
         }
         let id = self.editor.selection.ids.iter().next()?.clone();
-        let mut current = Some(id.clone());
-        while let Some(ancestor) = current {
-            let node = self.editor.scene().get(&ancestor)?;
-            if node.object.locked {
-                return None;
-            }
-            current = node.parent.clone();
-        }
-        self.selection_corners(&id)?;
+        gpui_flow_interaction::scene::SceneResizeGeometry::for_target(&self.editor, &id)?;
         Some(id)
+    }
+    fn resize_handles(
+        &self,
+    ) -> Option<(
+        DisplayId,
+        [gpui_flow_interaction::scene::SceneResizeHandle; 8],
+    )> {
+        let id = self.resize_target()?;
+        let handles =
+            gpui_flow_interaction::scene::SceneResizeGeometry::for_target(&self.editor, &id)?
+                .screen_handles(&self.editor)?;
+        Some((id, handles))
     }
     fn selection_corners(&self, id: &DisplayId) -> Option<[WorldPoint; 4]> {
         let bounds = self.editor.engine.local_bounds(id).ok()??;

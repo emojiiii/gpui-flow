@@ -203,7 +203,10 @@ impl SceneEventRouter {
         let mut hit = None;
         if let Some(pointer) = event.pointer() {
             self.position = pointer.position;
-            if let HitTarget::Object(id) | HitTarget::ObjectResize(id) = &pointer.hit {
+            if let HitTarget::Object(id)
+            | HitTarget::ObjectResize(id)
+            | HitTarget::ObjectResizeHandle { id, .. } = &pointer.hit
+            {
                 hit = editor.engine.handle(&DisplayId::from(id.clone()));
             }
         }

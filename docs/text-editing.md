@@ -10,8 +10,9 @@ This is an opt-in, target-aware editor-tool slice, not full Leafer tool or Text
 compatibility. The existing scene selection/transform tool remains the default
 outer tool. The per-controller registry resolves a supported inner tool by target
 shape and owns at most one inner session. Registrations and lifecycle events are
-platform-neutral; arbitrary custom inner widgets, path/line editing tools and
-replacement transform handles are not provided by this panel.
+platform-neutral; arbitrary custom inner widgets and path/line editing tools
+are not provided by this panel. The separate [bounded outer-handle slice](resize-handles.md)
+adds eight single-selection handles and remains suspended during Text editing.
 
 `SceneView::set_text_editing_enabled(true, window, cx)` enables native Text
 double-click activation. `open_text_editor(handle, window, cx)` explicitly opens a

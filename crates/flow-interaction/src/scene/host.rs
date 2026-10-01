@@ -2,6 +2,7 @@ use super::{SceneCommand, object_editable, selection_bounds};
 use crate::*;
 use gpui_flow_core::{ConnectionDrag, Rect, Viewport};
 use gpui_flow_editor::{SceneEditor, SceneSelection};
+use gpui_flow_engine::{ElementHandle, InstanceState};
 use gpui_flow_scene::{Affine, DisplayId, SceneError};
 use std::collections::BTreeSet;
 impl From<SceneError> for InteractionError {
@@ -21,6 +22,7 @@ struct Capture {
     button: Option<PointerButton>,
     selection: SceneSelection,
     viewport: Viewport,
+    target: Option<(ElementHandle, u64, u64)>,
 }
 /// Plugin host deliberately does not expose mutable editor state to plugins.
 /// A trusted application can still access its own Editor directly; read-only
@@ -239,10 +241,24 @@ impl ScenePluginHost {
         let before = editor.scene().clone();
         let selection = editor.selection.clone();
         let viewport = editor.viewport;
+        let stale_target = self.capture_target_stale(editor);
+        if stale_target && self.gesture_owner.is_some() {
+            let same_document = self.capture.as_ref().and_then(|c| c.target).is_some_and(
+                |(target, _, document)| {
+                    target.engine_id() == editor.engine.engine_id()
+                        && document == editor.engine.document_epoch()
+                },
+            );
+            if same_document {
+                editor.commit_edit();
+            } else {
+                editor.abandon_edit();
+            }
+        }
         if self.gesture_owner.take().is_some() && editor.editing() {
             editor.cancel_edit();
         }
-        if let Some(capture) = self.capture.take() {
+        if let Some(capture) = self.capture.take().filter(|_| !stale_target) {
             editor.selection = capture.selection;
             let graph = editor.scene().clone();
             editor.selection.retain_existing(&graph);
@@ -277,8 +293,24 @@ impl ScenePluginHost {
         self.cancel_active(editor, &mut report);
         report
     }
+    fn capture_target_stale(&self, editor: &SceneEditor) -> bool {
+        self.capture
+            .as_ref()
+            .and_then(|c| c.target)
+            .is_some_and(|(target, epoch, document)| {
+                editor.engine.document_epoch() != document
+                    || !editor.engine.instance(target).is_ok_and(|instance| {
+                        instance.state == InstanceState::Attached
+                            && instance.attachment_epoch == epoch
+                    })
+            })
+    }
     pub fn dispatch(&mut self, editor: &mut SceneEditor, event: CanvasEvent) -> DispatchReport {
         let mut report = DispatchReport::default();
+        if self.capture_target_stale(editor) {
+            self.cancel_active(editor, &mut report);
+            return report;
+        }
         if !editor.viewport.is_valid() {
             self.cancel_active(editor, &mut report);
             report.errors.push(InteractionError::InvalidInput(
@@ -430,6 +462,10 @@ impl ScenePluginHost {
             } => Some((*token, *handle, key.clone())),
             _ => None,
         };
+        let resize_identity = match &command {
+            SceneCommand::SetResizeTransform { target, .. } => Some(*target),
+            _ => None,
+        };
         let mut effects = vec![];
         let mut participants = vec![];
         let cleanup = matches!(
@@ -469,6 +505,13 @@ impl ScenePluginHost {
         {
             return Err(InteractionError::InvalidInput(
                 "middleware cannot retarget an owned edit command".into(),
+            ));
+        }
+        if let Some(target) = resize_identity
+            && !matches!(&command, SceneCommand::SetResizeTransform { target: actual, .. } if *actual == target)
+        {
+            return Err(InteractionError::InvalidInput(
+                "middleware cannot retarget a resize command".into(),
             ));
         }
         if command.capability() == Some(Capability::Edit)
@@ -527,18 +570,38 @@ impl ScenePluginHost {
             }
         };
         match command {
-            SceneCommand::CapturePointer { pointer_id } => {
+            SceneCommand::CapturePointer { pointer_id }
+            | SceneCommand::CapturePointerForTarget { pointer_id, .. } => {
                 if let Some(active) = self.capture_owner() {
                     if active != owner {
                         return Err(InteractionError::GestureOwned(active.into()));
                     }
                 } else {
+                    let target =
+                        if let SceneCommand::CapturePointerForTarget { target, .. } = command {
+                            let instance = editor.engine.instance(target).map_err(|error| {
+                                InteractionError::InvalidInput(error.to_string())
+                            })?;
+                            if instance.state != InstanceState::Attached {
+                                return Err(InteractionError::InvalidInput(
+                                    "capture target is detached".into(),
+                                ));
+                            }
+                            Some((
+                                target,
+                                instance.attachment_epoch,
+                                editor.engine.document_epoch(),
+                            ))
+                        } else {
+                            None
+                        };
                     self.capture = Some(Capture {
                         owner: owner.into(),
                         pointer_id,
                         button: self.event_button,
                         selection: editor.selection.clone(),
                         viewport: editor.viewport,
+                        target,
                     });
                 }
             }
@@ -618,6 +681,29 @@ impl ScenePluginHost {
             }
             SceneCommand::SetTransform { id, transform } => {
                 require_editable(&id)?;
+                editor.transaction(|scene| {
+                    scene.update_object(&id, |object| object.transform = transform)
+                })?;
+            }
+            SceneCommand::SetResizeTransform { target, transform } => {
+                let instance = editor
+                    .engine
+                    .instance(target)
+                    .map_err(|error| InteractionError::InvalidInput(error.to_string()))?;
+                if instance.state != InstanceState::Attached {
+                    return Err(InteractionError::InvalidInput(
+                        "resize target is detached".into(),
+                    ));
+                }
+                let id = instance.id.clone();
+                require_editable(&id)?;
+                if super::SceneResizeGeometry::for_target(editor, &id).is_none()
+                    || !super::SceneResizeGeometry::accepts_transform(editor, &id, transform)
+                {
+                    return Err(InteractionError::InvalidInput(
+                        "unsupported resize transform or subtree".into(),
+                    ));
+                }
                 editor.transaction(|scene| {
                     scene.update_object(&id, |object| object.transform = transform)
                 })?;

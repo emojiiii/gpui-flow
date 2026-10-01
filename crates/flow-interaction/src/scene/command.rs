@@ -11,6 +11,12 @@ pub enum SceneCommand {
     CapturePointer {
         pointer_id: u64,
     },
+    /// Capture tied to one live generation/mount. Invalidating this identity
+    /// releases input without restoring an obsolete gesture snapshot.
+    CapturePointerForTarget {
+        pointer_id: u64,
+        target: gpui_flow_engine::ElementHandle,
+    },
     ReleasePointer,
     BeginGesture,
     CommitGesture,
@@ -33,6 +39,12 @@ pub enum SceneCommand {
     },
     SetTransform {
         id: DisplayId,
+        transform: Affine,
+    },
+    /// Named-handle transform. Middleware may normalize the matrix but cannot
+    /// retarget this live identity or bypass the bounded native-subtree check.
+    SetResizeTransform {
+        target: gpui_flow_engine::ElementHandle,
         transform: Affine,
     },
     RotateSelection {
@@ -87,7 +99,10 @@ pub enum SceneCommand {
 impl SceneCommand {
     pub fn capability(&self) -> Option<Capability> {
         Some(match self {
-            Self::CapturePointer { .. } | Self::ReleasePointer | Self::CancelGesture => {
+            Self::CapturePointer { .. }
+            | Self::CapturePointerForTarget { .. }
+            | Self::ReleasePointer
+            | Self::CancelGesture => {
                 return None;
             }
             Self::Select { .. }

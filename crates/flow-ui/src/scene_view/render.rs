@@ -265,7 +265,7 @@ impl Render for SceneView {
             .filter_map(|id| self.selection_corners(id))
             .collect();
         let marquee = self.interactions.marquee();
-        let show_resize = self.resize_target().is_some();
+        let resize_handles = self.resize_handles().map(|(_, handles)| handles);
         let overlay = canvas(
             |_, _, _| (),
             move |bounds, _, window, _| {
@@ -280,11 +280,18 @@ impl Render for SceneView {
                     if let Ok(path) = path.build() {
                         window.paint_path(path, rgb(theme.accent));
                     }
-                    if show_resize {
+                }
+                if let Some(handles) = resize_handles {
+                    let side = gpui_flow_interaction::scene::RESIZE_HANDLE_PAINT_SIZE;
+                    for handle in handles {
                         window.paint_quad(fill(
                             Bounds::new(
-                                p(corners[2]) - point(px(4.), px(4.)),
-                                size(px(8.), px(8.)),
+                                bounds.origin
+                                    + point(
+                                        px(handle.position.x - side / 2.),
+                                        px(handle.position.y - side / 2.),
+                                    ),
+                                size(px(side), px(side)),
                             ),
                             rgb(theme.accent),
                         ));

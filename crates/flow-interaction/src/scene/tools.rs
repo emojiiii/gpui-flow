@@ -208,6 +208,11 @@ impl SceneToolController {
     pub fn outer_tool(&self) -> &str {
         &self.outer
     }
+    /// Native adapters may show the built-in handles only while this outer
+    /// identity is loaded. Inner editing, disabling and disposal suspend it.
+    pub fn outer_tool_active(&self, id: &str) -> bool {
+        self.is_enabled() && self.outer_loaded && self.active.is_none() && self.outer == id
+    }
     pub fn is_enabled(&self) -> bool {
         self.enabled && !self.disposed
     }
@@ -549,6 +554,9 @@ impl SceneToolController {
             self.load_outer();
             return Ok(closed);
         }
+        if host.has_capture() {
+            host.cancel(editor);
+        }
         self.unload_outer(ToolCloseReason::OuterToolSwitch);
         self.outer = id.into();
         self.load_outer();
@@ -566,6 +574,9 @@ impl SceneToolController {
             return Ok(false);
         }
         if !enabled {
+            if host.has_capture() {
+                host.cancel(editor);
+            }
             if let Some(token) = self.active_token() {
                 self.finish_with_resume(editor, host, token, ToolCloseReason::Disabled, false)?;
             }
@@ -632,6 +643,9 @@ impl SceneToolController {
             self.finish_with_resume(editor, host, token, ToolCloseReason::Unregistered, false)?;
         }
         if self.outer == id {
+            if host.has_capture() {
+                host.cancel(editor);
+            }
             self.unload_outer(ToolCloseReason::Unregistered);
             self.outer = self.registry.default_outer.clone();
         }
@@ -657,6 +671,9 @@ impl SceneToolController {
         }
         self.bind(editor)?;
         self.reconcile_with_resume(editor, host, false);
+        if host.has_capture() {
+            host.cancel(editor);
+        }
         if let Some(token) = self.active_token() {
             self.finish_with_resume(editor, host, token, ToolCloseReason::Disposed, false)?;
         }

@@ -238,6 +238,9 @@ impl FlowCanvas {
             input::CanvasCursor::Grab => CursorStyle::OpenHand,
             input::CanvasCursor::Grabbing => CursorStyle::ClosedHand,
             input::CanvasCursor::Resize => CursorStyle::ResizeUpLeftDownRight,
+            input::CanvasCursor::ResizeHorizontal => CursorStyle::ResizeLeftRight,
+            input::CanvasCursor::ResizeVertical => CursorStyle::ResizeUpDown,
+            input::CanvasCursor::ResizeOtherDiagonal => CursorStyle::ResizeUpRightDownLeft,
             input::CanvasCursor::NotAllowed => CursorStyle::OperationNotAllowed,
         }
     }

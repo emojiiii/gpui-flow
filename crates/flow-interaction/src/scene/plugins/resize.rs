@@ -1,15 +1,20 @@
-use crate::scene::{SceneCommand, object_editable};
+use crate::scene::{SceneCommand, SceneResizeGeometry, object_editable};
 use crate::*;
 use gpui_flow_core::{Point, Rect};
-use gpui_flow_editor::{SceneEditor, resize_transform};
+use gpui_flow_editor::{
+    ResizeHandle, ResizeOptions, SceneEditor, resize_transform, resize_transform_with_options,
+};
 use gpui_flow_scene::{Affine, DisplayId, Shape};
 struct Resize {
     id: DisplayId,
+    target: gpui_flow_engine::ElementHandle,
     inverse: Affine,
     original: Affine,
     bounds: Rect,
     start_local: Point,
     uniform: bool,
+    handle: Option<ResizeHandle>,
+    minimum_scale: Point,
 }
 #[derive(Default)]
 pub struct SceneResizePlugin {
@@ -44,10 +49,24 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
         }
         match event {
             CanvasEvent::PointerDown(p) if p.button == Some(PointerButton::Left) => {
-                let HitTarget::ObjectResize(id) = &p.hit else {
-                    return;
+                let (id, handle) = match &p.hit {
+                    HitTarget::ObjectResize(id) => (id, None),
+                    HitTarget::ObjectResizeHandle { id, handle } => (id, Some(*handle)),
+                    _ => return,
                 };
                 let id = DisplayId::from(id.clone());
+                if cx.editor.editing() {
+                    // A Text-owned edit or another gesture cannot be stolen
+                    // by a manually supplied handle hit.
+                    return;
+                }
+                if p.modifiers.space
+                    || (handle.is_some()
+                        && (cx.editor.selection.ids.len() != 1
+                            || !cx.editor.selection.ids.contains(&id)))
+                {
+                    return;
+                }
                 if !object_editable(cx.editor.scene(), &id) {
                     return;
                 }
@@ -66,44 +85,118 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
                 else {
                     return;
                 };
+                let geometry = if handle.is_some() {
+                    let Some(geometry) = SceneResizeGeometry::for_target(cx.editor, &id) else {
+                        return;
+                    };
+                    Some(geometry)
+                } else {
+                    None
+                };
+                let Some(target) = cx.editor.engine.handle(&id) else {
+                    return;
+                };
+                let start_local =
+                    inverse.transform_point(cx.editor.viewport.screen_to_world(p.position));
+                if !start_local.is_finite() {
+                    return;
+                }
                 self.resize = Some(Resize {
                     id,
+                    target,
                     inverse,
                     original: node.object.transform,
-                    bounds,
-                    start_local: inverse
-                        .transform_point(cx.editor.viewport.screen_to_world(p.position)),
-                    uniform: matches!(node.object.shape, Shape::Text(_) | Shape::Image(_)),
+                    bounds: geometry.map_or(bounds, |g| g.bounds),
+                    start_local,
+                    uniform: geometry.map_or(
+                        matches!(node.object.shape, Shape::Text(_) | Shape::Image(_)),
+                        |g| g.uniform,
+                    ),
+                    handle,
+                    minimum_scale: geometry.map_or(Point::new(0.05, 0.05), |g| g.minimum_scale),
                 });
                 out.command(SceneCommand::BeginGesture);
-                out.command(SceneCommand::CapturePointer {
+                out.command(SceneCommand::CapturePointerForTarget {
                     pointer_id: p.pointer_id,
+                    target,
                 });
-                out.effect(CanvasEffect::Cursor(CanvasCursor::Resize));
+                let cursor = geometry
+                    .and_then(|g| g.screen_handles(cx.editor))
+                    .and_then(|handles| handles.into_iter().find(|h| Some(h.handle) == handle))
+                    .map_or(CanvasCursor::Resize, |h| h.cursor);
+                out.effect(CanvasEffect::Cursor(cursor));
             }
             CanvasEvent::PointerMove(p) => {
                 if let Some(resize) = &self.resize {
-                    let mut transform = resize_transform(
-                        resize.original,
-                        resize.bounds,
-                        resize.start_local,
-                        resize
-                            .inverse
-                            .transform_point(cx.editor.viewport.screen_to_world(p.position)),
-                    );
-                    if (resize.uniform || p.modifiers.shift)
-                        && let Some(inverse) = resize.original.inverse()
+                    let current = resize
+                        .inverse
+                        .transform_point(cx.editor.viewport.screen_to_world(p.position));
+                    let transform = if let Some(handle) = resize.handle {
+                        let Some(transform) = resize_transform_with_options(
+                            resize.original,
+                            resize.bounds,
+                            resize.start_local,
+                            current,
+                            ResizeOptions {
+                                handle,
+                                uniform: resize.uniform || p.modifiers.shift,
+                                minimum_scale: resize.minimum_scale,
+                            },
+                        ) else {
+                            out.command(SceneCommand::CancelGesture);
+                            return;
+                        };
+                        transform
+                    } else {
+                        // Keep the legacy untyped bottom-right API's max-factor
+                        // uniform rule. Named handles use signed projection above.
+                        let mut transform = resize_transform(
+                            resize.original,
+                            resize.bounds,
+                            resize.start_local,
+                            current,
+                        );
+                        if (resize.uniform || p.modifiers.shift)
+                            && let Some(inverse) = resize.original.inverse()
+                        {
+                            let relative = inverse * transform;
+                            let factor = relative.a.max(relative.d);
+                            transform = resize.original
+                                * Affine::scale(factor, factor).around(resize.bounds.origin);
+                        }
+                        transform
+                    };
+                    if resize.handle.is_some()
+                        && !SceneResizeGeometry::accepts_transform(cx.editor, &resize.id, transform)
                     {
-                        let relative = inverse * transform;
-                        let factor = relative.a.max(relative.d);
-                        transform = resize.original
-                            * Affine::scale(factor, factor).around(resize.bounds.origin);
+                        out.command(SceneCommand::CancelGesture);
+                        return;
                     }
-                    out.command(SceneCommand::SetTransform {
-                        id: resize.id.clone(),
-                        transform,
+                    out.command(if resize.handle.is_some() {
+                        SceneCommand::SetResizeTransform {
+                            target: resize.target,
+                            transform,
+                        }
+                    } else {
+                        SceneCommand::SetTransform {
+                            id: resize.id.clone(),
+                            transform,
+                        }
                     });
+                } else if cx.capture_owner.is_none() {
+                    let cursor = if let HitTarget::ObjectResizeHandle { id, handle } = &p.hit {
+                        SceneResizeGeometry::for_target(cx.editor, &DisplayId::from(id.clone()))
+                            .and_then(|g| g.screen_handles(cx.editor))
+                            .and_then(|handles| handles.into_iter().find(|h| h.handle == *handle))
+                            .map_or(CanvasCursor::Default, |h| h.cursor)
+                    } else {
+                        CanvasCursor::Default
+                    };
+                    out.effect(CanvasEffect::Cursor(cursor));
                 }
+            }
+            CanvasEvent::PointerLeave if self.resize.is_none() && cx.capture_owner.is_none() => {
+                out.effect(CanvasEffect::Cursor(CanvasCursor::Default));
             }
             CanvasEvent::PointerUp(_) if self.resize.take().is_some() => {
                 out.command(SceneCommand::CommitGesture);

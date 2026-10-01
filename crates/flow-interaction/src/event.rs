@@ -31,6 +31,12 @@ pub enum HitTarget {
     /// Retained-scene object ID for a SceneEditor-backed plugin host.
     Object(String),
     ObjectResize(String),
+    /// A named single-selection transform handle. The legacy ObjectResize
+    /// retains its bottom-right behavior for existing headless integrations.
+    ObjectResizeHandle {
+        id: String,
+        handle: gpui_flow_editor::ResizeHandle,
+    },
 }
 /// Position is in canvas-local screen pixels. The current viewport is the only
 /// source of world coordinates, preventing inconsistent screen/world payloads.
@@ -101,5 +107,8 @@ pub enum CanvasCursor {
     Grab,
     Grabbing,
     Resize,
+    ResizeHorizontal,
+    ResizeVertical,
+    ResizeOtherDiagonal,
     NotAllowed,
 }

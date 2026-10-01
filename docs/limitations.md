@@ -6,6 +6,8 @@
 
 ## UI 与交互
 
+- [八方向单选transform手柄](resize-handles.md)已通过聚焦模型/UI与Linux原生拖动验收，未验范围见契约。Text/Image及其父子树限定uniform；Custom、退化/奇异或native不支持的变换不提供手柄。无多选变换框、路径控制点、旋转/倾斜/中心点工具或intrinsic-size改写
+
 - Studio 默认显示左侧组件、画布和 Inspector；FlowOptions 可隐藏六类辅助 UI，但尚未提供任意插槽化工作台布局 API
 - Graph 内容输入按节点 kind 编辑一个 `text` / `prompt` / `source` 字段；retained Scene Text 新增可选内容编辑面板与单次Undo会话，见 [text-editing.md](text-editing.md)。不是排版所见即所得编辑器，几何、标题、端口等属性仍没有通用编辑表单
 - 连线采用拖放与屏幕距离吸附，释放空白/不兼容处取消；尚无已有边拖放重连、边标签编辑或精确路径命中测试

@@ -55,3 +55,6 @@ pub use state_transition::{StateTransition, StateTransitions};
 
 mod tools;
 pub use tools::*;
+
+mod resize_handles;
+pub use resize_handles::*;
