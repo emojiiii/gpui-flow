@@ -87,6 +87,23 @@ fn failed_edit_is_atomic() {
     assert!(!e.undo());
 }
 #[test]
+fn imported_svg_path_reuses_editor_history_and_canonical_serialization() {
+    let mut e = SceneEditor::new(scene()).unwrap();
+    let before = e.scene().clone();
+    let path = Path::from_svg("M0 0 a20 10 30 0 1 40 20 l-40 0z").unwrap();
+    e.transaction(|scene| {
+        scene.insert(DisplayObject::new("svg", path), Some("group".into()), None)
+    })
+    .unwrap();
+    let imported = e.scene().clone();
+    let json = imported.to_json().unwrap();
+    assert_eq!(Scene::from_json(&json).unwrap(), imported);
+    assert!(e.undo());
+    assert_eq!(*e.scene(), before);
+    assert!(e.redo());
+    assert_eq!(*e.scene(), imported);
+}
+#[test]
 fn locked_ancestor_protects_children() {
     let mut s = scene();
     s.update_object(&"group".into(), |o| o.locked = true)

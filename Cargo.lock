@@ -2529,6 +2529,7 @@ dependencies = [
  "lyon_tessellation",
  "serde",
  "serde_json",
+ "svgtypes 0.15.3",
 ]
 
 [[package]]

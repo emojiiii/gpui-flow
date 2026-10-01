@@ -89,11 +89,14 @@ fn gallery_scene() -> Scene {
         400.,
     ));
     insert(
-        DisplayObject::new("line", shapes::Line::new(p(0., 90.), p(135., 10.)))
-            .with_transform(Affine::translation(325., 280.))
-            .with_style(Style::stroke(Color::hex(0x63e2bf), 6.)),
+        DisplayObject::new(
+            "svg-arc",
+            shapes::Path::from_svg("M0 80 A70 35 -25 0 1 135 20 S150 80 120 90").unwrap(),
+        )
+        .with_transform(Affine::translation(325., 280.))
+        .with_style(Style::stroke(Color::hex(0x63e2bf), 6.)),
     );
-    insert(label("line-label", "Line · affine stroke", 310., 400.));
+    insert(label("line-label", "SVG Path · A/S curves", 310., 400.));
     insert(
         DisplayObject::new(
             "image",

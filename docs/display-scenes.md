@@ -38,7 +38,34 @@ let scene = Scene::from_json(&json)?;
 
 `Scene::update_object` 在候选场景上执行并验证；非法修改不会半提交。`reparent(..., preserve_world=true)` 保持世界变换。父子不能形成环，叶节点不能持有子节点。z_index 同级排序，顺序相同保留树顺序。
 
-## 容器
+## SVG 路径数据导入
+
+`display::Path::from_svg(d)` 接受 SVG `path` 的 `d` 字符串，复用已锁定的
+`svgtypes 0.15.3` 解析语法、`kurbo 0.11.3` 转换椭圆弧，不另写字符串词法器。
+支持 M/L/H/V/C/S/Q/T/A/Z 及对应相对命令、隐式重复、子路径、紧凑数值和指数。
+结果是现有绝对 Move/Line/Quadratic/Cubic/Close 命令，可直接传入 DisplayObject，
+复用场景序列化、拾取、描边、CPU 合成和编辑器 Undo/Redo。
+
+```rust
+let path = gpui_flow_scene::display::Path::from_svg(
+    "M0 80 A70 35 -25 0 1 135 20 S150 80 120 90"
+)?;
+```
+
+这是路径数据入口，不是 SVG XML/CSS/滤镜/外链文档导入。弧转换为误差目标
+0.1 本地单位的 cubic，并非保留精确 A 命令或原始字符串；f32 存储另有舍入。
+输入上限 1 MiB、原始及归一化命令各 16384、坐标和修正后弧半径/圆心限定
+±1e6。非零半径不大于 1e-5 或不同端点距离小于 1e-9 的弧明确拒绝，避免
+底层数值退化被静默当成直线。零半径为直线、同端点弧省略。错误不返回半条路径。
+`primitives` 示例的第二行展示导入的旋转弧和 smooth cubic。
+
+本批 Linux 验证：741 项 headless（8 项原有媒体忽略）、83 项 UI 单测、
+workspace/all-target 严格 Clippy 与格式检查通过。新增覆盖路径语法、退化弧、
+数值/工作量限制、边界/拾取、JSON、编辑历史及 CPU 真实弧像素。
+实际 GPUI 窗口已显示导入曲线，点击选中、R 旋转、Ctrl-Z 恢复均观察到正确结果，
+backend diagnostics 为 0。未运行 Windows/macOS、完整 SVG 文档、外部素材或性能验收。
+
+## 容器类型
 
 - Group：无自身几何，由子元素组成；父级 transform/opacity/visibility/locked 继承
 - Box：有矩形边界和可选裁切

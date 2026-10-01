@@ -63,6 +63,20 @@ fn group_opacity_is_once_across_overlapping_children() {
     assert_eq!(at(&f, 15, 5), [0, 0, 128, 128]);
 }
 #[test]
+fn svg_arc_path_uses_real_curve_pixels_inside_composite_domain() {
+    let mut s = Scene::new();
+    s.insert(group("g", 0.5), None, None).unwrap();
+    let path = display::Path::from_svg("M40 20 A20 20 0 1 1 0 20 A20 20 0 1 1 40 20Z").unwrap();
+    insert(
+        &mut s,
+        DisplayObject::new("arc", path).with_style(Style::fill(Color::hex(0xff0000))),
+        "g",
+    );
+    let frame = render(&s);
+    assert_eq!(at(&frame, 20, 20), [128, 0, 0, 128]);
+    assert_eq!(at(&frame, 1, 1), [0, 0, 0, 0]);
+}
+#[test]
 fn nested_opacity_multiplies_once_per_group() {
     let mut s = Scene::new();
     s.insert(group("a", 0.5), None, None).unwrap();

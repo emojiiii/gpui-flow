@@ -8,6 +8,7 @@ mod group;
 mod image;
 mod line;
 mod path;
+mod path_svg;
 mod pen;
 mod polygon;
 mod rect;
