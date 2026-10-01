@@ -398,7 +398,7 @@ impl Render for SceneView {
                 .size_full(),
             );
         }
-        if self.compositing_pending || !self.composite_diagnostics.is_empty() {
+        if self.compositing.loading_visible() || !self.composite_diagnostics.is_empty() {
             let message = self
                 .composite_diagnostics
                 .first()

@@ -635,6 +635,19 @@ impl CompositeController {
                 })
             })
     }
+    /// Background refresh is not a loading interruption when every domain can
+    /// still paint a compatible frame. Keep `pending` available for scheduling
+    /// and callers, but do not flash a loading badge on every animation tick.
+    /// `frame` enforces resource, font, placement and upload invalidation; this
+    /// must never resurrect pixels that those checks deliberately withdrew.
+    pub fn loading_visible(&self) -> bool {
+        self.pending()
+            && self.requested.as_ref().is_some_and(|key| {
+                key.domains
+                    .iter()
+                    .any(|domain| self.frame(domain.source.root_id()).is_none())
+            })
+    }
     fn can_accept(&self, id: &DisplayId, candidate: &ImageFrame) -> bool {
         let old_bytes = self.accepted.get(id).map_or(0, |v| v.frame.bytes);
         self.retired_bytes + old_bytes <= MAX_RETIRED
@@ -1461,6 +1474,35 @@ mod tests {
             [0, 255, 0, 255]
         );
         assert!(c.accepted(&next, &"g".into(), &green.image).is_some());
+    }
+    #[test]
+    fn loading_badge_distinguishes_first_load_from_presentable_animation_refresh() {
+        let first = animated_key();
+        let mut c = CompositeController::default();
+        c.request(first.clone());
+        assert!(c.loading_visible());
+        let work = c.take_work().unwrap();
+        assert!(c.loading_visible());
+        c.finish(first.clone(), work.run());
+        let image = c.frame(&"g".into()).unwrap().0;
+        c.accepted(&first, &"g".into(), &image.image);
+        c.request(next_frame(&first, 1));
+        assert!(c.pending(), "refresh still needs scheduling");
+        assert!(!c.loading_visible(), "accepted frame remains paintable");
+        let _work = c.take_work().unwrap();
+        assert!(!c.loading_visible());
+    }
+    #[test]
+    fn loading_badge_returns_when_geometry_invalidates_the_presented_frame() {
+        let first = animated_key();
+        let mut c = CompositeController::default();
+        let image = ready(&mut c, first.clone());
+        c.accepted(&first, &"g".into(), &image.image);
+        let mut changed = (*first).clone();
+        changed.viewport.device_scale = 2.;
+        c.request(Arc::new(changed));
+        assert!(c.frame(&"g".into()).is_none());
+        assert!(c.loading_visible());
     }
     #[test]
     fn animation_seek_resource_and_geometry_changes_hard_cancel_and_hide_old_pixels() {

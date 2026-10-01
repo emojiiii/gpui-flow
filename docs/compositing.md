@@ -154,6 +154,14 @@ A previous complete frame may remain for conservative paint/opacity-only changes
 
 `SceneView::composite_diagnostics` and `compositing_pending` expose status independently from resource readiness. Resource `Complete` is still its existing resource/paint receipt; it is not redefined as composite success or a GPU fence.
 
+The loading badge distinguishes a missing displayable frame from a background
+refresh. Animation resampling can leave `compositing_pending` true without
+showing `Compositing…` when every requested domain already has a compatible
+paintable frame. Errors remain visible independently. First load, missing
+domains, revoked resources/fonts, and incompatible geometry still withdraw
+pixels and display loading/error status; this does not reuse stale pixels across
+those boundaries or eliminate the hard-invalidation blank interval.
+
 Raster work uses GPUI's background executor, but full Scene validation, snapshot preparation, existing native resource-preflight text shaping and some shared stroke validation still happen on the UI thread. This slice does not promise a frame-time bound, incremental damage rasterization or large-scene interactive performance.
 
 ## Validation and reproduction
