@@ -52,6 +52,15 @@ conversions!(
     Rect, Ellipse, Line, Polygon, Star, Path, Pen, Text, Image, Group, Box, Frame, Custom
 );
 impl Shape {
+    /// The renderer's own-paint entry/exit phases; structural object order and
+    /// picking do not change when a container moves its stroke after children.
+    pub fn paint_phases(&self) -> (crate::PaintPhase, Option<crate::PaintPhase>) {
+        match self {
+            Self::Box(s) => s.paint_order.phases(),
+            Self::Frame(s) => s.paint_order.phases(),
+            _ => (crate::PaintPhase::All, None),
+        }
+    }
     pub fn tag(&self) -> &'static str {
         match self {
             Self::Rect(_) => "rect",

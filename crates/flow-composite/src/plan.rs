@@ -1,7 +1,7 @@
 use crate::{CompositeError, CompositeIssue, CompositeLimits};
 use gpui_flow_scene::{
-    Affine, BlendMode, ClipRegion, Color, DisplayId, DisplayObject, MaskMode, Point, Scene,
-    SceneError, Shape, display::Group,
+    Affine, BlendMode, ClipRegion, Color, DisplayId, DisplayObject, MaskMode, PaintPhase, Point,
+    Scene, SceneError, Shape, display::Group,
 };
 
 /// An opaque canvas that the caller owns completely. This does not capture a
@@ -38,6 +38,12 @@ pub(crate) struct DomainNode {
 #[derive(Clone, Debug, PartialEq)]
 pub enum SceneUnit {
     Native(DisplayId),
+    /// A vector container's own paint at its tree entry or exit. Both phases
+    /// retain one canonical object and its ancestor-only clip chain.
+    NativePhase {
+        id: DisplayId,
+        phase: PaintPhase,
+    },
     Domain(Box<DomainSource>),
     Rejected(CompositeIssue),
 }
@@ -266,7 +272,14 @@ fn visit(
         });
         return;
     }
-    out.push(SceneUnit::Native(id.clone()));
+    let (before, after) = o.shape.paint_phases();
+    out.push(match before {
+        PaintPhase::All => SceneUnit::Native(id.clone()),
+        phase => SceneUnit::NativePhase {
+            id: id.clone(),
+            phase,
+        },
+    });
     let mut clips = clips.to_vec();
     if let Some((local_bounds, corner_radius)) = o.shape.child_clip() {
         clips.push(ClipRegion {
@@ -277,6 +290,12 @@ fn visit(
     }
     for child in ordered(scene, &node.children) {
         visit(scene, child, world, &clips, limits, domains, out);
+    }
+    if let Some(phase) = after {
+        out.push(SceneUnit::NativePhase {
+            id: id.clone(),
+            phase,
+        });
     }
 }
 #[derive(Default)]

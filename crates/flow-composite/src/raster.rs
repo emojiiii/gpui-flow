@@ -1,6 +1,6 @@
 use crate::{
     CanvasBackdrop, CompositeError, CompositeLimits, DomainSource, ImageInputs, TextInputs,
-    vector::{Preparation, PreparedNode, transform},
+    vector::{Preparation, PreparedNode, VectorPaint, transform},
 };
 use gpui_flow_scene::{
     Affine, BlendMode, Bounds, ClipRegion, MaskMode, Point, Shape, Size, display::Rect,
@@ -330,22 +330,8 @@ impl Raster<'_> {
         if draw_shadow && node.shadow.is_some() {
             self.shadow(node, target, clip)?;
         }
-        for p in &node.paints {
-            self.check()?;
-            let a = self.world_to_layer * p.world;
-            if a.inverse().is_none() || transform(a).invert().is_none_or(|t| !t.is_finite()) {
-                return Err(CompositeError::UnsupportedTransform);
-            }
-            // Check every control point, not just a clipped allocation rectangle.
-            for point in p.path.points() {
-                let q = a.transform_point(Point::new(point.x, point.y));
-                if !q.is_finite() || q.x.abs() > 1_000_000. || q.y.abs() > 1_000_000. {
-                    return Err(CompositeError::UnsupportedTransform);
-                }
-            }
-            self.budget.write(self.pixels)?;
-            target.fill_path(&p.path, &p.paint, p.rule, transform(a), clip);
-        }
+        let (before, after) = node.paints.split_at(node.before_children);
+        self.paints(before, target, clip)?;
         if let Some(p) = &node.image {
             self.check()?;
             let a = self.world_to_layer * p.world;
@@ -390,6 +376,33 @@ impl Raster<'_> {
             }
         } else {
             self.children(node, target, depth, clip)?;
+        }
+        // Restore the ancestor clip after children. The container's child clip
+        // must never cut away its own outside/centered stroke.
+        self.paints(after, target, clip)?;
+        Ok(())
+    }
+    fn paints(
+        &mut self,
+        paints: &[VectorPaint],
+        target: &mut Pixmap,
+        clip: Option<&Mask>,
+    ) -> Result<(), CompositeError> {
+        for p in paints {
+            self.check()?;
+            let a = self.world_to_layer * p.world;
+            if a.inverse().is_none() || transform(a).invert().is_none_or(|t| !t.is_finite()) {
+                return Err(CompositeError::UnsupportedTransform);
+            }
+            // Check every control point, not just a clipped allocation rectangle.
+            for point in p.path.points() {
+                let q = a.transform_point(Point::new(point.x, point.y));
+                if !q.is_finite() || q.x.abs() > 1_000_000. || q.y.abs() > 1_000_000. {
+                    return Err(CompositeError::UnsupportedTransform);
+                }
+            }
+            self.budget.write(self.pixels)?;
+            target.fill_path(&p.path, &p.paint, p.rule, transform(a), clip);
         }
         Ok(())
     }

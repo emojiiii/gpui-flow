@@ -102,11 +102,23 @@ original control points in storage, and callers can request different flattening
 precision. Ellipse/rounded-rectangle subdivision is bounded; paths additionally
 expose `flatten_with(FlattenOptions)` for tolerance/depth control.
 
-`Scene::paint_list()` emits back-to-front objects, effective opacity, inherited
-lock state, and the exact transformed rounded-rectangle clip ancestry. Sibling
+`Scene::paint_list()` emits one entry per object in structural parent-first
+order, with effective opacity, inherited lock state, and the exact transformed
+rounded-rectangle clip ancestry. Sibling
 `z_index` values are sorted stably; descendants cannot escape their parent's
 stacking position. Invisible or zero-opacity subtrees are excluded. Group
 entries are present but have no geometry of their own.
+
+Box and Frame have an explicit `paint_order` field. Constructors and omitted
+JSON retain `ContainerPaintOrder::BeforeChildren` (own fills, own strokes,
+children). `.with_paint_order(ContainerPaintOrder::StrokeAfterChildren)` selects
+own fills, children, own strokes. `Shape::paint_phases()` exposes the renderer's
+entry/exit schedule using runtime `PaintPhase::{All, Fill, Stroke}`; it does not
+duplicate objects in `paint_list()` or change `Scene::paint_order()`. SceneView's
+native planner and CPU domains consume these phases. A custom renderer must
+respect the phase schedule rather than assume one structural item represents
+all drawing at that position. Own paints use ancestor clips; `clip_children`
+only adds a clip for descendants. See the [bounded contract and source references](../../docs/container-paint-order.md).
 
 `Style` supports solid color, linear gradients, radial gradients, optional
 stroke, additional ordered fill/stroke layers, opacity, and nonzero/even-odd fill
@@ -126,6 +138,9 @@ bounding rectangles are conservative. Picking checks the actual clip geometry.
 
 `hit_test(world_point, options)` returns the frontmost hit; `hit_test_all` returns
 front-to-back hits with IDs, local/world points, and root-to-target paths.
+This order is structural: a hittable child takes precedence over its Box/Frame
+parent even where an opted-in final parent stroke visually covers the child.
+This matches the pinned Leafer descendant preference; it is not pixel picking.
 
 - Hidden, zero-opacity, and locked subtrees are excluded by default
 - `include_invisible` and `include_locked` override the respective filters
@@ -188,6 +203,13 @@ Rust Stroke literals need the new fields or `..Stroke::default()`; constructors
 remain available. New serializer output includes these fields, so backward
 reading compatibility does not promise byte-identical JSON.
 
+Missing Box/Frame `paint_order` fields deserialize as `before_children`;
+explicit `stroke_after_children` opts in. Invalid variant names and null are
+rejected. Rust exhaustive Box/Frame literals need `paint_order`; their existing
+constructors are unchanged. Older readers may ignore the new field and retain
+the old appearance, so this does not guarantee forward visual compatibility.
+See [serialization and API migration](../../docs/container-paint-order.md#rust-api-and-serialization-compatibility).
+
 ## Deliberate boundaries
 
 This crate does not perform font shaping, text auto-layout, image fetching or
@@ -206,6 +228,13 @@ also apply document-size limits appropriate to their deployment.
 The scene tests, clippy and format checks are covered by the current local
 workspace validation. See `docs/appearance.md` for stroke budgets and
 `docs/local-validation-2026-09-30.md` for exact commands and remaining limits.
+The separate 2026-10-01 container paint-order batch passed 807 headless
+tests/doctests (8 pre-existing ignored), 90 UI tests, strict workspace/docs
+Clippy, executable documentation tests, format checks and the native example
+build. Its scene/engine/editor coverage includes legacy defaults and JSON,
+factory validation, unchanged structural picks, stable identities, property
+atomicity and Undo/Redo. Target-window order/clip/opacity/blend smoke checks
+also completed on cloud Linux; see the [exact coverage and remaining limits](../../docs/container-paint-order.md#validation-status).
 
 ```sh
 cargo test -p gpui-flow-scene

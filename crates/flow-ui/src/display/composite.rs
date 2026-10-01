@@ -924,6 +924,110 @@ mod tests {
         assert!(!before.compatible(&key(&different_owner), &"g".into()));
     }
     #[test]
+    fn root_and_nested_container_order_edits_hide_accepted_frames_and_reject_late_work() {
+        use gpui_flow_engine::PropertyKey;
+        use gpui_flow_scene::{Color, ContainerPaintOrder, DisplayObject, Shape, Stroke, display};
+
+        for target in ["g", "r"] {
+            let mut e = engine();
+            e.transaction(|scene| {
+                scene.update_object(&"g".into(), |object| {
+                    object.shape = display::Frame::new(30., 30.).into();
+                    object.style.stroke = Some(Stroke::new(Color::rgb(0, 255, 0), 8.));
+                })?;
+                scene.update_object(&"r".into(), |object| {
+                    object.shape = display::Box::new(20., 20.).into();
+                    object.style.stroke = Some(Stroke::new(Color::WHITE, 6.));
+                })?;
+                scene.insert(
+                    DisplayObject::new("child", display::Rect::new(20., 20.)),
+                    Some("r".into()),
+                    None,
+                )
+            })
+            .unwrap();
+            let mut c = CompositeController::default();
+            let first = key(&e);
+            let old = ready(&mut c, first.clone());
+            let domain: DisplayId = "g".into();
+            c.accepted(&first, &domain, &old.image);
+            assert_eq!(c.accepted.len(), 1);
+
+            // Admit a paint-only refresh while the old complete image is valid.
+            e.set_property(
+                e.handle(&"child".into()).unwrap(),
+                PropertyKey::Fill,
+                serde_json::to_value(gpui_flow_scene::Paint::solid(Color::rgb(0, 0, 255))).unwrap(),
+            )
+            .unwrap();
+            let pending = key(&e);
+            assert!(pending.compatible(&first, &domain));
+            assert!(c.request(pending.clone()).is_empty());
+            let work = c.take_work().unwrap();
+            assert!(Arc::ptr_eq(
+                &c.old_frame(&domain).unwrap().image,
+                &old.image
+            ));
+            // Finish the pixels before cancellation, but delay delivery so this
+            // exercises rejection of a successful obsolete result, not an error.
+            let late_result = work.run();
+            assert!(matches!(
+                late_result.as_slice(),
+                [(id, Ok(Some(_)))] if id == &domain
+            ));
+
+            let bounds = e.visible_bounds().unwrap();
+            let handle = e.handle(&target.into()).unwrap();
+            let identity = e.instance(handle).unwrap();
+            let mut shape = e.object(handle).unwrap().shape.clone();
+            match &mut shape {
+                Shape::Box(shape) => shape.paint_order = ContainerPaintOrder::StrokeAfterChildren,
+                Shape::Frame(shape) => shape.paint_order = ContainerPaintOrder::StrokeAfterChildren,
+                _ => unreachable!(),
+            }
+            e.set_property(
+                handle,
+                PropertyKey::Shape,
+                serde_json::to_value(shape).unwrap(),
+            )
+            .unwrap();
+            let current = key(&e);
+            assert_eq!(e.visible_bounds().unwrap(), bounds);
+            assert_eq!(e.instance(handle).unwrap(), identity);
+            assert_eq!(current.viewport, pending.viewport);
+            assert_eq!(current.domains[0].identities, pending.domains[0].identities);
+            assert!(!current.compatible(&first, &domain));
+            assert!(!current.compatible(&pending, &domain));
+            let retired = c.request(current.clone());
+            assert_eq!(retired.len(), 1);
+            assert!(Arc::ptr_eq(&retired[0].image, &old.image));
+            assert!(work.cancel.load(Ordering::Relaxed));
+            assert!(c.old_frame(&domain).is_none());
+            assert!(c.frame(&domain).is_none());
+            assert!(c.loading_visible());
+            assert!(c.take_work().is_none());
+
+            c.finish(pending, late_result);
+            assert!(c.candidates.is_empty());
+            assert!(c.frame(&domain).is_none());
+            assert!(c.loading_visible());
+            let fresh = c.take_work().unwrap();
+            assert_eq!(fresh.key, current);
+            let result = fresh.run();
+            c.finish(current.clone(), result);
+            let candidate = c.frame(&domain).unwrap();
+            assert!(candidate.1);
+            assert!(!Arc::ptr_eq(&candidate.0.image, &old.image));
+            c.accepted(&current, &domain, &candidate.0.image);
+            assert!(Arc::ptr_eq(
+                &c.old_frame(&domain).unwrap().image,
+                &candidate.0.image
+            ));
+            assert!(!c.pending());
+            assert!(!c.loading_visible());
+        }
+    }
+    #[test]
     fn retirement_pressure_blocks_candidate_before_any_upload_and_preserves_budget() {
         let mut e = engine();
         let mut c = CompositeController::default();

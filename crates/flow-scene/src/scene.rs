@@ -437,8 +437,9 @@ impl Scene {
         ids.sort_by_key(|id| self.nodes[*id].object.z_index);
         ids
     }
-    /// Back-to-front object ordering; z_index sorts only among siblings and
-    /// equal z values preserve insertion order.
+    /// Structural object ordering; z_index sorts only among siblings and equal
+    /// z values preserve insertion order. Each object occurs once. A container
+    /// may paint its stroke after descendants, so this is not a draw-op list.
     pub fn paint_order(&self) -> Result<Vec<DisplayId>, SceneError> {
         Ok(self
             .paint_list()?

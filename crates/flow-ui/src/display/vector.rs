@@ -73,17 +73,28 @@ struct VectorPaint<'a> {
 /// Tessellate in local space, then transform triangles. Non-uniform scales
 /// preserve each layer's stroke geometry. This is the renderer's actual ordered
 /// preparation path, also exercised without a native window by the tests.
+#[cfg(test)]
 fn prepare_vector_paints(
     object: &RenderObject,
     origin: Point<Pixels>,
     scale_factor: f32,
 ) -> Vec<VectorPaint<'_>> {
+    prepare_vector_paints_for_phase(object, origin, scale_factor, scene::PaintPhase::All)
+}
+fn prepare_vector_paints_for_phase(
+    object: &RenderObject,
+    origin: Point<Pixels>,
+    scale_factor: f32,
+    phase: scene::PaintPhase,
+) -> Vec<VectorPaint<'_>> {
     let screen =
         scene::Affine::translation(origin.x.into(), origin.y.into()) * object.screen_transform;
-    let needs_contours = object.object.style.fills().any(|paint| paint.is_visible())
-        || object.object.style.strokes().any(|stroke| {
-            stroke.width > 0.0 && stroke.paint.is_visible() && !stroke.uses_advanced_geometry()
-        });
+    let needs_contours = (phase.includes_fill()
+        && object.object.style.fills().any(|paint| paint.is_visible()))
+        || (phase.includes_stroke()
+            && object.object.style.strokes().any(|stroke| {
+                stroke.width > 0.0 && stroke.paint.is_visible() && !stroke.uses_advanced_geometry()
+            }));
     let contours = if needs_contours {
         object
             .object
@@ -131,7 +142,7 @@ fn prepare_vector_paints(
         scene::FillRule::EvenOdd => FillRule::EvenOdd,
     };
     for (index, fill) in object.object.style.fills().enumerate() {
-        if !fill.is_visible() {
+        if !phase.includes_fill() || !fill.is_visible() {
             continue;
         }
         if let Some(path) = build(
@@ -146,7 +157,7 @@ fn prepare_vector_paints(
         }
     }
     for (index, stroke) in object.object.style.strokes().enumerate() {
-        if stroke.width <= 0.0 || !stroke.paint.is_visible() {
+        if !phase.includes_stroke() || stroke.width <= 0.0 || !stroke.paint.is_visible() {
             continue;
         }
         let path = if stroke.uses_advanced_geometry() {
@@ -181,15 +192,17 @@ fn prepare_vector_paints(
 pub(super) fn paint_vector(
     object: &RenderObject,
     origin: Point<Pixels>,
+    phase: scene::PaintPhase,
     window: &mut Window,
     cx: &mut App,
 ) {
-    super::gradient::clear_object_issues(
+    super::gradient::begin_paint_phase(
         window.window_handle().window_id().as_u64(),
         object.object.id.as_str(),
+        phase,
     );
     for VectorPaint { path, paint, layer } in
-        prepare_vector_paints(object, origin, window.scale_factor())
+        prepare_vector_paints_for_phase(object, origin, window.scale_factor(), phase)
     {
         if let Some(color) = color(paint, object.opacity) {
             window.paint_path(path, color);
@@ -721,5 +734,66 @@ mod tests {
                 );
             }
         }
+    }
+    #[test]
+    fn container_phases_partition_original_layers_and_preserve_ancestor_clips() {
+        let mut obj = object(Style {
+            fill: Some(Color::TRANSPARENT.into()),
+            fill_layers: vec![linear(Color::rgba(255, 0, 0, 128)), Color::WHITE.into()],
+            stroke: Some(Stroke::new(Color::TRANSPARENT, 8.)),
+            stroke_layers: vec![
+                Stroke::new(Color::BLACK, 8.).with_alignment(scene::StrokeAlignment::Outside),
+                Stroke {
+                    paint: linear(Color::rgba(0, 0, 255, 128)),
+                    ..Stroke::new(Color::WHITE, 4.)
+                },
+            ],
+            ..Default::default()
+        });
+        obj.object.shape = scene::display::Frame::new(20., 20.)
+            .rounded(3.)
+            .with_paint_order(scene::ContainerPaintOrder::StrokeAfterChildren)
+            .into();
+        obj.screen_transform = Affine::translation(10., 10.);
+        obj.clips = vec![scene::ClipRegion {
+            local_bounds: scene::Bounds::new(ScenePoint::new(5., 5.), scene::Size::new(32., 32.)),
+            corner_radius: 0.,
+            world_transform: Affine::IDENTITY,
+        }];
+        let all = prepare_vector_paints(&obj, point(px(0.), px(0.)), 1.5);
+        let fills = prepare_vector_paints_for_phase(
+            &obj,
+            point(px(0.), px(0.)),
+            1.5,
+            scene::PaintPhase::Fill,
+        );
+        let strokes = prepare_vector_paints_for_phase(
+            &obj,
+            point(px(0.), px(0.)),
+            1.5,
+            scene::PaintPhase::Stroke,
+        );
+        assert_eq!(
+            fills.iter().map(|p| p.layer).collect::<Vec<_>>(),
+            vec![PaintLayer::Fill(1), PaintLayer::Fill(2)]
+        );
+        assert_eq!(
+            strokes.iter().map(|p| p.layer).collect::<Vec<_>>(),
+            vec![PaintLayer::Stroke(1), PaintLayer::Stroke(2)]
+        );
+        for (all, split) in all.iter().zip(fills.iter().chain(&strokes)) {
+            assert_eq!(all.layer, split.layer);
+            assert_eq!(all.paint, split.paint);
+            assert_eq!(triangles(&all.path), triangles(&split.path));
+        }
+        // Own stroke is allowed outside the Frame's child clip (x < 10),
+        // and is still constrained by the real ancestor clip (x >= 5).
+        let points: Vec<_> = triangles(&strokes[0].path).into_iter().flatten().collect();
+        assert!(points.iter().any(|p| p.x < 10.));
+        assert!(
+            points
+                .iter()
+                .all(|p| p.x >= 5. - 0.001 && p.x <= 37. + 0.001)
+        );
     }
 }

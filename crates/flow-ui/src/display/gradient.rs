@@ -119,6 +119,12 @@ pub(super) fn clear_object_issues(window_id: u64, object: &str) {
             .retain(|issue| issue.window_id != window_id || issue.object != object)
     });
 }
+pub(super) fn begin_paint_phase(window_id: u64, object: &str, phase: scene::PaintPhase) {
+    // A delayed stroke must not erase a fill failure from this same frame.
+    if phase != scene::PaintPhase::Stroke {
+        clear_object_issues(window_id, object);
+    }
+}
 /// Release retained textures; call outside the paint phase (e.g. when closing a scene).
 pub fn clear_gradient_cache(window: &mut Window, cx: &mut App) {
     let images = CACHE.with(|cache| {
@@ -278,6 +284,18 @@ pub(super) fn paint_gradient(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn stroke_phase_preserves_fill_failures_until_the_next_object_frame() {
+        let object = object();
+        record_error(&object, "previous frame".into(), 79);
+        begin_paint_phase(79, "gradient", scene::PaintPhase::Fill);
+        assert!(gradient_render_issues(79).is_empty());
+        record_error(&object, "fill failed".into(), 79);
+        begin_paint_phase(79, "gradient", scene::PaintPhase::Stroke);
+        assert_eq!(gradient_render_issues(79)[0].message, "fill failed");
+        begin_paint_phase(79, "gradient", scene::PaintPhase::All);
+        assert!(gradient_render_issues(79).is_empty());
+    }
     fn object() -> RenderObject {
         RenderObject {
             object: scene::DisplayObject::new("gradient", scene::display::Rect::new(10.0, 10.0)),

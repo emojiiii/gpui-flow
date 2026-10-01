@@ -310,14 +310,15 @@ impl Render for SceneView {
             .when(!owned_canvas, |view| view.bg(rgb(theme.background)))
             .track_focus(&self.focus)
             .child(background);
-        let mut objects = frame
+        let objects = frame
             .objects
             .into_iter()
             .map(|o| (o.object.id.clone(), o))
             .collect::<std::collections::BTreeMap<_, _>>();
         for unit in frame.units {
-            let id = match unit {
-                SceneUnit::Native(id) => id,
+            let (id, phase) = match unit {
+                SceneUnit::Native(id) => (id, gpui_flow_scene::PaintPhase::All),
+                SceneUnit::NativePhase { id, phase } => (id, phase),
                 SceneUnit::Domain(domain) => {
                     if let Some(key) = &composite_key {
                         view = view.child(self.composite_element(
@@ -330,10 +331,16 @@ impl Render for SceneView {
                 }
                 SceneUnit::Rejected(_) => continue,
             };
-            let Some(object) = objects.remove(&id) else {
+            let Some(object) = objects.get(&id).cloned() else {
                 continue;
             };
-            self.diagnostics.extend(object.diagnostics());
+            if phase != gpui_flow_scene::PaintPhase::Stroke {
+                self.diagnostics.extend(object.diagnostics());
+            }
+            if phase != gpui_flow_scene::PaintPhase::All {
+                view = view.child(DisplayElement::new(object).with_paint_phase(phase));
+                continue;
+            }
             if let gpui_flow_scene::Shape::Custom(custom) = &object.object.shape
                 && let Some(renderer) = self.renderers.get(&custom.kind)
             {
@@ -981,6 +988,92 @@ mod state_tests {
         let restored = raster_container(&restored);
         assert_eq!(restored.screen_bounds, original.screen_bounds);
         assert_eq!(restored.premul_rgba, original.premul_rgba);
+    }
+    #[test]
+    fn container_phase_edit_and_undo_share_native_and_presented_domain_planning() {
+        use gpui_flow_composite::SceneUnit;
+        use gpui_flow_scene::{ContainerPaintOrder, PaintPhase, Shape, Stroke, Style};
+        let mut scene = Scene::new();
+        scene
+            .insert(
+                DisplayObject::new("frame", display::Frame::new(30., 30.)).with_style(Style {
+                    fill: Some(Color::BLACK.into()),
+                    stroke: Some(Stroke::new(Color::WHITE, 8.)),
+                    ..Default::default()
+                }),
+                None,
+                None,
+            )
+            .unwrap();
+        scene
+            .insert(
+                DisplayObject::new("child", display::Rect::new(20., 20.))
+                    .with_style(Style::fill(Color::rgb(0, 0, 255))),
+                Some("frame".into()),
+                None,
+            )
+            .unwrap();
+        let mut editor = SceneEditor::new(scene).unwrap();
+        let mut styles = SceneStateStyles::new(&editor.engine);
+        let router = SceneEventRouter::new();
+        let snapshot = |editor: &SceneEditor, styles: &mut SceneStateStyles| {
+            let (frame, error) =
+                super::state_render_frame(editor, &router, styles, std::time::Duration::ZERO);
+            assert!(error.is_none());
+            frame
+        };
+        let before = snapshot(&editor, &mut styles);
+        assert_eq!(
+            before.units,
+            vec![
+                SceneUnit::Native("frame".into()),
+                SceneUnit::Native("child".into())
+            ]
+        );
+        editor
+            .transaction(|s| {
+                s.update_object(&"frame".into(), |o| {
+                    let Shape::Frame(f) = &mut o.shape else {
+                        unreachable!()
+                    };
+                    f.paint_order = ContainerPaintOrder::StrokeAfterChildren;
+                })
+            })
+            .unwrap();
+        let after = snapshot(&editor, &mut styles);
+        assert_eq!(after.objects.len(), 2);
+        assert_eq!(
+            after.units,
+            vec![
+                SceneUnit::NativePhase {
+                    id: "frame".into(),
+                    phase: PaintPhase::Fill
+                },
+                SceneUnit::Native("child".into()),
+                SceneUnit::NativePhase {
+                    id: "frame".into(),
+                    phase: PaintPhase::Stroke
+                }
+            ]
+        );
+        editor
+            .transaction(|s| s.update_object(&"frame".into(), |o| o.style.opacity = 0.5))
+            .unwrap();
+        let domain = snapshot(&editor, &mut styles);
+        assert!(matches!(domain.units.as_slice(), [SceneUnit::Domain(_)]));
+        let frame = raster_container(&domain);
+        let x = (2. - frame.screen_bounds.origin.x) as usize;
+        let y = (15. - frame.screen_bounds.origin.y) as usize;
+        assert_eq!(
+            &frame.premul_rgba[(y * frame.width as usize + x) * 4..][..4],
+            &[128; 4]
+        );
+        assert!(editor.undo());
+        assert_eq!(snapshot(&editor, &mut styles).units, after.units);
+        assert!(editor.undo());
+        assert_eq!(snapshot(&editor, &mut styles).units, before.units);
+        assert!(editor.redo());
+        assert_eq!(snapshot(&editor, &mut styles).units, after.units);
     }
 }
 

@@ -134,6 +134,14 @@ impl DisplayElement {
     pub fn new(object: RenderObject) -> Self {
         Self { object }
     }
+    /// Internal render operation. Keep the public standalone element and
+    /// RenderObject construction shapes unchanged; do not strip style layers.
+    pub(crate) fn with_paint_phase(self, phase: scene::PaintPhase) -> PhasedDisplayElement {
+        PhasedDisplayElement {
+            object: self.object,
+            phase,
+        }
+    }
     /// Supply a lifecycle-tracked image; Pending/Failed/Cancelled never fall
     /// back to another untracked load. The wrapper preserves this type's legacy
     /// public `DisplayElement { object }` construction shape.
@@ -146,6 +154,16 @@ impl DisplayElement {
             image,
             frame_index: None,
         }
+    }
+}
+#[derive(IntoElement)]
+pub(crate) struct PhasedDisplayElement {
+    object: RenderObject,
+    phase: scene::PaintPhase,
+}
+impl RenderOnce for PhasedDisplayElement {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        render_display(self.object, None, None, self.phase)
     }
 }
 /// Runtime-only resource presentation, separate from the legacy DisplayElement.
@@ -163,18 +181,24 @@ impl PreparedDisplayElement {
 }
 impl RenderOnce for DisplayElement {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        render_display(self.object, None, None)
+        render_display(self.object, None, None, scene::PaintPhase::All)
     }
 }
 impl RenderOnce for PreparedDisplayElement {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        render_display(self.object, Some(self.image), self.frame_index)
+        render_display(
+            self.object,
+            Some(self.image),
+            self.frame_index,
+            scene::PaintPhase::All,
+        )
     }
 }
 fn render_display(
     object: RenderObject,
     image: Option<crate::resources::SceneImagePresentation>,
     frame_index: Option<usize>,
+    phase: scene::PaintPhase,
 ) -> AnyElement {
     if !object.native_renderable() {
         return div().into_any_element();
@@ -184,7 +208,9 @@ fn render_display(
         Shape::Image(source) => image::image_element(source, &object, image, frame_index),
         _ => canvas(
             |_, _, _| (),
-            move |bounds, _, window, cx| vector::paint_vector(&object, bounds.origin, window, cx),
+            move |bounds, _, window, cx| {
+                vector::paint_vector(&object, bounds.origin, phase, window, cx)
+            },
         )
         .absolute()
         .size_full()

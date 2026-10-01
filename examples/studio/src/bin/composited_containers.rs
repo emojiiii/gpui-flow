@@ -1,23 +1,34 @@
-//! Fixed-size Box/Frame CPU domains using the existing SceneView consumer.
+//! Explicit native/CPU container paint phases using the existing SceneView consumer.
 use gpui::{prelude::*, *};
 use gpui_flow::{
     ControlButton, SceneView,
-    scene::{Affine, BlendMode, Color, DisplayObject, Scene, Shape, Size, Stroke, Style, display},
+    scene::{
+        Affine, BlendMode, Color, ContainerPaintOrder, DisplayObject, Scene, Shape, Size, Stroke,
+        Style, display,
+    },
 };
 fn document() -> Scene {
     let mut scene = Scene::new();
     for (id, label, x, shape) in [
         (
             "box",
-            "Box: visible overflow",
+            "Native Box: visible overflow",
             40.,
-            Shape::Box(display::Box::new(240., 230.).rounded(28.)),
+            Shape::Box(
+                display::Box::new(240., 230.)
+                    .rounded(28.)
+                    .with_paint_order(ContainerPaintOrder::StrokeAfterChildren),
+            ),
         ),
         (
             "frame",
-            "Frame: rounded child clip",
+            "CPU Frame: rounded clip + alpha",
             360.,
-            Shape::Frame(display::Frame::new(240., 230.).rounded(48.)),
+            Shape::Frame(
+                display::Frame::new(240., 230.)
+                    .rounded(48.)
+                    .with_paint_order(ContainerPaintOrder::StrokeAfterChildren),
+            ),
         ),
     ] {
         scene
@@ -27,8 +38,12 @@ fn document() -> Scene {
                     .with_style(Style {
                         fill: Some(Color::hex(0xffcc66).into()),
                         stroke: Some(Stroke::new(Color::hex(0x50dfaf), 14.)),
-                        opacity: 0.5,
-                        blend_mode: BlendMode::Normal,
+                        opacity: if id == "box" { 1. } else { 0.5 },
+                        blend_mode: if id == "box" {
+                            BlendMode::PassThrough
+                        } else {
+                            BlendMode::Normal
+                        },
                         ..Default::default()
                     }),
                 None,
@@ -71,12 +86,18 @@ fn document() -> Scene {
         .unwrap();
     scene
         .insert(
-            DisplayObject::new("clip", display::Frame::new(230., 230.).rounded(65.))
-                .with_transform(Affine::translation(20., 20.))
-                .with_style(Style {
-                    fill: None,
-                    ..Default::default()
-                }),
+            DisplayObject::new(
+                "clip",
+                display::Frame::new(230., 230.)
+                    .rounded(65.)
+                    .with_paint_order(ContainerPaintOrder::StrokeAfterChildren),
+            )
+            .with_transform(Affine::translation(20., 20.))
+            .with_style(Style {
+                fill: None,
+                stroke: Some(Stroke::new(Color::hex(0x50dfaf), 14.)),
+                ..Default::default()
+            }),
             Some("blend".into()),
             None,
         )
@@ -136,16 +157,60 @@ impl Lab {
 }
 impl Render for Lab {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let frame = self
+            .view
+            .read(cx)
+            .editor
+            .scene()
+            .get(&"frame".into())
+            .unwrap();
+        let Shape::Frame(frame) = &frame.object.shape else {
+            unreachable!()
+        };
+        let order = match frame.paint_order {
+            ContainerPaintOrder::BeforeChildren => "fill → stroke → children (legacy)",
+            ContainerPaintOrder::StrokeAfterChildren => "fill → children → stroke",
+        };
         div().size_full().flex().flex_col().bg(rgb(0x161b25)).text_color(rgb(0xffffff))
-            .child(div().h(px(58.)).px_4().flex().items_center().gap_2().child("Composited containers")
-                .child(ControlButton::new("clip","Frame clip on / off").on_click(cx.listener(|this,_,_,cx|this.edit("frame",|o|if let Shape::Frame(f)=&mut o.shape {f.clip_children = !f.clip_children;},cx))))
-                .child(ControlButton::new("opacity","Frame alpha 50% / 100%").on_click(cx.listener(|this,_,_,cx|this.edit("frame",|o|o.style.opacity=if o.style.opacity==0.5 {1.}else{0.5},cx))))
-                .child(ControlButton::new("blend","Multiply / Screen").on_click(cx.listener(|this,_,_,cx|this.edit("blend-blue",|o|o.style.blend_mode=if o.style.blend_mode==BlendMode::Multiply {BlendMode::Screen}else{BlendMode::Multiply},cx))))
-                .child(ControlButton::new("undo","Undo").on_click(cx.listener(|this,_,_,cx|{this.view.update(cx,|v,cx|{v.editor.undo();cx.notify();});cx.notify();}))))
+            .child(div().h(px(96.)).px_4().py_2().flex().flex_col().gap_2()
+                .child(format!("Container paint phases: {order}"))
+                .child(div().flex().items_center().gap_2()
+                    .child(ControlButton::new("order", "Swap paint order").on_click(cx.listener(|this, _, _, cx| {
+                        this.view.update(cx, |v, cx| {
+                            v.editor.transaction(|s| {
+                                for id in ["box", "frame", "clip"] {
+                                    s.update_object(&id.into(), |o| {
+                                        let order = match &mut o.shape {
+                                            Shape::Box(b) => &mut b.paint_order,
+                                            Shape::Frame(f) => &mut f.paint_order,
+                                            _ => unreachable!(),
+                                        };
+                                        *order = match *order {
+                                            ContainerPaintOrder::BeforeChildren => ContainerPaintOrder::StrokeAfterChildren,
+                                            ContainerPaintOrder::StrokeAfterChildren => ContainerPaintOrder::BeforeChildren,
+                                        };
+                                    })?;
+                                }
+                                Ok(())
+                            }).unwrap();
+                            cx.notify();
+                        });
+                        cx.notify();
+                    })))
+                    .child(ControlButton::new("clip", "Frame clip").on_click(cx.listener(|this, _, _, cx| this.edit("frame", |o| if let Shape::Frame(f) = &mut o.shape { f.clip_children = !f.clip_children; }, cx))))
+                    .child(ControlButton::new("native", "Box native / CPU").on_click(cx.listener(|this, _, _, cx| this.edit("box", |o| o.style.opacity = if o.style.opacity == 1. { 0.5 } else { 1. }, cx))))
+                    .child(ControlButton::new("opacity", "Frame alpha").on_click(cx.listener(|this, _, _, cx| this.edit("frame", |o| o.style.opacity = if o.style.opacity == 0.5 { 1. } else { 0.5 }, cx))))
+                    .child(ControlButton::new("blend", "Multiply / Screen").on_click(cx.listener(|this, _, _, cx| this.edit("blend-blue", |o| o.style.blend_mode = if o.style.blend_mode == BlendMode::Multiply { BlendMode::Screen } else { BlendMode::Multiply }, cx))))
+                    .child(ControlButton::new("undo", "Undo").on_click(cx.listener(|this, _, _, cx| {
+                        this.view.update(cx, |v, cx| { v.editor.undo(); cx.notify(); });
+                        cx.notify();
+                    }))))
+            )
             .child(div().flex_1().min_h_0().overflow_hidden().child(self.view.clone()))
-            .child(div().h(px(70.)).px_4().text_sm().child("Own fills and strokes draw before children, matching the current native Scene order. Outer stroke stays visible.\nClipping does not isolate the blend backdrop. Text labels stay outside domains. Toggle controls, pan/zoom, then Undo."))
+            .child(div().h(px(70.)).px_4().text_sm().child("Explicit after-fill order uses the same native/CPU scene pipeline. Swap order to reveal children over the inner stroke.\nOutside strokes survive child clips; ancestor clips still apply. Box switches native/CPU, Frame keeps whole alpha. Pan/zoom and Undo."))
     }
 }
+
 fn main() {
     gpui_kit::application()
         .with_assets(gpui_kit::assets::Assets)
@@ -155,13 +220,13 @@ fn main() {
                 WindowOptions {
                     window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
                         None,
-                        size(px(1060.), px(620.)),
+                        size(px(1060.), px(660.)),
                         cx,
                     ))),
                     ..Default::default()
                 },
                 |window, cx| {
-                    window.set_window_title("gpui-flow · Composited containers");
+                    window.set_window_title("gpui-flow · Container paint phases");
                     cx.new(Lab::new)
                 },
             )

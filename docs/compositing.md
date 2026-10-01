@@ -1,6 +1,6 @@
 # Bounded vector, image and text compositing in SceneView
 
-Status: bounded vector, static-image, elapsed-time animated-image, host-opt-in same-backend text and explicit owned-canvas backdrop implementation. Validation checkpoints below distinguish the local Linux passes. The vector native-window smoke test below was recorded on 2026-09-30; static-image validation is reported separately. This is a bounded Leafer-inspired slice, not complete Leafer or GPU-backdrop compatibility. The first headless checkpoint is [9bd37d4](https://github.com/emojiiii/gpui-flow/commit/9bd37d479cf546e0d58b123465a2df07cf13bc3c); the subsequent integration adds the production SceneView consumer.
+Status: bounded vector, static-image, elapsed-time animated-image, host-opt-in same-backend text and explicit owned-canvas backdrop implementation. Explicit [Box/Frame paint phases](container-paint-order.md) passed the current local Linux aggregate and targeted native smoke checks; see the [phase-order checkpoint](#container-paint-order-validation-2026-10-01) for scope and limits. Validation checkpoints below distinguish this batch from earlier local Linux passes. The vector native-window smoke test below was recorded on 2026-09-30; static-image validation is reported separately. This is a bounded Leafer-inspired slice, not complete Leafer or GPU-backdrop compatibility. The first headless checkpoint is [9bd37d4](https://github.com/emojiiii/gpui-flow/commit/9bd37d479cf546e0d58b123465a2df07cf13bc3c); the subsequent integration adds the production SceneView consumer.
 
 ## Actual rendering path
 
@@ -20,10 +20,10 @@ At the GPUI boundary, those bytes pass once through `swap_rgba_pa_to_bgra` into 
 - Alpha masks are hidden and affect following stable z-ordered siblings until another mask. Opaque-mask independent blends flush against the CPU parent; translucent-mask runs composite first, then apply alpha once
 - Rect, rounded Rect, Ellipse, Line, Polygon, Star, Path, Pen, nested Group and fixed-size Box/Frame are supported, including current fills/gradients and centered stroke meshes
 - Each selected Image frame uses decoded pixel dimensions for Contain/Cover/Fill, with bilinear sampling, layout-box clipping for Cover, full affine placement, image alpha masks and the same group/blend/clip path as vectors
-- Fixed-size Box/Frame paint their own fill and centered stroke layers before children, matching current native Scene order. Opacity applies once to the complete container; rounded child clips do not clip its own outer stroke
+- Fixed-size Box/Frame default to own fills → own strokes → children. Explicit `ContainerPaintOrder::StrokeAfterChildren` selects own fills → children → own strokes in both native SceneView and CPU domains. Existing constructors and omitted JSON keep the legacy order. Opacity applies once to the complete container; rounded child clips do not clip its own outer stroke
 - Box overflow is visible by default; Frame clips descendants by default. Nested rounded child clips intersect under affine transforms, without turning pass-through containers into isolated blend groups. Inherited clips outside the domain still apply to the finished output
 
-Missing JSON fields retain old defaults. Rust `Style` and `DisplayObject` exhaustive literals need the new fields or constructor/default syntax; new enum variants may require updating exhaustive matches. This is backward JSON reading, not Leafer JSON import compatibility or compatibility with older renderers.
+Missing JSON fields retain old defaults. Rust `Style` and `DisplayObject` exhaustive literals need the new fields or constructor/default syntax; Box/Frame literals now need `paint_order`, and exhaustive `SceneUnit` matches must handle `NativePhase`. `RenderObject` and `DisplayElement { object }` construction shapes remain unchanged. See the [paint-order migration contract](container-paint-order.md#rust-api-and-serialization-compatibility). This is backward JSON reading, not Leafer JSON import compatibility or compatibility with older renderers.
 
 ### Additional artistic blends
 
@@ -72,9 +72,13 @@ Box and Frame now enter the real planner, tiny-skia vector preparation and raste
 
 Child clipping uses an 8-bit mask on each actual paint or isolated-layer composite, not a synthetic isolated child surface. A pass-through Frame's Multiply/Screen children therefore still see the preceding CPU backdrop. Isolated children and alpha-mask runs receive the inherited clip once when returned to the parent. Nested masks and their intersection scratch storage/work are budgeted. Clipped child bounds reduce output allocation; own fill/stroke bounds remain outside this child restriction. Clip bounds retain f64 world precision before viewport cancellation, including large translations.
 
-This is current Scene-model compatibility, not complete Leafer Box/Frame parity. The pinned Leafer `BoxData.__drawAfterFill` path can use fill → children → stroke for isolated/clipped boxes. The current native Scene paints fill → stroke → children, and this CPU implementation deliberately keeps that same order; a child can cover the inner portion of a parent stroke. No new paint-phase schema is introduced. Frame keeps the existing Scene style defaults rather than adopting Leafer's default white fill. Auto-sizing/scrolling/path-input boxes and other Leafer-only properties are not added here.
+`Box.paint_order` and `Frame.paint_order` explicitly select `BeforeChildren` (own fills → own strokes → children) or `StrokeAfterChildren` (own fills → children → own strokes). Existing constructors and missing JSON fields retain `BeforeChildren`; rounded corners, clipping, opacity and blending do not silently change it. `SceneUnit::NativePhase` schedules native entry/exit paints, while a captured domain still substitutes one whole subtree. CPU preparation splits its existing paint vector after the emitted fills and submits each layer once inside the same container isolation. `Scene::paint_list`/`paint_order`, geometric picking and event ancestry remain structural, with one entry per object. A child can still be picked beneath a visually overlaid parent stroke.
+
+This is a bounded explicit option, not complete Leafer Box/Frame parity. In the pinned source, `BoxData.__drawAfterFill` is conditional on `__single || __clipAfterFill`; Leafer does not universally put container strokes after children. Its picker also prefers descendants over an overlapping Box/Frame. Flow does not reproduce that automatic phase-selection policy. Frame keeps the existing Scene style defaults rather than adopting Leafer's default white fill. This change adds no auto-sizing, scrolling, path-input boxes, container shadows or other Leafer-only rendering properties. See the [full contract, pinned source citations and validation scope](container-paint-order.md).
 
 Alpha masks still require a direct Group parent. A Box/Frame can itself be that Group's mask, including its painted children, and it can contain a Group with mask runs. Direct mask children of Box/Frame remain a validation error. No mask/disclosure/resource permissions are widened.
+
+Both paint phases use only the container's inherited ancestor clips; the child clip is applied to descendants and released before the final own stroke. Mask runs inside children complete before that stroke. An enclosing mask and container opacity operate on the complete container, without one mask/opacity application per phase. Changing the order is an incompatible composite placement change, including when the container is nested: accepted stale frames cannot be reused across the change. Phase ordering adds no isolation boundary or extra CPU surface of its own, and all existing geometry, clipping, allocation and surface-work limits remain in force. The [phase-order checkpoint](#container-paint-order-validation-2026-10-01) records the current verification separately from the unchanged historical fixed-container checkpoint.
 
 Run `cargo run --locked --offline -p flow-studio --bin composited_containers` for Box overflow, rounded Frame clipping/opacity, pass-through clipped blending, and Undo controls. Labels remain native outside domains.
 
@@ -225,7 +229,7 @@ The static-image pass did not rerun the separate ignored-media tests, standalone
 
 ## Source references
 
-[Leafer blendMode](https://www.leaferjs.com/ui/reference/UI/blendMode.html), [mask](https://www.leaferjs.com/ui/reference/UI/mask.html), [pinned mask implementation](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/mask/src/index.ts), [pinned Box implementation](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/Box.ts), [pinned BoxData phases](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display-module/data/src/BoxData.ts), [pinned Frame defaults](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/Frame.ts), [pinned LeafData isolation](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/display-module/data/src/LeafData.ts), [GPUI decoded frame API](https://github.com/longbridge/gpui-fast/blob/10d005166a9f9e079d55ebfb700035f3860c3e71/crates/gpui/src/assets.rs), [GPUI GIF/WebP loader](https://github.com/longbridge/gpui-fast/blob/10d005166a9f9e079d55ebfb700035f3860c3e71/crates/gpui/src/elements/img.rs), [GPUI paint_image](https://github.com/longbridge/gpui-fast/blob/10d005166a9f9e079d55ebfb700035f3860c3e71/crates/gpui/src/window.rs). These sources establish the intended bounded semantics; they do not turn this adapter into full Leafer compatibility.
+[Leafer blendMode](https://www.leaferjs.com/ui/reference/UI/blendMode.html), [mask](https://www.leaferjs.com/ui/reference/UI/mask.html), [pinned mask implementation](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/mask/src/index.ts), [pinned Box implementation](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/Box.ts), [pinned BoxData phases](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display-module/data/src/BoxData.ts), [pinned UIRender fill/content/stroke ordering](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display-module/render/src/UIRender.ts#L55-L85), [pinned descendant-first Picker](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/partner/selector/src/Picker.ts#L53-L83), [pinned Frame defaults](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/Frame.ts), [pinned LeafData isolation](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/display-module/data/src/LeafData.ts), [GPUI decoded frame API](https://github.com/longbridge/gpui-fast/blob/10d005166a9f9e079d55ebfb700035f3860c3e71/crates/gpui/src/assets.rs), [GPUI GIF/WebP loader](https://github.com/longbridge/gpui-fast/blob/10d005166a9f9e079d55ebfb700035f3860c3e71/crates/gpui/src/elements/img.rs), [GPUI paint_image](https://github.com/longbridge/gpui-fast/blob/10d005166a9f9e079d55ebfb700035f3860c3e71/crates/gpui/src/window.rs). The [container paint-order contract](container-paint-order.md#pinned-leafer-reference) ties the conditional source branches to the bounded implementation. These sources establish the intended bounded semantics; they do not turn this adapter into full Leafer compatibility.
 
 ## Container validation, 2026-10-01
 
@@ -402,3 +406,34 @@ example, ignored media tests or standalone documentation executables. Synthetic
 text-alpha fixtures and the native glyph example do not add a new typography
 certification. All earlier unsupported-shadow and resource/budget boundaries
 still apply.
+
+
+## Container paint-order validation, 2026-10-01
+
+The final local Linux aggregate exited 0: 807 headless tests/doctests passed
+(8 pre-existing ignored), 90 UI library tests passed, workspace/all-targets and
+documentation-example strict Clippy passed, executable documentation tests and
+workspace/docs format checks passed, and the native `composited_containers`
+build passed. These are final-run counts, not summed repeated runs. The
+`container-phase-final` run record reports a minimum 8,096,276,480 available disk
+bytes; commands used locked/offline dependencies.
+
+Coverage includes preserved JSON/factory defaults, enum validation, structural
+picking and stable identities, Undo/Redo, native phase/layer ordering, nested
+whole-domain substitution, CPU overlap pixels, transparent/multiple paint layers,
+single opacity, masks, blend backdrops, inherited/child clips, fractional DPR,
+own-stroke crop/culling and budget rollback. A dedicated controller regression
+verifies root/nested order-only edits withdraw accepted stale output and reject
+a successfully rendered obsolete completion before accepting fresh pixels.
+
+Target-window screenshots on the cloud Linux desktop verified both paint orders
+in a native Box and CPU Frame, Undo, native-to-CPU opacity promotion and return,
+Frame clipping/alpha, Multiply/Screen, pan/zoom and repeated toggles. Normal
+close returned exit code 0 with an empty native log. This is visible smoke
+evidence, not screenshot-golden or frame-rate evidence. Reopening was not run
+in this batch; close-during-worker behavior remains unverified. CI,
+macOS/Windows, live multi-monitor/DPR changes, live GPU-failure injection, the
+ignored tests and a full old-example interaction sweep were not run. See the
+[complete paint-order validation record](container-paint-order.md#validation-status)
+for the test seams and unchanged limits. Earlier checkpoints above remain
+historical and unchanged.

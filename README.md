@@ -12,7 +12,7 @@
 
 静态Image现已通过现有GPUI资源加载/cache接入合成：支持真实像素alpha、Contain/Cover/Fill、组透明度、域内混合与遮罩。新增`composited_images`原生示例；验证范围与资源/内存边界见[compositing.md](docs/compositing.md)。
 
-固定尺寸Box/Frame已接入真实CPU合成：自身fill/stroke后绘制children、整体透明度、圆角子级clip及域内混合。保持现有native顺序；尚未实现Leafer特有fill→children→stroke阶段。新增`composited_containers`示例，见[语义边界](docs/compositing.md#fixed-size-painted-containers)。
+固定尺寸Box/Frame支持整体透明度、圆角子级clip及域内混合；旧JSON与现有构造器保持fill→stroke→children。新增显式`ContainerPaintOrder::StrokeAfterChildren`，让native/CPU按fill→children→stroke绘制，结构顺序与子级优先命中保持不变；不自动复刻Leafer的条件选择。见[容器绘制阶段契约](docs/container-paint-order.md)及`composited_containers`示例。本批807项headless（8项原有忽略）、90项UI、workspace/docs严格Clippy与格式、可执行文档测试及原生构建通过；真实窗口验过两种顺序、Undo、native/CPU切换、clip/alpha/混合、pan/zoom及重复切换，正常关闭退出0。详细覆盖与未验范围见[验证检查点](docs/container-paint-order.md#validation-status)。
 
 动画Image已复用GPUI解码帧接入native/CPU合成，支持实例暂停、seek和隐藏冻结。Text新增宿主显式接入的同原生字体后端桥，支持solid纯文字、换行/wrap/对齐及正向均匀缩放，真实glyph alpha可参与mask/clip/组透明度与域内混合；不是任意现有App自动开启。缺少文字桥、不支持的文字样式/变换、Custom和任意宿主GPUI背景混合仍整域明确报错，擦除、完整shadow/filter仍缺。闭合矢量Inside/Outside描边已新增共享有界Boolean mesh；scale-fixed描边、完整嵌套timeline和motion path仍缺。此次窗口烟测不代替跨平台、大规模性能或所有旧示例交互验收。详细约束与实际操作见[compositing.md](docs/compositing.md)。
 
@@ -131,6 +131,7 @@ cargo +1.98.1 run --locked -p flow-studio
 - [键盘事件、Space导航与释放清理](docs/keyboard-routing.md)
 - [视觉行列布局与边界](docs/flow-layout.md)
 - [多层填充、描边与外观边界](docs/appearance.md)
+- [Box/Frame显式绘制阶段、兼容性与验证状态](docs/container-paint-order.md)
 - [引擎基础契约实施顺序](docs/engine-contract-plan.md)
 
 - [交互插件、只读策略与自定义行为](docs/plugins.md)
