@@ -353,14 +353,22 @@ impl Raster<'_> {
                 ),
                 ..Default::default()
             };
+            let own_clip = p
+                .own_clip
+                .as_ref()
+                .map(|region| self.child_clip(region, clip))
+                .transpose()?;
             self.budget.write(self.pixels)?;
             target.fill_path(
                 &p.path,
                 &paint,
                 tiny_skia::FillRule::Winding,
                 transform(a),
-                clip,
+                own_clip.as_ref().or(clip),
             );
+            if own_clip.is_some() {
+                self.budget.in_use -= self.pixels;
+            }
         }
         if node.children_before_inner {
             self.clipped_children(node, target, depth, clip)?;

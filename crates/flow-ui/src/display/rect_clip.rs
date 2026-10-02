@@ -9,13 +9,7 @@ pub(super) enum RectClip {
     Empty,
 }
 pub(super) fn supports_transform(m: Affine) -> bool {
-    [m.a, m.b, m.c, m.d, m.tx, m.ty]
-        .iter()
-        .all(|v| v.is_finite())
-        && m.b == 0.
-        && m.c == 0.
-        && m.a > 0.
-        && m.a == m.d
+    m.is_positive_uniform_scale_translation()
 }
 fn intersection(a: Bounds, b: Bounds) -> Option<Bounds> {
     let x = a.min_x().max(b.min_x());

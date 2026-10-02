@@ -321,7 +321,7 @@ impl ElementDefinition for BuiltinDefinition {
                 json!({"content":"","size":{"width":100.,"height":30.},"font_family":"sans-serif","font_size":14.,"line_height":1.2,"align":"start","wrap":true,"padding":[0.,0.,0.,0.],"vertical_align":"top"})
             }
             "image" => {
-                json!({"source":"","size":{"width":100.,"height":100.},"natural_size":null,"fit":"contain"})
+                json!({"source":"","size":{"width":100.,"height":100.},"natural_size":null,"fit":"contain","corner_radius":0.,"corner_radii":null})
             }
             "canvas" => {
                 json!({"size":{"width":100.,"height":100.},"pixel_ratio":1.,"smooth":true,"safe_resize":false,"corner_radius":0.,"corner_radii":null})

@@ -43,6 +43,16 @@ pub(super) fn image_element(
         return div().into_any_element();
     };
     let fit = native_fit(image.fit);
+    let [tl, tr, br, bl] = image
+        .effective_corners()
+        .0
+        .map(|r| px(r * object.screen_transform.a));
+    let corners = Corners {
+        top_left: tl,
+        top_right: tr,
+        bottom_right: br,
+        bottom_left: bl,
+    };
     let content = div()
         .absolute()
         .left(px(plan.offset.x))
@@ -62,14 +72,8 @@ pub(super) fn image_element(
                             |_, _, _| (),
                             move |bounds, _, window, _| {
                                 let fitted = fit.get_bounds(bounds, image.size(index));
-                                let _ = window.paint_image(
-                                    bounds,
-                                    fitted,
-                                    Corners::all(px(0.)),
-                                    image,
-                                    index,
-                                    false,
-                                );
+                                let _ = window
+                                    .paint_image(bounds, fitted, corners, image, index, false);
                             },
                         )
                         .size_full(),
@@ -81,7 +85,11 @@ pub(super) fn image_element(
                         img(image.clone())
                             .id(SharedString::from(format!("{native_id}:{:?}", image.id)))
                             .size_full()
-                            .object_fit(fit),
+                            .object_fit(fit)
+                            .rounded_tl(tl)
+                            .rounded_tr(tr)
+                            .rounded_br(br)
+                            .rounded_bl(bl),
                     )
                     .into_any_element()
             }
@@ -101,7 +109,11 @@ pub(super) fn image_element(
                     img(ImageSource::Resource(resource))
                         .id(native_id)
                         .size_full()
-                        .object_fit(fit),
+                        .object_fit(fit)
+                        .rounded_tl(tl)
+                        .rounded_tr(tr)
+                        .rounded_br(br)
+                        .rounded_bl(bl),
                 )
                 .into_any_element(),
             None => content

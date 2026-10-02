@@ -53,6 +53,8 @@ impl RenderObject {
             })
         };
         if matches!(self.object.shape, Shape::Canvas(_))
+            || matches!(&self.object.shape, Shape::Image(image)
+                if image.is_rounded() && image.fit == scene::display::ImageFit::Contain)
             || self.object.style.blend_mode != scene::BlendMode::PassThrough
             || self.object.mask != scene::MaskMode::None
             || (self.object.style.opacity < 1.0

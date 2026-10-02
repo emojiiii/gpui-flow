@@ -69,6 +69,11 @@ impl Affine {
             .iter()
             .all(|v| v.is_finite())
     }
+    /// A finite axis-aligned positive uniform scale plus translation. Rotation,
+    /// reflection and shear do not meet this exact geometric predicate.
+    pub fn is_positive_uniform_scale_translation(self) -> bool {
+        self.is_finite() && self.b == 0. && self.c == 0. && self.a > 0. && self.a == self.d
+    }
     pub fn determinant(self) -> f64 {
         self.a as f64 * self.d as f64 - self.b as f64 * self.c as f64
     }

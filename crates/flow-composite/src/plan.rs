@@ -320,7 +320,11 @@ fn visit(
         return;
     }
     let world = parent * o.transform;
-    if boundary(scene, id) {
+    let image_geometry_domain = matches!(&o.shape, Shape::Image(image)
+        if !world.is_positive_uniform_scale_translation()
+            || clips.iter().any(|c| !c.is_rectangular() || !c.world_transform.is_positive_uniform_scale_translation())
+            || (image.is_rounded() && image.fit == gpui_flow_scene::display::ImageFit::Contain));
+    if boundary(scene, id) || image_geometry_domain {
         *domains += 1;
         if *domains > limits.max_domains {
             out.push(SceneUnit::Rejected(CompositeIssue {

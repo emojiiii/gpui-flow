@@ -24,6 +24,7 @@ pub(crate) struct PreparedNode {
     pub child_clip: Option<ClipRegion>,
 }
 pub(crate) struct ImagePaint {
+    pub own_clip: Option<ClipRegion>,
     pub smooth: bool,
     pub image: Arc<StaticImage>,
     pub path: Path,
@@ -305,6 +306,7 @@ impl Preparation {
                 let path = PathBuilder::from_rect(rect);
                 self.add_path(&path, source.world_transform, limits)?;
                 image_paint = Some(ImagePaint {
+                    own_clip: None,
                     smooth: true,
                     texture_to_local: Affine::translation(b.origin.x, b.origin.y)
                         * Affine::scale(
@@ -340,6 +342,12 @@ impl Preparation {
                 let path = PathBuilder::from_rect(rect);
                 self.add_path(&path, source.world_transform, limits)?;
                 image_paint = Some(ImagePaint {
+                    own_clip: image.is_rounded().then(|| ClipRegion {
+                        local_bounds: image.bounds(),
+                        corner_radius: image.corner_radius,
+                        corner_radii: image.corner_radii,
+                        world_transform: source.world_transform,
+                    }),
                     smooth: true,
                     texture_to_local: Affine::translation(content.origin.x, content.origin.y)
                         * Affine::scale(
@@ -374,6 +382,7 @@ impl Preparation {
                 if let Some(path) = path(&object.shape)? {
                     self.add_path(&path, source.world_transform, limits)?;
                     image_paint = Some(ImagePaint {
+                        own_clip: None,
                         smooth: canvas.smooth,
                         texture_to_local: Affine::scale(
                             canvas.size.width / pixels.width() as f32,

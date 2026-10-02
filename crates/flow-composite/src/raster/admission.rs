@@ -130,6 +130,21 @@ impl Admission<'_> {
             self.budget.write(self.pixels)?;
             self.budget.in_use -= bytes;
         }
+        // Image-local rounded masks follow the same checked A8 path as child clips.
+        if node
+            .image
+            .as_ref()
+            .is_some_and(|image| image.own_clip.is_some())
+        {
+            self.budget.reserve(self.pixels)?;
+            self.budget.write(self.pixels)?;
+            if clip {
+                self.budget.write(self.pixels * 2)?;
+                self.budget.reserve(self.pixels)?;
+                self.budget.in_use -= self.pixels;
+            }
+            self.budget.in_use -= self.pixels;
+        }
         self.budget
             .write(self.pixels * (node.paints.len() as u64 + u64::from(node.image.is_some())))?;
         if node.child_clip.is_some() && !node.children.is_empty() {

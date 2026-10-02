@@ -117,7 +117,7 @@ impl Shape {
             Self::Path(s) => s.flatten(tolerance),
             Self::Pen(s) => s.flatten(tolerance),
             Self::Text(s) => vec![crate::geometry::rectangle(s.size, 0.0, tolerance)],
-            Self::Image(s) => vec![crate::geometry::rectangle(s.size, 0.0, tolerance)],
+            Self::Image(s) => vec![s.flatten(tolerance)],
             Self::Canvas(s) => vec![s.flatten(tolerance)],
             Self::Group(_) => vec![],
             Self::Box(s) => vec![s.flatten(tolerance)],
@@ -141,7 +141,7 @@ impl Shape {
             Self::Box(s) => s.contains(point),
             Self::Frame(s) => s.contains(point),
             Self::Text(s) => s.bounds().contains(point),
-            Self::Image(s) => s.bounds().contains(point),
+            Self::Image(s) => s.contains(point),
             Self::Canvas(s) => s.contains(point),
             Self::Line(_) | Self::Group(_) => false,
             _ => crate::geometry::fill_hit(&self.flatten(0.1), point, rule),
@@ -155,7 +155,7 @@ impl Shape {
             return false;
         }
         if let Self::Image(image) = self {
-            return image.bounds().contains(point) && image.content_bounds().contains(point);
+            return image.contains(point) && image.content_bounds().contains(point);
         }
         if let Self::Canvas(canvas) = self
             && canvas.contains(point)
@@ -186,13 +186,6 @@ impl Shape {
             })
     }
     pub fn validate(&self) -> Result<(), String> {
-        fn size(s: crate::Size) -> Result<(), String> {
-            if s.is_positive() {
-                Ok(())
-            } else {
-                Err("size must be finite and positive".into())
-            }
-        }
         match self {
             Self::Rect(s) => s.validate()?,
             Self::Canvas(s) => s.validate()?,
@@ -226,18 +219,7 @@ impl Shape {
             Self::Pen(s) => s.path.validate()?,
             Self::Custom(s) => s.validate()?,
             Self::Text(s) => s.validate()?,
-            Self::Image(s) => {
-                size(s.size)?;
-                if s.source.trim().is_empty() {
-                    return Err("image source cannot be empty".into());
-                }
-                if let Some(n) = s.natural_size {
-                    size(n)?;
-                }
-                if !s.content_bounds().is_valid() {
-                    return Err("image fit bounds overflow".into());
-                }
-            }
+            Self::Image(s) => s.validate()?,
             Self::Group(_) => {}
             Self::Box(s) => s.validate()?,
             Self::Frame(s) => s.validate()?,
