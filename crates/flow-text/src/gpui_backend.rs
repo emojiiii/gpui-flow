@@ -38,7 +38,10 @@ pub fn shape_text(
     request: &TextMeasureRequest,
     color: gpui::Hsla,
 ) -> Result<Vec<gpui::WrappedLine>, String> {
-    if !request.font_size.is_finite()
+    if !request.para_spacing.is_finite()
+        || !(0. ..=1_000_000.).contains(&request.para_spacing)
+        || (request.para_spacing != 0. && request.content.len() > crate::MAX_TEXT_BYTES)
+        || !request.font_size.is_finite()
         || request.font_size <= 0.
         || !request.line_height.is_finite()
         || request.line_height <= 0.
@@ -48,15 +51,17 @@ pub fn shape_text(
     {
         return Err("invalid native text dimensions".into());
     }
+    let content = request.text_case.presentation(&request.content)?;
     let descriptor = scene_font(&request.font_family, request.font_weight, request.italic);
     // Empty strings also fail explicitly when no usable primary/fallback exists.
     system.resolve_font(&descriptor);
+    let content_len = content.len();
     system
         .shape_text(
-            SharedString::from(request.content.clone()),
+            SharedString::from(content.into_owned()),
             px(request.font_size),
             &[TextRun {
-                len: request.content.len(),
+                len: content_len,
                 font: descriptor,
                 color,
                 ..Default::default()
@@ -146,7 +151,7 @@ impl GpuiTextMeasurer {
             metrics.width = metrics.width.max(extent.width.into());
             metrics.lines += line.wrap_boundaries.len() + 1;
         }
-        metrics.height = metrics.line_height * metrics.lines as f32;
+        metrics.height = request.block_height(metrics.lines);
         metrics.validate()?;
         Ok(metrics)
     }
@@ -189,6 +194,8 @@ mod tests {
             font_size: 16.,
             font_weight: 400,
             italic: false,
+            text_case: Default::default(),
+            para_spacing: 0.,
             line_height: 20.,
             wrap_width: None,
         }
@@ -292,5 +299,31 @@ mod tests {
             fresh
         );
         assert_eq!(cache.entries.len(), 1);
+    }
+    #[test]
+    fn case_and_paragraph_spacing_are_independent_measurement_cache_keys() {
+        let mut cache = Cache::default();
+        for (case, spacing) in [
+            (crate::TextCase::None, 0.),
+            (crate::TextCase::Upper, 0.),
+            (crate::TextCase::Lower, 0.),
+            (crate::TextCase::Upper, 9.),
+        ] {
+            let mut key = request("Mixed\nText".into());
+            key.text_case = case;
+            key.para_spacing = spacing;
+            cache.insert(
+                key,
+                TextMetrics {
+                    width: 10.,
+                    height: 40. + spacing,
+                    line_height: 20.,
+                    lines: 2,
+                },
+            );
+        }
+        assert_eq!(cache.entries.len(), 4);
+        cache.invalidate();
+        assert!(cache.entries.is_empty());
     }
 }

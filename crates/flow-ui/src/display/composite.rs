@@ -2280,6 +2280,8 @@ mod tests {
                 font_size: 25.,
                 font_weight: 400,
                 italic: false,
+                text_case: Default::default(),
+                para_spacing: 0.,
                 line_height: 35.,
                 wrap_width: Some(75.),
             },

@@ -6,21 +6,34 @@ use unicode_segmentation::UnicodeSegmentation;
 /// Same shaped rows for native painting and CPU glyph rasterization.
 pub struct TextBoxShape {
     pub lines: Vec<WrappedLine>,
+    /// Top of each shaped line relative to the block. An unwrapped GPUI line
+    /// represents one hard-newline paragraph; after ellipsis it can instead
+    /// represent a visual row, whose original offset must remain unchanged.
+    pub line_offsets: Vec<f32>,
     /// Original row height keeps vertically overflowing text top aligned even
     /// when ellipsis removes the hidden rows before paint.
     pub block_height: f32,
 }
-fn row_height(lines: &[WrappedLine], height: f32) -> f32 {
-    lines
+fn paragraph_layout(lines: &[WrappedLine], request: &TextMeasureRequest) -> (Vec<f32>, f32) {
+    let mut rows = 0;
+    let offsets = lines
         .iter()
-        .map(|l| l.wrap_boundaries.len() + 1)
-        .sum::<usize>() as f32
-        * height
+        .enumerate()
+        .map(|(paragraph, line)| {
+            let top = rows as f32 * request.line_height + paragraph as f32 * request.para_spacing;
+            rows += line.wrap_boundaries.len() + 1;
+            top
+        })
+        .collect();
+    (offsets, request.block_height(rows))
 }
 fn plain(request: &TextMeasureRequest, content: &str) -> TextMeasureRequest {
     TextMeasureRequest {
         content: content.into(),
         wrap_width: None,
+        // These rows already contain presentation text from the original shape.
+        text_case: crate::TextCase::None,
+        para_spacing: 0.,
         ..request.clone()
     }
 }
@@ -85,10 +98,14 @@ pub fn shape_text_in_box(
         request.validate()?;
     }
     let original = shape_text(system, request, color)?;
-    let block_height = row_height(&original, request.line_height);
+    let (line_offsets, block_height) = paragraph_layout(&original, request);
+    if !block_height.is_finite() || line_offsets.iter().any(|offset| !offset.is_finite()) {
+        return Err("text line height overflow".into());
+    }
     if overflow == TextOverflow::Clip {
         return Ok(TextBoxShape {
             lines: original,
+            line_offsets,
             block_height,
         });
     }
@@ -97,32 +114,26 @@ pub fn shape_text_in_box(
         .flat_map(|l| &l.unwrapped_layout.runs)
         .map(|r| r.glyphs.len())
         .sum();
-    if !block_height.is_finite() {
-        return Err("ellipsis line height overflow".into());
-    }
     if glyphs > 8192 {
         return Err("ellipsis source glyph limit (8192)".into());
     }
-    let max_rows = ((box_height as f64 / request.line_height as f64)
-        .floor()
-        .max(1.) as usize)
-        .min(8192);
     let count: usize = original.iter().map(|l| l.wrap_boundaries.len() + 1).sum();
     if count > 8192 {
         return Err("ellipsis source row limit (8192)".into());
     }
-    if count <= max_rows
+    if block_height <= box_height
         && original
             .iter()
             .all(|l| f32::from(l.size(px(request.line_height)).width) <= box_width)
     {
         return Ok(TextBoxShape {
             lines: original,
+            line_offsets,
             block_height,
         });
     }
     let mut rows = Vec::new();
-    for line in &original {
+    for (line, top) in original.iter().zip(&line_offsets) {
         let boundaries = line
             .text
             .grapheme_indices(true)
@@ -130,6 +141,7 @@ pub fn shape_text_in_box(
             .chain(std::iter::once(line.text.len()))
             .collect::<Vec<_>>();
         let mut start = 0;
+        let mut row_index = 0;
         for wrap in &line.wrap_boundaries {
             let end = line
                 .unwrapped_layout
@@ -141,16 +153,27 @@ pub fn shape_text_in_box(
             if end < start || end > line.text.len() || boundaries.binary_search(&end).is_err() {
                 return Err("unsupported native wrap order".into());
             }
-            rows.push(&line.text[start..end]);
+            rows.push((
+                &line.text[start..end],
+                *top + row_index as f32 * request.line_height,
+            ));
+            row_index += 1;
             start = end;
         }
-        rows.push(&line.text[start..]);
+        rows.push((
+            &line.text[start..],
+            *top + row_index as f32 * request.line_height,
+        ));
     }
-    let vertical_overflow = rows.len() > max_rows;
-    let visible = rows.len().min(max_rows);
+    let visible = rows
+        .iter()
+        .take_while(|(_, top)| *top as f64 + request.line_height as f64 <= box_height as f64)
+        .count()
+        .max(1);
+    let vertical_overflow = rows.len() > visible;
     let mut clipped = Vec::with_capacity(visible);
     let mut changed = vertical_overflow;
-    for (index, row) in rows.iter().take(visible).enumerate() {
+    for (index, (row, _)) in rows.iter().take(visible).enumerate() {
         let value = ellipsize(
             system,
             request,
@@ -165,6 +188,7 @@ pub fn shape_text_in_box(
     if !changed {
         return Ok(TextBoxShape {
             lines: original,
+            line_offsets,
             block_height,
         });
     }
@@ -179,6 +203,7 @@ pub fn shape_text_in_box(
     }
     Ok(TextBoxShape {
         lines,
+        line_offsets: rows.iter().take(visible).map(|(_, top)| *top).collect(),
         block_height,
     })
 }

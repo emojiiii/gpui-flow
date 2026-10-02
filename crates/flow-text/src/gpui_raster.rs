@@ -179,6 +179,15 @@ impl GpuiTextRasterizer {
             r.bounds[2],
             r.bounds[3],
         )?;
+        // Flow-owned paragraph/ellipsis offsets stay live for the whole raster
+        // job, so account them beside bitmap and decoration storage.
+        let offset_bytes = shaped.line_offsets.capacity() * std::mem::size_of::<f32>();
+        let shape_bytes = output_bytes
+            .checked_add(offset_bytes)
+            .ok_or("text working-set limit")?;
+        if shape_bytes > max_bytes {
+            return Err("text working-set limit".into());
+        }
         let decorations = crate::gpui_decoration::layout_decorations(
             &shaped,
             &crate::gpui_decoration::DecorationRequest {
@@ -190,10 +199,11 @@ impl GpuiTextRasterizer {
                 vertical_align: r.vertical_align,
                 device_scale: r.device_scale,
             },
-            max_bytes.saturating_sub(output_bytes),
+            max_bytes.saturating_sub(shape_bytes),
         )?;
-        let base_bytes = output_bytes + decorations.allocated_bytes;
+        let base_bytes = shape_bytes + decorations.allocated_bytes;
         out.peak_bytes = base_bytes;
+        let line_offsets = shaped.line_offsets;
         let lines = shaped.lines;
         let count: usize = lines
             .iter()
@@ -206,8 +216,9 @@ impl GpuiTextRasterizer {
         let mut cache: HashMap<RenderGlyphParams, Arc<GlyphBitmap>> = HashMap::new();
         let mut cache_bytes = 0;
         let block_height = shaped.block_height;
-        let mut line_y = r.bounds[1] + r.vertical_align.offset(r.bounds[3], block_height);
-        for line in lines {
+        let block_y = r.bounds[1] + r.vertical_align.offset(r.bounds[3], block_height);
+        for (line, offset) in lines.into_iter().zip(line_offsets) {
+            let line_y = block_y + offset;
             let layout = &line.unwrapped_layout;
             let baseline =
                 (r.text.line_height - f32::from(layout.ascent) - f32::from(layout.descent)) / 2.
@@ -317,7 +328,6 @@ impl GpuiTextRasterizer {
             }
             let rows = line.wrap_boundaries.len() + 1;
             out.rows += rows;
-            line_y += r.text.line_height * rows as f32;
         }
         for rect in decorations.rects {
             self.check(epoch, cancelled)?;

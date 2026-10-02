@@ -33,3 +33,12 @@ pub(crate) fn text_decoration(
         Scene::UnderlineStrikethrough => Paint::UnderlineStrikethrough,
     }
 }
+
+pub(crate) fn text_case(value: gpui_flow_scene::display::TextCase) -> gpui_flow_text::TextCase {
+    use gpui_flow_scene::display::TextCase as Scene;
+    match value {
+        Scene::None => gpui_flow_text::TextCase::None,
+        Scene::Upper => gpui_flow_text::TextCase::Upper,
+        Scene::Lower => gpui_flow_text::TextCase::Lower,
+    }
+}

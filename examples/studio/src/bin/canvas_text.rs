@@ -130,6 +130,8 @@ impl Lab {
                 font_size: t.font_size,
                 font_weight: t.font_weight,
                 italic: t.italic,
+                text_case: Default::default(),
+                para_spacing: 0.,
                 line_height: t.font_size * t.line_height,
                 wrap_width: Some(240.),
             };

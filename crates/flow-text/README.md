@@ -22,6 +22,8 @@ let request = TextMeasureRequest {
     font_size: 16.0,
     font_weight: 400,
     italic: false,
+    text_case: Default::default(),
+    para_spacing: 0.,
     line_height: 20.0,
     wrap_width: Some(200.0),
 };
@@ -36,7 +38,7 @@ matching font and wrapping policy, `gpui_backend::shape_text` returns GPUI's
 
 All sizes are logical model units. Empty text has one line; a final newline
 preserves an additional empty line. Family, weight, italic face, font size, absolute line
-height and optional wrap width determine the result. Platform fallback, CJK,
+height, text case, paragraph spacing and optional wrap width determine the result. Platform fallback, CJK,
 emoji and shaping remain GPUI's responsibility. Metrics use line boxes, not
 ink bounds. Errors return without replacing document geometry.
 
@@ -87,3 +89,17 @@ The SceneView producer now supports [bounded affine Text](../../docs/text-affine
 by choosing maximum-scale local raster coordinates and reusing the existing
 image compositor. TextRasterRequest values must share one raster coordinate
 space; RasterizedText.origin is expressed in that space after device scaling.
+
+
+## Presentation case and paragraph gaps
+
+`TextMeasureRequest` now includes `text_case: TextCase::None` and
+`para_spacing: 0.`. `Upper`/`Lower` transform Unicode scalars before shaping while
+preserving canonical `content`; Title and SmallCaps are not guessed. Conversion
+source and expanded output are bounded to 64KiB UTF-8. A custom `TextMeasurer`
+should use `request.text_case.presentation(&request.content)` for display content
+and `request.block_height(visual_rows)` for line-box height including hard-newline
+gaps. Soft wraps never gain paragraph spacing. See the
+[contract and regression entry points](../../docs/text-case-paragraph-spacing.md).
+For painting, use `gpui_overflow::shape_text_in_box` and its `line_offsets` in both
+native and CPU paths; raw `shape_text` returns GPUI lines without positioning them.

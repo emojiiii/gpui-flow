@@ -14,6 +14,8 @@ fn request(decoration: D) -> TextRasterRequest {
             font_size: 20.,
             font_weight: 400,
             italic: false,
+            text_case: Default::default(),
+            para_spacing: 0.,
             line_height: 28.,
             wrap_width: None,
         },

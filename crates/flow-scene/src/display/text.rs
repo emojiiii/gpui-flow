@@ -32,6 +32,21 @@ pub enum TextDecoration {
     Strikethrough,
     UnderlineStrikethrough,
 }
+/// Verified textCase subset. Title and font small-caps are not approximated.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextCase {
+    #[default]
+    None,
+    Upper,
+    Lower,
+}
+fn unchanged_case(value: &TextCase) -> bool {
+    *value == TextCase::None
+}
+fn no_spacing(value: &f32) -> bool {
+    *value == 0.
+}
 fn undecorated(value: &TextDecoration) -> bool {
     *value == TextDecoration::None
 }
@@ -60,6 +75,12 @@ pub struct Text {
     #[serde(default, skip_serializing_if = "upright")]
     pub italic: bool,
     pub line_height: f32,
+    /// Presentation-only Unicode case conversion; content stays canonical.
+    #[serde(default, skip_serializing_if = "unchanged_case")]
+    pub text_case: TextCase,
+    /// Additional local logical space between hard-newline paragraphs only.
+    #[serde(default, skip_serializing_if = "no_spacing")]
+    pub para_spacing: f32,
     pub align: TextAlign,
     pub wrap: bool,
     /// Top, right, bottom, left padding in local logical units.
@@ -82,6 +103,8 @@ impl Text {
             font_weight: default_font_weight(),
             italic: false,
             line_height: 1.2,
+            text_case: TextCase::None,
+            para_spacing: 0.,
             align: TextAlign::Start,
             wrap: true,
             padding: [0.; 4],
@@ -103,10 +126,34 @@ impl Text {
         )
     }
     pub fn validate(&self) -> Result<(), String> {
-        if (self.overflow == TextOverflow::Ellipsis || self.decoration != TextDecoration::None)
+        if (self.overflow == TextOverflow::Ellipsis
+            || self.decoration != TextDecoration::None
+            || self.text_case != TextCase::None
+            || self.para_spacing != 0.)
             && self.content.len() > 65_536
         {
-            return Err("ellipsis/decorated text allows at most 64KiB UTF-8 content".into());
+            return Err("styled text allows at most 64KiB UTF-8 content".into());
+        }
+        let converted_bytes: usize = match self.text_case {
+            TextCase::None => 0,
+            TextCase::Upper => self
+                .content
+                .chars()
+                .flat_map(char::to_uppercase)
+                .map(char::len_utf8)
+                .sum(),
+            TextCase::Lower => self
+                .content
+                .chars()
+                .flat_map(char::to_lowercase)
+                .map(char::len_utf8)
+                .sum(),
+        };
+        if converted_bytes > 65_536 {
+            return Err("case conversion output exceeds 64KiB UTF-8".into());
+        }
+        if !self.para_spacing.is_finite() || !(0. ..=1_000_000.).contains(&self.para_spacing) {
+            return Err("paragraph spacing must be finite and within 0..=1000000".into());
         }
         if !self.size.is_positive()
             || !self.font_size.is_finite()

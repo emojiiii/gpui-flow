@@ -28,6 +28,8 @@ impl TextPaintPlan {
                 font_size: text.font_size * m.d,
                 font_weight: text.font_weight,
                 italic: text.italic,
+                text_case: crate::text_measure::text_case(text.text_case),
+                para_spacing: text.para_spacing * m.d,
                 line_height: text.font_size * text.line_height * m.d,
                 wrap_width: text.wrap.then_some(content.size.width * m.a),
             },
@@ -146,13 +148,14 @@ pub(super) fn text_element(text: &Text, object: &RenderObject) -> AnyElement {
                 let block_height = shaped.block_height;
                 let mut origin = bounds.origin;
                 origin.y += px(vertical_align.offset(bounds.size.height.into(), block_height));
-                for line in shaped.lines {
+                let block_origin = origin;
+                for (line, offset) in shaped.lines.into_iter().zip(shaped.line_offsets) {
+                    origin.y = block_origin.y + px(offset);
                     if let Err(error) =
                         line.paint(origin, line_height, align, Some(bounds), window, cx)
                     {
                         eprintln!("gpui-flow text painting: {error}");
                     }
-                    origin.y += line.size(line_height).height;
                 }
                 for r in decorations {
                     window.paint_quad(fill(
@@ -181,6 +184,8 @@ mod tests {
         text.font_size = 20.;
         text.line_height = 1.4;
         text.font_weight = 700;
+        text.text_case = gpui_flow_scene::display::TextCase::Upper;
+        text.para_spacing = 11.;
         for (model_align, native_align) in [
             (SceneTextAlign::Start, TextAlign::Left),
             (SceneTextAlign::Center, TextAlign::Center),
@@ -196,6 +201,8 @@ mod tests {
                 assert_eq!(p.align, native_align);
                 assert_eq!(p.request.wrap_width, Some(90. * zoom));
                 assert_eq!(p.request.line_height, 28. * zoom);
+                assert_eq!(p.request.para_spacing, 11. * zoom);
+                assert_eq!(p.request.text_case, gpui_flow_text::TextCase::Upper);
                 assert_eq!(p.bounds.origin, point(px(13.), px(17.)));
                 assert_eq!(p.bounds.size, size(px(90. * zoom), px(40. * zoom)));
                 assert_eq!(text, canonical);

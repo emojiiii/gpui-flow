@@ -3,13 +3,15 @@
 This is a bounded plain-text slice of Leafer's text layout contract. It uses the
 same native GPUI shaping function for measurement and scene painting. It does
 not estimate width from character counts and does not provide rich-text editing,
-IME, baselines, letter/paragraph spacing, ellipsis, percentage sizing, or complete
-Leafer Text compatibility.
+IME, baseline controls, letter spacing, percentage sizing, or complete Leafer
+Text compatibility. Later bounded [ellipsis](text-overflow.md) and
+[case/paragraph spacing](text-case-paragraph-spacing.md) share the same backend.
 
 ## Inputs and dimension ownership
 
 `Text` stores family, font size, weight (1..=1000, default 400 for old JSON),
-relative line height, alignment, wrap policy and a positive explicit size.
+relative line height, presentation case, paragraph spacing, alignment, wrap policy
+and a positive explicit size.
 `FlowLayout.texts` optionally maps live Text IDs to:
 
 - `TextSizing::Natural`: measure both axes without wrapping; requires `wrap=false`
@@ -23,7 +25,9 @@ and after parent allocation, then existing bounded measure/arrange passes settle
 text and content-sized ancestors. Conflicting ownership, invalid metrics and
 non-convergence fail on a private candidate.
 
-Each logical line box is `font_size * line_height`. Empty text retains one line;
+Each logical line box is `font_size * line_height`. Additional `para_spacing` is
+inserted only between hard-newline paragraphs, never soft-wrap rows.
+Empty text retains one line;
 a final newline retains another empty line. Native empty-text width is zero;
 Natural scene geometry uses a minimum width of 1 to preserve the scene's positive
 bounds contract. AutoHeight retains its supplied width even for empty text.
@@ -59,7 +63,10 @@ The model/layout crate has no GPUI dependency. `TextMeasurer: Send + Sync` accep
 an owned `TextMeasureRequest` and returns validated `TextMetrics`. Implementations
 must be deterministic for the current font environment; callbacks may run more
 than once. Metrics must use the requested absolute line height and report
-`height = line_height * lines`. They must not commit edits or produce external
+`height = request.block_height(lines)`: absolute line height times visual rows
+plus `para_spacing` times hard-newline count. Shape the presentation string from
+`request.text_case.presentation(&request.content)` without changing canonical
+content. They must not commit edits or produce external
 side effects from `measure`.
 
 The native crate exports `GpuiTextMeasurer`. Bind it to the **same**
@@ -96,7 +103,8 @@ normalized before measuring and revalidated before commit.
 
 `GpuiTextMeasurer` and the scene canvas text painter call the same
 `WindowTextSystem::shape_text` entry point with explicit family/weight, normal
-font style/default features, model wrap width and line height. Painting uses
+or italic font style/default features, model wrap width and line height. Unicode
+case conversion occurs before shaping; paragraph offsets are applied after wrapping. Painting uses
 `WrappedLine::paint`, avoiding inherited host truncation, line-clamp or fallback
 styles. CJK, emoji, ligatures and missing-family/glyph substitution use GPUI's
 platform shaper. A requested missing family may resolve through GPUI's fallback
@@ -117,7 +125,7 @@ Serialize font-resource changes and scene edits on the host editor thread; measu
 Font installation/loading and GPUI's native font-resolution caches remain host
 responsibilities. This API invalidates Flow metrics and reflows; it does not claim
 to repair stale native font-registration state or install missing fonts. Font
-family/content/size/weight/line-height/width edits automatically use different
+family/content/size/weight/italic/case/paragraph-spacing/line-height/width edits automatically use different
 cache keys.
 
 ## Verification and upstream reference

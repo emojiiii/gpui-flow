@@ -109,6 +109,8 @@ impl TextPreparation<'_> {
                         font_size: text.font_size * m.d,
                         font_weight: text.font_weight,
                         italic: text.italic,
+                        text_case: crate::text_measure::text_case(text.text_case),
+                        para_spacing: text.para_spacing * m.d,
                         line_height: text.font_size * text.line_height * m.d,
                         wrap_width: text.wrap.then_some(content.size.width * m.a),
                     },

@@ -14,6 +14,9 @@ pub mod gpui_raster;
 #[cfg(feature = "gpui")]
 pub use gpui_raster::{GpuiTextRasterizer, RasterizedText, TextRasterRequest};
 
+mod text_case;
+pub use text_case::{MAX_TEXT_BYTES, TextCase};
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextMeasureRequest {
     pub content: String,
@@ -24,16 +27,30 @@ pub struct TextMeasureRequest {
     pub italic: bool,
     /// Absolute logical line-box height, not a glyph's ink bounds.
     pub line_height: f32,
+    pub text_case: TextCase,
+    /// Additional absolute logical space between hard-newline paragraphs.
+    pub para_spacing: f32,
     pub wrap_width: Option<f32>,
 }
 impl TextMeasureRequest {
+    /// Same hard-newline paragraph contract as GPUI shape_text, including a
+    /// final empty paragraph. Soft wraps never change the paragraph count.
+    pub fn paragraph_breaks(&self) -> usize {
+        self.content.bytes().filter(|b| *b == b'\n').count()
+    }
+    pub fn block_height(&self, visual_rows: usize) -> f32 {
+        self.line_height * visual_rows as f32 + self.para_spacing * self.paragraph_breaks() as f32
+    }
     pub fn validate(&self) -> Result<(), String> {
         if self.content.len() > 65_536 || self.font_family.len() > 512 {
             return Err(
                 "text measurement allows at most 64KiB UTF-8 content and 512-byte family".into(),
             );
         }
+        self.text_case.presentation(&self.content)?;
         if self.font_family.trim().is_empty()
+            || !self.para_spacing.is_finite()
+            || !(0. ..=1_000_000.).contains(&self.para_spacing)
             || !self.font_size.is_finite()
             || self.font_size <= 0.
             || !(1..=1000).contains(&self.font_weight)

@@ -73,10 +73,14 @@ pub fn layout_decorations(
     rects
         .try_reserve_exact(count)
         .map_err(|_| "text decoration allocation")?;
-    let mut y = r.bounds[1] + r.vertical_align.offset(r.bounds[3], shaped.block_height);
+    let block_y = r.bounds[1] + r.vertical_align.offset(r.bounds[3], shaped.block_height);
     let thickness = (r.font_size / 11. * r.device_scale).round().max(1.) / r.device_scale;
     let snap = |v: f32| (v * r.device_scale).round() / r.device_scale;
-    for line in &shaped.lines {
+    if shaped.lines.len() != shaped.line_offsets.len() {
+        return Err("text line offsets disagree with shaped paragraphs".into());
+    }
+    for (line, offset) in shaped.lines.iter().zip(&shaped.line_offsets) {
+        let mut y = block_y + offset;
         let layout = &line.unwrapped_layout;
         let baseline = (r.line_height - f32::from(layout.ascent) - f32::from(layout.descent)) * 0.5
             + f32::from(layout.ascent);

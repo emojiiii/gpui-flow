@@ -73,6 +73,12 @@ pub(super) fn measure(
             font_size: text.font_size,
             font_weight: text.font_weight,
             italic: text.italic,
+            text_case: match text.text_case {
+                gpui_flow_scene::display::TextCase::None => gpui_flow_text::TextCase::None,
+                gpui_flow_scene::display::TextCase::Upper => gpui_flow_text::TextCase::Upper,
+                gpui_flow_scene::display::TextCase::Lower => gpui_flow_text::TextCase::Lower,
+            },
+            para_spacing: text.para_spacing,
             line_height: text.font_size * text.line_height,
             wrap_width: if *sizing == TextSizing::AutoHeight && text.wrap {
                 Some(text.content_bounds().size.width)
@@ -85,8 +91,9 @@ pub(super) fn measure(
             .map_err(|_| invalid(id, "text measurement backend panicked"))?
             .map_err(|e| invalid(id, e))?;
         metrics.validate().map_err(|e| invalid(id, e))?;
-        let expected_height = request.line_height * metrics.lines as f32;
-        if metrics.line_height != request.line_height
+        let expected_height = request.block_height(metrics.lines);
+        if metrics.lines <= request.paragraph_breaks()
+            || metrics.line_height != request.line_height
             || !expected_height.is_finite()
             || (metrics.height - expected_height).abs() > expected_height.max(1.) * 0.00001
         {
