@@ -164,3 +164,11 @@ source pixels and destinations are logical units. Negative rectangles are reject
 images remain explicit immutable host inputs. Text draw commands and persistent
 context/pattern APIs remain outside this slice. The [task ledger](leafer-task-ledger.md)
 tracks bounded completion separately from partial and unverified capabilities.
+
+
+[Motion-path animation](motion-path-animation.md) now provides an explicit bounded
+single-target clock/seek binding and token-owned editor history. Source/ancestor
+edits cancel conservatively; there is no automatic refollow, path reveal or
+text-on-path. Canvas now also has [same-backend text-box draw and measurement](canvas-text-commands.md);
+this is top-left box layout, not browser baseline overloads. Stroke text, persistent
+current paths and patterns remain open ledger scope.

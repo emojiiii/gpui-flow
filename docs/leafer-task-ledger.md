@@ -1,12 +1,12 @@
 # Leafer 对齐任务总表 v1（审阅版）
 
-固定45个去重能力单元，源码包含版本 `0ab6ffbf8bdbdb837a30f6cbf193e5506cb0124d`。这是具体范围的开发台账，不是全部Leafer API兼容证明，不用任务数计算工时或百分比。旧39条A–E验收契约仅为交叉索引，不与本表相加；此前31/8快速审计不作为本表完成数。
+固定45个去重能力单元，源码包含版本 `003288b3a9b4178890c162a4f1271f3b8dd41f4f`。这是具体范围的开发台账，不是全部Leafer API兼容证明，不用任务数计算工时或百分比。旧39条A–E验收契约仅为交叉索引，不与本表相加；此前31/8快速审计不作为本表完成数。
 
 ## 状态计数
 
-- 有界契约已验证：18
-- 部分实现：15
-- 未开始该能力：8
+- 有界契约已验证：19
+- 部分实现：16
+- 未开始该能力：6
 - 待核实验收：3
 - 开发/验收中：1
 
@@ -56,16 +56,16 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | ELM-03 | 元素 / [Group Box Frame容器裁切](container-corners.md) | 有界契约已验证 | 分离组件/paint phases/四角、嵌套真实clip，bounds/hit/CPU/native一致受能力限制 | 不扩大Custom/特殊effect能力 |
 | ELM-04 | 元素 / [Text固定排版属性](text-affine.md) | 部分实现 | 已有font/wrap/align/padding/ellipsis/italic/decoration/affine；必补letterSpacing、wordSpacing、paraIndent、paraSpacing、textCase、writingMode和autoSizeAlign | 富runs/WYSIWYG不是此次固定ITextStyleInputData属性集，作为额外范围另立项 |
 | ELM-05 | 元素 / [Image真实帧与几何呈现](image-corners.md) | 有界契约已验证 | 静态/动画帧、fit、四角及仿射/复杂clip，真实CPU像素和资源代际 | alpha hit/crop内编辑归ELM-06；解码与URL权限归宿主 |
-| ELM-06 | 元素 / [Image像素命中与内编辑](image-transform-tools.md) | 未开始该能力 | decoded-alpha hit阈值/缩放/当前帧和crop内工具必须一致且可撤销 | OSS未找到Image专属crop inner editor；属于框架明确扩展，不虚称上游已有 |
+| ELM-06 | 元素 / [Image像素命中与内编辑](image-transform-tools.md) | 开发/验收中 | decoded-alpha hit阈值/缩放/当前帧和crop内工具必须一致且可撤销 | OSS未找到Image专属crop inner editor；属于框架明确扩展，不虚称上游已有 |
 | ELM-07 | 元素 / [Canvas拥有像素与生命周期](canvas-component.md) | 有界契约已验证 | 独立配置、运行时surface、DPR/smooth/safe-resize/clear/draw/snapshot、代际释放 | 像素不进文档/Undo；非整视图OwnedCanvas |
 | ELM-08 | 元素 / [Canvas矢量上下文批次](canvas-clips.md) | 有界契约已验证 | Path填充/描边、transform/alpha/save/restore/冻结clip栈；晚失败原子回滚 | 无持久current path/context；图文分别归ELM-09/10 |
 | ELM-09 | 元素 / [Canvas图像批次](canvas-image-commands.md) | 有界契约已验证 | immutable image输入、source crop/destination/DPR、仿射/clip/alpha和单代际原子提交 | 不取URL；负尺寸拒绝；不保证浏览器精确filter边缘 |
-| ELM-10 | 元素 / [Canvas文字与路径/图案状态](canvas-image-commands.md) | 未开始该能力 | 必选fillText、measureText、strokeText；beginPath/moveTo/lineTo/quadraticCurveTo/bezierCurveTo/closePath；createPattern的repeat/no-repeat与transform | 不包含DOM focus控件、CSS字体parser或全部浏览器context状态；新增操作另增范围 |
+| ELM-10 | 元素 / [Canvas文字与路径/图案状态](canvas-text-commands.md) | 部分实现 | 必选fillText、measureText、strokeText；beginPath/moveTo/lineTo/quadraticCurveTo/bezierCurveTo/closePath；createPattern的repeat/no-repeat与transform | 不包含DOM focus控件、CSS字体parser或全部浏览器context状态；新增操作另增范围 |
 | ELM-11 | 元素 / [Canvas与场景导出](canvas-pixels.md) | 部分实现 | Canvas RGBA/PNG已实现；必补固定Scene区域PNG/JPEG/WebP和SVG，含背景/透明度/裁切范围及缺资源拒绝 | 文件选择器/自动下载不是引擎API；字体嵌入或完整外部SVG导入不在本项 |
 | CUS-01 | 自定义元素 / [动态几何命中与宿主呈现](engine.md) | 待核实验收 | custom属性驱动几何/bounds/hit、显式native renderer、实例隔离；拒绝不支持合成 | schema本身归DAT-01；不双计工厂 |
 | CUS-02 | 自定义元素 / [自定义resize和异步资源协议](custom-nodes.md) | 未开始该能力 | 自定义尺寸/编辑策略与测量、异步ready/cancel事件正式接入 | 任意宿主回调能实现不等于框架已提供协议 |
 | ANI-01 | 交互插件 / [有界属性动画时序](animation-timing.md) | 有界契约已验证 | 稀疏关键帧、delay/repeat/direction/speed、seek/pause/conflict/cancel和单Undo | 不是嵌套timeline；motion binding归ANI-02 |
-| ANI-02 | 交互插件 / [持续运动路径动画](motion-path-queries.md) | 开发/验收中 | 按时钟距离/切线绑定位置/旋转，变化失效/冲突/销毁/取消/history一致 | 查询/一次定位已归ELM-02，不能算本项完成 |
+| ANI-02 | 交互插件 / [持续运动路径动画](motion-path-animation.md) | 有界契约已验证 | 按时钟距离/切线绑定位置/旋转，变化失效/冲突/销毁/取消/history一致 | source/祖先变化保守取消，不自动refollow；无路径生长/文字沿路径/自动timer；完成后显式finish_editor封Undo |
 | ANI-03 | 交互插件 / [组合动画时钟与定位控制](animation-timing.md) | 未开始该能力 | 必选AnimateList式并行与串行子动画、offset、父时钟seek/pause/reverse、结束样式及一次Undo | jump/join、physics、无限嵌套和跨所有跳帧回调不属于v1有限集合，新增须显式扩项 |
 
 ## 自动化、原生与版本证据
@@ -108,16 +108,16 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | ELM-03 | 容器16新回归；全套1215及后续Text/Image clip回归通过 | 后续Text/Image真实复杂祖先窗口通过；早期角切片原生仅adapter | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | ELM-04 | 多个字体/排版/CPU/UI聚焦记录通过 | 已实现子集有多次真实对照和Undo；富runs等未验 | `650046049c42377dfa9f98b223f43496b71bd161` |
 | ELM-05 | 16新回归、664受影响通过（1原有忽略） | 08:45–08:49真实静态/动画/旋转/clip/Undo通过 | `cfe28b01e81c8bfba2cdc0e277bdbdb0a0375dc9` |
-| ELM-06 | 当前几何hit和outer工具不覆盖本项 | 未实现/未验收 | 尚无独立完整验收提交 |
+| ELM-06 | alpha-hit独立实现和资源/采样测试进行中，尚未集成验收；crop内工具未开始 | 未实现/未验收 | 尚无独立完整验收提交 |
 | ELM-07 | 24新回归及356受影响通过 | Canvas实际Draw/Clear/resize/Undo窗口通过 | `d365f5a9e533e823e43e09db5154935e01b68c49` |
 | ELM-08 | 11矢量+7clip新回归、360/367受影响记录通过 | 11:41和11:57窗口、DPR/回滚/重绘像素对照通过 | `e4f7d9455f7aaaf38d160951c330ae03249435d1` |
 | ELM-09 | 12新回归；63 composite+18 UI=81聚焦通过，strict Clippy/link通过 | 14:00:18–14:03:12 Linux窗口退出0；DPR1/2、crop/透明源/反射/clip/晚失败/resize/Undo/Clear；三组像素区域一致 | `0ab6ffbf8bdbdb837a30f6cbf193e5506cb0124d` |
-| ELM-10 | 无该项完整实现测试 | 未实现/未验收 | 尚无独立完整验收提交 |
+| ELM-10 | FillTextBox/同源measure已实现：8新回归、119不同受影响检查及严格Clippy通过；stroke/current path/pattern未实现 | 14:37–14:39双DPR真实字形/clip/bridge/measure/resize/Undo/Clear退出0，四组像素一致 | `003288b3a9b4178890c162a4f1271f3b8dd41f4f` |
 | ELM-11 | RGBA/PNG11新回归、338受影响通过 | 10:25 PNG预览及4份解码核验；Scene/SVG未验 | `61ac2522c7194ae2a63240b63afa8cc4808a67a8` |
 | CUS-01 | registry动态几何及renderer adapter已有测试 | primitives自定义点击/撤销完整原生证据待核实 | 尚无独立完整验收提交 |
 | CUS-02 | 无完整协议验收 | 未实现/未验收 | 尚无独立完整验收提交 |
 | ANI-01 | 10月2日workspace日志包含animation/sequences/timing/editor_playback通过；旧文档pending需修正 | 纯显式时钟契约；不宣称新动画窗口验收 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
-| ANI-02 | 独立motion binding实现启动；新代码尚未验收 | 未实现/未验收 | 尚无独立完整验收提交 |
+| ANI-02 | 29新回归；102 animation含doctest和17原placement通过，严格3crate Clippy通过 | 纯显式时钟/引擎与editor契约，未新增原生窗口 | `457bdede25ac8bb06b452bde4038d6c54e6e5dac` |
 | ANI-03 | 无嵌套timeline行为验收 | 未实现/未验收 | 尚无独立完整验收提交 |
 
 ## 上游符号与技术依赖
@@ -177,3 +177,5 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 - 收口开放集合：Canvas文字/路径/图案列举固定操作；Text列举固定属性；导出固定PNG/JPEG/WebP/SVG；明确硬件/平台依赖。新增范围不得静默加入
 
 完整机器可读记录见 [JSON](leafer-task-ledger.json)。下一轮先补待核实的事件/焦点/资源/custom证据，不将不明历史项目当作新代码完成。
+
+- 14:40更新：ANI-02有界持续绑定完成并有headless证据；ELM-10文字盒/测量子集完成但整项仍部分；ELM-06 alpha-hit开发中，不预计通过。当前19已验证、16部分、3待核实、1开发中、6未开始。

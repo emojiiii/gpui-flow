@@ -1,7 +1,7 @@
 # Canvas text-box commands and native measurement
 
 Status: implementation and 8 new regressions pass; 119 distinct affected checks,
-strict Clippy and native linking pass. Real-window acceptance is pending. This is a bounded text-box API, not full browser CanvasText.
+strict Clippy, native linking and real Linux-window acceptance pass. This is a bounded text-box API, not full browser CanvasText.
 
 `CanvasCommand::FillTextBox { text, position, color }` reuses the retained plain
 Text configuration in an imperative pixel batch. Position is the logical top-left
@@ -49,3 +49,38 @@ Flow deliberately exposes an explicit Text box rather than parsing a CSS font
 string or pretending top-left coordinates are browser alphabetic baselines.
 StrokeText, baseline variants, persistent current paths and image patterns remain
 unimplemented; ELM-10 stays partial/in progress until its fixed table scope closes.
+
+
+## Validation
+
+Eight new regressions pass (six synthetic-ink compositor protocol tests and two
+UI adapter tests). The affected commands passed **119 distinct checks**: 69
+composite Canvas tests plus UI filters Canvas=20 and Text=32, with their two new
+CanvasText tests counted once. Zero failures or ignored tests. Strict composite/UI
+all-targets Clippy, example Clippy, formatting and actual native linking pass.
+Synthetic test ink validates protocol/alpha/clip/atomic budgets, not real fonts;
+real-font evidence comes from the window below.
+
+The frozen `canvas_text` executable ran 2026-10-02 14:37:06–14:39:36 UTC, closed
+normally with exit 0 and empty stdout/stderr. Both DPR1 and DPR2 rendered actual
+Latin ligatures/accents and CJK fallback, clipped ellipsis, underline, rotated
+italic text and alpha. Curved and nested even-odd clips affected glyph ink, not
+layout rectangles. Late-command rejection and missing font bridge kept existing
+pixels. Measurement still returned the same native shaping metrics without the
+raster bridge: 240.0 × 110.4 logical units, four lines; the bounded painted box
+correctly showed fewer lines with ellipsis. Safe resize/configuration Undo,
+Clear and redraw retained their documented runtime-pixel semantics.
+
+Four artwork comparisons were pixel-identical to the initial image: late error,
+missing backend, restored unclipped redraw, and Clear+redraw. This is not a
+browser-baseline or cross-platform/font-installation guarantee.
+
+Exact source checkpoint `003288b3a9b4178890c162a4f1271f3b8dd41f4f`, tree
+`c7c272c21301ca63c3ccc51cf90927d3990dac0e`; archive SHA-256
+`2a8f547983d00a8c9ad2b015ce56c8e262af1f1747dfcd15e5ed9526fe432073`;
+binary SHA-256
+`78d7c2397f69a93c5ae24a5797e349caff92d7e3156a0f5e68f1f0c2698fdb38`.
+The already-linked executable was frozen before parallel Image-hit source work
+began. That later source is not claimed as covered by this receipt. Screenshots
+and the normal close receipt are retained with validation artifacts. Reproduce:
+`cargo run --locked -p flow-studio --bin canvas_text`.
