@@ -1,11 +1,292 @@
 use crate::layout::intersection;
-use crate::subtree::paint_ids;
-use crate::{EngineError, LayoutEntry, SceneEngine};
+use crate::subtree::{paint_ids, tree_ids};
+use crate::{ChangeSet, ElementHandle, EngineError, InstanceState, LayoutEntry, SceneEngine};
 use gpui_flow_scene::{
     Affine, Bounds, ClipRegion, DisplayId, HitPolicy, HitTestOptions, HitTestResult, PaintItem,
-    Point, SceneError, Shape,
+    Point, Scene, SceneError, Shape,
 };
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+
+/// Stable depth-first pre-order. Paint order sorts siblings by z-index, retaining
+/// insertion order for ties; it does not filter hidden, locked, or clipped nodes.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum QueryOrder {
+    #[default]
+    Tree,
+    Paint,
+}
+
+/// Exact, case-sensitive AND conditions, not a selector language. A subtree is
+/// an attached instance, includes its root by default, and rejects stale handles.
+/// Tags are the serialized Shape::tag() names (including "custom"). Classes are
+/// individual members of DisplayObject::classes. No condition means all nodes.
+#[derive(Debug, Clone, Copy)]
+pub struct ElementQuery<'a> {
+    pub id: Option<&'a DisplayId>,
+    pub name: Option<&'a str>,
+    pub tag: Option<&'a str>,
+    pub class: Option<&'a str>,
+    pub subtree: Option<ElementHandle>,
+    pub include_root: bool,
+    pub order: QueryOrder,
+}
+impl Default for ElementQuery<'_> {
+    fn default() -> Self {
+        Self {
+            id: None,
+            name: None,
+            tag: None,
+            class: None,
+            subtree: None,
+            include_root: true,
+            order: QueryOrder::Tree,
+        }
+    }
+}
+
+/// Deterministic work counters, not elapsed time or a complexity guarantee for
+/// whole commits. Metadata is reconciled only for the commit's dirty IDs.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct QueryIndexStats {
+    pub metadata_examined: usize,
+    pub metadata_updated: usize,
+    pub order_nodes_rebuilt: usize,
+}
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct QueryStats {
+    /// Nodes tested from the smallest available bucket/subtree, before filtering.
+    pub candidates_tested: usize,
+    pub matches: usize,
+}
+#[derive(Debug, Clone, Copy)]
+struct Position {
+    tree: usize,
+    end: usize,
+    paint: usize,
+}
+/// IDs, never handles: identity is resolved from the engine after every query.
+/// Detached instances are deliberately absent, even though their IDs are reserved.
+#[derive(Default)]
+pub(crate) struct QueryIndex {
+    names: BTreeMap<String, BTreeSet<DisplayId>>,
+    tags: BTreeMap<String, BTreeSet<DisplayId>>,
+    classes: BTreeMap<String, BTreeSet<DisplayId>>,
+    tree: Vec<DisplayId>,
+    pub(crate) paint: Vec<DisplayId>,
+    // Lookup only: output order is always determined by the explicit ranks.
+    positions: HashMap<DisplayId, Position>,
+    pub(crate) stats: QueryIndexStats,
+}
+impl QueryIndex {
+    pub(crate) fn new(scene: &Scene) -> Self {
+        let mut index = Self::default();
+        for node in scene.nodes() {
+            index.insert(&node.object);
+        }
+        index.rebuild_order(scene);
+        index.stats.metadata_examined = scene.len();
+        index.stats.metadata_updated = scene.len();
+        index
+    }
+    fn insert(&mut self, object: &gpui_flow_scene::DisplayObject) {
+        self.names
+            .entry(object.name.clone())
+            .or_default()
+            .insert(object.id.clone());
+        self.tags
+            .entry(object.shape.tag().into())
+            .or_default()
+            .insert(object.id.clone());
+        for class in &object.classes {
+            self.classes
+                .entry(class.clone())
+                .or_default()
+                .insert(object.id.clone());
+        }
+    }
+    fn remove(&mut self, object: &gpui_flow_scene::DisplayObject) {
+        fn remove(map: &mut BTreeMap<String, BTreeSet<DisplayId>>, key: &str, id: &DisplayId) {
+            if let Some(ids) = map.get_mut(key) {
+                ids.remove(id);
+                if ids.is_empty() {
+                    map.remove(key);
+                }
+            }
+        }
+        remove(&mut self.names, &object.name, &object.id);
+        remove(&mut self.tags, object.shape.tag(), &object.id);
+        for class in &object.classes {
+            remove(&mut self.classes, class, &object.id);
+        }
+    }
+    fn rebuild_order(&mut self, scene: &Scene) {
+        self.tree = tree_ids(scene);
+        self.paint = paint_ids(scene);
+        self.positions = self
+            .tree
+            .iter()
+            .enumerate()
+            .map(|(rank, id)| {
+                (
+                    id.clone(),
+                    Position {
+                        tree: rank,
+                        end: rank + 1,
+                        paint: 0,
+                    },
+                )
+            })
+            .collect();
+        for id in self.tree.iter().rev() {
+            let end = self.positions[id].end;
+            if let Some(parent) = &scene.get(id).expect("attached").parent {
+                let position = self.positions.get_mut(parent).expect("parent");
+                position.end = position.end.max(end);
+            }
+        }
+        for (rank, id) in self.paint.iter().enumerate() {
+            self.positions.get_mut(id).expect("attached").paint = rank;
+        }
+        self.stats.order_nodes_rebuilt = scene.len();
+    }
+    /// Called only after the complete candidate (including layout) is validated.
+    pub(crate) fn reconcile(&mut self, old: &Scene, new: &Scene, change: &ChangeSet) {
+        self.stats = QueryIndexStats::default();
+        for id in change.dirty.keys() {
+            self.stats.metadata_examined += 1;
+            let before = old.get(id).map(|n| &n.object);
+            let after = new.get(id).map(|n| &n.object);
+            let unchanged = match (before, after) {
+                (Some(a), Some(b)) => {
+                    a.name == b.name && a.classes == b.classes && a.shape.tag() == b.shape.tag()
+                }
+                (None, None) => true,
+                _ => false,
+            };
+            if !unchanged {
+                if let Some(object) = before {
+                    self.remove(object);
+                }
+                if let Some(object) = after {
+                    self.insert(object);
+                }
+                self.stats.metadata_updated += 1;
+            }
+        }
+        if !change.structure.is_empty() || change.properties.iter().any(|p| p.property == "z_index")
+        {
+            self.rebuild_order(new);
+        }
+    }
+}
+
+enum Candidates<'a> {
+    Slice(&'a [DisplayId]),
+    Set(&'a BTreeSet<DisplayId>),
+}
+impl<'a> Candidates<'a> {
+    fn len(&self) -> usize {
+        match self {
+            Self::Slice(ids) => ids.len(),
+            Self::Set(ids) => ids.len(),
+        }
+    }
+    fn iter(&self) -> Box<dyn Iterator<Item = &'a DisplayId> + '_> {
+        match self {
+            Self::Slice(ids) => Box::new(ids.iter()),
+            Self::Set(ids) => Box::new(ids.iter()),
+        }
+    }
+}
+
 impl SceneEngine {
+    pub fn query_index_stats(&self) -> QueryIndexStats {
+        self.queries.stats
+    }
+    /// Query only attached nodes and resolve their current generational identity.
+    pub fn query(&self, query: ElementQuery<'_>) -> Result<Vec<ElementHandle>, EngineError> {
+        self.query_with_stats(query).map(|(handles, _)| handles)
+    }
+    pub fn query_with_stats(
+        &self,
+        query: ElementQuery<'_>,
+    ) -> Result<(Vec<ElementHandle>, QueryStats), EngineError> {
+        let index = &self.queries;
+        // Validate scope even when another condition has an empty bucket.
+        let scope = query
+            .subtree
+            .map(|handle| {
+                let info = self.instance(handle)?;
+                match info.state {
+                    InstanceState::Destroyed => return Err(EngineError::InvalidHandle),
+                    InstanceState::Detached => return Err(EngineError::DetachedHandle),
+                    InstanceState::Attached => {}
+                }
+                let position = index.positions.get(&info.id).expect("attached indexed");
+                Ok((
+                    position.tree + usize::from(!query.include_root),
+                    position.end,
+                ))
+            })
+            .transpose()?;
+        let ordered = match query.order {
+            QueryOrder::Tree => &index.tree,
+            QueryOrder::Paint => &index.paint,
+        };
+        let mut candidates = Candidates::Slice(
+            scope.map_or(ordered.as_slice(), |(start, end)| &index.tree[start..end]),
+        );
+        for (key, map) in [
+            (query.name, &index.names),
+            (query.tag, &index.tags),
+            (query.class, &index.classes),
+        ] {
+            if let Some(key) = key {
+                let Some(bucket) = map.get(key) else {
+                    return Ok((vec![], QueryStats::default()));
+                };
+                if bucket.len() < candidates.len() {
+                    candidates = Candidates::Set(bucket);
+                }
+            }
+        }
+        if let Some(id) = query.id {
+            let Some((id, _)) = index.positions.get_key_value(id) else {
+                return Ok((vec![], QueryStats::default()));
+            };
+            candidates = Candidates::Slice(std::slice::from_ref(id));
+        }
+        let mut stats = QueryStats::default();
+        let mut matches = vec![];
+        for id in candidates.iter() {
+            stats.candidates_tested += 1;
+            let position = index.positions[id];
+            if scope.is_some_and(|(start, end)| position.tree < start || position.tree >= end) {
+                continue;
+            }
+            let object = &self.scene().get(id).expect("attached indexed").object;
+            if query.name.is_some_and(|name| object.name != name)
+                || query.tag.is_some_and(|tag| object.shape.tag() != tag)
+                || query
+                    .class
+                    .is_some_and(|class| !object.classes.contains(class))
+            {
+                continue;
+            }
+            matches.push(id);
+        }
+        matches.sort_by_key(|id| match query.order {
+            QueryOrder::Tree => index.positions[*id].tree,
+            QueryOrder::Paint => index.positions[*id].paint,
+        });
+        stats.matches = matches.len();
+        let handles = matches
+            .into_iter()
+            .map(|id| self.handle(id).expect("attached identity"))
+            .collect();
+        Ok((handles, stats))
+    }
+
     pub fn world_transform(&self, id: &DisplayId) -> Result<Affine, EngineError> {
         Ok(self.entry(id)?.world_transform)
     }
@@ -38,9 +319,9 @@ impl SceneEngine {
     /// is repeated per frame. Flattening/tessellation remains a backend concern.
     pub fn paint_list(&self) -> Result<Vec<PaintItem<'_>>, EngineError> {
         let mut result = vec![];
-        for id in paint_ids(self.scene()) {
-            let object = &self.scene().get(&id).expect("node").object;
-            let e = self.entry(&id)?;
+        for id in &self.queries.paint {
+            let object = &self.scene().get(id).expect("node").object;
+            let e = self.entry(id)?;
             if !e.visible || e.opacity <= 0. {
                 continue;
             }
@@ -89,9 +370,9 @@ impl SceneEngine {
             );
         }
         let mut hits = vec![];
-        for id in paint_ids(self.scene()).into_iter().rev() {
-            let object = &self.scene().get(&id).expect("node").object;
-            let e = self.entry(&id)?;
+        for id in self.queries.paint.iter().rev() {
+            let object = &self.scene().get(id).expect("node").object;
+            let e = self.entry(id)?;
             if !e.hit_enabled
                 || (!options.include_locked && e.locked)
                 || (!options.include_invisible && (!e.visible || e.opacity <= 0.))
@@ -148,7 +429,7 @@ impl SceneEngine {
                     id: id.clone(),
                     world_point: world,
                     local_point: local,
-                    path: self.scene().ancestor_path(&id)?,
+                    path: self.scene().ancestor_path(id)?,
                 });
             }
         }

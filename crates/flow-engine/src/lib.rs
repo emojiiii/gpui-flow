@@ -20,6 +20,7 @@ pub use engine::*;
 pub use instance::*;
 pub use layout::*;
 pub use motion::PathPlacement;
+pub use query::{ElementQuery, QueryIndexStats, QueryOrder, QueryStats};
 pub use registry::*;
 pub use resource::*;
 

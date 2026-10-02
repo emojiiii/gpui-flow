@@ -43,6 +43,7 @@ pub struct SceneEngine {
     revision: u64,
     document_epoch: u64,
     layout: LayoutSnapshot,
+    pub(crate) queries: crate::query::QueryIndex,
     layout_provider: Option<crate::derive::InstalledLayout>,
     pub(crate) deriving_layout: std::cell::Cell<bool>,
     instances: Vec<Instance>,
@@ -76,6 +77,7 @@ impl SceneEngine {
             .map(|n| (n.object.id.clone(), DirtyFlags::ALL))
             .collect();
         let (layout, _) = update_layout(&scene, &LayoutSnapshot::default(), &dirty, 0)?;
+        let queries = crate::query::QueryIndex::new(&scene);
         let mut engine = Self {
             id,
             scene,
@@ -83,6 +85,7 @@ impl SceneEngine {
             revision: 0,
             document_epoch: 0,
             layout,
+            queries,
             instances: vec![],
             free: vec![],
             ids: BTreeMap::new(),
@@ -596,6 +599,7 @@ impl SceneEngine {
         self.detached.remove(&subtree.token);
         self.revision = revision;
         self.layout.revision = revision;
+        self.queries.stats = QueryIndexStats::default();
         for event in &change.lifecycle {
             self.instances[event.handle.slot].state = InstanceState::Destroyed;
             self.ids.remove(&event.id);
@@ -863,6 +867,7 @@ impl SceneEngine {
             }
             CommitMode::Normal | CommitMode::Reset => {}
         }
+        self.queries.reconcile(&self.scene, &next, &change);
         self.scene = next;
         self.document_epoch = document_epoch;
         self.layout = layout;
