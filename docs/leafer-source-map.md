@@ -44,6 +44,7 @@ Status: historical source research plus a separately labelled current source map
 - Canvas裁切增量：[逐次绘制的Path裁切栈](canvas-clips.md)冻结当前变换，支持NonZero/EvenOdd、交集、空clip与save/restore；复用已有alpha-mask并在每次source-over前应用覆盖率，显式核算复制几何及mask预算。新增7项回归，367项受影响测试通过；真实双DPR模式/无效命令/resize/Undo/重绘窗口退出0，三组画面区域逐像素一致。非持久context，未扩展retained场景clip schema
 - Text变换增量：[局部字形像素的仿射绘制](text-affine.md)复用Affine最大奇异值、同App字体与现有图像compositor，支持旋转/反射/非均匀/剪切并保留uniform原路径；精确local mask、祖先裁切、字形预算/陈旧任务/Undo贯通。新增9项回归，376项受影响测试通过；真实Unicode/装饰/overflow/透明度/bridge恢复/十一Undo窗口退出0，恢复画面逐像素一致。外部编辑手柄、富文本及effect自身变换限制保持
 - Text交互增量：[字体能力控制的外部变换手柄](text-transform-tools.md)默认保持uniform约束，匹配字体bridge启用纯solid无effect Text非均匀/旋转及共享roots；几何/插件/命令/派生布局使用同一runtime能力，撤销能力先取消capture。新增9项回归，401项受影响检查通过；真实单选/仿射父级/混合与roots/Shift/UndoRedo/只读/viewport窗口及聚焦输入关闭复验均退出0。仍为transform-only，不改Text盒子或字体大小
+- Text盒子交互增量：[固定盒子尺寸与reflow手柄](text-box-resize.md)作为显式Box模式复用已有resize/capture/事务；保持字体、padding和仿射线性项，支持真实换行/ellipsis、固定对边、Shift比例和一次Undo，派生布局覆盖目标时原子拒绝。新增12项回归，301项受影响检查通过；真实Linux宽高/仿射父级/模式切换/只读/UndoRedo窗口退出0，Redo画面逐像素一致。默认transform不变，字体大小拖动和响应auto-size所有权覆盖仍缺
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
 ## 九类能力当前边界（含待验证源码增量）

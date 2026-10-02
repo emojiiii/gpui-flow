@@ -42,8 +42,9 @@ external edits, using the existing stale-capture policy.
 The pinned Leafer [resize module](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/resize/src/resize.ts)
 distinguishes transform-only `editSize: scale`, intrinsic resizing and Text
 font-size resizing. This slice is Flow's transform-only mode. It does not add
-intrinsic Text width/font-size rewriting, reflow drag tools, custom pivots, skew
-handles or WYSIWYG text editing. Existing content-panel sessions still suspend
+intrinsic Text width/font-size rewriting, custom pivots, skew handles or WYSIWYG
+text editing. The later opt-in [fixed Text-box mode](text-box-resize.md) adds
+width/height reflow while retaining this default transform mode. Existing content-panel sessions still suspend
 outer tools. [Affine glyph rendering](text-affine.md) is the separate prerequisite.
 
 ## Validation

@@ -1,8 +1,7 @@
 # Intrinsic fixed Text-box resize
 
-Status: recoverable source checkpoint. Four geometry and eight interaction
-regressions plus strict affected/example Clippy pass; broader targeted checks and
-native acceptance are pending.
+Status: implemented and validated in focused automated checks and a real Linux
+window. This is an explicit fixed-box tool, not full Leafer editor parity.
 
 `SceneResizePlugin::default().with_text_resize_mode(TextResizeMode::Box)` opts
 named, single-selection, supported plain Text into box resizing. Install it using
@@ -45,3 +44,38 @@ distinguishes intrinsic size, transform-only and Text font-size changes. This
 slice adds the explicit fixed Text-box variant alongside Flow's old transform
 mode. It does not implement font-size dragging, auto-size alignment rules,
 general per-component intrinsic resize, rich text or WYSIWYG editing.
+
+
+## Validation
+
+Twelve new regressions cover all eight handles through affine poses, opposite
+anchors, Shift ratio, exact no-op, padding floors, finite/size budgets, typed
+command safety, stale external edits, plugin replacement, one-step Undo/Redo,
+native-only/default-mode compatibility and responsive-layout ownership rollback.
+Affected checks: **301 passed, zero failed or ignored** (12 editor, 259 interaction,
+30 filtered UI Text checks). Strict all-targets Clippy for editor/interaction/UI,
+example Clippy and actual native linking passed. These counts are not additive
+with earlier slices, and the full UI suite was not rerun for this interaction change.
+
+The `text_box_resize --trace` window ran 2026-10-02 13:30:28–13:34:30 UTC and
+closed normally with exit 0. Real pointer checks covered width shrink and reflow
+with end ellipsis, increased height revealing more lines, left-edge opposite
+anchoring, Shift-preserved box ratio, one-step Undo/Redo, affine-parent width
+resizing, default transform-mode compatibility and native-only Text with the font
+bridge withdrawn. The font stayed 23 and intrinsic mode preserved the affine
+linear terms. With the bridge withdrawn, the separate affine fixture explicitly
+reported its missing backend, as designed. Read-only removed resize handles;
+a background drag panned the viewport but left the Text model unchanged.
+The Undo/Redo artwork region was pixel-identical. The trace had only expected
+transform/box metadata (1,288 lines), with no program stdout. No IME, rich-text,
+held-pointer capability revocation or cross-platform native coverage is claimed.
+
+Production source was unchanged during acceptance. Exact source commit
+`38d1aea4cdb80bf7e59aec321a0102c1365a3720`, tree
+`7e62d030642790113ce8906c3825e4581adf6dad`; archive SHA-256
+`fc2cc81361f47acda015a001ccf3cc2048339ccc83701342a4ccd9f15a442a40`;
+binary SHA-256
+`13d17e58ec5a5ec2411805b2a2264fa1544bdf36efd05a4e29ac2391f1bfe18b`.
+Screenshots, command logs, trace and normal close receipt are retained with the
+validation artifacts. Reproduce with
+`cargo run --locked -p flow-studio --bin text_box_resize`.
