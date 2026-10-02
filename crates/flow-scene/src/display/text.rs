@@ -23,6 +23,18 @@ pub enum TextOverflow {
     Clip,
     Ellipsis,
 }
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextDecoration {
+    #[default]
+    None,
+    Underline,
+    Strikethrough,
+    UnderlineStrikethrough,
+}
+fn undecorated(value: &TextDecoration) -> bool {
+    *value == TextDecoration::None
+}
 fn upright(value: &bool) -> bool {
     !*value
 }
@@ -57,6 +69,8 @@ pub struct Text {
     pub vertical_align: TextVerticalAlign,
     #[serde(default, skip_serializing_if = "is_clip")]
     pub overflow: TextOverflow,
+    #[serde(default, skip_serializing_if = "undecorated")]
+    pub decoration: TextDecoration,
 }
 impl Text {
     pub fn new(content: impl Into<String>, size: Size) -> Self {
@@ -73,6 +87,7 @@ impl Text {
             padding: [0.; 4],
             vertical_align: TextVerticalAlign::Top,
             overflow: TextOverflow::Clip,
+            decoration: TextDecoration::None,
         }
     }
     /// The shared wrapping, alignment and glyph clipping box. Call validate at
@@ -88,8 +103,10 @@ impl Text {
         )
     }
     pub fn validate(&self) -> Result<(), String> {
-        if self.overflow == TextOverflow::Ellipsis && self.content.len() > 65_536 {
-            return Err("ellipsis text allows at most 64KiB UTF-8 content".into());
+        if (self.overflow == TextOverflow::Ellipsis || self.decoration != TextDecoration::None)
+            && self.content.len() > 65_536
+        {
+            return Err("ellipsis/decorated text allows at most 64KiB UTF-8 content".into());
         }
         if !self.size.is_positive()
             || !self.font_size.is_finite()

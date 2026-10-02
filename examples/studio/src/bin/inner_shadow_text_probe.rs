@@ -59,6 +59,7 @@ fn main() -> Result<(), String> {
             let bounds = [x, 20., width, 80.];
             let mut request = TextRasterRequest {
                 overflow: gpui_flow_text::TextOverflow::Clip,
+                decoration: gpui_flow_text::TextDecoration::None,
                 vertical_align: gpui_flow_text::VerticalAlign::Top,
                 text: TextMeasureRequest {
                     content: "████".into(),
@@ -167,6 +168,7 @@ fn main() -> Result<(), String> {
     }
     let request = TextRasterRequest {
         overflow: gpui_flow_text::TextOverflow::Clip,
+        decoration: gpui_flow_text::TextDecoration::None,
         vertical_align: gpui_flow_text::VerticalAlign::Top,
         text: TextMeasureRequest {
             content: "too large".into(),

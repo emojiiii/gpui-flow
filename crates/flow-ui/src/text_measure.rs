@@ -20,3 +20,16 @@ pub(crate) fn text_overflow(
         gpui_flow_scene::display::TextOverflow::Ellipsis => gpui_flow_text::TextOverflow::Ellipsis,
     }
 }
+
+pub(crate) fn text_decoration(
+    value: gpui_flow_scene::display::TextDecoration,
+) -> gpui_flow_text::TextDecoration {
+    use gpui_flow_scene::display::TextDecoration as Scene;
+    use gpui_flow_text::TextDecoration as Paint;
+    match value {
+        Scene::None => Paint::None,
+        Scene::Underline => Paint::Underline,
+        Scene::Strikethrough => Paint::Strikethrough,
+        Scene::UnderlineStrikethrough => Paint::UnderlineStrikethrough,
+    }
+}

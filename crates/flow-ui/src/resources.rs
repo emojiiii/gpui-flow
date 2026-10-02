@@ -335,14 +335,48 @@ impl SceneResourceAdapter {
                 Shape::Text(text) => {
                     let request = text_request(&text);
                     let shaped = catch_unwind(AssertUnwindSafe(|| {
-                        gpui_flow_text::gpui_overflow::shape_text_in_box(
+                        if text.decoration != gpui_flow_scene::display::TextDecoration::None {
+                            request.validate()?;
+                        }
+                        let shaped = gpui_flow_text::gpui_overflow::shape_text_in_box(
                             window.text_system(),
                             &request,
                             gpui::Hsla::default(),
                             crate::text_measure::text_overflow(text.overflow),
                             text.content_bounds().size.width,
                             text.content_bounds().size.height,
-                        )
+                        )?;
+                        gpui_flow_text::gpui_decoration::layout_decorations(
+                            &shaped,
+                            &gpui_flow_text::gpui_decoration::DecorationRequest {
+                                decoration: crate::text_measure::text_decoration(text.decoration),
+                                font_size: request.font_size,
+                                line_height: request.line_height,
+                                bounds: [
+                                    0.,
+                                    0.,
+                                    text.content_bounds().size.width,
+                                    text.content_bounds().size.height,
+                                ],
+                                align: match text.align {
+                                    gpui_flow_scene::display::TextAlign::Start => {
+                                        gpui::TextAlign::Left
+                                    }
+                                    gpui_flow_scene::display::TextAlign::Center => {
+                                        gpui::TextAlign::Center
+                                    }
+                                    gpui_flow_scene::display::TextAlign::End => {
+                                        gpui::TextAlign::Right
+                                    }
+                                },
+                                vertical_align: crate::text_measure::vertical_align(
+                                    text.vertical_align,
+                                ),
+                                device_scale: 1.,
+                            },
+                            usize::MAX,
+                        )?;
+                        Ok::<_, String>(shaped)
                     }))
                     .unwrap_or_else(|_| Err("native text shaping panicked".into()));
                     (

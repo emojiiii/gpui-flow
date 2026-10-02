@@ -4,6 +4,8 @@
 #[cfg(feature = "gpui")]
 pub mod gpui_backend;
 #[cfg(feature = "gpui")]
+pub mod gpui_decoration;
+#[cfg(feature = "gpui")]
 pub mod gpui_overflow;
 #[cfg(feature = "gpui")]
 pub use gpui_backend::GpuiTextMeasurer;
@@ -127,4 +129,14 @@ pub enum TextOverflow {
     #[default]
     Clip,
     Ellipsis,
+}
+
+/// Plain text decoration, painted with the glyph fill color.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum TextDecoration {
+    #[default]
+    None,
+    Underline,
+    Strikethrough,
+    UnderlineStrikethrough,
 }

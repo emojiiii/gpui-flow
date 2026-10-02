@@ -53,6 +53,13 @@ impl RenderObject {
             })
         };
         if matches!(self.object.shape, Shape::Canvas(_))
+            || ((self.opacity < 1.
+                || self
+                    .object
+                    .style
+                    .fills()
+                    .any(|p| matches!(p,Paint::Solid{color} if color.a<255)))
+                && matches!(&self.object.shape,Shape::Text(t) if t.decoration != scene::display::TextDecoration::None))
             || matches!(&self.object.shape, Shape::Image(image)
                 if image.is_rounded() && image.fit == scene::display::ImageFit::Contain)
             || self.object.style.blend_mode != scene::BlendMode::PassThrough
@@ -266,3 +273,6 @@ pub use registry::*;
 
 #[cfg(test)]
 mod overflow_tests;
+
+#[cfg(test)]
+mod decoration_tests;

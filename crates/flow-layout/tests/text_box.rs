@@ -138,3 +138,22 @@ fn italic_request_participates_in_reactive_intrinsic_sizing_and_undo() {
     assert!(e.redo());
     assert_eq!(size(e.scene()).width, 118.);
 }
+
+#[test]
+fn decorations_do_not_change_intrinsic_requests_or_sizes() {
+    let (mut plain, l, m) = fixture(TextSizing::Natural);
+    let mut decorated = plain.clone();
+    decorated
+        .update_object(&"t".into(), |o| {
+            if let Shape::Text(t) = &mut o.shape {
+                t.decoration = gpui_flow_scene::display::TextDecoration::UnderlineStrikethrough;
+            }
+        })
+        .unwrap();
+    let measured = l.with_text_measurer(m.clone());
+    measured.apply_to_scene(&mut plain).unwrap();
+    measured.apply_to_scene(&mut decorated).unwrap();
+    assert_eq!(size(&plain), size(&decorated));
+    let r = m.0.lock().unwrap();
+    assert!(r.iter().all(|v| v == &r[0]));
+}

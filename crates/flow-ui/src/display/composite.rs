@@ -2271,6 +2271,7 @@ mod tests {
         let actual = result.remove(0).1.unwrap().unwrap();
         let request = gpui_flow_text::TextRasterRequest {
             overflow: gpui_flow_text::TextOverflow::Clip,
+            decoration: gpui_flow_text::TextDecoration::None,
             vertical_align: gpui_flow_text::VerticalAlign::Top,
             text: gpui_flow_text::TextMeasureRequest {
                 content: "A ffi".into(),

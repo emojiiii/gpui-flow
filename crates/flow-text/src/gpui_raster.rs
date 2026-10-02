@@ -29,6 +29,7 @@ pub struct TextRasterRequest {
     pub align: TextAlign,
     pub vertical_align: crate::VerticalAlign,
     pub overflow: crate::TextOverflow,
+    pub decoration: crate::TextDecoration,
     /// Full alignment/clip box, before viewport clipping: [x, y, width, height].
     pub bounds: [f32; 4],
     /// Screen-logical viewport/host content intersection: [x, y, width, height].
@@ -177,6 +178,21 @@ impl GpuiTextRasterizer {
             r.bounds[2],
             r.bounds[3],
         )?;
+        let decorations = crate::gpui_decoration::layout_decorations(
+            &shaped,
+            &crate::gpui_decoration::DecorationRequest {
+                decoration: r.decoration,
+                font_size: r.text.font_size,
+                line_height: r.text.line_height,
+                bounds: r.bounds,
+                align: r.align,
+                vertical_align: r.vertical_align,
+                device_scale: r.device_scale,
+            },
+            max_bytes.saturating_sub(output_bytes),
+        )?;
+        let base_bytes = output_bytes + decorations.allocated_bytes;
+        out.peak_bytes = base_bytes;
         let lines = shaped.lines;
         let count: usize = lines
             .iter()
@@ -251,15 +267,15 @@ impl GpuiTextRasterizer {
                         let estimate = glyph_capacity(bounds)?;
                         if cache.len() >= MAX_CACHE_ENTRIES
                             || cache_bytes + estimate > MAX_CACHE_BYTES
-                            || output_bytes + cache_bytes + estimate > max_bytes
+                            || base_bytes + cache_bytes + estimate > max_bytes
                         {
                             cache.clear();
                             cache_bytes = 0;
                         }
-                        if output_bytes + estimate > max_bytes {
+                        if base_bytes + estimate > max_bytes {
                             return Err("text working-set limit".into());
                         }
-                        out.peak_bytes = out.peak_bytes.max(output_bytes + cache_bytes + estimate);
+                        out.peak_bytes = out.peak_bytes.max(base_bytes + cache_bytes + estimate);
                         let raster_work = if bounds.is_zero() {
                             0
                         } else {
@@ -302,6 +318,10 @@ impl GpuiTextRasterizer {
             out.rows += rows;
             line_y += r.text.line_height * rows as f32;
         }
+        for rect in decorations.rects {
+            self.check(epoch, cancelled)?;
+            paint_decoration(&mut out, rect, r.device_scale, r.color, remaining_work)?;
+        }
         self.check(epoch, cancelled)?;
         Ok(Some(out))
     }
@@ -330,7 +350,7 @@ fn quantize(origin: [f32; 2], emoji: bool) -> ([i32; 2], [u8; 2]) {
         [(q[0].fract() * 4.) as u8, q[1].fract() as u8],
     )
 }
-fn aligned_x(x: f32, width: f32, line: f32, align: TextAlign) -> f32 {
+pub(crate) fn aligned_x(x: f32, width: f32, line: f32, align: TextAlign) -> f32 {
     match align {
         TextAlign::Left => x,
         TextAlign::Center => (x * 2. + width - line) / 2.,
@@ -452,6 +472,43 @@ fn paint_bitmap(
             let j = ((y as i64 + oy) as usize * out.width as usize + (x as i64 + ox) as usize) * 4;
             for (dst, src) in out.premul_rgba[j..j + 4].iter_mut().zip(src) {
                 *dst = src.saturating_add(mul(*dst, 255 - src_alpha(bitmap, i, color[3])));
+            }
+        }
+    }
+    Ok(())
+}
+fn paint_decoration(
+    out: &mut RasterizedText,
+    rect: [f32; 4],
+    scale: f32,
+    color: [u8; 4],
+    remaining_work: &mut u64,
+) -> Result<(), String> {
+    let x0 = ((rect[0] * scale).round() as i64 - out.origin[0] as i64).clamp(0, out.width as i64)
+        as usize;
+    let y0 = ((rect[1] * scale).round() as i64 - out.origin[1] as i64).clamp(0, out.height as i64)
+        as usize;
+    let x1 = (((rect[0] + rect[2]) * scale).round() as i64 - out.origin[0] as i64)
+        .clamp(0, out.width as i64) as usize;
+    let y1 = (((rect[1] + rect[3]) * scale).round() as i64 - out.origin[1] as i64)
+        .clamp(0, out.height as i64) as usize;
+    let writes = (x1.saturating_sub(x0) * y1.saturating_sub(y0)) as u64;
+    charge_work(remaining_work, writes)?;
+    out.pixel_writes = out.pixel_writes.saturating_add(writes);
+    if out.pixel_writes > MAX_WRITES {
+        return Err("text pixel work limit".into());
+    }
+    let source = [
+        mul(color[0], color[3]),
+        mul(color[1], color[3]),
+        mul(color[2], color[3]),
+        color[3],
+    ];
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let index = (y * out.width as usize + x) * 4;
+            for (dst, src) in out.premul_rgba[index..index + 4].iter_mut().zip(source) {
+                *dst = src.saturating_add(mul(*dst, 255 - color[3]));
             }
         }
     }

@@ -293,11 +293,16 @@ fn boundary(scene: &Scene, id: &DisplayId) -> bool {
     };
     let o = &node.object;
     matches!(o.shape, Shape::Canvas(_))
+        || (matches!(&o.shape,Shape::Text(t) if t.decoration != gpui_flow_scene::display::TextDecoration::None)
+            && o.style
+                .fills()
+                .any(|p| matches!(p,gpui_flow_scene::Paint::Solid{color} if color.a<255)))
         || o.style.has_shadows()
         || o.style.has_inner_shadows()
         || o.style.blend_mode != BlendMode::PassThrough
         || (o.style.opacity < 1.0
             && (o.shape.allows_children()
+                || matches!(&o.shape,Shape::Text(t) if t.decoration != gpui_flow_scene::display::TextDecoration::None)
                 || o.style.fills().count() + o.style.strokes().count() > 1))
         || node.children.iter().any(|id| {
             scene

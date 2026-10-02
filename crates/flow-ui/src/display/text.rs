@@ -12,6 +12,7 @@ struct TextPaintPlan {
     align: TextAlign,
     vertical_align: gpui_flow_text::VerticalAlign,
     overflow: gpui_flow_text::TextOverflow,
+    decoration: gpui_flow_text::TextDecoration,
     bounds: Bounds<Pixels>,
 }
 impl TextPaintPlan {
@@ -20,6 +21,7 @@ impl TextPaintPlan {
         Self {
             vertical_align: crate::text_measure::vertical_align(text.vertical_align),
             overflow: crate::text_measure::text_overflow(text.overflow),
+            decoration: crate::text_measure::text_decoration(text.decoration),
             request: TextMeasureRequest {
                 content: text.content.clone(),
                 font_family: text.font_family.clone(),
@@ -75,6 +77,7 @@ pub(super) fn text_element(text: &Text, object: &RenderObject) -> AnyElement {
         align,
         vertical_align,
         overflow,
+        decoration,
         bounds: model_bounds,
     } = TextPaintPlan::new(text, m);
     let own_bounds = gpui_flow_scene::Bounds::new(
@@ -91,22 +94,44 @@ pub(super) fn text_element(text: &Text, object: &RenderObject) -> AnyElement {
         return div().into_any_element();
     };
     canvas(
-        move |_, window, _| {
+        move |bounds, window, _| {
             catch_unwind(AssertUnwindSafe(|| {
-                gpui_flow_text::gpui_overflow::shape_text_in_box(
+                if decoration != gpui_flow_text::TextDecoration::None {
+                    request.validate()?;
+                }
+                let shaped = gpui_flow_text::gpui_overflow::shape_text_in_box(
                     window.text_system(),
                     &request,
                     color.into(),
                     overflow,
                     model_bounds.size.width.into(),
                     model_bounds.size.height.into(),
-                )
+                )?;
+                let decorations = gpui_flow_text::gpui_decoration::layout_decorations(
+                    &shaped,
+                    &gpui_flow_text::gpui_decoration::DecorationRequest {
+                        decoration,
+                        font_size: request.font_size,
+                        line_height: request.line_height,
+                        bounds: [
+                            bounds.origin.x.into(),
+                            bounds.origin.y.into(),
+                            bounds.size.width.into(),
+                            bounds.size.height.into(),
+                        ],
+                        align,
+                        vertical_align,
+                        device_scale: window.scale_factor(),
+                    },
+                    usize::MAX,
+                )?;
+                Ok::<_, String>((shaped, decorations.rects))
             }))
             .unwrap_or_else(|_| Err("native text shaping panicked".into()))
-            .map(|shaped| (shaped, px(request.line_height)))
+            .map(|(shaped, decorations)| (shaped, px(request.line_height), decorations))
         },
         move |bounds, result, window, cx| {
-            let (shaped, line_height) = match result {
+            let (shaped, line_height, decorations) = match result {
                 Ok(value) => value,
                 Err(error) => {
                     eprintln!("gpui-flow text rendering: {error}");
@@ -128,6 +153,12 @@ pub(super) fn text_element(text: &Text, object: &RenderObject) -> AnyElement {
                         eprintln!("gpui-flow text painting: {error}");
                     }
                     origin.y += line.size(line_height).height;
+                }
+                for r in decorations {
+                    window.paint_quad(fill(
+                        Bounds::new(point(px(r[0]), px(r[1])), size(px(r[2]), px(r[3]))),
+                        color,
+                    ));
                 }
             });
         },

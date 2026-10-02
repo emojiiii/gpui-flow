@@ -288,3 +288,70 @@ fn italic_edit_rejects_late_glyph_domain_completion() {
     c.finish(next, fresh.run());
     assert!(c.frame(&"text".into()).is_some());
 }
+
+#[test]
+fn decorated_text_object_opacity_is_applied_once_after_glyph_line_overlap() {
+    let (_app, bridge) =
+        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let mut s = Scene::new();
+    let mut t = display::Text::new("█", Size::new(60., 40.));
+    t.font_family = "DejaVu Sans".into();
+    t.font_size = 24.;
+    t.line_height = 1.;
+    t.decoration = display::TextDecoration::Strikethrough;
+    s.insert(
+        DisplayObject::new("text", t).with_style(Style {
+            fill: Some(
+                Color {
+                    r: 255,
+                    g: 255,
+                    b: 255,
+                    a: 128,
+                }
+                .into(),
+            ),
+            opacity: 0.5,
+            ..Default::default()
+        }),
+        None,
+        None,
+    )
+    .unwrap();
+    let e = SceneEngine::new(s).unwrap();
+    let f = render(&e, Some(&bridge)).unwrap().unwrap();
+    assert_eq!(
+        f.premul_rgba.as_chunks::<4>().0.iter().map(|p| p[3]).max(),
+        Some(96)
+    );
+}
+#[test]
+fn decoration_edits_invalidate_pending_text_pixels_and_undo_restores() {
+    let (_app, bridge) =
+        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let mut e = gpui_flow_editor::SceneEditor::new(scene()).unwrap();
+    let before = e.scene().clone();
+    let first = request(&e.engine, Some(&bridge));
+    let mut c = CompositeController::default();
+    c.request(first.clone());
+    let work = c.take_work().unwrap();
+    let late = work.run();
+    e.transaction(|s| {
+        s.update_object(&"text".into(), |o| {
+            if let Shape::Text(t) = &mut o.shape {
+                t.decoration = display::TextDecoration::Underline;
+            }
+        })
+    })
+    .unwrap();
+    let next = request(&e.engine, Some(&bridge));
+    assert!(!next.compatible(&first, &"text".into()));
+    c.request(next.clone());
+    assert!(work.cancel.load(Ordering::Relaxed));
+    c.finish(first, late);
+    assert!(c.frame(&"text".into()).is_none());
+    let fresh = c.take_work().unwrap();
+    c.finish(next, fresh.run());
+    assert!(c.frame(&"text".into()).is_some());
+    assert!(e.undo());
+    assert_eq!(e.scene(), &before);
+}

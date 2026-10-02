@@ -7,6 +7,7 @@ use std::sync::{Arc, atomic::AtomicBool};
 fn request(content: &str) -> TextRasterRequest {
     TextRasterRequest {
         overflow: gpui_flow_text::TextOverflow::Clip,
+        decoration: gpui_flow_text::TextDecoration::None,
         vertical_align: gpui_flow_text::VerticalAlign::Top,
         text: TextMeasureRequest {
             content: content.into(),
