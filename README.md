@@ -38,6 +38,8 @@ Group/Box/Frame外阴影使用完整子树alpha，包含子阴影、mask结果�
 
 新增[Ellipse弧线、扇形和圆环组件能力](docs/ellipse-arcs.md)：保留旧JSON与默认整椭圆路径，独立组件生成共享曲线，接入真实bounds/hit、填充/描边、CPU像素、dirty和Undo。新增25项回归，八个headless crate共806项测试及严格Clippy通过；[图例](docs/images/ellipse-arcs.svg)由实际组件几何生成并检查。`Ellipse::flatten`现返回多轮廓，Rust调用迁移见契约；本批未运行原生窗口/GPU。
 
+新增[Rect独立四角半径](docs/rect-corners.md)：typed `CornerRadii`复用Kurbo，保持旧scalar/default JSON，贯通曲线、CPU像素、命中/描边及Undo；工厂schema现也接入Ellipse新增角度/内环字段。20项新增回归，八crate共826项测试和严格Clippy通过；[几何图例](docs/images/rect-corners.svg)已生成检查。Box/Frame仍是统一圆角，未把Rect能力宣称为完整容器裁切支持。
+
 ## 架构层次
 
 1. **display / scene**：Rect、Ellipse、Line、Polygon、Star、Path、Pen、Text、Image、Group、Box、Frame 独立文件；统一 identity、style、affine transform、层级、命中、事件、JSON

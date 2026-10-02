@@ -168,8 +168,8 @@ fn check_source_budget(shape: &Shape) -> Result<(), String> {
         Shape::Text(_) | Shape::Image(_) | Shape::Group(_) => {
             return Err("advanced strokes require vector geometry".into());
         }
-        // These primitives validate their size/count and emit at most 8192
-        // vertices (star) or 4100 (rounded rectangle).
+        // These primitives validate size/count and emit at most 8192
+        // points (star and bounded ellipse/rectangle curve adapters).
         _ => 0,
     };
     if count > MAX_STROKE_POINTS {

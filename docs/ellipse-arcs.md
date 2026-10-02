@@ -108,3 +108,9 @@ Full workspace/native UI/cross-platform checks were not rerun. The generic nativ
 adapter's source consumes the shared contours, but no native window or GPU
 backend was exercised in this slice. No GitHub Actions, deployment or merge was
 launched.
+
+
+Factory follow-up: the [Rect corner slice](rect-corners.md#validation) also added
+the Ellipse angle/ring fields to the built-in registry schema, with explicit
+factory/default/invalid-input tests. Constructors and direct Shape edits already
+used those fields; factory creation now exposes the same validated behavior.

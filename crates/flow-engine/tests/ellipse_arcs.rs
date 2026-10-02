@@ -134,3 +134,45 @@ fn zero_span_clears_geometry_without_destroying_identity() {
             .is_none()
     );
 }
+
+#[test]
+fn registry_accepts_ellipse_geometry_fields_and_keeps_full_oval_defaults() {
+    let mut e = engine();
+    let (full, _) = e.create("ellipse", "full", json!({}), None, None).unwrap();
+    assert_eq!(
+        &e.object(full).unwrap().shape,
+        &Shape::from(Ellipse::new(100., 100.))
+    );
+    let (sector,_)=e.create("ellipse","sector",json!({"size":{"width":40.,"height":40.},"start_angle":0.,"end_angle":90.,"inner_radius":0.5,"closed":true}),None,None).unwrap();
+    assert_eq!(
+        &e.object(sector).unwrap().shape,
+        &Shape::from(Ellipse::circle(20.).sector(0., 90.).ring(0.5))
+    );
+    for name in ["start_angle", "end_angle", "inner_radius", "closed"] {
+        assert!(
+            e.registry()
+                .get("ellipse")
+                .unwrap()
+                .schema()
+                .descriptor(name)
+                .is_some()
+        );
+    }
+}
+#[test]
+fn registry_rejects_invalid_new_ellipse_fields_before_insertion() {
+    let mut e = engine();
+    let before = e.scene().clone();
+    for properties in [
+        json!({"inner_radius":2.}),
+        json!({"start_angle":0.,"end_angle":400.}),
+        json!({"closed":"no"}),
+    ] {
+        assert!(
+            e.create("ellipse", "invalid", properties, None, None)
+                .is_err()
+        );
+    }
+    assert_eq!(e.scene(), &before);
+    assert_eq!(e.revision(), 0);
+}

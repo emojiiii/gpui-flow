@@ -302,8 +302,12 @@ impl ElementDefinition for BuiltinDefinition {
     }
     fn schema(&self) -> PropertySchema {
         let defaults = match self.0 {
-            "rect" => json!({"size":{"width":100.,"height":100.},"corner_radius":0.}),
-            "ellipse" => json!({"size":{"width":100.,"height":100.}}),
+            "rect" => {
+                json!({"size":{"width":100.,"height":100.},"corner_radius":0.,"corner_radii":null})
+            }
+            "ellipse" => {
+                json!({"size":{"width":100.,"height":100.},"start_angle":0.,"end_angle":0.,"inner_radius":0.,"closed":true})
+            }
             "line" => json!({"start":{"x":0.,"y":0.},"end":{"x":100.,"y":0.}}),
             "polygon" => {
                 json!({"points":[{"x":0.,"y":0.},{"x":100.,"y":0.},{"x":50.,"y":100.}],"closed":true})

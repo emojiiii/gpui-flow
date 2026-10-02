@@ -27,7 +27,7 @@ pub use path::{Path, PathCommand};
 pub use path_measure::{PathMeasure, PathSample};
 pub use pen::Pen;
 pub use polygon::Polygon;
-pub use rect::Rect;
+pub use rect::{CornerRadii, Rect};
 use serde::{Deserialize, Serialize};
 pub use star::Star;
 pub use text::{Text, TextAlign};
@@ -128,7 +128,7 @@ impl Shape {
     }
     pub fn contains_geometry(&self, point: Point, rule: crate::FillRule) -> bool {
         match self {
-            Self::Rect(s) => crate::geometry::rounded_contains(s.bounds(), s.corner_radius, point),
+            Self::Rect(s) => s.contains(point),
             Self::Ellipse(s) => s.contains_with_rule(point, rule),
             Self::Box(s) => crate::geometry::rounded_contains(s.bounds(), s.corner_radius, point),
             Self::Frame(s) => crate::geometry::rounded_contains(s.bounds(), s.corner_radius, point),
@@ -186,10 +186,7 @@ impl Shape {
             }
         }
         match self {
-            Self::Rect(s) => {
-                size(s.size)?;
-                radius(s.corner_radius)?;
-            }
+            Self::Rect(s) => s.validate()?,
             Self::Ellipse(s) => s.validate()?,
             Self::Line(s) => {
                 if !s.start.is_finite() || !s.end.is_finite() {
