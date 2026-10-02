@@ -126,8 +126,9 @@ host, explicit boxes still clip overhang, and richer typography remains separate
 Text now supports [bounded underline/strikethrough decoration](text-decoration.md)
 with shared native/CPU row geometry. Opaque text remains native; nonopaque
 object/fill alpha requires an explicit font bridge and an automatic CPU domain.
-Custom decoration color/offset, wavy/dashed styles, skip-ink, letter/word/paragraph
-spacing and rich runs remain unsupported. Plain decoration does not alter
+Custom decoration color/offset, wavy/dashed styles, skip-ink, letter/word spacing and rich runs remain unsupported. Paragraph spacing and
+None/Upper/Lower presentation case are now supported as a bounded subset; see
+[text case and paragraph spacing](text-case-paragraph-spacing.md). Plain decoration does not alter
 measurement or permit outside-box paint.
 
 Canvas [vector command batches](canvas-commands.md) now support owned Path

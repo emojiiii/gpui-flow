@@ -1,14 +1,14 @@
 # Leafer 对齐任务总表 v1（审阅版）
 
-固定45个去重能力单元，源码包含版本 `9b12aac930a5e2678dbc5afe0146c42c0e87ae8a`。这是具体范围的开发台账，不是全部Leafer API兼容证明，不用任务数计算工时或百分比。旧39条A–E验收契约仅为交叉索引，不与本表相加；此前31/8快速审计不作为本表完成数。
+固定45个去重能力单元，源码包含版本 `4b47d2597030de8a49fb08d9e2b62587604c37ab`。这是具体范围的开发台账，不是全部Leafer API兼容证明，不用任务数计算工时或百分比。旧39条A–E验收契约仅为交叉索引，不与本表相加；此前31/8快速审计不作为本表完成数。
 
 ## 状态计数
 
-- 有界契约已验证：19
+- 有界契约已验证：20
 - 部分实现：16
 - 未开始该能力：6
 - 待核实验收：3
-- 开发/验收中：1
+- 开发/验收中：0
 
 有界已验证仅表示本行支持集合有实际证据，不表示整个上游模块完全对齐。源码、自动检查、真实窗口分别记录。未开始指本项新增能力，不以已有依赖代码冒充实现。目标是继续完成表内未闭环行为；技术依赖不因此被删除，也不能以“今晚”为由虚报通过。
 
@@ -25,7 +25,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | DAT-01 | 数据 / [元素工厂与属性schema](engine.md) | 有界契约已验证 | 内置及Custom注册、默认值/版本/验证；非法输入原子拒绝 | 运行时回调不序列化；不含Leafer格式导入 |
 | DAT-02 | 数据 / [原子属性与历史](engine.md) | 有界契约已验证 | 有类型setter、批量首旧末新、一次revision及UndoRedo，失败无部分修改 | 直接可信宿主底层修改不是权限边界 |
 | DAT-03 | 数据 / [版本化文档与有限Leafer映射](display-scenes.md) | 部分实现 | 必选现有Scene JSON v1读写/未知版本拒绝；固定原语tag、transform、基础paint的Leafer JSON映射，未知属性明确拒绝并往返 | 不含JS回调、任意computed缓存或完整上游JSON兼容；迁移仅在存在正式v2时定义 |
-| DAT-04 | 数据 / [查询与增量缓存性能](engine.md) | 开发/验收中 | 固定id/name/tag/class/子树条件与顺序；随机仿射+重挂载对照、固定fixture重算计数及CPU benchmark | 无通用CSS选择器语言；不声称GPU局部绘制 |
+| DAT-04 | 数据 / [查询与增量缓存性能](query-indexes.md) | 有界契约已验证 | 固定id/name/tag/class/子树条件与顺序；随机仿射+重挂载对照、固定fixture重算计数及CPU benchmark | 无通用CSS选择器语言；不声称GPU局部绘制 |
 | INS-01 | 实例 / [代际身份与树操作](engine.md) | 有界契约已验证 | create/clone/detach/reattach/reparent/destroy保留或更换身份有明确定义；奇异/循环原子拒绝 | 不是多App分层组合 |
 | INS-02 | 实例 / [多层App实例组合](leafer-source-map.md) | 未开始该能力 | 多层画布树、跨层事件/坐标转发、独立生命周期与销毁 | 多个普通SceneView并排不等于App分层 |
 | LIF-01 | 生命周期 / [订阅与拥有资源销毁](resource-lifecycle.md) | 有界契约已验证 | once/off/scoped disposal、destroy exactly once、旧token和迟到job不重定向 | 不包含后台加载器硬取消 |
@@ -54,7 +54,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | ELM-01 | 元素 / [矢量原语与实际几何](ellipse-arcs.md) | 有界契约已验证 | Rect/Ellipse/Line/Polygon/Star/Path/Pen各独立模块；四角/弧环/数据API贯通bounds/hit/CPU | 不包含通用点编辑器或完整SVG文档 |
 | ELM-02 | 元素 / [Path距离查询与显式定位](path-placement.md) | 有界契约已验证 | Kurbo局部弧长/切线、世界点、显式目标定位；自依赖/祖先/奇异/陈旧拒绝 | 持续动画绑定归ANI-02 |
 | ELM-03 | 元素 / [Group Box Frame容器裁切](container-corners.md) | 有界契约已验证 | 分离组件/paint phases/四角、嵌套真实clip，bounds/hit/CPU/native一致受能力限制 | 不扩大Custom/特殊effect能力 |
-| ELM-04 | 元素 / [Text固定排版属性](text-affine.md) | 部分实现 | 已有font/wrap/align/padding/ellipsis/italic/decoration/affine；必补letterSpacing、wordSpacing、paraIndent、paraSpacing、textCase、writingMode和autoSizeAlign | 富runs/WYSIWYG不是此次固定ITextStyleInputData属性集，作为额外范围另立项 |
+| ELM-04 | 元素 / [Text固定排版属性](text-case-paragraph-spacing.md) | 部分实现 | 已有font/wrap/align/padding/ellipsis/italic/decoration/affine；必补letterSpacing、wordSpacing、paraIndent、paraSpacing、textCase、writingMode和autoSizeAlign | 富runs/WYSIWYG不是此次固定ITextStyleInputData属性集，作为额外范围另立项 |
 | ELM-05 | 元素 / [Image真实帧与几何呈现](image-corners.md) | 有界契约已验证 | 静态/动画帧、fit、四角及仿射/复杂clip，真实CPU像素和资源代际 | alpha hit/crop内编辑归ELM-06；解码与URL权限归宿主 |
 | ELM-06 | 元素 / [Image像素命中与内编辑](image-alpha-hit.md) | 部分实现 | decoded-alpha hit阈值/缩放/当前帧和crop内工具必须一致且可撤销 | OSS未找到Image专属crop inner editor；属于框架明确扩展，不虚称上游已有 |
 | ELM-07 | 元素 / [Canvas拥有像素与生命周期](canvas-component.md) | 有界契约已验证 | 独立配置、运行时surface、DPR/smooth/safe-resize/clear/draw/snapshot、代际释放 | 像素不进文档/Undo；非整视图OwnedCanvas |
@@ -77,7 +77,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | DAT-01 | engine/registry、engine及metadata测试已在10月2日全套记录通过 | 纯引擎项，不要求窗口 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | DAT-02 | engine/engine及editor历史测试在全套记录通过 | 纯引擎项，不要求窗口 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | DAT-03 | 当前serde roundtrip通过；跨格式/迁移未实现 | 未验收 | 尚无独立完整验收提交 |
-| DAT-04 | 独立query索引、随机参考对照与benchmark实现中；旧缓存测试通过不等于新实现验收 | 纯数据项，不要求窗口 | 尚无独立完整验收提交 |
+| DAT-04 | 154项engine通过/2 benchmark常规忽略；两个benchmark均显式运行通过。300步query与480步cache参考对照；等工作量索引维护中位开销+1.25/+2.23/+3.40%，无整体提速声明 | 纯数据项，不要求窗口 | `4049da69ddd159972093df5aed04649c24fb4e3d` |
 | INS-01 | engine实例、clone/reparent和资源迟到结果测试通过 | 纯引擎项，不要求窗口 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | INS-02 | 无该项验收证据 | 未实现/未验收 | 尚无独立完整验收提交 |
 | LIF-01 | engine生命周期与resources对应测试已通过 | 纯归属逻辑；原生资源回执另列LIF-02 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
@@ -106,7 +106,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | ELM-01 | Ellipse25、Rect20、Path23新回归及headless批次通过 | 模型几何和CPU为主；Ellipse/Rect专项窗口未声称通过 | `6796dc885cecbb155fb00d2eb4736c64bb51afb0` |
 | ELM-02 | 查询17及定位17新回归通过 | 只读/显式引擎API，不要求新增窗口 | `d914a1ef0fec79b25fb67cb7f76f2c7f774ec55d` |
 | ELM-03 | 容器16新回归；全套1215及后续Text/Image clip回归通过 | 后续Text/Image真实复杂祖先窗口通过；早期角切片原生仅adapter | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
-| ELM-04 | 多个字体/排版/CPU/UI聚焦记录通过 | 已实现子集有多次真实对照和Undo；富runs等未验 | `650046049c42377dfa9f98b223f43496b71bd161` |
+| ELM-04 | 新增None/Upper/Lower和非负paraSpacing：22项新回归、1001项受影响通过；Title/small-caps及其他固定属性仍缺 | 15:51–16:01真实双路径7态区域像素一致，Undo恢复一致，退出0；不表示完整Text排版已完成 | `4b47d2597030de8a49fb08d9e2b62587604c37ab` |
 | ELM-05 | 16新回归、664受影响通过（1原有忽略） | 08:45–08:49真实静态/动画/旋转/clip/Undo通过 | `cfe28b01e81c8bfba2cdc0e277bdbdb0a0375dc9` |
 | ELM-06 | alpha-hit18新回归、UI171与strict Clippy通过；crop内工具未开始 | 14:55–15:00实际透明/阈值/当前帧/pending/failed/affine clips/remount点击验收退出0 | `17f92d2fec9b136027eceb3c8d8a063fc84cb013` |
 | ELM-07 | 24新回归及356受影响通过 | Canvas实际Draw/Clear/resize/Undo窗口通过 | `d365f5a9e533e823e43e09db5154935e01b68c49` |

@@ -188,3 +188,5 @@ cargo +1.98.1 run --locked -p flow-studio
 反向布局：`RowReverse/ColumnReverse`与`wrap_reverse`按Leafer遍历/行序契约工作，保持场景树与绘制顺序，支持内容尺寸与响应布局。详见[布局契约](docs/flow-layout.md)
 
 当前容器内阴影采用完整子树真实alpha。BeforeChildren与StrokeAfterChildren保持不同插入点，自身inner不回灌自身outer，子级最终效果进入父源；PassThrough隔离拒绝与预算保持不变。运行 `container_inner_shadows` 查看原生示例，本轮883项headless（8项原有忽略）、97项UI、共享预算fixture、严格Clippy/格式/docs、原生链接与目标窗口smoke通过；完整边界与未验项目见[契约](docs/container-inner-shadows.md#validation)。
+
+Text presentation case and hard-newline paragraph spacing now share native/CPU layout and measurement. See [the bounded contract](docs/text-case-paragraph-spacing.md); run `cargo run -p flow-studio --bin text_paragraph_styles` for the paired view.

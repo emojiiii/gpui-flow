@@ -68,7 +68,7 @@ from headless model tests; building the demo alone is not visual verification.
 
 The final style implementation passed 1,001 local tests: 808 across scene, engine,
 layout, and interaction (including their doctests); 179 native UI tests; 13 GPUI
-text tests; and one standalone text-contract doctest. Three existing benchmark
+text tests; and one standalone text-contract doctest. Three benchmark
 fixtures remained explicitly ignored. This includes 22 new regressions for this
 slice and the FontSize-resize preservation cross-test. The eight new native
 fixtures cover case-equivalent shaped widths and exact CPU pixels, empty/trailing
@@ -82,3 +82,28 @@ and `flow-studio`, including every existing example's request-literal migration.
 The new demo linked successfully. These are local Linux checks using installed
 fonts. Interactive window/pixel acceptance is separate; these results do not
 establish macOS/Windows font or pixel identity.
+
+## Native window receipt
+
+The exact tested source is commit `4b47d2597030de8a49fb08d9e2b62587604c37ab`,
+tree `2f594c12b2ac680a633f05751522aaf01bb6f6e1`. Source archive SHA256:
+`5564634eb596352861385fb32722ec016e93518b0ca8bae92d69f85501ad68e6`.
+The linked binary SHA256 is
+`29c94e058ee7bc2e2704c74db8ad6d0e26f2298130553362601b10e9da22b2b1`.
+
+On Linux, the actual window ran 2026-10-02 15:51:24–16:01:05 UTC and closed
+normally with exit 0 and empty stdout/stderr. Physical controls exercised
+None → Upper → Lower, paragraph spacing 10 → 0, top/middle/bottom under overflow,
+and five Undo operations restoring the original case and spacing. Upper expanded
+ß to SS and changed wrapping; Lower displayed the scalar-based dotted-I and Greek
+case behavior. Both paths retained the same soft-wrap spacing, hard-newline gaps,
+clipping and end ellipsis. Because the fixture overflows, vertical alignment
+clamps to the same top position; this is not evidence of a non-overflow vertical
+shift (the native automated alignment fixtures cover that separately).
+
+Seven captured states had identical 252×192 RGBA artwork regions between the
+native and CPU presentations after translating by their 300-pixel separation.
+The restored 600×240 artwork region also exactly matched the initial capture.
+These are specific local-font/DPR screenshot comparisons, not cross-platform
+pixel guarantees. The retained canonical-content and serialization guarantees
+come from the model regressions, not from visually inspecting the transformed text.
