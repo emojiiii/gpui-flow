@@ -1,5 +1,8 @@
 //! Imperative, bounded Canvas pixels. All writes publish one immutable snapshot;
 //! failed admission/rendering leaves both pixels and generation unchanged.
+mod pixels;
+pub use pixels::CanvasPixels;
+
 use crate::{
     CompositeError, CompositeLimits, DomainSource, ImageInputs, PixelBudget, RasterViewport,
     StaticImage, TextInputs, rasterize_with_inputs,

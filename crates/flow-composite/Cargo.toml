@@ -11,5 +11,8 @@ gpui-flow-scene.workspace = true
 image = { version = "=0.25.10", default-features = false }
 tiny-skia = { version = "=0.11.4", default-features = false, features = ["std", "simd"] }
 
+# Streaming PNG export reuses the version already present in Cargo.lock.
+png = "=0.17.16"
+
 [dev-dependencies]
 serde_json.workspace = true

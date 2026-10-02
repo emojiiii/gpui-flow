@@ -82,6 +82,7 @@ pub enum CompositeError {
     },
     UnsupportedAnimatedImage,
     InvalidImage,
+    ImageEncoding(String),
     TextBackendRequired(DisplayId),
     UnsupportedTextStyle(DisplayId),
     TextRasterization {
@@ -161,3 +162,6 @@ mod image_corner_tests;
 
 #[cfg(test)]
 mod text_clip_tests;
+
+#[cfg(test)]
+mod canvas_pixel_tests;

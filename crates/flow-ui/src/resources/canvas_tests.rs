@@ -222,3 +222,52 @@ fn surface_capacity_fails_explicitly_and_disposal_frees_admission() {
             .is_some()
     );
 }
+
+#[test]
+fn physical_pixel_transactions_publish_new_snapshot_and_keep_document_unchanged() {
+    use gpui_flow_composite::{CanvasPixels, CompositeLimits};
+    let (mut e, mut r, h) = setup();
+    r.prepare_canvases(&mut e).unwrap();
+    let scene = e.scene().clone();
+    let revision = e.revision();
+    let old = r.canvas_snapshot(&e, h).unwrap();
+    let pixels =
+        CanvasPixels::from_rgba(1, 1, vec![255, 128, 0, 128], CompositeLimits::default()).unwrap();
+    r.edit_canvas(&mut e, h, |s| s.write_pixels(&pixels, 2, 3).map(|_| ()))
+        .unwrap();
+    let new = r.canvas_snapshot(&e, h).unwrap();
+    assert!(!Arc::ptr_eq(&old, &new));
+    assert_eq!(
+        new.read_pixels(2, 3, 1, 1, CompositeLimits::default())
+            .unwrap()
+            .rgba(),
+        &[255, 128, 0, 128]
+    );
+    assert_eq!(old.premultiplied_rgba(), &[0; 320]);
+    assert_eq!(e.scene(), &scene);
+    assert_eq!(e.revision(), revision);
+    assert!(
+        new.encode_png(CompositeLimits::default())
+            .unwrap()
+            .starts_with(b"\x89PNG")
+    );
+}
+#[test]
+fn failed_pixel_transaction_rolls_back_all_writes_and_retains_exportable_snapshot() {
+    use gpui_flow_composite::{CanvasPixels, CompositeError, CompositeLimits};
+    let (mut e, mut r, h) = setup();
+    r.prepare_canvases(&mut e).unwrap();
+    let old = r.canvas_snapshot(&e, h).unwrap();
+    let pixels = CanvasPixels::from_rgba(1, 1, vec![255; 4], CompositeLimits::default()).unwrap();
+    assert!(
+        r.edit_canvas(&mut e, h, |s| {
+            s.write_pixels(&pixels, 0, 0)?;
+            Err(CompositeError::InvalidImage)
+        })
+        .is_err()
+    );
+    assert!(Arc::ptr_eq(&old, &r.canvas_snapshot(&e, h).unwrap()));
+    e.destroy(h).unwrap();
+    assert!(r.canvas_snapshot(&e, h).is_none());
+    assert!(old.encode_png(CompositeLimits::default()).is_ok());
+}

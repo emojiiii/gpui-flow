@@ -2447,7 +2447,15 @@ mod tests {
         let late = work.run();
         assert!(matches!(late.as_slice(), [(_, Ok(Some(_)))]));
         resources
-            .edit_canvas(&mut e, h, |s| s.fill_rect(bounds, Color::hex(0x0000ff)))
+            .edit_canvas(&mut e, h, |s| {
+                let pixels = gpui_flow_composite::CanvasPixels::from_rgba(
+                    20,
+                    20,
+                    [0, 0, 255, 255].repeat(400),
+                    CompositeLimits::default(),
+                )?;
+                s.write_pixels(&pixels, 0, 0).map(|_| ())
+            })
             .unwrap();
         assert_eq!(revision, e.revision());
         let second = Arc::new((*key(&e)).clone().with_resources(&e, Some(&resources)));
