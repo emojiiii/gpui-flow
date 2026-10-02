@@ -2270,6 +2270,7 @@ mod tests {
         let mut result = work.run();
         let actual = result.remove(0).1.unwrap().unwrap();
         let request = gpui_flow_text::TextRasterRequest {
+            vertical_align: gpui_flow_text::VerticalAlign::Top,
             text: gpui_flow_text::TextMeasureRequest {
                 content: "A ffi".into(),
                 font_family: "DejaVu Sans".into(),

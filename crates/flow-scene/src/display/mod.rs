@@ -32,7 +32,7 @@ pub use polygon::Polygon;
 pub use rect::{CornerRadii, Rect};
 use serde::{Deserialize, Serialize};
 pub use star::Star;
-pub use text::{Text, TextAlign};
+pub use text::{Text, TextAlign, TextVerticalAlign};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "geometry", rename_all = "snake_case")]
@@ -225,18 +225,7 @@ impl Shape {
             Self::Path(s) => s.validate()?,
             Self::Pen(s) => s.path.validate()?,
             Self::Custom(s) => s.validate()?,
-            Self::Text(s) => {
-                size(s.size)?;
-                if !s.font_size.is_finite()
-                    || s.font_size <= 0.0
-                    || !(1..=1000).contains(&s.font_weight)
-                    || !s.line_height.is_finite()
-                    || s.line_height <= 0.0
-                    || s.font_family.trim().is_empty()
-                {
-                    return Err("invalid text metrics or font family".into());
-                }
-            }
+            Self::Text(s) => s.validate()?,
             Self::Image(s) => {
                 size(s.size)?;
                 if s.source.trim().is_empty() {

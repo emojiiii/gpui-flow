@@ -87,19 +87,26 @@ impl TextPreparation<'_> {
                 let backend = self
                     .backend
                     .ok_or_else(|| CompositeError::TextBackendRequired(object.id.clone()))?;
-                let bounds = [m.tx, m.ty, text.size.width * m.a, text.size.height * m.d];
+                let content = text.content_bounds();
+                let bounds = [
+                    m.tx + content.origin.x * m.a,
+                    m.ty + content.origin.y * m.d,
+                    content.size.width * m.a,
+                    content.size.height * m.d,
+                ];
                 let clip = source_clip(full_source, bounds, self.viewport);
                 let Some(clip) = clip else {
                     return Ok(None);
                 };
                 let request = TextRasterRequest {
+                    vertical_align: crate::text_measure::vertical_align(text.vertical_align),
                     text: TextMeasureRequest {
                         content: text.content.clone(),
                         font_family: text.font_family.clone(),
                         font_size: text.font_size * m.d,
                         font_weight: text.font_weight,
                         line_height: text.font_size * text.line_height * m.d,
-                        wrap_width: text.wrap.then_some(text.size.width * m.a),
+                        wrap_width: text.wrap.then_some(content.size.width * m.a),
                     },
                     align: match text.align {
                         TextAlign::Start => gpui::TextAlign::Left,

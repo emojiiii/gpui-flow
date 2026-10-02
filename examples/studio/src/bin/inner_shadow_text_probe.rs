@@ -58,6 +58,7 @@ fn main() -> Result<(), String> {
             assert!(source.text_sources()[0].2);
             let bounds = [x, 20., width, 80.];
             let mut request = TextRasterRequest {
+                vertical_align: gpui_flow_text::VerticalAlign::Top,
                 text: TextMeasureRequest {
                     content: "████".into(),
                     font_family: "DejaVu Sans".into(),
@@ -163,6 +164,7 @@ fn main() -> Result<(), String> {
         }
     }
     let request = TextRasterRequest {
+        vertical_align: gpui_flow_text::VerticalAlign::Top,
         text: TextMeasureRequest {
             content: "too large".into(),
             font_family: "DejaVu Sans".into(),

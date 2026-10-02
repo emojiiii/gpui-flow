@@ -600,7 +600,7 @@ fn text_request(text: &Text) -> TextMeasureRequest {
         font_size: text.font_size,
         font_weight: text.font_weight,
         line_height: text.font_size * text.line_height,
-        wrap_width: text.wrap.then_some(text.size.width),
+        wrap_width: text.wrap.then_some(text.content_bounds().size.width),
     }
 }
 /// The URI check prevents accidental delegation of imported remote references.

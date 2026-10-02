@@ -74,7 +74,7 @@ pub(super) fn measure(
             font_weight: text.font_weight,
             line_height: text.font_size * text.line_height,
             wrap_width: if *sizing == TextSizing::AutoHeight && text.wrap {
-                Some(text.size.width)
+                Some(text.content_bounds().size.width)
             } else {
                 None
             },
@@ -96,9 +96,9 @@ pub(super) fn measure(
         }
         let mut size = text.size;
         if *sizing == TextSizing::Natural {
-            size.width = metrics.width.max(1.);
+            size.width = metrics.width.max(1.) + text.padding[1] + text.padding[3];
         }
-        size.height = metrics.height;
+        size.height = metrics.height + text.padding[0] + text.padding[2];
         if size != text.size {
             scene.update_object(id, |object| {
                 let Shape::Text(text) = &mut object.shape else {

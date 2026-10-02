@@ -70,3 +70,29 @@ pub trait TextMeasurer: Send + Sync {
     fn measure(&self, request: &TextMeasureRequest) -> Result<TextMetrics, String>;
     fn invalidate(&self) {}
 }
+
+/// Alignment of a clipped text block. Overflow remains top-aligned, matching
+/// the pinned clipped-overflow layout rather than shifting the first line away.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum VerticalAlign {
+    #[default]
+    Top,
+    Middle,
+    Bottom,
+}
+impl VerticalAlign {
+    pub fn offset(self, available_height: f32, content_height: f32) -> f32 {
+        if !available_height.is_finite()
+            || !content_height.is_finite()
+            || available_height <= content_height
+        {
+            return 0.;
+        }
+        let free = available_height - content_height;
+        match self {
+            Self::Top => 0.,
+            Self::Middle => free * 0.5,
+            Self::Bottom => free,
+        }
+    }
+}

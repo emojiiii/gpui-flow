@@ -318,7 +318,7 @@ impl ElementDefinition for BuiltinDefinition {
             "path" => json!({"commands":[]}),
             "pen" => json!({"path":{"commands":[]}}),
             "text" => {
-                json!({"content":"","size":{"width":100.,"height":30.},"font_family":"sans-serif","font_size":14.,"line_height":1.2,"align":"start","wrap":true})
+                json!({"content":"","size":{"width":100.,"height":30.},"font_family":"sans-serif","font_size":14.,"line_height":1.2,"align":"start","wrap":true,"padding":[0.,0.,0.,0.],"vertical_align":"top"})
             }
             "image" => {
                 json!({"source":"","size":{"width":100.,"height":100.},"natural_size":null,"fit":"contain"})

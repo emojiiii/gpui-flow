@@ -8,6 +8,20 @@ pub enum TextAlign {
     Center,
     End,
 }
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextVerticalAlign {
+    #[default]
+    Top,
+    Middle,
+    Bottom,
+}
+fn is_top(value: &TextVerticalAlign) -> bool {
+    *value == TextVerticalAlign::Top
+}
+fn no_padding(value: &[f32; 4]) -> bool {
+    *value == [0.; 4]
+}
 /// Text with an explicit layout box. Font shaping/measurement is performed by
 /// the host adapter, which can update size with actual measured dimensions.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -21,6 +35,11 @@ pub struct Text {
     pub line_height: f32,
     pub align: TextAlign,
     pub wrap: bool,
+    /// Top, right, bottom, left padding in local logical units.
+    #[serde(default, skip_serializing_if = "no_padding")]
+    pub padding: [f32; 4],
+    #[serde(default, skip_serializing_if = "is_top")]
+    pub vertical_align: TextVerticalAlign,
 }
 impl Text {
     pub fn new(content: impl Into<String>, size: Size) -> Self {
@@ -33,7 +52,43 @@ impl Text {
             line_height: 1.2,
             align: TextAlign::Start,
             wrap: true,
+            padding: [0.; 4],
+            vertical_align: TextVerticalAlign::Top,
         }
+    }
+    /// The shared wrapping, alignment and glyph clipping box. Call validate at
+    /// mutation boundaries; public fields can temporarily form invalid geometry.
+    pub fn content_bounds(&self) -> Bounds {
+        let [top, right, bottom, left] = self.padding;
+        Bounds::new(
+            Point::new(left, top),
+            Size::new(
+                (self.size.width as f64 - left as f64 - right as f64) as f32,
+                (self.size.height as f64 - top as f64 - bottom as f64) as f32,
+            ),
+        )
+    }
+    pub fn validate(&self) -> Result<(), String> {
+        if !self.size.is_positive()
+            || !self.font_size.is_finite()
+            || self.font_size <= 0.
+            || !(1..=1000).contains(&self.font_weight)
+            || !self.line_height.is_finite()
+            || self.line_height <= 0.
+            || self.font_family.trim().is_empty()
+        {
+            return Err("invalid text metrics, size or font family".into());
+        }
+        if self
+            .padding
+            .iter()
+            .any(|n| !n.is_finite() || *n < 0. || *n > 1_000_000.)
+            || !self.content_bounds().is_valid()
+            || !self.content_bounds().size.is_positive()
+        {
+            return Err("text padding must leave a finite positive content box".into());
+        }
+        Ok(())
     }
     pub fn bounds(&self) -> Bounds {
         Bounds::new(Point::ZERO, self.size)

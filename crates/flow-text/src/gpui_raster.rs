@@ -27,6 +27,7 @@ const MAX_WRITES: u64 = 32_000_000;
 pub struct TextRasterRequest {
     pub text: TextMeasureRequest,
     pub align: TextAlign,
+    pub vertical_align: crate::VerticalAlign,
     /// Full alignment/clip box, before viewport clipping: [x, y, width, height].
     pub bounds: [f32; 4],
     /// Screen-logical viewport/host content intersection: [x, y, width, height].
@@ -178,7 +179,12 @@ impl GpuiTextRasterizer {
         }
         let mut cache: HashMap<RenderGlyphParams, Arc<GlyphBitmap>> = HashMap::new();
         let mut cache_bytes = 0;
-        let mut line_y = r.bounds[1];
+        let block_height = r.text.line_height
+            * lines
+                .iter()
+                .map(|line| line.wrap_boundaries.len() + 1)
+                .sum::<usize>() as f32;
+        let mut line_y = r.bounds[1] + r.vertical_align.offset(r.bounds[3], block_height);
         for line in lines {
             let layout = &line.unwrapped_layout;
             let baseline =

@@ -10,18 +10,21 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 struct TextPaintPlan {
     request: TextMeasureRequest,
     align: TextAlign,
+    vertical_align: gpui_flow_text::VerticalAlign,
     bounds: Bounds<Pixels>,
 }
 impl TextPaintPlan {
     fn new(text: &Text, m: gpui_flow_scene::Affine) -> Self {
+        let content = text.content_bounds();
         Self {
+            vertical_align: crate::text_measure::vertical_align(text.vertical_align),
             request: TextMeasureRequest {
                 content: text.content.clone(),
                 font_family: text.font_family.clone(),
                 font_size: text.font_size * m.d,
                 font_weight: text.font_weight,
                 line_height: text.font_size * text.line_height * m.d,
-                wrap_width: text.wrap.then_some(text.size.width * m.a),
+                wrap_width: text.wrap.then_some(content.size.width * m.a),
             },
             align: match text.align {
                 SceneTextAlign::Start => TextAlign::Left,
@@ -29,8 +32,11 @@ impl TextPaintPlan {
                 SceneTextAlign::End => TextAlign::Right,
             },
             bounds: Bounds::new(
-                point(px(m.tx), px(m.ty)),
-                size(px(text.size.width * m.a), px(text.size.height * m.d)),
+                point(
+                    px(m.tx + content.origin.x * m.a),
+                    px(m.ty + content.origin.y * m.d),
+                ),
+                size(px(content.size.width * m.a), px(content.size.height * m.d)),
             ),
         }
     }
@@ -64,10 +70,11 @@ pub(super) fn text_element(text: &Text, object: &RenderObject) -> AnyElement {
     let TextPaintPlan {
         request,
         align,
+        vertical_align,
         bounds: model_bounds,
     } = TextPaintPlan::new(text, m);
     let own_bounds = gpui_flow_scene::Bounds::new(
-        gpui_flow_scene::Point::new(m.tx, m.ty),
+        gpui_flow_scene::Point::new(model_bounds.origin.x.into(), model_bounds.origin.y.into()),
         gpui_flow_scene::Size::new(
             model_bounds.size.width.into(),
             model_bounds.size.height.into(),
@@ -100,7 +107,13 @@ pub(super) fn text_element(text: &Text, object: &RenderObject) -> AnyElement {
             let mask = native_mask(visible, model_bounds.origin, bounds);
             // GPUI intersects this with the existing host content mask.
             window.with_content_mask(Some(mask), |window| {
+                let block_height = f32::from(line_height)
+                    * lines
+                        .iter()
+                        .map(|line| line.wrap_boundaries.len() + 1)
+                        .sum::<usize>() as f32;
                 let mut origin = bounds.origin;
+                origin.y += px(vertical_align.offset(bounds.size.height.into(), block_height));
                 for line in lines {
                     if let Err(error) =
                         line.paint(origin, line_height, align, Some(bounds), window, cx)
