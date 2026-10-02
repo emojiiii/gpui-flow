@@ -523,6 +523,10 @@ impl ScenePluginHost {
             SceneCommand::SetTextBoxResize { target, .. } => Some(*target),
             _ => None,
         };
+        let text_font_identity = match &command {
+            SceneCommand::SetTextFontResize { target, .. } => Some(*target),
+            _ => None,
+        };
         let resize_identity = match &command {
             SceneCommand::SetResizeTransform { target, .. } => Some(*target),
             _ => None,
@@ -599,6 +603,13 @@ impl ScenePluginHost {
         {
             return Err(InteractionError::InvalidInput(
                 "middleware cannot retarget a Text box command".into(),
+            ));
+        }
+        if let Some(target) = text_font_identity
+            && !matches!(&command, SceneCommand::SetTextFontResize { target: actual, .. } if *actual == target)
+        {
+            return Err(InteractionError::InvalidInput(
+                "middleware cannot retarget a Text font command".into(),
             ));
         }
         if let Some(target) = resize_identity
@@ -862,6 +873,9 @@ impl ScenePluginHost {
                 transform,
             } => {
                 self.apply_text_box_resize(editor, target, size, transform)?;
+            }
+            SceneCommand::SetTextFontResize { target, resize } => {
+                self.apply_text_font_resize(editor, target, resize)?;
             }
             SceneCommand::SetResizeTransform { target, transform } => {
                 if self.capture_target_stale(editor) {

@@ -4,8 +4,8 @@ use crate::scene::{
 use crate::*;
 use gpui_flow_core::{Point, Rect};
 use gpui_flow_editor::{
-    ResizeHandle, ResizeOptions, SceneEditor, TextBoxResizeGeometry, resize_transform,
-    resize_transform_with_options,
+    ResizeHandle, ResizeOptions, SceneEditor, TextBoxResizeGeometry, TextFontResizeGeometry,
+    resize_transform, resize_transform_with_options,
 };
 use gpui_flow_scene::{Affine, DisplayId, Shape};
 struct Resize {
@@ -19,6 +19,7 @@ struct Resize {
     handle: Option<ResizeHandle>,
     minimum_scale: Point,
     text_box: Option<TextBoxResizeGeometry>,
+    text_font: Option<TextFontResizeGeometry>,
 }
 struct SelectionResize {
     geometry: SceneSelectionResizeGeometry,
@@ -31,6 +32,8 @@ pub enum TextResizeMode {
     Transform,
     /// Named single-selection plain Text only; other targets retain transforms.
     Box,
+    /// Scale the fixed Text box, font and padding without scaling its matrix.
+    FontSize,
 }
 #[derive(Default)]
 pub struct SceneResizePlugin {
@@ -176,10 +179,24 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
                 } else {
                     None
                 };
+                let text_font = if handle.is_some()
+                    && self.text_mode == TextResizeMode::FontSize
+                    && crate::scene::resize_handles::affine_text_supported(
+                        &node.object,
+                        TransformCapabilities { affine_text: true },
+                    ) {
+                    let Shape::Text(text) = &node.object.shape else {
+                        unreachable!()
+                    };
+                    TextFontResizeGeometry::new(text).ok()
+                } else {
+                    None
+                };
                 self.resize = Some(Resize {
                     id,
                     target,
                     text_box,
+                    text_font,
                     inverse,
                     original: node.object.transform,
                     bounds: geometry.map_or(bounds, |g| g.bounds),
@@ -237,6 +254,26 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
                     let current = resize
                         .inverse
                         .transform_point(cx.editor.viewport.screen_to_world(p.position));
+                    if let Some(geometry) = resize.text_font {
+                        let Some(result) = geometry.resize(
+                            resize.original,
+                            resize.start_local,
+                            current,
+                            ResizeOptions {
+                                handle: resize.handle.expect("named Text font handle"),
+                                uniform: false,
+                                minimum_scale: resize.minimum_scale,
+                            },
+                        ) else {
+                            out.command(SceneCommand::CancelGesture);
+                            return;
+                        };
+                        out.command(SceneCommand::SetTextFontResize {
+                            target: resize.target,
+                            resize: result,
+                        });
+                        return;
+                    }
                     if let Some(geometry) = resize.text_box {
                         let Some(result) = geometry.resize(
                             resize.original,

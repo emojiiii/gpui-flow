@@ -10,6 +10,38 @@ impl ScenePluginHost {
         size: Size,
         transform: Affine,
     ) -> Result<(), InteractionError> {
+        self.apply_text_intrinsic_resize(editor, target, size, transform, None)
+    }
+    pub(super) fn apply_text_font_resize(
+        &mut self,
+        editor: &mut SceneEditor,
+        target: ElementHandle,
+        resize: gpui_flow_editor::TextFontResize,
+    ) -> Result<(), InteractionError> {
+        if !resize.font_size.is_finite()
+            || resize.font_size <= 0.
+            || resize.font_size > gpui_flow_editor::MAX_TEXT_RESIZE_FONT_SIZE
+        {
+            return Err(InteractionError::InvalidInput(
+                "unsupported Text font resize".into(),
+            ));
+        }
+        self.apply_text_intrinsic_resize(
+            editor,
+            target,
+            resize.size,
+            resize.transform,
+            Some((resize.font_size, resize.padding)),
+        )
+    }
+    fn apply_text_intrinsic_resize(
+        &mut self,
+        editor: &mut SceneEditor,
+        target: ElementHandle,
+        size: Size,
+        transform: Affine,
+        font: Option<(f32, [f32; 4])>,
+    ) -> Result<(), InteractionError> {
         if self.capture_target_stale(editor) {
             return Err(InteractionError::InvalidInput(
                 "stale Text box target".into(),
@@ -70,6 +102,10 @@ impl ScenePluginHost {
                 scene.update_object(&id, |object| {
                     if let Shape::Text(text) = &mut object.shape {
                         text.size = size;
+                        if let Some((font_size,padding))=font {
+                            text.font_size=font_size;
+                            text.padding=padding;
+                        }
                     }
                     object.transform = transform;
                 })
@@ -79,7 +115,7 @@ impl ScenePluginHost {
                     .get(&id)
                     .ok_or_else(|| SceneError::MissingNode(id.clone()))?;
                 if !object_editable(scene, &id)
-                    || !matches!(&node.object.shape,Shape::Text(t) if t.size==size)
+                    || !matches!(&node.object.shape,Shape::Text(t) if t.size==size && font.is_none_or(|(font_size,padding)|t.font_size==font_size&&t.padding==padding))
                     || node.object.transform != transform
                     || scene.world_transform(&id)? != expected_world
                     || !super::super::resize_handles::affine_text_supported(&node.object, plain)

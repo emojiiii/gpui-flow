@@ -9,3 +9,5 @@ pub use resize::*;
 
 mod text_resize;
 pub use text_resize::*;
+mod text_font_resize;
+pub use text_font_resize::*;

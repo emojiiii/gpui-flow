@@ -60,6 +60,12 @@ pub enum SceneCommand {
         size: Size,
         transform: Affine,
     },
+    /// Intrinsic Text font, box, padding and anchoring translation. The actual
+    /// text content and dimensionless line-height remain current and unchanged.
+    SetTextFontResize {
+        target: gpui_flow_engine::ElementHandle,
+        resize: gpui_flow_editor::TextFontResize,
+    },
     /// Exactly one immutable ordered membership set. Middleware may normalize
     /// matrices, but cannot drop, add, duplicate, reorder or retarget members.
     SetResizeTransforms {
