@@ -961,3 +961,6 @@ mod text_box_tests {
         assert_eq!(text_request(&text).wrap_width, None);
     }
 }
+
+#[cfg(test)]
+mod lifecycle_tests;
