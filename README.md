@@ -192,3 +192,5 @@ cargo +1.98.1 run --locked -p flow-studio
 Text presentation case and hard-newline paragraph spacing now share native/CPU layout and measurement. See [the bounded contract](docs/text-case-paragraph-spacing.md); run `cargo run -p flow-studio --bin text_paragraph_styles` for the paired view.
 
 Native acceptance receipts: [focus/keyboard exact input replay](docs/focus-keyboard-validation.md), [resource readiness and paint](docs/resource-lifecycle-validation.md), and [Custom geometry and host renderers](docs/custom-geometry-validation.md). These include exact-source, automatic-test and physical-window evidence separately.
+
+[Scene PNG/JPEG/lossless WebP export](docs/scene-raster-export.md) uses current resources and the same-App text bridge; `scene_export` demonstrates independent decoded previews. [Bounded nested timelines](docs/animation-timeline.md) combine serial/parallel property animations under one explicit parent clock and Undo transaction.

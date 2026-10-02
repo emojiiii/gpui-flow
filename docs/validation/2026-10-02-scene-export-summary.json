@@ -1,0 +1,1463 @@
+{
+  "schema_version": 1,
+  "feature": "ELM-11 fixed-region scene PNG/JPEG/lossless-WebP export",
+  "status": "raster subset verified; SVG remains open",
+  "audit_utc": "2026-10-02T17:14:06.939840+00:00",
+  "source": {
+    "remote_commit": "99392f7c35f956f8765ed5730423df19e3d474cd",
+    "remote_commit_url": "https://github.com/emojiiii/gpui-flow/commit/99392f7c35f956f8765ed5730423df19e3d474cd",
+    "remote_verification": "Integrator verified commit/main/tree via GitHub API; remote commit not stored in local object database",
+    "local_synthetic_commit": "c4414daccc35dcea505407b7efca672bdf721bab",
+    "tree": "23acbddf0bbebdbbc4ef5e92b7bffabe5891f736",
+    "archive_sha256": "171e9409c93c6e32e38e90dfcb87f68384a5f79e637e546d068ce3380ab6663c",
+    "binary_sha256": "8f17c920acd6e11e85178fdb58dc411671d5cac5579c6a2897b0616e252e02a2",
+    "archive_all_git_blobs_match_local_tree": true,
+    "archive_file_count": 522,
+    "relevant_files": [
+      {
+        "path": "Cargo.lock",
+        "bytes": 218680,
+        "sha256": "10698fc0469bf9e03b947e58c55c56738b621dbbafaba246f94cb203859bc708",
+        "git_blob": "db8ba086132f10f2edbdf3ae69a91289510dbf5f"
+      },
+      {
+        "path": "crates/flow-composite/Cargo.toml",
+        "bytes": 593,
+        "sha256": "b9d84cd2cc5f233f73fbe5aabd6dbc46ad961e273239d07e0f2867cc93ab4e9e",
+        "git_blob": "a5a43b633c817338176c1ae88f878e93f7b4b5ac"
+      },
+      {
+        "path": "crates/flow-composite/src/lib.rs",
+        "bytes": 4777,
+        "sha256": "7d2110ec96856ea92e843422465e967049d701fd6d79c8b9e43293657615d5a9",
+        "git_blob": "7c4267b5b04431984f5e6dd125266436c2e9a115"
+      },
+      {
+        "path": "crates/flow-composite/src/scene_export.rs",
+        "bytes": 17253,
+        "sha256": "0322049bb5cdfeaa3a2742b833602844bd51dfa50276eb247c84a8eb1573b2e3",
+        "git_blob": "da8002937011dc18161783e3103cbc12c6fce825"
+      },
+      {
+        "path": "crates/flow-composite/src/scene_export_tests.rs",
+        "bytes": 20524,
+        "sha256": "32fce16f685ff199b399ed2ace36078fed13777d0e556f967c4a11f9f8ceadb2",
+        "git_blob": "47d030837facdf37eb17cf03b9a6d7f98830fb8d"
+      },
+      {
+        "path": "crates/flow-ui/src/display/composite.rs",
+        "bytes": 105833,
+        "sha256": "4af92cc07f2ad69aa2521ed3d6a2825693441c8784acdff5ee889f108f335668",
+        "git_blob": "096b9395edebec435584141a31b631f83ac7fc46"
+      },
+      {
+        "path": "crates/flow-ui/src/display/composite_text.rs",
+        "bytes": 10688,
+        "sha256": "90043ea593d67d7fe5d366f2e17eaa259eff165b6208c57ce6ae10f637a46ea8",
+        "git_blob": "f002d7dad9df900a8966cf25f7095bcf98ace43a"
+      },
+      {
+        "path": "crates/flow-ui/src/resources.rs",
+        "bytes": 38068,
+        "sha256": "9eaa15158db023615dfd3b0147d9cc34e469f5248f1f590115f505fcf6df43c3",
+        "git_blob": "0ec4f86fccd3b21787bb51e5a344fd847cfd085b"
+      },
+      {
+        "path": "crates/flow-ui/src/resources/export_tests.rs",
+        "bytes": 12312,
+        "sha256": "7d418e01db7559c3115fd7af060924a3f2e47d3bddf5111ba6b1f970a8384edf",
+        "git_blob": "b992c4c89cc062103481ad624cc622e71de159e4"
+      },
+      {
+        "path": "crates/flow-ui/src/scene_view/export.rs",
+        "bytes": 5404,
+        "sha256": "fd22d1cfa07c9ea4a0be1a16ba81ccd9ade2bd20ec8f57b412d76e687284b1b9",
+        "git_blob": "ad762c131416ad2d2fab2957bee57b0890b1b0be"
+      },
+      {
+        "path": "crates/flow-ui/src/scene_view/mod.rs",
+        "bytes": 16535,
+        "sha256": "20d1a9f12c329f60aeddb29e8e1df0db565075930f49213896ef8219b41f0500",
+        "git_blob": "44b154f886c1be5eb88bc89397e08de27cfaeb61"
+      },
+      {
+        "path": "examples/studio/src/bin/scene_export.rs",
+        "bytes": 28468,
+        "sha256": "ad8eac57ab0662bf6867fd86c71dff92f5c7966780832ceeb86a3ec45e9d9f8f",
+        "git_blob": "9ed8c86c38f84329ff3ffba1073f0f5cb34318ae"
+      }
+    ]
+  },
+  "native": {
+    "evidence_directory": "/workspace/shared/scene-export-validation",
+    "start_utc": "2026-10-02T17:01:50Z",
+    "end_utc": "2026-10-02T17:07:56Z",
+    "exit_code": 0,
+    "interaction_evidence": "Integrator physically clicked all 14 exports and inspected native preview screenshots; auditor inspected crop-alpha screenshot and independently decoded output files",
+    "raw_record_file": "native.stderr",
+    "raw_record_bytes": 11430,
+    "raw_record_sha256": "5432fccbb994ba5cedb62747760f7a0e809774f13c42ea340185db70e677df46",
+    "raw_json_record_count": 15,
+    "stdout_file": "native.jsonl",
+    "stdout_bytes": 0,
+    "export_attempts": 14,
+    "successful_files": 10,
+    "expected_rejections": 4,
+    "undo_records": 1
+  },
+  "decoder": {
+    "library": "Pillow",
+    "version": "12.3.0",
+    "jpeg_library_version": "6.2",
+    "webp_library_version": "1.6.0",
+    "jpeg_comparison_policy": "Pillow/libjpeg and native image/zune decoded hashes differ; JPEG checks dimensions, full opacity and 8x8 known-background tolerance, not pixel equality"
+  },
+  "assertions": {
+    "all_per_attempt_json_receipts_equal_raw_records": true,
+    "all_encoded_lengths_and_fnv_match": true,
+    "all_dimensions_match_world_crop_scale_and_dpr": true,
+    "all_alpha_histograms_match_receipts": true,
+    "all_png_webp_decoded_fnv_match_native": true,
+    "opaque_png_1_equals_webp_3": true,
+    "transparent_crop_webp_5_equals_png_10_12_13": true,
+    "edited_png_11_differs_from_5": true,
+    "edited_different_pixels": 68902,
+    "png_10_12_13_encoded_bytes_identical": true,
+    "no_encoded_files_for_rejections_6_7_8_9": true,
+    "all_14_scene_revision_canvas_selection_viewport_unchanged": true,
+    "all_14_previews_outside_source": true,
+    "undo_restored_exact_canonical_baseline": true,
+    "normal_exit": true
+  },
+  "decoded_files": [
+    {
+      "sequence": 1,
+      "path": "files/scene-294015-1790960510626236914-001.png",
+      "format": "PNG",
+      "dimensions": [
+        440,
+        320
+      ],
+      "encoded_sha256": "067a2e21d9908d22eb0ff05023b75ed5c6ea5756b5197a803a14df963e1254e0",
+      "encoded_fnv1a64": "10689a7d7c7ffda7",
+      "encoded_bytes": 20314,
+      "decoded_rgba_sha256": "2c67ea35df8a5aa2a7b7e2dd905b423b97554672e5517f82e782151f05285a48",
+      "decoded_rgba_fnv1a64": "15ea68e45801f7d8",
+      "native_decoded_fnv1a64_matches": true,
+      "alpha_zero_partial_opaque": [
+        0,
+        0,
+        140800
+      ],
+      "corner_rgba": [
+        232,
+        238,
+        247,
+        255
+      ],
+      "jpeg_background_probe": null
+    },
+    {
+      "sequence": 2,
+      "path": "files/scene-294015-1790960510626236914-002.jpg",
+      "format": "JPEG",
+      "dimensions": [
+        440,
+        320
+      ],
+      "encoded_sha256": "748dc7f11c6727cb16179bf214d202620f0fbef7243923f1e5d27802f9a9134b",
+      "encoded_fnv1a64": "7227f25e05db4f49",
+      "encoded_bytes": 26052,
+      "decoded_rgba_sha256": "dd9a339c6116651a38eeca8d9874eb3c0577a02620ad18ca345841ecdce15304",
+      "decoded_rgba_fnv1a64": "a8c047ee1cff0dcd",
+      "native_decoded_fnv1a64_matches": false,
+      "alpha_zero_partial_opaque": [
+        0,
+        0,
+        140800
+      ],
+      "corner_rgba": [
+        231,
+        238,
+        248,
+        255
+      ],
+      "jpeg_background_probe": {
+        "bounds": [
+          0,
+          0,
+          8,
+          8
+        ],
+        "channel_extrema": [
+          [
+            231,
+            231
+          ],
+          [
+            238,
+            238
+          ],
+          [
+            248,
+            248
+          ],
+          [
+            255,
+            255
+          ]
+        ],
+        "max_channel_error": [
+          1,
+          0,
+          1,
+          0
+        ],
+        "within_tolerance_3": true
+      }
+    },
+    {
+      "sequence": 3,
+      "path": "files/scene-294015-1790960510626236914-003.webp",
+      "format": "WEBP",
+      "dimensions": [
+        440,
+        320
+      ],
+      "encoded_sha256": "8bad82c5cb350fa6aacf2bb6286d381ba29eeef7dfd2982739d3fc3dec92297a",
+      "encoded_fnv1a64": "3e0f6c303e68aa44",
+      "encoded_bytes": 16768,
+      "decoded_rgba_sha256": "2c67ea35df8a5aa2a7b7e2dd905b423b97554672e5517f82e782151f05285a48",
+      "decoded_rgba_fnv1a64": "15ea68e45801f7d8",
+      "native_decoded_fnv1a64_matches": true,
+      "alpha_zero_partial_opaque": [
+        0,
+        0,
+        140800
+      ],
+      "corner_rgba": [
+        232,
+        238,
+        247,
+        255
+      ],
+      "jpeg_background_probe": null
+    },
+    {
+      "sequence": 4,
+      "path": "files/scene-294015-1790960510626236914-004.png",
+      "format": "PNG",
+      "dimensions": [
+        880,
+        640
+      ],
+      "encoded_sha256": "3c1a9d4ec1d7b3e0c093741e8eb0a28472de3a16a4e7b83b95655984ae90bfcb",
+      "encoded_fnv1a64": "6477f4f75e688d4d",
+      "encoded_bytes": 55068,
+      "decoded_rgba_sha256": "904b0587a718c71b8fb39f14d0329fa5d4a542931e6c8b1348086fb378a1bfa9",
+      "decoded_rgba_fnv1a64": "7b92872be6f594e1",
+      "native_decoded_fnv1a64_matches": true,
+      "alpha_zero_partial_opaque": [
+        0,
+        0,
+        563200
+      ],
+      "corner_rgba": [
+        232,
+        238,
+        247,
+        255
+      ],
+      "jpeg_background_probe": null
+    },
+    {
+      "sequence": 5,
+      "path": "files/scene-294015-1790960510626236914-005.webp",
+      "format": "WEBP",
+      "dimensions": [
+        720,
+        480
+      ],
+      "encoded_sha256": "9ee2f7fbe6441fd4ec5098cc23451369f21719112cf359708b56c153ff7138b1",
+      "encoded_fnv1a64": "83119088c72110f2",
+      "encoded_bytes": 43680,
+      "decoded_rgba_sha256": "c06b9ff447ab2f34c3dffbb55f53518b397d33a37120a2a823907c7b84446519",
+      "decoded_rgba_fnv1a64": "adc4a0ab9a5e1730",
+      "native_decoded_fnv1a64_matches": true,
+      "alpha_zero_partial_opaque": [
+        163071,
+        35234,
+        147295
+      ],
+      "corner_rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "jpeg_background_probe": null
+    },
+    {
+      "sequence": 10,
+      "path": "files/scene-294015-1790960510626236914-010.png",
+      "format": "PNG",
+      "dimensions": [
+        720,
+        480
+      ],
+      "encoded_sha256": "6a1f9d2e5414467e7be0e658159473527ba68b454367f3473f139f2d325e150b",
+      "encoded_fnv1a64": "c7f4480ecc4f6872",
+      "encoded_bytes": 49612,
+      "decoded_rgba_sha256": "c06b9ff447ab2f34c3dffbb55f53518b397d33a37120a2a823907c7b84446519",
+      "decoded_rgba_fnv1a64": "adc4a0ab9a5e1730",
+      "native_decoded_fnv1a64_matches": true,
+      "alpha_zero_partial_opaque": [
+        163071,
+        35234,
+        147295
+      ],
+      "corner_rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "jpeg_background_probe": null
+    },
+    {
+      "sequence": 11,
+      "path": "files/scene-294015-1790960510626236914-011.png",
+      "format": "PNG",
+      "dimensions": [
+        720,
+        480
+      ],
+      "encoded_sha256": "39943158bbce9a146678c927b11dd8bba585dfe8ac5497d693372943adf2ef9a",
+      "encoded_fnv1a64": "4cd821ee858fb305",
+      "encoded_bytes": 49649,
+      "decoded_rgba_sha256": "de7a5aff81aa4e457c300a74a70b8dbdfcf9f5685787d56e7251236c07d2f8b9",
+      "decoded_rgba_fnv1a64": "b2f9b08555861341",
+      "native_decoded_fnv1a64_matches": true,
+      "alpha_zero_partial_opaque": [
+        163071,
+        35234,
+        147295
+      ],
+      "corner_rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "jpeg_background_probe": null
+    },
+    {
+      "sequence": 12,
+      "path": "files/scene-294015-1790960510626236914-012.png",
+      "format": "PNG",
+      "dimensions": [
+        720,
+        480
+      ],
+      "encoded_sha256": "6a1f9d2e5414467e7be0e658159473527ba68b454367f3473f139f2d325e150b",
+      "encoded_fnv1a64": "c7f4480ecc4f6872",
+      "encoded_bytes": 49612,
+      "decoded_rgba_sha256": "c06b9ff447ab2f34c3dffbb55f53518b397d33a37120a2a823907c7b84446519",
+      "decoded_rgba_fnv1a64": "adc4a0ab9a5e1730",
+      "native_decoded_fnv1a64_matches": true,
+      "alpha_zero_partial_opaque": [
+        163071,
+        35234,
+        147295
+      ],
+      "corner_rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "jpeg_background_probe": null
+    },
+    {
+      "sequence": 13,
+      "path": "files/scene-294015-1790960510626236914-013.png",
+      "format": "PNG",
+      "dimensions": [
+        720,
+        480
+      ],
+      "encoded_sha256": "6a1f9d2e5414467e7be0e658159473527ba68b454367f3473f139f2d325e150b",
+      "encoded_fnv1a64": "c7f4480ecc4f6872",
+      "encoded_bytes": 49612,
+      "decoded_rgba_sha256": "c06b9ff447ab2f34c3dffbb55f53518b397d33a37120a2a823907c7b84446519",
+      "decoded_rgba_fnv1a64": "adc4a0ab9a5e1730",
+      "native_decoded_fnv1a64_matches": true,
+      "alpha_zero_partial_opaque": [
+        163071,
+        35234,
+        147295
+      ],
+      "corner_rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "jpeg_background_probe": null
+    },
+    {
+      "sequence": 14,
+      "path": "files/scene-294015-1790960510626236914-014.jpg",
+      "format": "JPEG",
+      "dimensions": [
+        720,
+        480
+      ],
+      "encoded_sha256": "eadfe014f14cc883d41389550a792b4594d5d51ba118216e7338a287e292d232",
+      "encoded_fnv1a64": "f8bd5c480943c9fb",
+      "encoded_bytes": 48223,
+      "decoded_rgba_sha256": "dd910c40d0808d13264c1e6565d8eacd0dcf04a28466b4f84761a740373d538c",
+      "decoded_rgba_fnv1a64": "0ad33da2fb6f57d1",
+      "native_decoded_fnv1a64_matches": false,
+      "alpha_zero_partial_opaque": [
+        0,
+        0,
+        345600
+      ],
+      "corner_rgba": [
+        231,
+        238,
+        248,
+        255
+      ],
+      "jpeg_background_probe": {
+        "bounds": [
+          0,
+          0,
+          8,
+          8
+        ],
+        "channel_extrema": [
+          [
+            231,
+            231
+          ],
+          [
+            238,
+            238
+          ],
+          [
+            248,
+            248
+          ],
+          [
+            255,
+            255
+          ]
+        ],
+        "max_channel_error": [
+          1,
+          0,
+          1,
+          0
+        ],
+        "within_tolerance_3": true
+      }
+    }
+  ],
+  "rejections": [
+    {
+      "sequence": 6,
+      "no_encoded_output": true,
+      "last_preview_retained": true,
+      "error": "InvalidGeometry(\"JPEG requires quality 1..=100 and an opaque export background\")"
+    },
+    {
+      "sequence": 7,
+      "no_encoded_output": true,
+      "last_preview_retained": true,
+      "error": "TextBackendRequired(DisplayId(\"text\"))"
+    },
+    {
+      "sequence": 8,
+      "no_encoded_output": true,
+      "last_preview_retained": true,
+      "error": "ImagePending(DisplayId(\"image\"))"
+    },
+    {
+      "sequence": 9,
+      "no_encoded_output": true,
+      "last_preview_retained": true,
+      "error": "ImageUnavailable { image: DisplayId(\"image\"), reason: \"asset error: controlled export fixture failure\" }"
+    }
+  ],
+  "records": [
+    {
+      "fixture": "scene-export",
+      "session": "294015-1790960510626236914",
+      "sequence": 1,
+      "format": "png",
+      "quality": null,
+      "world_bounds": [
+        0.0,
+        0.0,
+        440.0,
+        320.0
+      ],
+      "scale": 1.0,
+      "pixel_ratio": 1.0,
+      "background_rgba": [
+        232,
+        238,
+        247,
+        255
+      ],
+      "font_bridge": true,
+      "source": "ready",
+      "hash_algorithm": "fnv1a64",
+      "preview_is_outside_source": true,
+      "scene_revision_canvas_selection_viewport_unchanged": true,
+      "history_access": "immutable SceneView borrow; Undo verifies explicit edit baseline",
+      "encoded_bytes": 20314,
+      "encoded_fnv1a64": "10689a7d7c7ffda7",
+      "readback": {
+        "decoded_dimensions": [
+          440,
+          320
+        ],
+        "decoded_rgba_fnv1a64": "15ea68e45801f7d8",
+        "reference_rgba_fnv1a64": "15ea68e45801f7d8",
+        "reference_format": "webp",
+        "lossless_exact": true,
+        "jpeg_background_probe": null,
+        "corner_rgba": [
+          232,
+          238,
+          247,
+          255
+        ],
+        "alpha_zero_partial_opaque": [
+          0,
+          0,
+          140800
+        ]
+      },
+      "status": "passed",
+      "file": "/workspace/shared/scene-export-validation/files/scene-294015-1790960510626236914-001.png"
+    },
+    {
+      "fixture": "scene-export",
+      "session": "294015-1790960510626236914",
+      "sequence": 2,
+      "format": "jpg",
+      "quality": 90,
+      "world_bounds": [
+        0.0,
+        0.0,
+        440.0,
+        320.0
+      ],
+      "scale": 1.0,
+      "pixel_ratio": 1.0,
+      "background_rgba": [
+        232,
+        238,
+        247,
+        255
+      ],
+      "font_bridge": true,
+      "source": "ready",
+      "hash_algorithm": "fnv1a64",
+      "preview_is_outside_source": true,
+      "scene_revision_canvas_selection_viewport_unchanged": true,
+      "history_access": "immutable SceneView borrow; Undo verifies explicit edit baseline",
+      "encoded_bytes": 26052,
+      "encoded_fnv1a64": "7227f25e05db4f49",
+      "readback": {
+        "decoded_dimensions": [
+          440,
+          320
+        ],
+        "decoded_rgba_fnv1a64": "2eb5ad38f7c77228",
+        "reference_rgba_fnv1a64": "15ea68e45801f7d8",
+        "reference_format": "png",
+        "lossless_exact": false,
+        "jpeg_background_probe": true,
+        "corner_rgba": [
+          231,
+          238,
+          248,
+          255
+        ],
+        "alpha_zero_partial_opaque": [
+          0,
+          0,
+          140800
+        ]
+      },
+      "status": "passed",
+      "file": "/workspace/shared/scene-export-validation/files/scene-294015-1790960510626236914-002.jpg"
+    },
+    {
+      "fixture": "scene-export",
+      "session": "294015-1790960510626236914",
+      "sequence": 3,
+      "format": "webp",
+      "quality": null,
+      "world_bounds": [
+        0.0,
+        0.0,
+        440.0,
+        320.0
+      ],
+      "scale": 1.0,
+      "pixel_ratio": 1.0,
+      "background_rgba": [
+        232,
+        238,
+        247,
+        255
+      ],
+      "font_bridge": true,
+      "source": "ready",
+      "hash_algorithm": "fnv1a64",
+      "preview_is_outside_source": true,
+      "scene_revision_canvas_selection_viewport_unchanged": true,
+      "history_access": "immutable SceneView borrow; Undo verifies explicit edit baseline",
+      "encoded_bytes": 16768,
+      "encoded_fnv1a64": "3e0f6c303e68aa44",
+      "readback": {
+        "decoded_dimensions": [
+          440,
+          320
+        ],
+        "decoded_rgba_fnv1a64": "15ea68e45801f7d8",
+        "reference_rgba_fnv1a64": "15ea68e45801f7d8",
+        "reference_format": "png",
+        "lossless_exact": true,
+        "jpeg_background_probe": null,
+        "corner_rgba": [
+          232,
+          238,
+          247,
+          255
+        ],
+        "alpha_zero_partial_opaque": [
+          0,
+          0,
+          140800
+        ]
+      },
+      "status": "passed",
+      "file": "/workspace/shared/scene-export-validation/files/scene-294015-1790960510626236914-003.webp"
+    },
+    {
+      "fixture": "scene-export",
+      "session": "294015-1790960510626236914",
+      "sequence": 4,
+      "format": "png",
+      "quality": null,
+      "world_bounds": [
+        0.0,
+        0.0,
+        440.0,
+        320.0
+      ],
+      "scale": 1.0,
+      "pixel_ratio": 2.0,
+      "background_rgba": [
+        232,
+        238,
+        247,
+        255
+      ],
+      "font_bridge": true,
+      "source": "ready",
+      "hash_algorithm": "fnv1a64",
+      "preview_is_outside_source": true,
+      "scene_revision_canvas_selection_viewport_unchanged": true,
+      "history_access": "immutable SceneView borrow; Undo verifies explicit edit baseline",
+      "encoded_bytes": 55068,
+      "encoded_fnv1a64": "6477f4f75e688d4d",
+      "readback": {
+        "decoded_dimensions": [
+          880,
+          640
+        ],
+        "decoded_rgba_fnv1a64": "7b92872be6f594e1",
+        "reference_rgba_fnv1a64": "7b92872be6f594e1",
+        "reference_format": "webp",
+        "lossless_exact": true,
+        "jpeg_background_probe": null,
+        "corner_rgba": [
+          232,
+          238,
+          247,
+          255
+        ],
+        "alpha_zero_partial_opaque": [
+          0,
+          0,
+          563200
+        ]
+      },
+      "status": "passed",
+      "file": "/workspace/shared/scene-export-validation/files/scene-294015-1790960510626236914-004.png"
+    },
+    {
+      "fixture": "scene-export",
+      "session": "294015-1790960510626236914",
+      "sequence": 5,
+      "format": "webp",
+      "quality": null,
+      "world_bounds": [
+        20.0,
+        30.0,
+        360.0,
+        240.0
+      ],
+      "scale": 1.0,
+      "pixel_ratio": 2.0,
+      "background_rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "font_bridge": true,
+      "source": "ready",
+      "hash_algorithm": "fnv1a64",
+      "preview_is_outside_source": true,
+      "scene_revision_canvas_selection_viewport_unchanged": true,
+      "history_access": "immutable SceneView borrow; Undo verifies explicit edit baseline",
+      "encoded_bytes": 43680,
+      "encoded_fnv1a64": "83119088c72110f2",
+      "readback": {
+        "decoded_dimensions": [
+          720,
+          480
+        ],
+        "decoded_rgba_fnv1a64": "adc4a0ab9a5e1730",
+        "reference_rgba_fnv1a64": "adc4a0ab9a5e1730",
+        "reference_format": "png",
+        "lossless_exact": true,
+        "jpeg_background_probe": null,
+        "corner_rgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "alpha_zero_partial_opaque": [
+          163071,
+          35234,
+          147295
+        ]
+      },
+      "status": "passed",
+      "file": "/workspace/shared/scene-export-validation/files/scene-294015-1790960510626236914-005.webp"
+    },
+    {
+      "fixture": "scene-export",
+      "session": "294015-1790960510626236914",
+      "sequence": 6,
+      "format": "jpg",
+      "quality": 90,
+      "world_bounds": [
+        20.0,
+        30.0,
+        360.0,
+        240.0
+      ],
+      "scale": 1.0,
+      "pixel_ratio": 2.0,
+      "background_rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "font_bridge": true,
+      "source": "ready",
+      "hash_algorithm": "fnv1a64",
+      "preview_is_outside_source": true,
+      "scene_revision_canvas_selection_viewport_unchanged": true,
+      "history_access": "immutable SceneView borrow; Undo verifies explicit edit baseline",
+      "status": "export_rejected",
+      "error": "InvalidGeometry(\"JPEG requires quality 1..=100 and an opaque export background\")",
+      "last_preview_retained": true
+    },
+    {
+      "fixture": "scene-export",
+      "session": "294015-1790960510626236914",
+      "sequence": 7,
+      "format": "png",
+      "quality": null,
+      "world_bounds": [
+        20.0,
+        30.0,
+        360.0,
+        240.0
+      ],
+      "scale": 1.0,
+      "pixel_ratio": 2.0,
+      "background_rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "font_bridge": false,
+      "source": "ready",
+      "hash_algorithm": "fnv1a64",
+      "preview_is_outside_source": true,
+      "scene_revision_canvas_selection_viewport_unchanged": true,
+      "history_access": "immutable SceneView borrow; Undo verifies explicit edit baseline",
+      "status": "export_rejected",
+      "error": "TextBackendRequired(DisplayId(\"text\"))",
+      "last_preview_retained": true
+    },
+    {
+      "fixture": "scene-export",
+      "session": "294015-1790960510626236914",
+      "sequence": 8,
+      "format": "png",
+      "quality": null,
+      "world_bounds": [
+        20.0,
+        30.0,
+        360.0,
+        240.0
+      ],
+      "scale": 1.0,
+      "pixel_ratio": 2.0,
+      "background_rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "font_bridge": true,
+      "source": "pending",
+      "hash_algorithm": "fnv1a64",
+      "preview_is_outside_source": true,
+      "scene_revision_canvas_selection_viewport_unchanged": true,
+      "history_access": "immutable SceneView borrow; Undo verifies explicit edit baseline",
+      "status": "export_rejected",
+      "error": "ImagePending(DisplayId(\"image\"))",
+      "last_preview_retained": true
+    },
+    {
+      "fixture": "scene-export",
+      "session": "294015-1790960510626236914",
+      "sequence": 9,
+      "format": "png",
+      "quality": null,
+      "world_bounds": [
+        20.0,
+        30.0,
+        360.0,
+        240.0
+      ],
+      "scale": 1.0,
+      "pixel_ratio": 2.0,
+      "background_rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "font_bridge": true,
+      "source": "failed",
+      "hash_algorithm": "fnv1a64",
+      "preview_is_outside_source": true,
+      "scene_revision_canvas_selection_viewport_unchanged": true,
+      "history_access": "immutable SceneView borrow; Undo verifies explicit edit baseline",
+      "status": "export_rejected",
+      "error": "ImageUnavailable { image: DisplayId(\"image\"), reason: \"asset error: controlled export fixture failure\" }",
+      "last_preview_retained": true
+    },
+    {
+      "fixture": "scene-export",
+      "session": "294015-1790960510626236914",
+      "sequence": 10,
+      "format": "png",
+      "quality": null,
+      "world_bounds": [
+        20.0,
+        30.0,
+        360.0,
+        240.0
+      ],
+      "scale": 1.0,
+      "pixel_ratio": 2.0,
+      "background_rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "font_bridge": true,
+      "source": "ready",
+      "hash_algorithm": "fnv1a64",
+      "preview_is_outside_source": true,
+      "scene_revision_canvas_selection_viewport_unchanged": true,
+      "history_access": "immutable SceneView borrow; Undo verifies explicit edit baseline",
+      "encoded_bytes": 49612,
+      "encoded_fnv1a64": "c7f4480ecc4f6872",
+      "readback": {
+        "decoded_dimensions": [
+          720,
+          480
+        ],
+        "decoded_rgba_fnv1a64": "adc4a0ab9a5e1730",
+        "reference_rgba_fnv1a64": "adc4a0ab9a5e1730",
+        "reference_format": "webp",
+        "lossless_exact": true,
+        "jpeg_background_probe": null,
+        "corner_rgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "alpha_zero_partial_opaque": [
+          163071,
+          35234,
+          147295
+        ]
+      },
+      "status": "passed",
+      "file": "/workspace/shared/scene-export-validation/files/scene-294015-1790960510626236914-010.png"
+    },
+    {
+      "fixture": "scene-export",
+      "session": "294015-1790960510626236914",
+      "sequence": 11,
+      "format": "png",
+      "quality": null,
+      "world_bounds": [
+        20.0,
+        30.0,
+        360.0,
+        240.0
+      ],
+      "scale": 1.0,
+      "pixel_ratio": 2.0,
+      "background_rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "font_bridge": true,
+      "source": "ready",
+      "hash_algorithm": "fnv1a64",
+      "preview_is_outside_source": true,
+      "scene_revision_canvas_selection_viewport_unchanged": true,
+      "history_access": "immutable SceneView borrow; Undo verifies explicit edit baseline",
+      "encoded_bytes": 49649,
+      "encoded_fnv1a64": "4cd821ee858fb305",
+      "readback": {
+        "decoded_dimensions": [
+          720,
+          480
+        ],
+        "decoded_rgba_fnv1a64": "b2f9b08555861341",
+        "reference_rgba_fnv1a64": "b2f9b08555861341",
+        "reference_format": "webp",
+        "lossless_exact": true,
+        "jpeg_background_probe": null,
+        "corner_rgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "alpha_zero_partial_opaque": [
+          163071,
+          35234,
+          147295
+        ]
+      },
+      "status": "passed",
+      "file": "/workspace/shared/scene-export-validation/files/scene-294015-1790960510626236914-011.png"
+    },
+    {
+      "fixture": "scene-export",
+      "kind": "undo",
+      "baseline_restored": true,
+      "preview_retained": true
+    },
+    {
+      "fixture": "scene-export",
+      "session": "294015-1790960510626236914",
+      "sequence": 12,
+      "format": "png",
+      "quality": null,
+      "world_bounds": [
+        20.0,
+        30.0,
+        360.0,
+        240.0
+      ],
+      "scale": 1.0,
+      "pixel_ratio": 2.0,
+      "background_rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "font_bridge": true,
+      "source": "ready",
+      "hash_algorithm": "fnv1a64",
+      "preview_is_outside_source": true,
+      "scene_revision_canvas_selection_viewport_unchanged": true,
+      "history_access": "immutable SceneView borrow; Undo verifies explicit edit baseline",
+      "encoded_bytes": 49612,
+      "encoded_fnv1a64": "c7f4480ecc4f6872",
+      "readback": {
+        "decoded_dimensions": [
+          720,
+          480
+        ],
+        "decoded_rgba_fnv1a64": "adc4a0ab9a5e1730",
+        "reference_rgba_fnv1a64": "adc4a0ab9a5e1730",
+        "reference_format": "webp",
+        "lossless_exact": true,
+        "jpeg_background_probe": null,
+        "corner_rgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "alpha_zero_partial_opaque": [
+          163071,
+          35234,
+          147295
+        ]
+      },
+      "status": "passed",
+      "file": "/workspace/shared/scene-export-validation/files/scene-294015-1790960510626236914-012.png"
+    },
+    {
+      "fixture": "scene-export",
+      "session": "294015-1790960510626236914",
+      "sequence": 13,
+      "format": "png",
+      "quality": null,
+      "world_bounds": [
+        20.0,
+        30.0,
+        360.0,
+        240.0
+      ],
+      "scale": 1.0,
+      "pixel_ratio": 2.0,
+      "background_rgba": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "font_bridge": true,
+      "source": "ready",
+      "hash_algorithm": "fnv1a64",
+      "preview_is_outside_source": true,
+      "scene_revision_canvas_selection_viewport_unchanged": true,
+      "history_access": "immutable SceneView borrow; Undo verifies explicit edit baseline",
+      "encoded_bytes": 49612,
+      "encoded_fnv1a64": "c7f4480ecc4f6872",
+      "readback": {
+        "decoded_dimensions": [
+          720,
+          480
+        ],
+        "decoded_rgba_fnv1a64": "adc4a0ab9a5e1730",
+        "reference_rgba_fnv1a64": "adc4a0ab9a5e1730",
+        "reference_format": "webp",
+        "lossless_exact": true,
+        "jpeg_background_probe": null,
+        "corner_rgba": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "alpha_zero_partial_opaque": [
+          163071,
+          35234,
+          147295
+        ]
+      },
+      "status": "passed",
+      "file": "/workspace/shared/scene-export-validation/files/scene-294015-1790960510626236914-013.png"
+    },
+    {
+      "fixture": "scene-export",
+      "session": "294015-1790960510626236914",
+      "sequence": 14,
+      "format": "jpg",
+      "quality": 90,
+      "world_bounds": [
+        20.0,
+        30.0,
+        360.0,
+        240.0
+      ],
+      "scale": 1.0,
+      "pixel_ratio": 2.0,
+      "background_rgba": [
+        232,
+        238,
+        247,
+        255
+      ],
+      "font_bridge": true,
+      "source": "ready",
+      "hash_algorithm": "fnv1a64",
+      "preview_is_outside_source": true,
+      "scene_revision_canvas_selection_viewport_unchanged": true,
+      "history_access": "immutable SceneView borrow; Undo verifies explicit edit baseline",
+      "encoded_bytes": 48223,
+      "encoded_fnv1a64": "f8bd5c480943c9fb",
+      "readback": {
+        "decoded_dimensions": [
+          720,
+          480
+        ],
+        "decoded_rgba_fnv1a64": "d7dfd5dccaa9b079",
+        "reference_rgba_fnv1a64": "1b1d37f83a526f41",
+        "reference_format": "png",
+        "lossless_exact": false,
+        "jpeg_background_probe": true,
+        "corner_rgba": [
+          231,
+          238,
+          248,
+          255
+        ],
+        "alpha_zero_partial_opaque": [
+          0,
+          0,
+          345600
+        ]
+      },
+      "status": "passed",
+      "file": "/workspace/shared/scene-export-validation/files/scene-294015-1790960510626236914-014.jpg"
+    }
+  ],
+  "evidence_inventory": [
+    {
+      "path": "crop-alpha.png",
+      "bytes": 132734,
+      "sha256": "c9e8fca48367a410a6b6647b175cfcfe8bd668289f691aea3b015e0cdd6ce3a9"
+    },
+    {
+      "path": "dpr2.png",
+      "bytes": 132767,
+      "sha256": "f32c3d9afc6e12612747f850d28f6297cf3e967544024b26f7cd6d3e42969032"
+    },
+    {
+      "path": "edited.png",
+      "bytes": 130818,
+      "sha256": "d245cc981406388043a1492c078bc30584d7b9cb62989b33b174e55f2d72ed5a"
+    },
+    {
+      "path": "failed-rejected.png",
+      "bytes": 130669,
+      "sha256": "6f83a07fc6305224be190d1a34b7767e771fb5d5bbf20d5b7cc5de5d2cedd92a"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-001.json",
+      "bytes": 1160,
+      "sha256": "dc0b09a1bcb831d31c29f23bc04cee3b09c7a0ce9a333e4d17f4f4b9ca5f3ad7"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-001.png",
+      "bytes": 20314,
+      "sha256": "067a2e21d9908d22eb0ff05023b75ed5c6ea5756b5197a803a14df963e1254e0"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-002.jpg",
+      "bytes": 26052,
+      "sha256": "748dc7f11c6727cb16179bf214d202620f0fbef7243923f1e5d27802f9a9134b"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-002.json",
+      "bytes": 1158,
+      "sha256": "68a7c33a492921ee54da2509b2894bf2a7dad0a5f59232b00909c8d8764f430b"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-003.json",
+      "bytes": 1161,
+      "sha256": "50c182888d341b7e5b2b4d2bf480c2daf3fb3ff5ea37a6749e63cdc8d7083d56"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-003.webp",
+      "bytes": 16768,
+      "sha256": "8bad82c5cb350fa6aacf2bb6286d381ba29eeef7dfd2982739d3fc3dec92297a"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-004.json",
+      "bytes": 1160,
+      "sha256": "8d32fdfb8702fe032ce93831bb69014b1fc3b9f11318e2b43c2e0d07e0491047"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-004.png",
+      "bytes": 55068,
+      "sha256": "3c1a9d4ec1d7b3e0c093741e8eb0a28472de3a16a4e7b83b95655984ae90bfcb"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-005.json",
+      "bytes": 1156,
+      "sha256": "0ee272326a5efc049f320ae83eea95357890d8939ef8b2898c5e38829f0bf3ec"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-005.webp",
+      "bytes": 43680,
+      "sha256": "9ee2f7fbe6441fd4ec5098cc23451369f21719112cf359708b56c153ff7138b1"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-006.json",
+      "bytes": 709,
+      "sha256": "c2c1010a1eef3c792e7cd10be5a9f7ca554a64955194691df98ddafad76a53db"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-007.json",
+      "bytes": 670,
+      "sha256": "2a1fc232dd1a7f942b55c9688a00cb3f819bdb6e65afddd1c9626bdcf05abebd"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-008.json",
+      "bytes": 665,
+      "sha256": "b0b67ff15c62fddabe7cb74818fcbe29fe1536062b58fca9cc5ba248637e08f5"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-009.json",
+      "bytes": 738,
+      "sha256": "e29832991a0f3b81a465c3fcdf272f45904fad9dff796638a1fc102d8a38f53f"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-010.json",
+      "bytes": 1156,
+      "sha256": "bd19faee9af53c026990e11347c4ad2f8a1ee6c3c566fc8d7646e536941e7b97"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-010.png",
+      "bytes": 49612,
+      "sha256": "6a1f9d2e5414467e7be0e658159473527ba68b454367f3473f139f2d325e150b"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-011.json",
+      "bytes": 1156,
+      "sha256": "b717292e8f53e62946afa380d2c6661e19b54dea00745a677b04bb1fd78b071e"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-011.png",
+      "bytes": 49649,
+      "sha256": "39943158bbce9a146678c927b11dd8bba585dfe8ac5497d693372943adf2ef9a"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-012.json",
+      "bytes": 1156,
+      "sha256": "5fd7f0c26134629c9f3201813a45860145583cd22354391261cfc22386e8822f"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-012.png",
+      "bytes": 49612,
+      "sha256": "6a1f9d2e5414467e7be0e658159473527ba68b454367f3473f139f2d325e150b"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-013.json",
+      "bytes": 1156,
+      "sha256": "1515269d9095b69d84eebb9fa9f8fc75bdcc4ad170e7aba0c4216e3e8a1a0efe"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-013.png",
+      "bytes": 49612,
+      "sha256": "6a1f9d2e5414467e7be0e658159473527ba68b454367f3473f139f2d325e150b"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-014.jpg",
+      "bytes": 48223,
+      "sha256": "eadfe014f14cc883d41389550a792b4594d5d51ba118216e7338a287e292d232"
+    },
+    {
+      "path": "files/scene-294015-1790960510626236914-014.json",
+      "bytes": 1161,
+      "sha256": "2f43c841b84d641fdba82a50ce81418fddfc0ea10d707a0b8666dc58000d1507"
+    },
+    {
+      "path": "final-jpeg.png",
+      "bytes": 133550,
+      "sha256": "f03198c1fc3172b4a2b808dbef1ff02d2a302e3ef91dbdcb57b6894eab2868af"
+    },
+    {
+      "path": "font-rejected.png",
+      "bytes": 126547,
+      "sha256": "40ef757ca685e9675f2dc57a232dce4f747873b92758dce54f5914e7ed14c205"
+    },
+    {
+      "path": "jpeg-alpha-rejected.png",
+      "bytes": 128991,
+      "sha256": "5dc4ed45027228cf3e8427d1e59f7159b9036cf44e57f1b073b18844ddf89393"
+    },
+    {
+      "path": "jpeg.png",
+      "bytes": 131603,
+      "sha256": "edb850c9ca784b4d53ac7d4b4a567ade96f3533bb1ebf5cb79fced2186a66b8e"
+    },
+    {
+      "path": "manifest.txt",
+      "bytes": 289,
+      "sha256": "65750a68521b8bd5e99d65ceb94dba61b41c126b0feaa3c62c2fd28d3a834f40"
+    },
+    {
+      "path": "native.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "native.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "native.receipt",
+      "bytes": 180,
+      "sha256": "20e935a80dd9495b9712caf8ad5fa71b483dd4db1e77f7f0a53c728ddddb0181"
+    },
+    {
+      "path": "native.stderr",
+      "bytes": 11430,
+      "sha256": "5432fccbb994ba5cedb62747760f7a0e809774f13c42ea340185db70e677df46"
+    },
+    {
+      "path": "pan-independent.png",
+      "bytes": 131235,
+      "sha256": "40d6fce400f33b509d146ae24b3e46a9b5e36e5167df03813fc1d2812aed7164"
+    },
+    {
+      "path": "pending-rejected.png",
+      "bytes": 123678,
+      "sha256": "35f1d5f8249bc7de8b714480b927edbcd9a0f225f7b2483cde4dcc025e753ae7"
+    },
+    {
+      "path": "png.png",
+      "bytes": 131176,
+      "sha256": "1835f2dac9312cc149671c93310531d2ddde383bd2d2587c74ff5c8c0b5d8f58"
+    },
+    {
+      "path": "recovered.png",
+      "bytes": 132504,
+      "sha256": "87834d7eec183c8179a2968680000acc8b0b0bc3b88f5f1c95e85a8bd30e5ffc"
+    },
+    {
+      "path": "run-native.sh",
+      "bytes": 568,
+      "sha256": "fda1eee9c7c11b1cca8956db0d17b9794d8b97296f315c06b9feb763a256a76e"
+    },
+    {
+      "path": "scene_export",
+      "bytes": 178139688,
+      "sha256": "8f17c920acd6e11e85178fdb58dc411671d5cac5579c6a2897b0616e252e02a2"
+    },
+    {
+      "path": "source.tar.gz",
+      "bytes": 1231536,
+      "sha256": "171e9409c93c6e32e38e90dfcb87f68384a5f79e637e546d068ce3380ab6663c"
+    },
+    {
+      "path": "undo.png",
+      "bytes": 132486,
+      "sha256": "f476683d5c0ff14de596a4a9c654013b25c39bcad1fc806e97ca7e18d58fa550"
+    },
+    {
+      "path": "webp.png",
+      "bytes": 131308,
+      "sha256": "df8f2c155f1c4a750a649c19b5375513231351512cf632c03770999247903f35"
+    }
+  ],
+  "inspected_build_test_logs": [
+    {
+      "path": "/tmp/scene-export-tests.log",
+      "bytes": 25308,
+      "sha256": "4fc5e7fadce3512ec7e28b7174fc263cdac5f3a92b12140a817b7e280d7c3d66",
+      "result_lines": [
+        "    Finished `test` profile [unoptimized] target(s) in 4.31s",
+        "test result: ok. 264 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.29s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ]
+    },
+    {
+      "path": "/tmp/scene-export-clippy.log",
+      "bytes": 152,
+      "sha256": "57aa203c4ebe0d758895e6225689a227944660bda112c69fd69b6663d2c24f84",
+      "result_lines": [
+        "    Finished `dev` profile [unoptimized] target(s) in 1.87s"
+      ]
+    },
+    {
+      "path": "/tmp/flow-export-ui-tests.log",
+      "bytes": 1305,
+      "sha256": "f5b3785ba02e105fd30be25c5047f9101392702ebcee60b3743cb49977998ae2",
+      "result_lines": [
+        "    Finished `test` profile [unoptimized] target(s) in 8.34s",
+        "test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 184 filtered out; finished in 0.43s"
+      ]
+    },
+    {
+      "path": "/tmp/flow-export-ui-final.log",
+      "bytes": 20503,
+      "sha256": "452d89db327de7563e689c9cbb6b4dd1384e52e3b49407dcf8733f8341eaa88d",
+      "result_lines": [
+        "    Finished `test` profile [unoptimized] target(s) in 5.93s",
+        "test result: ok. 191 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 14.79s"
+      ]
+    },
+    {
+      "path": "/tmp/flow-export-ui-clippy-final.log",
+      "bytes": 135,
+      "sha256": "ab686f15b70a9c4d0e64cc1e06ec351f77a7ba684b685a8fe66fc0a91acf0c59",
+      "result_lines": [
+        "    Finished `dev` profile [unoptimized] target(s) in 3.59s"
+      ]
+    },
+    {
+      "path": "/tmp/flow-export-demo-clippy.log",
+      "bytes": 138,
+      "sha256": "08cc75877c8196cdfd1f5e5a379f2b3af5647548c93eb41fb9968d93b305644a",
+      "result_lines": [
+        "    Finished `dev` profile [unoptimized] target(s) in 0.62s"
+      ]
+    },
+    {
+      "path": "/tmp/flow-export-demo-build.log",
+      "bytes": 213,
+      "sha256": "0f3a76e735a9df5bcb9762908e90acc02902e8c15b50a5920b499a114e0b25be",
+      "result_lines": [
+        "    Finished `dev` profile [unoptimized] target(s) in 6.24s"
+      ]
+    }
+  ],
+  "verification_scope": {
+    "core_tests_passed": 264,
+    "new_core_export_tests": 21,
+    "ui_library_tests_passed": 191,
+    "new_ui_export_tests": 7,
+    "strict_core_ui_and_example_clippy": "passed per inspected logs",
+    "example_native_link": "passed per inspected log",
+    "audit_reran_builds": false,
+    "audit_changed_code_or_ran_native_ui": false,
+    "limits": [
+      "scene SVG is unimplemented",
+      "lossy WebP is unsupported",
+      "synchronous resource observation does not fetch/wait",
+      "no cross-platform or large-scale performance claim",
+      "focused integration/native acceptance is not full-workspace acceptance"
+    ]
+  }
+}

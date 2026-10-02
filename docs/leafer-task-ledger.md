@@ -1,12 +1,12 @@
 # Leafer 对齐任务总表 v1（审阅版）
 
-固定45个去重能力单元，源码包含版本 `09bc537a551da09d4cb7c407e22ee10d49d3c667`。这是具体范围的开发台账，不是全部Leafer API兼容证明，不用任务数计算工时或百分比。旧39条A–E验收契约仅为交叉索引，不与本表相加；此前31/8快速审计不作为本表完成数。
+固定45个去重能力单元，源码包含版本 `99392f7c35f956f8765ed5730423df19e3d474cd`。这是具体范围的开发台账，不是全部Leafer API兼容证明，不用任务数计算工时或百分比。旧39条A–E验收契约仅为交叉索引，不与本表相加；此前31/8快速审计不作为本表完成数。
 
 ## 状态计数
 
-- 有界契约已验证：24
+- 有界契约已验证：25
 - 部分实现：15
-- 未开始该能力：5
+- 未开始该能力：4
 - 待核实验收：0
 - 开发/验收中：1
 
@@ -49,7 +49,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | APP-06 | 外观 / [GPU局部绘制后端](engine.md) | 未开始该能力 | 后端真正消费persistent damage并有像素等价/工作量对照 | CPU dirty和damage记录已归DAT-04；GPUI当前full-frame |
 | LAY-01 | 布局 / [固定与内容流式布局](flow-layout.md) | 有界契约已验证 | row/column、wrap/reverse、padding/gap/grow/minmax、auto-size/嵌套固定点/hidden排除 | 百分比/baseline/shrinkContent归LAY-03；不是CSS完整实现 |
 | LAY-02 | 布局 / [响应派生与事务所有权](reactive-layout.md) | 有界契约已验证 | 安装binding后普通编辑提交前派生、白名单/有界固定点/冲突拒绝、一次Undo | 不是全局observer/帧合并局部依赖调度 |
-| LAY-03 | 布局 / [高级尺寸与局部调度](flow-layout.md) | 未开始该能力 | 固定父尺寸百分比、shrinkContent、文字baseline行对齐、依赖dirty子树与单帧合并；循环/所有权冲突原子拒绝 | 受父尺寸确定性约束；不实现全CSS布局或无界observer网络 |
+| LAY-03 | 布局 / [高级尺寸与局部调度](flow-layout.md) | 开发/验收中 | 固定父尺寸百分比、shrinkContent、文字baseline行对齐、依赖dirty子树与单帧合并；循环/所有权冲突原子拒绝 | 受父尺寸确定性约束；不实现全CSS布局或无界observer网络 |
 | LAY-04 | 布局 / [同源文字测量与重排](text-measurement.md) | 有界契约已验证 | 同GPUI shaping的Natural/AutoHeight、字体metrics失效、真实测量推动布局 | 富排版的字词段间距归ELM-04 |
 | ELM-01 | 元素 / [矢量原语与实际几何](ellipse-arcs.md) | 有界契约已验证 | Rect/Ellipse/Line/Polygon/Star/Path/Pen各独立模块；四角/弧环/数据API贯通bounds/hit/CPU | 不包含通用点编辑器或完整SVG文档 |
 | ELM-02 | 元素 / [Path距离查询与显式定位](path-placement.md) | 有界契约已验证 | Kurbo局部弧长/切线、世界点、显式目标定位；自依赖/祖先/奇异/陈旧拒绝 | 持续动画绑定归ANI-02 |
@@ -61,12 +61,12 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | ELM-08 | 元素 / [Canvas矢量上下文批次](canvas-clips.md) | 有界契约已验证 | Path填充/描边、transform/alpha/save/restore/冻结clip栈；晚失败原子回滚 | 无持久current path/context；图文分别归ELM-09/10 |
 | ELM-09 | 元素 / [Canvas图像批次](canvas-image-commands.md) | 有界契约已验证 | immutable image输入、source crop/destination/DPR、仿射/clip/alpha和单代际原子提交 | 不取URL；负尺寸拒绝；不保证浏览器精确filter边缘 |
 | ELM-10 | 元素 / [Canvas文字与路径/图案状态](canvas-text-commands.md) | 部分实现 | 必选fillText、measureText、strokeText；beginPath/moveTo/lineTo/quadraticCurveTo/bezierCurveTo/closePath；createPattern的repeat/no-repeat与transform | 不包含DOM focus控件、CSS字体parser或全部浏览器context状态；新增操作另增范围 |
-| ELM-11 | 元素 / [Canvas与场景导出](canvas-pixels.md) | 部分实现 | Canvas RGBA/PNG已实现；必补固定Scene区域PNG/JPEG/WebP和SVG，含背景/透明度/裁切范围及缺资源拒绝 | 文件选择器/自动下载不是引擎API；字体嵌入或完整外部SVG导入不在本项 |
+| ELM-11 | 元素 / [Canvas与场景导出](scene-raster-export.md) | 部分实现 | Canvas RGBA/PNG已实现；必补固定Scene区域PNG/JPEG/WebP和SVG，含背景/透明度/裁切范围及缺资源拒绝 | 文件选择器/自动下载不是引擎API；字体嵌入或完整外部SVG导入不在本项 |
 | CUS-01 | 自定义元素 / [动态几何命中与宿主呈现](custom-geometry-validation.md) | 有界契约已验证 | custom属性驱动几何/bounds/hit、显式native renderer、实例隔离；拒绝不支持合成 | schema本身归DAT-01；不双计工厂 |
 | CUS-02 | 自定义元素 / [自定义resize和异步资源协议](custom-nodes.md) | 未开始该能力 | 自定义尺寸/编辑策略与测量、异步ready/cancel事件正式接入 | 任意宿主回调能实现不等于框架已提供协议 |
 | ANI-01 | 交互插件 / [有界属性动画时序](animation-timing.md) | 有界契约已验证 | 稀疏关键帧、delay/repeat/direction/speed、seek/pause/conflict/cancel和单Undo | 不是嵌套timeline；motion binding归ANI-02 |
 | ANI-02 | 交互插件 / [持续运动路径动画](motion-path-animation.md) | 有界契约已验证 | 按时钟距离/切线绑定位置/旋转，变化失效/冲突/销毁/取消/history一致 | source/祖先变化保守取消，不自动refollow；无路径生长/文字沿路径/自动timer；完成后显式finish_editor封Undo |
-| ANI-03 | 交互插件 / [组合动画时钟与定位控制](animation-timing.md) | 开发/验收中 | 必选AnimateList式并行与串行子动画、offset、父时钟seek/pause/reverse、结束样式及一次Undo | jump/join、physics、无限嵌套和跨所有跳帧回调不属于v1有限集合，新增须显式扩项 |
+| ANI-03 | 交互插件 / [组合动画时钟与定位控制](animation-timeline.md) | 有界契约已验证 | 必选AnimateList式并行与串行子动画、offset、父时钟seek/pause/reverse、结束样式及一次Undo | jump/join、physics、无限嵌套和跨所有跳帧回调不属于v1有限集合，新增须显式扩项 |
 
 ## 自动化、原生与版本证据
 
@@ -101,7 +101,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | APP-06 | 无GPU damage消费测试 | 未实现/未验收 | 尚无独立完整验收提交 |
 | LAY-01 | flow/auto_size/reverse/item_boxes/gap/taffy对应全套通过 | 核心是纯measure/arrange契约；窗口专门矩阵仍未宣称 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | LAY-02 | engine derivation及layout reactive/ratio/text测试通过 | 纯提交契约；Text盒子窗口验证其普通编辑路径 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
-| LAY-03 | 无完整行为验收 | 未实现/未验收 | 尚无独立完整验收提交 |
+| LAY-03 | 高级布局/百分比/baseline/dirty队列源码与受影响回归进行中；真实宿主帧桥另验，不以手动flush冒称完成 | 未实现/未验收 | 尚无独立完整验收提交 |
 | LAY-04 | text measurement与layout text回归通过 | Text padding/italic/overflow多次同源对照窗口通过 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | ELM-01 | Ellipse25、Rect20、Path23新回归及headless批次通过 | 模型几何和CPU为主；Ellipse/Rect专项窗口未声称通过 | `6796dc885cecbb155fb00d2eb4736c64bb51afb0` |
 | ELM-02 | 查询17及定位17新回归通过 | 只读/显式引擎API，不要求新增窗口 | `d914a1ef0fec79b25fb67cb7f76f2c7f774ec55d` |
@@ -113,12 +113,12 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | ELM-08 | 11矢量+7clip新回归、360/367受影响记录通过 | 11:41和11:57窗口、DPR/回滚/重绘像素对照通过 | `e4f7d9455f7aaaf38d160951c330ae03249435d1` |
 | ELM-09 | 12新回归；63 composite+18 UI=81聚焦通过，strict Clippy/link通过 | 14:00:18–14:03:12 Linux窗口退出0；DPR1/2、crop/透明源/反射/clip/晚失败/resize/Undo/Clear；三组像素区域一致 | `0ab6ffbf8bdbdb837a30f6cbf193e5506cb0124d` |
 | ELM-10 | FillTextBox/同源measure已实现：8新回归、119不同受影响检查及严格Clippy通过；stroke/current path/pattern未实现 | 14:37–14:39双DPR真实字形/clip/bridge/measure/resize/Undo/Clear退出0，四组像素一致 | `003288b3a9b4178890c162a4f1271f3b8dd41f4f` |
-| ELM-11 | RGBA/PNG11新回归、338受影响通过 | 10:25 PNG预览及4份解码核验；Scene/SVG未验 | `61ac2522c7194ae2a63240b63afa8cc4808a67a8` |
+| ELM-11 | Scene栅格导出21核心+7 UI新回归，264 composite与191 UI lib通过；严格Clippy/链接通过 | 17:01–17:07真实14尝试：10文件独立解码验证，4预期拒绝保留预览；DPR/crop/alpha/Undo/视口独立，退出0；SVG仍缺 | `99392f7c35f956f8765ed5730423df19e3d474cd` |
 | CUS-01 | 9项新回归、12既有registry与184 UI库检查通过；strict Clippy及链接通过 | 16:32–16:36八步真实点击/UndoRedo/双实例/renderer fallback/整域拒绝与恢复；49状态检查0失败、13 renderer输入；退出0 | `09bc537a551da09d4cb7c407e22ee10d49d3c667` |
 | CUS-02 | 无完整协议验收 | 未实现/未验收 | 尚无独立完整验收提交 |
 | ANI-01 | 10月2日workspace日志包含animation/sequences/timing/editor_playback通过；旧文档pending需修正 | 纯显式时钟契约；不宣称新动画窗口验收 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | ANI-02 | 29新回归；102 animation含doctest和17原placement通过，严格3crate Clippy通过 | 纯显式时钟/引擎与editor契约，未新增原生窗口 | `457bdede25ac8bb06b452bde4038d6c54e6e5dac` |
-| ANI-03 | 已按固定串并行/offset/父时钟/结束样式/一次Undo边界实现，独立回归正在进行；未验收 | 纯显式时钟API，尚无最终验收证据 | 尚无独立完整验收提交 |
+| ANI-03 | 34项新回归（25 timeline+9 editor），135 animation lib/tests全通过；strict Clippy通过，含失败帧/seek回滚及一次Undo | 纯显式时钟API，无新增原生控件；不把编译当窗口验收 | `7ba93bb9fa28e1b5f0622ae51e8a7ce2c88e6d62` |
 
 ## 上游符号与技术依赖
 
@@ -185,3 +185,5 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 - 15:31更新：INT-02固定Text FontSize模式通过自动和原生验收，其他组件intrinsic/auto-size范围仍缺，保持部分，不增加完成计数。
 
 - 2026-10-02 16:36：以真实trace/paint/renderer回执闭环EVT-01、EVT-02、LIF-02、CUS-01；固定总数45不变，24已验证、21未闭环。ANI-03进入开发；所有原生与纯测试覆盖差异逐项保留。
+
+- 2026-10-02 17:07：ANI-03按冻结有限集合闭环，25项已验证/20项未闭环；Scene PNG/JPEG/WebP原生与独立文件解码验收通过，ELM-11因SVG缺项仍部分。LAY-03进入开发，固定总数45不变。

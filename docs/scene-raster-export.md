@@ -1,8 +1,8 @@
 # Fixed-region scene raster export
 
-This is the headless raster subset of **ELM-11**, implemented on 2026-10-02.
-It does not complete ELM-11: scene SVG export remains open. A SceneView resource
-bridge and real-window acceptance are separate integration work.
+This is the bounded raster subset of **ELM-11**, implemented on 2026-10-02,
+including the SceneView resource/font bridge and focused Linux native acceptance.
+It does not complete ELM-11: scene SVG export remains open.
 
 ## Reused implementation
 
@@ -122,6 +122,37 @@ flag is checked before and after codecs and during JPEG/WebP external writes.
 It does not interrupt a codec's private compression computation; PNG uses the
 existing synchronous `StaticImage::encode_png` implementation.
 
+### SceneView adapter
+
+`SceneView::export_scene(request, limits)` and
+`SceneView::export_scene_cancellable(request, limits, &AtomicBool)` are
+synchronous, immutable host commands returning `Result<SceneExport,
+CompositeError>`. They capture `editor.scene()`, so this adapter exports the
+canonical document. Editor pan/zoom, grid/theme, selection/handles, transient
+state styles, native widgets and the example's separate preview do not enter
+the output. The adapter does not evaluate an independent presentation timeline.
+
+The adapter obtains Image and Canvas observations from the existing resource
+adapter and their current engine tickets. It converts only the selected decoded
+frame, deduplicates identical `(GPUI ImageId, frame_index)` buffers, and admits
+conversion bytes and pixel work before copying. Image conversion, glyph
+preparation, composition and codec work share the request budgets. Animated
+images use their current selected frame without advancing or changing playback.
+Canvas observations must still match the current canonical configuration/ticket;
+an old pre-resize snapshot is not accepted as a substitute.
+
+The installed same-App `GpuiTextRasterizer` enters through the existing
+`TextPreparation`/Canvas text-input contract at the export's physical-pixel
+mapping. Missing, pending, failed, cancelled, or stale inputs reject the complete
+export. The adapter passes cancellation through preparation and rechecks the
+font backend epoch and cancellation before returning bytes. It never fetches a
+URL, starts a resource load, waits for readiness, fabricates text rectangles, or
+falls back to a stale image. The host can render/resolve resources through its
+normal workflow and explicitly try export again.
+
+These APIs do not write files or create previews. The `scene_export` example
+performs those host actions after complete successful export and decode checks.
+
 ## Formats and locked dependencies
 
 - PNG: existing streaming `StaticImage::encode_png`, `png = 0.17.16`, RGBA8
@@ -191,14 +222,14 @@ These choices are explicit contracts, not claims of full Leafer export parity.
 
 Still open: scene SVG, trim/padding/slice/rotated clip options, alternate relative
 spaces, automatic resource waiting, auto-download/data URLs, per-format metadata,
-font embedding, lossy WebP, arbitrary native Custom rendering, and integration
-acceptance beyond this headless core.
+font embedding, lossy WebP, arbitrary native Custom rendering, and broader
+cross-platform/performance acceptance.
 
 ## Validation
 
 All 264 flow-composite tests passed, including 21 new export tests. Strict
-all-targets Clippy (`-D warnings`), changed-Rust-file formatting and `git diff
---check` also passed. The core adds deterministic regression coverage for fixed world origin/crop,
+all-targets Clippy (`-D warnings`), changed-Rust-file formatting and
+`git diff --check` also passed. The core adds deterministic regression coverage for fixed world origin/crop,
 scale/DPR/ceil dimensions, fractional crop coverage, empty and alpha backgrounds,
 ordinary owned-canvas opacity contract, z-order/backdrop blends, existing parent
 clip/group opacity/alpha masks, current image and Canvas inputs, host text ink,
@@ -213,6 +244,93 @@ cargo test --locked --offline -p gpui-flow-composite -- --test-threads=1
 cargo clippy --locked --offline -p gpui-flow-composite --all-targets -- -D warnings
 ```
 
-Only focused headless/core checks belong to this slice. No native window,
-workspace-wide acceptance, commit, push, GitHub Actions or deployment was run
-by this implementation worker.
+The final flow-ui library run passed **191 tests**, including **7 new export
+integration tests**. The focused integration tests cover selected-frame dedup and
+admission before copy, animation-frame selection without playback/document
+mutation, missing/pending/failed/stale resource rejection, early cancellation,
+Canvas resize-ticket freshness and immutable owned pixels, required font bridge,
+and real glyph case/paragraph/affine behavior plus font-epoch rejection. Strict
+UI-library and example Clippy and native example linking passed. The audit
+inspected the final logs rather than rerunning these builds. This is focused
+core/UI/example acceptance, not a full-workspace rerun.
+
+## Native acceptance and independent file audit
+
+The actual Linux window ran **2026-10-02 17:01:50–17:07:56 UTC** and closed
+normally with exit **0**. The native operator physically exercised all fourteen
+export attempts and inspected the displayed pixels. The source pane contained a
+clipped rotated vector, Unicode Upper text with paragraph spacing, a predecoded
+embedded alpha image, and runtime-owned Canvas pixels. The decoded file preview
+was a separate host `img`, never a node inserted into the exported scene.
+
+The frozen source is
+[commit 99392f7c35f956f8765ed5730423df19e3d474cd](https://github.com/emojiiii/gpui-flow/commit/99392f7c35f956f8765ed5730423df19e3d474cd),
+tree `23acbddf0bbebdbbc4ef5e92b7bffabe5891f736`, verified by the integrator through
+the GitHub API. The audit independently matched **all 522 archive files** to the
+local synthetic commit `c4414daccc35dcea505407b7efca672bdf721bab`, whose tree is
+exactly that frozen tree; later working-tree edits were not used as evidence.
+
+- Source archive SHA-256:
+  `171e9409c93c6e32e38e90dfcb87f68384a5f79e637e546d068ce3380ab6663c`
+- Executed binary SHA-256:
+  `8f17c920acd6e11e85178fdb58dc411671d5cac5579c6a2897b0616e252e02a2`
+- Local evidence directory: `/workspace/shared/scene-export-validation`
+- Actual raw JSON is `native.stderr`: **15 records**, comprising fourteen
+  attempts and one Undo witness. `native.jsonl` is empty stdout, not the record
+  source. `native.receipt` and `native.exit` confirm the run window and exit
+- [Compact audit summary](validation/2026-10-02-scene-export-summary.json)
+  preserves all exact parsed records, independent decode results, source/file/raw
+  hashes, screenshots inventory, and inspected build/test-log hashes
+
+The fourteen attempts yielded **10 complete encoded files and 4 expected
+rejections**:
+
+1. PNG, JPEG quality 90, and lossless WebP at full 440×320 / DPR 1 / opaque
+   background (attempts 1–3)
+2. Full PNG at DPR 2, yielding 880×640 (attempt 4)
+3. Transparent WebP at world crop `(20,30,360,240)` / DPR 2, yielding 720×480
+   (attempt 5)
+4. JPEG with transparent background, missing font bridge, pending Image, and
+   failed Image each rejected the complete export and retained the previous
+   decoded preview (attempts 6–9); **no encoded files** exist for those attempts
+5. Restoring Image readiness recovered the same transparent cropped pixels;
+   changing canonical vector color changed the output; Undo restored the exact
+   pre-edit canonical JSON; changing view pan/zoom left fixed-world export
+   unchanged (attempts 10–13 plus the Undo record)
+6. Cropped JPEG quality 90 at DPR 2 with the explicit opaque background succeeded
+   at 720×480 (attempt 14)
+
+Independent decoding used **Pillow 12.3.0**, its reported JPEG library **6.2**,
+and **libwebp 1.6.0**. All ten encoded lengths and native FNV-1a64 file hashes
+matched. Dimensions matched crop × scale × DPR, and independent alpha histograms
+matched every native receipt. FNV-1a64 is a fixture checksum; the audit separately
+records SHA-256 for encoded files and decoded RGBA.
+
+- Decoded full PNG 1 and WebP 3 are byte-for-byte equal RGBA, SHA-256
+  `2c67ea35df8a5aa2a7b7e2dd905b423b97554672e5517f82e782151f05285a48`
+- Decoded cropped WebP 5 and PNG 10/12/13 are byte-for-byte equal RGBA, SHA-256
+  `c06b9ff447ab2f34c3dffbb55f53518b397d33a37120a2a823907c7b84446519`.
+  They contain 163,071 transparent, 35,234 partial-alpha and 147,295 opaque pixels.
+  The three PNG files are also identical encoded bytes
+- Edited PNG 11 differs at **68,902 pixels**, while keeping the same alpha
+  histogram; Undo recovered the baseline. Its decoded RGBA SHA-256 is
+  `de7a5aff81aa4e457c300a74a70b8dbdfcf9f5685787d56e7251236c07d2f8b9`
+- JPEG 2/14 independently decoded to the correct extent with fully opaque alpha.
+  Their empty 8×8 corner decoded uniformly to `[231,238,248,255]`, within one
+  channel level of the explicit `[232,238,247,255]` background. Pillow/libjpeg and
+  native image/zune JPEG decoded hashes differ; **JPEG pixel equality is not
+  claimed**. The summary preserves both observed hashes
+
+All fourteen attempts asserted unchanged canonical JSON, engine revision,
+selection, viewport and Canvas snapshot identity. Export borrowed SceneView
+immutably; the subsequent real Undo explicitly verified the previous edit's
+baseline. Missing-producer recovery, repeated exports and view-only movement
+were all exercised without contaminating the source with preview nodes.
+
+The example writes unique `create_new` files and JSON receipts only under
+`FLOW_SCENE_EXPORT_DIR`, or its documented temp-directory fallback. Those host
+example side effects are separate from the library API. This acceptance does not
+claim SVG support, lossy WebP, cross-platform font equality, all native scenarios,
+large-scene performance, a process-wide memory cap, or workspace-wide validation.
+No code, build, UI run, publication, Actions or deployment was performed by the
+independent file-audit pass.
