@@ -171,3 +171,6 @@ mod canvas_command_tests;
 
 #[cfg(test)]
 mod text_affine_tests;
+
+#[cfg(test)]
+mod canvas_image_command_tests;

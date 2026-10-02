@@ -371,3 +371,51 @@ fn canvas_clip_batches_preserve_configuration_and_snapshot_on_late_failure() {
     assert!(Arc::ptr_eq(&old, &r.canvas_snapshot(&e, h).unwrap()));
     assert_eq!(e.scene(), &scene);
 }
+
+#[test]
+fn canvas_image_commands_publish_one_resource_without_document_changes_and_reject_stale_targets() {
+    use gpui_flow_composite::{CanvasCommand, ImageInputs, StaticImage};
+    let (mut e, mut r, h) = setup();
+    let scene = e.scene().clone();
+    let revision = e.revision();
+    let mut inputs = ImageInputs::default();
+    inputs.insert(
+        "decoded".into(),
+        Ok(Arc::new(
+            StaticImage::from_premultiplied_rgba(1, 1, vec![255, 0, 0, 255], Default::default())
+                .unwrap(),
+        )),
+    );
+    let command = CanvasCommand::DrawImage {
+        image: "decoded".into(),
+        source: Some(Bounds::new(Point::ZERO, Size::new(1., 1.))),
+        destination: Bounds::new(Point::new(2., 2.), Size::new(5., 4.)),
+    };
+    r.edit_canvas(&mut e, h, |s| {
+        s.draw_commands_with_images(std::slice::from_ref(&command), &inputs)
+            .map(|_| ())
+    })
+    .unwrap();
+    assert_eq!(at(&r, &e, h, 3, 3), [255, 0, 0, 255]);
+    assert_eq!(at(&r, &e, h, 0, 0), [0; 4]);
+    assert_eq!(e.scene(), &scene);
+    assert_eq!(e.revision(), revision);
+    let before = r.canvas_snapshot(&e, h).unwrap();
+    assert!(
+        r.edit_canvas(&mut e, h, |s| s
+            .draw_commands_with_images(&[command.clone(), CanvasCommand::Restore], &inputs)
+            .map(|_| ()))
+            .is_err()
+    );
+    assert!(Arc::ptr_eq(&before, &r.canvas_snapshot(&e, h).unwrap()));
+    let weak = Arc::downgrade(&before);
+    drop(before);
+    e.destroy(h).unwrap();
+    assert!(weak.upgrade().is_none());
+    assert!(
+        r.edit_canvas(&mut e, h, |s| s
+            .draw_commands_with_images(&[command], &inputs)
+            .map(|_| ()))
+            .is_err()
+    );
+}

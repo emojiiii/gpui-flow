@@ -1,10 +1,11 @@
 //! A bounded, transaction-local vector context over the existing compositor.
 mod clip;
+mod image;
 use super::CanvasSurface;
 use crate::{CompositeError, CompositeLimits, DomainNode, DomainSource, ImageInputs, TextInputs};
 use clip::{Budget, Clip};
 use gpui_flow_scene::{
-    Affine, DisplayObject, FillRule, Paint, Stroke, StrokeAlignment, Style,
+    Affine, Bounds, DisplayId, DisplayObject, FillRule, Paint, Stroke, StrokeAlignment, Style,
     display::{Group, Path},
 };
 
@@ -39,6 +40,13 @@ pub enum CanvasCommand {
     StrokePath {
         path: Path,
         stroke: Stroke,
+    },
+    /// Immutable decoded input, never a URL. Source is in physical image pixels;
+    /// destination is in logical Canvas units before the current transform.
+    DrawImage {
+        image: DisplayId,
+        source: Option<Bounds>,
+        destination: Bounds,
     },
 }
 #[derive(Clone)]
@@ -78,7 +86,9 @@ fn paint_budget(paint: &Paint) -> Result<(), CompositeError> {
 fn source(
     commands: &[CanvasCommand],
     limits: CompositeLimits,
-) -> Result<Option<DomainSource>, CompositeError> {
+    inputs: &ImageInputs,
+    smooth: bool,
+) -> Result<Option<(DomainSource, ImageInputs)>, CompositeError> {
     if commands.len() > MAX_CANVAS_COMMANDS {
         return Err(CompositeError::InputLimit);
     }
@@ -87,8 +97,27 @@ fn source(
     let mut children = Vec::new();
     let mut draws = 0usize;
     let mut budget = Budget::default();
+    let mut images = ImageInputs::default();
     for command in commands {
         let (path, style) = match command {
+            CanvasCommand::DrawImage {
+                image,
+                source,
+                destination,
+            } => {
+                draws += 1;
+                children.push(
+                    image::Compiler {
+                        inputs,
+                        images: &mut images,
+                        budget: &mut budget,
+                        smooth,
+                        limits,
+                    }
+                    .compile(image, *source, *destination, &state, draws)?,
+                );
+                continue;
+            }
             CanvasCommand::Save => {
                 if stack.len() >= MAX_CANVAS_STATE_DEPTH.min(limits.max_depth) {
                     return Err(CompositeError::NestingLimit);
@@ -167,7 +196,7 @@ fn source(
         // Admission precedes cloning or validation's geometry preparation.
         draws += 1;
         budget.input(path, limits)?;
-        budget.draw(path, &state.clips, limits)?;
+        budget.draw(path.commands.len(), &state.clips, limits)?;
         let object = DisplayObject::new(format!("canvas-command-{draws}"), path.clone())
             .with_transform(state.transform)
             .with_style(style);
@@ -192,15 +221,18 @@ fn source(
     if draws == 0 {
         return Ok(None);
     }
-    Ok(Some(DomainSource {
-        root: DomainNode {
-            object: DisplayObject::new("canvas-command-root", Group::new()),
-            world_transform: Affine::IDENTITY,
-            children,
+    Ok(Some((
+        DomainSource {
+            root: DomainNode {
+                object: DisplayObject::new("canvas-command-root", Group::new()),
+                world_transform: Affine::IDENTITY,
+                children,
+            },
+            clips: vec![],
+            canvas: None,
         },
-        clips: vec![],
-        canvas: None,
-    }))
+        images,
+    )))
 }
 impl CanvasSurface {
     /// Render an ordered vector batch and publish at most one immutable generation.
@@ -210,16 +242,22 @@ impl CanvasSurface {
     /// the existing surface DPR mapping is applied once after the command state.
     /// No context state, current path or command history is retained afterward.
     pub fn draw_commands(&mut self, commands: &[CanvasCommand]) -> Result<bool, CompositeError> {
-        let Some(source) = source(commands, self.limits)? else {
+        self.draw_commands_with_images(commands, &ImageInputs::default())
+    }
+    /// Atomic vector/image batch using host-supplied immutable decoded inputs.
+    /// Input keys are scoped to this call; only referenced buffers are retained
+    /// and charged, with shared buffers counted once by the compositor.
+    pub fn draw_commands_with_images(
+        &mut self,
+        commands: &[CanvasCommand],
+        inputs: &ImageInputs,
+    ) -> Result<bool, CompositeError> {
+        let Some((source, images)) = source(commands, self.limits, inputs, self.config.smooth)?
+        else {
             return Ok(false);
         };
         let before = self.generation();
-        self.draw(
-            &source,
-            Affine::IDENTITY,
-            &ImageInputs::default(),
-            &TextInputs::default(),
-        )?;
+        self.draw(&source, Affine::IDENTITY, &images, &TextInputs::default())?;
         Ok(self.generation() != before)
     }
 }

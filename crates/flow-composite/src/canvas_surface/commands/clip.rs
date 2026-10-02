@@ -37,13 +37,13 @@ impl Budget {
     }
     pub fn draw(
         &mut self,
-        path: &Path,
+        points: usize,
         clips: &[Clip<'_>],
         limits: CompositeLimits,
     ) -> Result<(), CompositeError> {
         self.nodes = self.nodes.saturating_add(1 + 2 * clips.len());
         self.masks = self.masks.saturating_add(clips.len());
-        self.rendered_points = self.rendered_points.saturating_add(path.commands.len());
+        self.rendered_points = self.rendered_points.saturating_add(points);
         for c in clips {
             self.rendered_points = self.rendered_points.saturating_add(c.path.commands.len());
         }
