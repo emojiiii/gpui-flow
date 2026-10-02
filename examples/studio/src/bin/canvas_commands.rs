@@ -18,8 +18,21 @@ fn fill(s: &str, color: Color) -> CanvasCommand {
         rule: FillRule::NonZero,
     }
 }
-fn commands() -> Vec<CanvasCommand> {
-    vec![
+fn commands(clip_mode: u8) -> Vec<CanvasCommand> {
+    let mut result = Vec::new();
+    if clip_mode > 0 {
+        result.push(CanvasCommand::ClipPath {
+            path: path("M 8 80 C 8 -15 255 -15 255 80 C 255 190 8 190 8 80 Z"),
+            rule: FillRule::NonZero,
+        });
+    }
+    if clip_mode > 1 {
+        result.push(CanvasCommand::ClipPath {
+            path: path("M 0 0 L 280 0 L 280 180 L 0 180 Z M 80 70 L 190 70 L 190 140 L 80 140 Z"),
+            rule: FillRule::EvenOdd,
+        });
+    }
+    result.extend([
         CanvasCommand::Transform(Affine::translation(18., 18.)),
         CanvasCommand::FillPath {
             path: path("M 0 20 Q 40 -15 80 20 C 100 50 90 65 55 62 L 0 62 Z"),
@@ -63,7 +76,8 @@ fn commands() -> Vec<CanvasCommand> {
         CanvasCommand::Transform(Affine::translation(20., -10.)),
         fill("M 0 0 L 38 0 L 38 28 L 0 28 Z", Color::hex(0x408cff)),
         CanvasCommand::Restore,
-    ]
+    ]);
+    result
 }
 fn document() -> Scene {
     let mut s = Scene::new();
@@ -102,6 +116,7 @@ fn document() -> Scene {
 struct Lab {
     view: Entity<SceneView>,
     status: String,
+    clip_mode: u8,
 }
 impl Lab {
     fn new(cx: &mut Context<Self>) -> Self {
@@ -114,6 +129,7 @@ impl Lab {
         let mut lab = Self {
             view,
             status: String::new(),
+            clip_mode: 1,
         };
         lab.paint(0, cx);
         lab
@@ -128,7 +144,7 @@ impl Lab {
                         match action {
                             0 => {
                                 s.clear()?;
-                                s.draw_commands(&commands())?;
+                                s.draw_commands(&commands(self.clip_mode))?;
                             }
                             1 => {
                                 s.draw_commands(&[
@@ -195,9 +211,10 @@ impl Render for Lab {
             .child(ControlButton::new("safe","Safe shrink/grow").on_click(cx.listener(|s,_,_,cx|s.resize(true,cx))))
             .child(ControlButton::new("reset","Reset shrink/grow").on_click(cx.listener(|s,_,_,cx|s.resize(false,cx))))
             .child(ControlButton::new("undo","Undo config").on_click(cx.listener(|s,_,_,cx|s.view.update(cx,|v,cx|{v.editor.undo();cx.notify();}))))
+            .child(ControlButton::new("clip","Cycle clip").on_click(cx.listener(|s,_,_,cx|{s.clip_mode=(s.clip_mode+1)%3;s.paint(0,cx);})))
             .child(ControlButton::new("clear","Clear").on_click(cx.listener(|s,_,_,cx|s.paint(3,cx)))))
         .child(div().flex_1().min_h_0().overflow_hidden().child(self.view.clone()))
-        .child(div().h(px(96.)).px_4().text_sm().child("Shared curves, gradient, rotated evenodd hole, dashed stroke and per-draw alpha.\nSave/restore affects transform and opacity only inside a batch. DPR maps logical coordinates once.\n").child(self.status.clone()))
+        .child(div().h(px(96.)).px_4().text_sm().child("Clip cycle: ellipse / ellipse + rectangular hole / none. Curves and each alpha draw share the frozen clip.\nSave/restore includes clipping, transform and opacity only inside a batch. DPR maps logical coordinates once.\n").child(self.status.clone()))
     }
 }
 fn main() {

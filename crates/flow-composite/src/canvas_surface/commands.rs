@@ -1,6 +1,8 @@
 //! A bounded, transaction-local vector context over the existing compositor.
+mod clip;
 use super::CanvasSurface;
 use crate::{CompositeError, CompositeLimits, DomainNode, DomainSource, ImageInputs, TextInputs};
+use clip::{Budget, Clip};
 use gpui_flow_scene::{
     Affine, DisplayObject, FillRule, Paint, Stroke, StrokeAlignment, Style,
     display::{Group, Path},
@@ -22,6 +24,12 @@ pub enum CanvasCommand {
     Transform(Affine),
     SetTransform(Affine),
     SetOpacity(f32),
+    /// Intersect the current clip with this path, frozen at the current transform.
+    /// Opacity does not affect clipping. Save/Restore includes the clip state.
+    ClipPath {
+        path: Path,
+        rule: FillRule,
+    },
     FillPath {
         path: Path,
         paint: Paint,
@@ -33,16 +41,18 @@ pub enum CanvasCommand {
         stroke: Stroke,
     },
 }
-#[derive(Clone, Copy)]
-struct State {
+#[derive(Clone)]
+struct State<'a> {
     transform: Affine,
     opacity: f32,
+    clips: Vec<Clip<'a>>,
 }
-impl Default for State {
+impl Default for State<'_> {
     fn default() -> Self {
         Self {
             transform: Affine::IDENTITY,
             opacity: 1.,
+            clips: Vec::new(),
         }
     }
 }
@@ -76,14 +86,14 @@ fn source(
     let mut stack = Vec::new();
     let mut children = Vec::new();
     let mut draws = 0usize;
-    let mut points = 0usize;
+    let mut budget = Budget::default();
     for command in commands {
         let (path, style) = match command {
             CanvasCommand::Save => {
                 if stack.len() >= MAX_CANVAS_STATE_DEPTH.min(limits.max_depth) {
                     return Err(CompositeError::NestingLimit);
                 }
-                stack.push(state);
+                stack.push(state.clone());
                 continue;
             }
             CanvasCommand::Restore => {
@@ -107,6 +117,21 @@ fn source(
                     ));
                 }
                 state.opacity = *value;
+                continue;
+            }
+            CanvasCommand::ClipPath { path, rule } => {
+                budget.input(path, limits)?;
+                if state.clips.len() + 2 > limits.max_depth
+                    || state.clips.len() >= MAX_CANVAS_STATE_DEPTH
+                {
+                    return Err(CompositeError::NestingLimit);
+                }
+                path.validate().map_err(CompositeError::InvalidGeometry)?;
+                state.clips.push(Clip {
+                    path,
+                    rule: *rule,
+                    transform: state.transform,
+                });
                 continue;
             }
             CanvasCommand::FillPath { path, paint, rule } => {
@@ -141,24 +166,23 @@ fn source(
         };
         // Admission precedes cloning or validation's geometry preparation.
         draws += 1;
-        points = points.saturating_add(path.commands.len());
-        if draws + 1 > limits.max_nodes
-            || path.commands.len() > limits.max_points
-            || points > limits.max_total_points
-        {
-            return Err(CompositeError::InputLimit);
-        }
+        budget.input(path, limits)?;
+        budget.draw(path, &state.clips, limits)?;
         let object = DisplayObject::new(format!("canvas-command-{draws}"), path.clone())
             .with_transform(state.transform)
             .with_style(style);
         object.validate().map_err(CompositeError::InvalidGeometry)?;
         // Compile directly to the existing domain IR: repeated Scene::insert
         // would clone/revalidate all preceding paths for every command.
-        children.push(DomainNode {
-            object,
-            world_transform: state.transform,
-            children: vec![],
-        });
+        children.push(clip::wrap(
+            DomainNode {
+                object,
+                world_transform: state.transform,
+                children: vec![],
+            },
+            &state.clips,
+            draws,
+        ));
     }
     if !stack.is_empty() {
         return Err(CompositeError::InvalidGeometry(
@@ -181,7 +205,8 @@ fn source(
 impl CanvasSurface {
     /// Render an ordered vector batch and publish at most one immutable generation.
     /// Any invalid command, stack, geometry or budget leaves all pixels untouched.
-    /// Returns false when there is no visible output. Coordinates are logical;
+    /// Returns whether a generation was published (a clipped transparent result
+    /// can still publish). Coordinates are logical;
     /// the existing surface DPR mapping is applied once after the command state.
     /// No context state, current path or command history is retained afterward.
     pub fn draw_commands(&mut self, commands: &[CanvasCommand]) -> Result<bool, CompositeError> {

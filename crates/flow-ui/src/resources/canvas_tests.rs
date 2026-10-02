@@ -338,3 +338,36 @@ fn canvas_vector_commands_reject_stale_handle_and_release_owned_snapshot() {
             .is_err()
     );
 }
+#[test]
+fn canvas_clip_batches_preserve_configuration_and_snapshot_on_late_failure() {
+    use gpui_flow_composite::CanvasCommand;
+    use gpui_flow_scene::FillRule;
+    let (mut e, mut r, h) = setup();
+    let scene = e.scene().clone();
+    let command = CanvasCommand::FillPath {
+        path: display::Path::from_svg("M 0 0 L 10 0 L 10 8 L 0 8 Z").unwrap(),
+        paint: Color::WHITE.into(),
+        rule: FillRule::NonZero,
+    };
+    let clip = CanvasCommand::ClipPath {
+        path: display::Path::from_svg("M 2 2 L 7 2 L 7 6 L 2 6 Z").unwrap(),
+        rule: FillRule::NonZero,
+    };
+    r.edit_canvas(&mut e, h, |s| {
+        s.draw_commands(&[clip.clone(), command.clone()])
+            .map(|_| ())
+    })
+    .unwrap();
+    assert_eq!(at(&r, &e, h, 3, 3), [255; 4]);
+    assert_eq!(at(&r, &e, h, 1, 1), [0; 4]);
+    assert_eq!(e.scene(), &scene);
+    let old = r.canvas_snapshot(&e, h).unwrap();
+    assert!(
+        r.edit_canvas(&mut e, h, |s| s
+            .draw_commands(&[clip, command, CanvasCommand::Save])
+            .map(|_| ()))
+            .is_err()
+    );
+    assert!(Arc::ptr_eq(&old, &r.canvas_snapshot(&e, h).unwrap()));
+    assert_eq!(e.scene(), &scene);
+}

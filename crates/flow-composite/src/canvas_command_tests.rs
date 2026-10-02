@@ -290,3 +290,184 @@ fn canvas_commands_resize_resets_or_preserves_pixels_but_never_retains_context()
     s.reconfigure(c).unwrap();
     assert_eq!(pixel(&s, 11, 11), [0; 4]);
 }
+
+fn clip(p: Path, rule: FillRule) -> CanvasCommand {
+    CanvasCommand::ClipPath { path: p, rule }
+}
+#[test]
+fn canvas_clips_freeze_transform_ignore_opacity_and_apply_dpr_once() {
+    let mut c = Canvas::new(16., 16.);
+    c.pixel_ratio = 2.;
+    let mut s = CanvasSurface::new(c, CompositeLimits::default()).unwrap();
+    s.draw_commands(&[
+        CanvasCommand::SetOpacity(0.),
+        CanvasCommand::Transform(Affine::translation(5., 3.)),
+        clip(square(), FillRule::NonZero),
+        CanvasCommand::SetTransform(Affine::IDENTITY),
+        CanvasCommand::SetOpacity(1.),
+        fill(path("M 0 0 L 16 0 L 16 16 L 0 16 Z"), Color::WHITE),
+    ])
+    .unwrap();
+    assert_eq!(pixel(&s, 11, 7), [255; 4]);
+    assert_eq!(pixel(&s, 9, 7), [0; 4]);
+    assert_eq!(pixel(&s, 22, 7), [0; 4]);
+    assert_eq!(pixel(&s, 11, 18), [0; 4]);
+}
+#[test]
+fn canvas_clips_nested_intersection_and_restore_preserve_draw_order() {
+    let mut s = surface();
+    s.draw_commands(&[
+        CanvasCommand::Save,
+        clip(path("M 2 2 L 20 2 L 20 20 L 2 20 Z"), FillRule::NonZero),
+        CanvasCommand::Save,
+        clip(path("M 10 10 L 28 10 L 28 28 L 10 28 Z"), FillRule::NonZero),
+        fill(path("M 0 0 L 32 0 L 32 32 L 0 32 Z"), Color::hex(0xff0000)),
+        CanvasCommand::Restore,
+        fill(square(), Color::hex(0x00ff00)),
+        CanvasCommand::Restore,
+        CanvasCommand::Transform(Affine::translation(24., 24.)),
+        fill(square(), Color::hex(0x0000ff)),
+    ])
+    .unwrap();
+    assert_eq!(pixel(&s, 15, 15), [255, 0, 0, 255]);
+    assert_eq!(pixel(&s, 22, 15), [0; 4]);
+    assert_eq!(pixel(&s, 3, 3), [0, 255, 0, 255]);
+    assert_eq!(pixel(&s, 1, 1), [0; 4]);
+    assert_eq!(pixel(&s, 26, 26), [0, 0, 255, 255]);
+}
+#[test]
+fn canvas_clips_evenodd_holes_and_empty_clips_are_real_geometry() {
+    let mut s = surface();
+    let hole = path("M 1 1 L 15 1 L 15 15 L 1 15 Z M 5 5 L 11 5 L 11 11 L 5 11 Z");
+    s.draw_commands(&[
+        clip(hole, FillRule::EvenOdd),
+        fill(path("M 0 0 L 32 0 L 32 32 L 0 32 Z"), Color::WHITE),
+    ])
+    .unwrap();
+    assert_eq!(pixel(&s, 2, 2), [255; 4]);
+    assert_eq!(pixel(&s, 8, 8), [0; 4]);
+    assert_eq!(pixel(&s, 20, 20), [0; 4]);
+    let mut empty = surface();
+    empty
+        .draw_commands(&[
+            CanvasCommand::Save,
+            clip(Path::default(), FillRule::NonZero),
+            fill(square(), Color::WHITE),
+            CanvasCommand::Restore,
+            CanvasCommand::Transform(Affine::translation(10., 10.)),
+            fill(square(), Color::WHITE),
+        ])
+        .unwrap();
+    assert_eq!(pixel(&empty, 2, 2), [0; 4]);
+    assert_eq!(pixel(&empty, 12, 12), [255; 4]);
+}
+#[test]
+fn canvas_clips_apply_coverage_per_draw_before_source_over() {
+    let curve = path("M 1.3 16 Q 14.7 -9 30.4 16 Q 16 39 1.3 16 Z");
+    let paint = fill(path("M 0 0 L 32 0 L 32 32 L 0 32 Z"), Color::WHITE);
+    let mut once = surface();
+    once.draw_commands(&[clip(curve.clone(), FillRule::NonZero), paint.clone()])
+        .unwrap();
+    let mut twice = surface();
+    twice
+        .draw_commands(&[
+            clip(curve.clone(), FillRule::NonZero),
+            paint.clone(),
+            paint.clone(),
+        ])
+        .unwrap();
+    let one = once.snapshot();
+    let two = twice.snapshot();
+    let mut edge = 0;
+    for (a, b) in one
+        .premultiplied_rgba()
+        .chunks(4)
+        .zip(two.premultiplied_rgba().chunks(4))
+    {
+        let x = a[3] as u16;
+        let expected = x + (x * (255 - x) + 127) / 255;
+        assert!((b[3] as i32 - expected as i32).abs() <= 1);
+        if x > 10 && x < 245 {
+            edge += 1;
+            assert!(b[3] > a[3]);
+        }
+    }
+    assert!(edge > 15);
+    once.draw_commands(&[clip(curve, FillRule::NonZero), paint])
+        .unwrap();
+    assert_eq!(
+        once.snapshot().premultiplied_rgba(),
+        two.premultiplied_rgba()
+    );
+}
+#[test]
+fn canvas_clips_do_not_leak_between_batches_or_paint_by_themselves() {
+    let mut s = surface();
+    let old = s.snapshot();
+    assert!(
+        !s.draw_commands(&[clip(square(), FillRule::NonZero)])
+            .unwrap()
+    );
+    assert!(Arc::ptr_eq(&old, &s.snapshot()));
+    s.draw_commands(&[
+        clip(Path::default(), FillRule::NonZero),
+        fill(square(), Color::WHITE),
+    ])
+    .unwrap();
+    assert!(s.snapshot().premultiplied_rgba().iter().all(|v| *v == 0));
+    s.draw_commands(&[
+        CanvasCommand::Transform(Affine::translation(20., 20.)),
+        fill(square(), Color::WHITE),
+    ])
+    .unwrap();
+    assert_eq!(pixel(&s, 22, 22), [255; 4]);
+}
+#[test]
+fn canvas_clips_invalid_late_path_and_compiled_mask_budgets_are_atomic() {
+    rejected(&[
+        fill(square(), Color::WHITE),
+        clip(
+            Path::new(vec![gpui_flow_scene::display::PathCommand::MoveTo {
+                to: Point::new(f32::NAN, 1.),
+            }]),
+            FillRule::NonZero,
+        ),
+    ]);
+    let commands = [
+        clip(square(), FillRule::NonZero),
+        fill(path("M 0 0 L 32 0 L 32 32 L 0 32 Z"), Color::WHITE),
+        fill(path("M 0 0 L 32 0 L 32 32 L 0 32 Z"), Color::WHITE),
+    ];
+    for limits in [
+        CompositeLimits {
+            max_total_points: 15,
+            ..Default::default()
+        },
+        CompositeLimits {
+            max_nodes: 6,
+            ..Default::default()
+        },
+        CompositeLimits {
+            max_mask_runs: 1,
+            ..Default::default()
+        },
+        CompositeLimits {
+            max_depth: 1,
+            ..Default::default()
+        },
+        CompositeLimits {
+            max_surface_bytes: 10_000,
+            ..Default::default()
+        },
+        CompositeLimits {
+            max_surface_writes: 4000,
+            ..Default::default()
+        },
+    ] {
+        let mut s = CanvasSurface::new(Canvas::new(32., 32.), limits).unwrap();
+        let old = s.snapshot();
+        assert!(s.draw_commands(&commands).is_err(), "{limits:?}");
+        assert!(Arc::ptr_eq(&old, &s.snapshot()));
+        assert_eq!(s.generation(), 1);
+    }
+}
