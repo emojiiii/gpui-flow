@@ -109,3 +109,8 @@ Text beneath rounded or affine ancestors now uses [automatic bounded glyph
 domains](text-ancestor-clips.md), with an explicitly supplied same-App font
 bridge. Rectangular native masks stay fast; transformed glyphs and arbitrary
 Text paint styles remain unsupported.
+
+Text now supports [bounded opt-in end ellipsis](text-overflow.md) using shared
+native/CPU shaping and grapheme boundaries. Default clipping and intrinsic
+measurement stay unchanged; custom markers, rich text and arbitrary typography
+remain outside this slice.

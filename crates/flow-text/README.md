@@ -60,3 +60,12 @@ cargo run --locked -p flow-studio --bin text_measure_probe
 ## Explicit native raster bridge
 
 With the `gpui` feature, `GpuiTextRasterizer::application(platform)` captures the platform's actual raster backend and constructs Application using that same platform. Explicitly pass the returned Arc to `SceneView::set_text_rasterizer`; an arbitrary existing App cannot expose GPUI's private raster handle. Font/glyph identity, shaping, fallback and wrapping stay with the same native `TextSystem`. The producer uses grayscale A8 and straight-BGRA color glyphs with bounded job-local caching and stale-font epoch checks. See [compositing](../../docs/compositing.md#host-opt-in-same-native-backend-text) for the supported plain-solid/uniform-scale subset, limits, lifecycle and real-font/native reproduction commands.
+
+## Fixed-box paint overflow
+
+The optional `gpui_overflow::shape_text_in_box` shares GPUI visual rows and
+grapheme-safe end-ellipsis decisions between native and CPU painting. This is a
+paint policy; `TextMeasurer` still measures the original source. `TextRasterRequest`
+now includes `overflow: TextOverflow::Clip` (old behavior) or `Ellipsis`. The
+contracts-only default stays dependency-free; the GPUI feature reuses the locked
+Unicode segmentation crate. See [limits and native evidence](../../docs/text-overflow.md).

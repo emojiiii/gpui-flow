@@ -1,7 +1,7 @@
 # Text fixed-box end ellipsis
 
-Status: recoverable implementation checkpoint. Focused model/shaping checks
-passed; final affected checks and native acceptance are pending.
+Status: bounded Linux model, real-glyph and native-window acceptance passed on
+2026-10-02. This is a fixed-box end-ellipsis slice, not full typography parity.
 
 ## Contract
 
@@ -60,9 +60,37 @@ font/shaping library. TextRasterRequest gains an `overflow` field; downstream
 Rust struct literals must choose Clip to retain the old behavior. Repository
 callers were migrated.
 
-## Validation checkpoint
+## Validation (2026-10-02)
 
-Focused checks cover default/JSON, factory/schema, invalid atomic updates,
-resource tickets, intrinsic sizing, history, GPUI wrap/nowrap/height decisions,
-tiny boxes, combining/ZWJ/flag graphemes, actual marker glyph pixels and stale
-composite jobs. Final counts and native evidence will replace this checkpoint.
+- 16 new regressions: 3 scene/default/budget, 2 factory/resource/atomicity,
+  1 editor history, 1 intrinsic layout, 8 real GPUI shaping/raster fixtures and
+  1 late composite-job invalidation case
+- 152 affected tests passed: 127 UI, 9 optional-GPUI text and 16 targeted model,
+  text-box/layout/history tests. Zero failed/ignored. Focused earlier runs
+  overlap these totals and are not additive; unchanged whole-workspace tests
+  were not broadly rerun
+- Strict six-crate all-targets Clippy, final example Clippy, formatting, locked
+  checks and one-job native linking passed. The contracts-only cargo tree still
+  contains flow-text alone. The Unicode dependency version was reused unchanged
+- Native window ran 10:02:01–10:04:21 UTC and exited 0 with empty stderr.
+  Side-by-side native/CPU actual glyphs matched for wrapped last-row markers,
+  nowrap paragraph markers, centered/bottom rows, vertical-overflow top alignment,
+  combining accents, family ZWJ emoji, flag emoji and CJK. Tiny boxes clipped the
+  real marker without scaling it. A taller box restored the complete original
+  Unicode content; six Undo steps restored the initial wrapped scene
+- Screenshots are preserved in the native tool record; final inventory confirmed
+  closure. No browser layout, all-font, all-bidi or cross-platform claim is made
+- The initial compile required exporting the new scene enum. Strict example
+  Clippy caught ambiguous assignment spacing, corrected before final link and
+  native acceptance. No production input changed during the passing final run
+
+Final native source tree: `b30f2d66f3d9167fb7240ab150d6eaea984872f6`.
+Source archive SHA-256:
+`801a9772212f90c7fc9bd3ac82b14ac5f94bc4592560425289cfa77ea8a9ca7c`.
+Linux example binary SHA-256:
+`d33689d558c3f4661d4c5d195f7cc2f42f79ddedfe9e82b93b3e4bdd90cb6c7a`.
+Only documentation changed after that exact native snapshot.
+
+Run `cargo run -p flow-studio --bin text_overflow` to compare both paths and
+exercise clip/ellipsis, wrapping, height, vertical alignment, Unicode, tiny width
+and Undo.

@@ -86,11 +86,13 @@ impl Lab {
             v.editor.transaction(|s|{for id in ["native","cpu"] {
                 s.update_object(&id.into(),|o|if let Shape::Text(t)=&mut o.shape{match action {
                     0=>t.overflow=if t.overflow==TextOverflow::Clip{TextOverflow::Ellipsis}else{TextOverflow::Clip},
-                    1=>t.wrap=!t.wrap,
+                    1=>t.wrap = !t.wrap,
                     2=>t.size.height=if t.size.height<150.{230.}else{130.},
+                    5=>t.size.width=if t.size.width>40.{32.}else{280.},
                     3=>t.vertical_align=match t.vertical_align{TextVerticalAlign::Top=>TextVerticalAlign::Middle,TextVerticalAlign::Middle=>TextVerticalAlign::Bottom,TextVerticalAlign::Bottom=>TextVerticalAlign::Top},
                     _=>t.content=if t.content==NORMAL{"Cafe\u{301} 👩‍👩‍👧‍👦 🇨🇦 ffi 漢字 · repeated Unicode text that should end at a grapheme boundary.\nMore content remains in the document.".into()}else{NORMAL.into()},
                 }})?;
+                if action==5 {s.update_object(&format!("{id}-box").into(),|o|if let Shape::Rect(r)=&mut o.shape{r.size.width=if r.size.width>40.{32.}else{280.};})?;}
                 if action==2 {s.update_object(&format!("{id}-box").into(),|o|if let Shape::Rect(r)=&mut o.shape{r.size.height=if r.size.height<150.{230.}else{130.};})?;}
             }Ok(())}).unwrap();cx.notify();
         });
@@ -105,6 +107,7 @@ impl Render for Lab {
             .child(ControlButton::new("height","Short / tall").on_click(cx.listener(|this,_,_,cx|this.edit(2,cx))))
             .child(ControlButton::new("align","Vertical align").on_click(cx.listener(|this,_,_,cx|this.edit(3,cx))))
             .child(ControlButton::new("unicode","Unicode / prose").on_click(cx.listener(|this,_,_,cx|this.edit(4,cx))))
+            .child(ControlButton::new("tiny","Tiny / full").on_click(cx.listener(|this,_,_,cx|this.edit(5,cx))))
             .child(ControlButton::new("undo","Undo").on_click(cx.listener(|this,_,_,cx|this.view.update(cx,|v,cx|{v.editor.undo();cx.notify();})))))
         .child(div().flex_1().min_h_0().overflow_hidden().child(self.view.clone()))
         .child(div().h(px(75.)).px_4().text_sm().child("Opt-in end ellipsis uses the inner padded box. Native and CPU share GPUI rows and grapheme-safe truncation.\nOriginal content and intrinsic measurement remain intact; vertical overflow stays top-aligned. Toggle policies / height / Unicode and Undo."))

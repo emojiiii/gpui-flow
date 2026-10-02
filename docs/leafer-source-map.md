@@ -36,6 +36,7 @@ Status: historical source research plus a separately labelled current source map
 - Image组件增量：[独立角半径与几何驱动合成](image-corners.md)复用Rect/Kurbo、GPUI Cover/Fill角半径和CPU实际fit-mask；Contain圆角及复杂变换/祖先clip自动进入有界CPU域。16项新回归，受影响664项通过（1项原有忽略），真实静态/动画/旋转/clip/Undo窗口退出0。没有alpha hit或原生圆角Text；后续Image编辑工具见下一条
 - Image交互增量：[非均匀缩放与旋转手柄](image-transform-tools.md)复用已有仿射/多选root/history与实际CPU域，保留Text约束及legacy兼容。新增10项回归并修复单选命名手柄陈旧source/派生布局捕获漏洞；受影响356项测试通过，Linux真实多路径拖动/Shift/Undo/Redo/zoom窗口退出0；crop/inner editor仍缺
 - Text裁切增量：[圆角/仿射祖先自动合成](text-ancestor-clips.md)复用同App字体bridge和真实mask，不再要求无关blend/effect强制建域；保留矩形native及显式后端/文字变换限制。新增8项回归，318项不同测试通过，原生窗口角半径/padding/clip/bridge恢复/Undo退出0；同时修复曲线mask边缘裁切覆盖率偏差
+- Text溢出增量：[固定框末尾省略号](text-overflow.md)复用GPUI实际wrap/shape与已锁定unicode-segmentation，不改原文/内在测量；native与CPU共享末行marker及垂直溢出顶对齐。新增16项回归，受影响152项通过，真实Unicode/窄框/换行/高度/Undo双路径窗口退出0；默认clip保持，任意marker/富文本/字间距仍缺
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
 ## 九类能力当前边界（含待验证源码增量）
