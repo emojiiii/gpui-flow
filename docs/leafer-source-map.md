@@ -42,6 +42,7 @@ Status: historical source research plus a separately labelled current source map
 - Text装饰增量：[共享实际行宽的下划线与删除线](text-decoration.md)贯通独立组件配置、工厂、资源、历史及native/CPU共同几何；非透明装饰自动合成以确保字形/线条重叠后整体opacity只应用一次。新增12项回归，373项受影响检查通过；真实四种装饰/对齐/换行/ellipsis/italic/opacity及十次Undo窗口退出0。自定义装饰色/offset、字词段间距及富文本仍缺
 - Canvas绘图增量：[原子矢量命令批次](canvas-commands.md)用独立模块复用现有domain/渐变/曲线及Kurbo-Lyon描边，支持批次内变换/opacity/save/restore与一次像素代际发布。新增11项回归，360项受影响测试通过；真实DPR 1/2、无效末命令回滚、resize/Undo/重绘窗口退出0，拒绝及重绘前后画面区域逐像素相同。完整context、clip stack及文字/图像命令仍缺
 - Canvas裁切增量：[逐次绘制的Path裁切栈](canvas-clips.md)冻结当前变换，支持NonZero/EvenOdd、交集、空clip与save/restore；复用已有alpha-mask并在每次source-over前应用覆盖率，显式核算复制几何及mask预算。新增7项回归，367项受影响测试通过；真实双DPR模式/无效命令/resize/Undo/重绘窗口退出0，三组画面区域逐像素一致。非持久context，未扩展retained场景clip schema
+- Text变换增量：[局部字形像素的仿射绘制](text-affine.md)复用Affine最大奇异值、同App字体与现有图像compositor，支持旋转/反射/非均匀/剪切并保留uniform原路径；精确local mask、祖先裁切、字形预算/陈旧任务/Undo贯通。新增9项回归，376项受影响测试通过；真实Unicode/装饰/overflow/透明度/bridge恢复/十一Undo窗口退出0，恢复画面逐像素一致。外部编辑手柄、富文本及effect自身变换限制保持
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
 ## 九类能力当前边界（含待验证源码增量）

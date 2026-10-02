@@ -1,8 +1,7 @@
 # Affine Text rendering
 
-Status: recoverable source checkpoint. Nine new focused pixel/transform tests and
-strict affected Clippy pass; broader checks, native linking and window acceptance
-are pending.
+Status: implemented and validated on Linux. This is bounded affine glyph
+rendering with an explicit same-App font bridge.
 
 SceneView now creates a bounded CPU domain for solid plain Text whose world
 transform includes rotation, reflection, shear or nonuniform scale. It requires
@@ -40,3 +39,38 @@ unsupported Text paints remain explicit errors. Source/attachment/font epochs,
 transform changes and Undo reuse existing request-key invalidation. This does
 not add transformed text editing, affine transform handles, arbitrary Text paints,
 rich text, font axes, cross-platform native acceptance or browser parity.
+
+Effect-specific transform restrictions are unchanged. For example, the bounded
+outer-shadow implementation still requires its supported positive-similarity
+transform; enabling affine glyphs does not enable arbitrary affine shadows.
+
+## Validation
+
+Nine new tests cover unchanged uniform raster metrics, existing maximum-scale
+math, inverse visibility projection, full effect sources, singular/extreme bounds,
+real rotated/reflected/nonuniform/sheared glyph pixels, local padding/decoration/
+ellipsis, missing bridge and unsupported paints, stale transform jobs and exact
+Undo, source budgets, local-mask admission and metadata replacement. An earlier
+ancestor-clip regression now verifies supported rotated glyphs while retaining
+the missing-bridge error.
+
+Affected tests: **376 passed, zero failed or ignored** (150 UI + 226 composite).
+Strict affected all-targets Clippy, example Clippy and real native linking passed.
+No production source changed during the native run.
+
+`text_affine` ran 2026-10-02 12:20:10–12:23:50 UTC and closed normally with exit 0
+and empty stdout/stderr. The window showed actual 30°/90° rotation, reflection,
+nonuniform scale and shear aligned with vector outlines; rounded ancestor clips,
+nowrap/ellipsis/clip, italic/Unicode, decorations and opacity also worked.
+Withdrawing the font bridge removed glyphs and reported TextBackendRequired;
+restoring it recovered the previous artwork pixel-for-pixel. Eleven Undo actions
+restored the initial identity artwork exactly. Screenshots and the close receipt
+were retained with the validation artifacts.
+
+Exact source commit `fd70a23915b33fac69aba13fd48c7fd5742d610e`, tree
+`5fbc4a8785e93f36d23248aedca14a62119c0e72`; archive SHA-256
+`e6852210de91212f2153cc1c55b25b1ece30fe6536b23f05cadd2df6f63afb77`;
+binary SHA-256
+`13104691820dd2a29ce1029368f8ae2857bc79f718deb7c6494528077b9b606a`.
+This is Linux native evidence, not cross-platform typography or browser parity.
+Run `cargo run --locked -p flow-studio --bin text_affine` to reproduce.

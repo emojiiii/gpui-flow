@@ -82,3 +82,8 @@ module uses the same shaped rows, actual font metrics and bounded allocation for
 native/CPU geometry. Existing Rust request literals must add `decoration`;
 measurement requests deliberately remain decoration-independent. See the
 [decoration contract and native receipt](../../docs/text-decoration.md).
+
+The SceneView producer now supports [bounded affine Text](../../docs/text-affine.md)
+by choosing maximum-scale local raster coordinates and reusing the existing
+image compositor. TextRasterRequest values must share one raster coordinate
+space; RasterizedText.origin is expressed in that space after device scaling.

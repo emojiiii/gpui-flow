@@ -102,7 +102,7 @@ app.run(move |cx| {
 
 This is an explicit capability, not automatic support for arbitrary existing App/Window instances: GPUI keeps their raster handle private. `set_text_rasterizer` rejects a bridge belonging to a different Application. Passing `None` withdraws the capability. No new font dependency or GPUI fork is introduced. The current helper is for locked desktop platforms; Web raster calls are explicitly rejected. The default SceneView still has no CPU text producer.
 
-The supported subset is the current plain-text model with zero/one solid fill, explicit family/weight/size/line height, newline/empty-line handling, optional automatic wrap, and start/center/end alignment. The complete text transform in screen space must be positive axis-aligned uniform scale plus translation. Rotation, skew, reflection, nonuniform scale, text strokes, gradients and multiple fill layers are explicit whole-domain errors. Hidden/zero-opacity subtrees need no raster input. A fully transparent/no-fill text produces no ink.
+The supported subset is the current plain-text model with zero/one solid fill, explicit family/weight/size/line height, newline/empty-line handling, optional automatic wrap, and start/center/end alignment. Positive axis-aligned uniform text keeps its existing raster path. [Bounded affine Text](text-affine.md) also supports rotation, skew, reflection and nonuniform scale through maximum-scale local glyph pixels and the existing image transform. Text strokes, gradients and multiple fill layers remain explicit whole-domain errors; effect-specific transform restrictions are unchanged. Hidden/zero-opacity subtrees need no raster input. A fully transparent/no-fill text produces no ink.
 
 `flow-text::shape_text` supplies the same `WrappedLine` layouts used by native text, retaining actual fallback FontIds, glyph IDs, ligatures/clusters and GPUI wrap boundaries. A thin paint walker follows GPUI's baseline `(line_height - ascent - descent)/2 + ascent`, per-glyph vertical offsets and wrap/alignment origins. Fonts, glyph selection, bidi and language behavior remain whatever the locked GPUI backend supports; this does not claim new shaping-language support. Device-pixel origin quantization follows GPUI's 4×1 grid, with the integer-origin emoji special case.
 
@@ -327,8 +327,8 @@ mostly offscreen source can therefore reject rather than being tiled.
 Document inputs require finite offsets within ±4096 and blur in [0,256]. The
 renderer additionally permits device sigma 0 or [0.001,64], device offsets within
 ±8192, and positive similarity transforms (translation, rotation, uniform scale).
-Reflections, skew and non-uniform scale reject explicitly. Text retains the
-existing stricter positive axis-aligned uniform transform restriction. Image,
+Reflections, skew and non-uniform scale reject explicitly. Text now uses the [affine glyph producer](text-affine.md), while these
+shadow-specific positive-similarity restrictions still apply. Image,
 font and viewport/DPR keys still apply. Changes to any shadow field invalidate
 stale placement conservatively. There is no hidden resolution reduction.
 

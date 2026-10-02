@@ -107,8 +107,8 @@ separate [interaction/lifecycle contract](image-transform-tools.md).
 
 Text beneath rounded or affine ancestors now uses [automatic bounded glyph
 domains](text-ancestor-clips.md), with an explicitly supplied same-App font
-bridge. Rectangular native masks stay fast; transformed glyphs and arbitrary
-Text paint styles remain unsupported.
+bridge. Rectangular native masks stay fast; a later [affine Text slice](text-affine.md)
+adds transformed glyphs. Arbitrary Text paint styles remain unsupported.
 
 Text now supports [bounded opt-in end ellipsis](text-overflow.md) using shared
 native/CPU shaping and grapheme boundaries. Default clipping and intrinsic
@@ -137,3 +137,9 @@ path builder, clearRect, image/text commands or additional composite operations.
 [Per-draw Path clip stacks](canvas-clips.md) now support frozen transforms,
 intersection and save/restore inside a batch; they do not change retained
 Box/Frame clipping schemas. Atomicity is per surface batch.
+
+Text [rotation, reflection, nonuniform scale and shear](text-affine.md) now use
+bounded local glyph pixels plus the existing CPU image transform. A same-App
+font bridge is required; exact local content masks and ancestor geometry remain
+enforced. Native standalone Text, transform handles, transformed content editing
+and existing effect-specific restrictions are unchanged.

@@ -85,3 +85,6 @@ Only documentation changed after final focused checks and native acceptance.
 automatic rounded CPU text and upright text under an affine container clip.
 Controls swap corners, toggle both ancestor clips/padding, withdraw/restore the
 font bridge and Undo document edits.
+
+Later [affine Text rendering](text-affine.md) extends the earlier positive-uniform
+glyph restriction. This document's original test/window receipt remains historical.
