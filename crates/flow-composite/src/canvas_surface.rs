@@ -12,15 +12,24 @@ use crate::{
     StaticImage, TextInputs, rasterize_with_inputs,
 };
 use gpui_flow_scene::{Affine, Bounds, Color, Point, Size, display::Canvas};
-use std::sync::{Arc, atomic::AtomicBool};
+use std::sync::{Arc, Weak, atomic::AtomicBool};
 use tiny_skia::{Pixmap, PixmapPaint, Transform};
 
+#[derive(Debug)]
+struct PathBudgetScope {
+    baseline: commands::CurrentPath,
+    max_bytes: u64,
+}
 #[derive(Clone, Debug)]
 pub struct CanvasSurface {
     config: Canvas,
     pixels: Arc<StaticImage>,
     generation: u64,
     limits: CompositeLimits,
+    current_path: commands::CurrentPath,
+    // Clones inherit active admission, but weak handles neither keep a finished
+    // scope's geometry alive nor permanently lower the configured ceiling.
+    path_budget_scopes: Vec<Weak<PathBudgetScope>>,
 }
 impl CanvasSurface {
     pub fn new(config: Canvas, limits: CompositeLimits) -> Result<Self, CompositeError> {
@@ -37,6 +46,8 @@ impl CanvasSurface {
             pixels,
             generation: 1,
             limits,
+            current_path: Default::default(),
+            path_budget_scopes: Vec::new(),
         })
     }
     pub fn config(&self) -> &Canvas {
@@ -50,6 +61,40 @@ impl CanvasSurface {
     }
     pub fn byte_len(&self) -> u64 {
         self.pixels.byte_len()
+    }
+    /// Allocated persistent path bytes, independent of pixel `byte_len`.
+    pub fn current_path_byte_len(&self) -> u64 {
+        self.current_path.byte_len()
+    }
+    /// New retained allocation relative to an immutable baseline. Surface clones
+    /// share path storage until a successful geometry edit replaces it.
+    pub fn additional_current_path_bytes(&self, baseline: &Self) -> u64 {
+        self.current_path.additional_bytes(&baseline.current_path)
+    }
+    /// Clear geometry only. Pixel snapshots and their generation stay unchanged.
+    pub fn reset_current_path(&mut self) {
+        self.current_path = Default::default();
+    }
+    /// Temporarily reduce path allocation admission, for an owning adapter's
+    /// aggregate geometry budget. Clones inherit admission while this callback
+    /// is active; afterward it expires without retaining baseline geometry.
+    pub fn with_current_path_budget<T>(
+        &mut self,
+        max_bytes: u64,
+        edit: impl FnOnce(&mut Self) -> Result<T, CompositeError>,
+    ) -> Result<T, CompositeError> {
+        self.path_budget_scopes
+            .retain(|scope| scope.strong_count() != 0);
+        let scope = Arc::new(PathBudgetScope {
+            baseline: self.current_path.clone(),
+            max_bytes,
+        });
+        let weak = Arc::downgrade(&scope);
+        self.path_budget_scopes.push(weak.clone());
+        let result = edit(self);
+        self.path_budget_scopes
+            .retain(|candidate| !Weak::ptr_eq(candidate, &weak));
+        result
     }
     fn next(&self) -> Result<u64, CompositeError> {
         self.generation
@@ -128,6 +173,7 @@ impl CanvasSurface {
                 }
             }
             self.publish(target, generation);
+            self.reset_current_path();
         } else {
             self.generation = generation;
         }

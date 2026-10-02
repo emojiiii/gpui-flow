@@ -30,6 +30,8 @@ pub struct CompositeLimits {
     pub max_dimension: u32,
     pub max_pixels: u64,
     pub max_surface_bytes: u64,
+    /// Canvas path storage/candidates/snapshots, separate from pixel memory.
+    pub max_path_bytes: u64,
     pub max_surface_writes: u64,
     pub max_nodes: usize,
     pub max_domains: usize,
@@ -45,6 +47,7 @@ impl Default for CompositeLimits {
             max_dimension: 4096,
             max_pixels: 4_194_304,
             max_surface_bytes: 128 * 1024 * 1024,
+            max_path_bytes: 16 * 1024 * 1024,
             max_surface_writes: 32_000_000,
             max_nodes: 512,
             max_domains: 8,
@@ -63,6 +66,7 @@ impl CompositeLimits {
             max_dimension: self.max_dimension.min(ceiling.max_dimension),
             max_pixels: self.max_pixels.min(ceiling.max_pixels),
             max_surface_bytes: self.max_surface_bytes.min(ceiling.max_surface_bytes),
+            max_path_bytes: self.max_path_bytes.min(ceiling.max_path_bytes),
             max_surface_writes: self.max_surface_writes.min(ceiling.max_surface_writes),
             max_nodes: self.max_nodes.min(ceiling.max_nodes),
             max_domains: self.max_domains.min(ceiling.max_domains),
@@ -186,3 +190,6 @@ mod scene_export_tests;
 
 #[cfg(test)]
 mod scene_svg_tests;
+
+#[cfg(test)]
+mod canvas_current_path_tests;

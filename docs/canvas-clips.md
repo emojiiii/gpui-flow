@@ -11,14 +11,15 @@ clip all subsequent draws until Restore or the end of the batch.
 
 This is the explicit-Path subset of the pinned core
 [clip/path/state contract](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/interface/src/canvas/ICanvas.ts).
-There is no implicit current-path builder or persistent browser context.
+The later [current-path slice](canvas-current-path.md) adds a persistent builder
+and frozen `ClipCurrentPath` snapshots; drawing state still remains batch-local.
 
 The separate `canvas_surface/commands/clip.rs` module compiles each draw through
 nested existing alpha-mask domains. Each draw receives its complete clip before
 source-over, including antialiased edges; it does not mask a whole multi-draw
 batch afterward. That distinction matters when opaque draws overlap at a
 partially covered clip edge. No new path flattening or scan converter is added.
-Saved states retain borrowed clip descriptions only. Emitted per-draw path
+Saved states retain shared immutable clip descriptions. Emitted per-draw path
 copies, mask runs and groups are charged to existing total-points, nodes, masks
 and depth ceilings before their construction. Surface masks use the compositor's
 existing byte/work admission. The shared 256-command and 16-state limits still

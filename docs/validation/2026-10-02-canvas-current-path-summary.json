@@ -1,0 +1,92 @@
+{
+  "recorded_utc": "2026-10-02T21:09:33.811994+00:00",
+  "feature": "ELM-10 persistent current-path increment",
+  "state": "implementation and automated validation complete; native acceptance pending",
+  "environment": "Linux cloud; /workspace/shared/gpui-flow-native-env.sh; existing shared native target; CARGO_BUILD_JOBS=1",
+  "new_tests": {
+    "composite": 15,
+    "ui": 7
+  },
+  "checks": [
+    {
+      "command": "cargo test --locked -p gpui-flow-composite canvas_",
+      "result": "passed",
+      "passed": 88,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/shared/canvas-current-path-tests.log"
+    },
+    {
+      "command": "cargo test --locked -p gpui-flow --lib canvas_",
+      "result": "passed",
+      "passed": 29,
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/shared/canvas-current-path-ui-tests.log"
+    },
+    {
+      "command": "cargo test --locked -p gpui-flow-composite -p gpui-flow --lib",
+      "result": "passed",
+      "packages": {
+        "gpui-flow-composite": 309,
+        "gpui-flow": 252
+      },
+      "failed": 0,
+      "ignored": 0,
+      "log": "/workspace/shared/canvas-current-path-full-tests.log"
+    },
+    {
+      "command": "cargo clippy --locked -p gpui-flow-composite -p gpui-flow --all-targets -- -D warnings",
+      "result": "passed",
+      "log": "/workspace/shared/canvas-current-path-clippy.log"
+    },
+    {
+      "command": "cargo clippy --locked -p flow-studio --bin canvas_current_path -- -D warnings",
+      "result": "passed",
+      "log": "/workspace/shared/canvas-current-path-demo-clippy.log"
+    },
+    {
+      "command": "cargo build --locked -p flow-studio --bin canvas_current_path",
+      "result": "passed",
+      "log": "/workspace/shared/canvas-current-path-build.log"
+    },
+    {
+      "command": "cargo fmt --all -- --check",
+      "result": "passed",
+      "log": "/workspace/shared/canvas-current-path-validation-20261002T2103Z/fmt.log"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed",
+      "log": "/workspace/shared/canvas-current-path-validation-20261002T2103Z/diff-check.log"
+    }
+  ],
+  "counts_note": "Focused runs overlap full library runs; do not sum them. No workspace-wide/cross-platform/Actions result is claimed.",
+  "build_inputs": {
+    "before": "/workspace/shared/canvas-current-path-validation-20261002T2103Z/build-inputs-before.json",
+    "after": "/workspace/shared/canvas-current-path-validation-20261002T2103Z/build-inputs-after.json",
+    "identical": true,
+    "files": 475,
+    "manifest_sha256": "a4a79d1e3c6fc755b31aa06af441c996ffede744a8b4db56f45fba5f2917bd88"
+  },
+  "binary": {
+    "path": "/workspace/shared/rust-target-native/debug/canvas_current_path",
+    "sha256": "531921c529dd27894d5b194d699439c26d17e6adf0a2c9b35eba8e759a823a8c"
+  },
+  "disk_free_after": "5.5 GiB (3 GiB floor preserved)",
+  "untested": [
+    "Native window acceptance is pending",
+    "Actual allocator/upload OOM injection (atomic commit ordering reviewed; reduced admission rollback tested)",
+    "Windows/macOS/browser pixel equivalence"
+  ],
+  "remaining_frozen_elm10_scope": [
+    "strokeText",
+    "createPattern repeat/no-repeat and pattern transform"
+  ],
+  "native_package": {
+    "directory": "/workspace/shared/canvas-current-path-native-validation-20261002T2109Z",
+    "binary_sha256": "531921c529dd27894d5b194d699439c26d17e6adf0a2c9b35eba8e759a823a8c",
+    "source_archive_sha256": "1a83e6cf888efdbb200907f1276d647944a524c644cfc0c06d7f819f0b48a988",
+    "source_scope": "475 repository build inputs; external dependency sources/toolchain/system libraries are not included"
+  }
+}

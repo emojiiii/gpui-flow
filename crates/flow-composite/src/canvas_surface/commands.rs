@@ -1,5 +1,7 @@
 //! A bounded, transaction-local vector context over the existing compositor.
 mod clip;
+mod current_path;
+pub(crate) use current_path::CurrentPath;
 mod image;
 mod text;
 use super::CanvasSurface;
@@ -10,6 +12,7 @@ use gpui_flow_scene::{
     StrokeAlignment, Style,
     display::{Group, Path, Text},
 };
+use std::{borrow::Cow, sync::Arc};
 
 /// Maximum operations, including state operations, in one atomic batch.
 pub const MAX_CANVAS_COMMANDS: usize = 256;
@@ -27,6 +30,36 @@ pub enum CanvasCommand {
     Transform(Affine),
     SetTransform(Affine),
     SetOpacity(f32),
+    /// Clear only the persistent current geometry; state and pixels survive.
+    BeginPath,
+    MoveTo {
+        to: Point,
+    },
+    LineTo {
+        to: Point,
+    },
+    QuadraticCurveTo {
+        control: Point,
+        to: Point,
+    },
+    BezierCurveTo {
+        control1: Point,
+        control2: Point,
+        to: Point,
+    },
+    ClosePath,
+    /// Draw a frozen snapshot without consuming the persistent path.
+    FillCurrentPath {
+        paint: Paint,
+        rule: FillRule,
+    },
+    StrokeCurrentPath {
+        stroke: Stroke,
+    },
+    /// Freeze the current geometry in this batch's clip state.
+    ClipCurrentPath {
+        rule: FillRule,
+    },
     /// Intersect the current clip with this path, frozen at the current transform.
     /// Opacity does not affect clipping. Save/Restore includes the clip state.
     ClipPath {
@@ -59,12 +92,12 @@ pub enum CanvasCommand {
     },
 }
 #[derive(Clone)]
-struct State<'a> {
+struct State {
     transform: Affine,
     opacity: f32,
-    clips: Vec<Clip<'a>>,
+    clips: Vec<Clip>,
 }
-impl Default for State<'_> {
+impl Default for State {
     fn default() -> Self {
         Self {
             transform: Affine::IDENTITY,
@@ -92,12 +125,18 @@ fn paint_budget(paint: &Paint) -> Result<(), CompositeError> {
         Ok(())
     }
 }
+struct Compilation {
+    drawing: Option<(DomainSource, ImageInputs)>,
+    current_path: CurrentPath,
+}
 fn source(
     commands: &[CanvasCommand],
     limits: CompositeLimits,
     inputs: &ImageInputs,
     smooth: bool,
-) -> Result<Option<(DomainSource, ImageInputs)>, CompositeError> {
+    current_path: &CurrentPath,
+    retained_paths: &[Arc<super::PathBudgetScope>],
+) -> Result<Compilation, CompositeError> {
     if commands.len() > MAX_CANVAS_COMMANDS {
         return Err(CompositeError::InputLimit);
     }
@@ -106,9 +145,28 @@ fn source(
     let mut children = Vec::new();
     let mut draws = 0usize;
     let mut budget = Budget::default();
+    budget.retained_path_bytes(current_path.byte_len(), limits)?;
+    for (index, scope) in retained_paths.iter().enumerate() {
+        let path = &scope.baseline;
+        if path.additional_bytes(current_path) != 0
+            && retained_paths[..index]
+                .iter()
+                .all(|earlier| path.additional_bytes(&earlier.baseline) != 0)
+        {
+            budget.retained_path_bytes(path.byte_len(), limits)?;
+        }
+    }
+    let mut current_path = current_path.clone();
+    let reserve = commands.len().saturating_mul(2);
+    let mut changed_path = false;
     let mut images = ImageInputs::default();
     let mut text_bytes = 0usize;
     for command in commands {
+        if current_path.command(command, state.transform, reserve, &mut budget, limits)? {
+            changed_path = true;
+            continue;
+        }
+        let mut path_input_admitted = false;
         let (path, style) = match command {
             CanvasCommand::FillTextBox {
                 text,
@@ -176,6 +234,71 @@ fn source(
                 state.opacity = *value;
                 continue;
             }
+            CanvasCommand::ClipCurrentPath { rule } => {
+                budget.input(current_path.path(), limits)?;
+                if state.clips.len() + 2 > limits.max_depth
+                    || state.clips.len() >= MAX_CANVAS_STATE_DEPTH
+                {
+                    return Err(CompositeError::NestingLimit);
+                }
+                current_path
+                    .path()
+                    .validate()
+                    .map_err(CompositeError::InvalidGeometry)?;
+                state.clips.push(Clip {
+                    path: current_path.snapshot(),
+                    rule: *rule,
+                    transform: Affine::IDENTITY,
+                });
+                continue;
+            }
+            CanvasCommand::FillCurrentPath { paint, rule } => {
+                paint_budget(paint)?;
+                budget.input(current_path.path(), limits)?;
+                path_input_admitted = true;
+                (
+                    Cow::Owned(current_path.local_snapshot(
+                        state.transform,
+                        &mut budget,
+                        limits,
+                    )?),
+                    Style {
+                        fill: Some(paint.clone()),
+                        fill_rule: *rule,
+                        opacity: state.opacity,
+                        ..Default::default()
+                    },
+                )
+            }
+            CanvasCommand::StrokeCurrentPath { stroke } => {
+                if stroke.alignment != StrokeAlignment::Center
+                    || stroke.dash_pattern.len() > gpui_flow_scene::MAX_STROKE_DASH_ENTRIES
+                {
+                    return Err(CompositeError::InputLimit);
+                }
+                paint_budget(&stroke.paint)?;
+                budget.input(current_path.path(), limits)?;
+                path_input_admitted = true;
+                (
+                    Cow::Owned(current_path.local_snapshot(
+                        state.transform,
+                        &mut budget,
+                        limits,
+                    )?),
+                    Style {
+                        fill: None,
+                        stroke: Some(stroke.clone()),
+                        opacity: state.opacity,
+                        ..Default::default()
+                    },
+                )
+            }
+            CanvasCommand::BeginPath
+            | CanvasCommand::MoveTo { .. }
+            | CanvasCommand::LineTo { .. }
+            | CanvasCommand::QuadraticCurveTo { .. }
+            | CanvasCommand::BezierCurveTo { .. }
+            | CanvasCommand::ClosePath => unreachable!("path construction handled above"),
             CanvasCommand::ClipPath { path, rule } => {
                 budget.input(path, limits)?;
                 if state.clips.len() + 2 > limits.max_depth
@@ -183,9 +306,10 @@ fn source(
                 {
                     return Err(CompositeError::NestingLimit);
                 }
+                budget.path_allocation(path.commands.len(), limits)?;
                 path.validate().map_err(CompositeError::InvalidGeometry)?;
                 state.clips.push(Clip {
-                    path,
+                    path: Arc::new(path.clone()),
                     rule: *rule,
                     transform: state.transform,
                 });
@@ -194,7 +318,7 @@ fn source(
             CanvasCommand::FillPath { path, paint, rule } => {
                 paint_budget(paint)?;
                 (
-                    path,
+                    Cow::Borrowed(path),
                     Style {
                         fill: Some(paint.clone()),
                         fill_rule: *rule,
@@ -211,7 +335,7 @@ fn source(
                 }
                 paint_budget(&stroke.paint)?;
                 (
-                    path,
+                    Cow::Borrowed(path),
                     Style {
                         fill: None,
                         stroke: Some(stroke.clone()),
@@ -223,9 +347,11 @@ fn source(
         };
         // Admission precedes cloning or validation's geometry preparation.
         draws += 1;
-        budget.input(path, limits)?;
+        if !path_input_admitted {
+            budget.input(&path, limits)?;
+        }
         budget.draw(path.commands.len(), &state.clips, limits)?;
-        let object = DisplayObject::new(format!("canvas-command-{draws}"), path.clone())
+        let object = DisplayObject::new(format!("canvas-command-{draws}"), path.into_owned())
             .with_transform(state.transform)
             .with_style(style);
         object.validate().map_err(CompositeError::InvalidGeometry)?;
@@ -246,21 +372,33 @@ fn source(
             "unbalanced Canvas save stack".into(),
         ));
     }
-    if draws == 0 {
-        return Ok(None);
+    if changed_path {
+        current_path
+            .path()
+            .validate()
+            .map_err(CompositeError::InvalidGeometry)?;
     }
-    Ok(Some((
-        DomainSource {
-            root: DomainNode {
-                object: DisplayObject::new("canvas-command-root", Group::new()),
-                world_transform: Affine::IDENTITY,
-                children,
+    if draws == 0 {
+        return Ok(Compilation {
+            drawing: None,
+            current_path,
+        });
+    }
+    Ok(Compilation {
+        current_path,
+        drawing: Some((
+            DomainSource {
+                root: DomainNode {
+                    object: DisplayObject::new("canvas-command-root", Group::new()),
+                    world_transform: Affine::IDENTITY,
+                    children,
+                },
+                clips: vec![],
+                canvas: None,
             },
-            clips: vec![],
-            canvas: None,
-        },
-        images,
-    )))
+            images,
+        )),
+    })
 }
 impl CanvasSurface {
     /// Render an ordered vector batch and publish at most one immutable generation.
@@ -268,7 +406,8 @@ impl CanvasSurface {
     /// Returns whether a generation was published (a clipped transparent result
     /// can still publish). Coordinates are logical;
     /// the existing surface DPR mapping is applied once after the command state.
-    /// No context state, current path or command history is retained afterward.
+    /// Current geometry persists; transforms, opacity, clips and the state stack
+    /// remain batch-local. Geometry-only success does not publish pixels.
     pub fn draw_commands(&mut self, commands: &[CanvasCommand]) -> Result<bool, CompositeError> {
         self.draw_commands_with_images(commands, &ImageInputs::default())
     }
@@ -290,14 +429,31 @@ impl CanvasSurface {
         inputs: &ImageInputs,
         prepare: impl FnOnce(CanvasTextRequest<'_>) -> Result<CanvasTextOutput, CompositeError>,
     ) -> Result<bool, CompositeError> {
-        let Some((source, images)) = source(commands, self.limits, inputs, self.config.smooth)?
-        else {
+        let scopes: Vec<_> = self
+            .path_budget_scopes
+            .iter()
+            .filter_map(std::sync::Weak::upgrade)
+            .collect();
+        let mut limits = self.limits;
+        for scope in &scopes {
+            limits.max_path_bytes = limits.max_path_bytes.min(scope.max_bytes);
+        }
+        let compiled = source(
+            commands,
+            limits,
+            inputs,
+            self.config.smooth,
+            &self.current_path,
+            &scopes,
+        )?;
+        let Some((source, images)) = compiled.drawing else {
+            self.current_path = compiled.current_path;
             return Ok(false);
         };
         let texts = prepare(CanvasTextRequest {
             source: &source,
             viewport: self.raster_viewport(),
-            limits: self.limits,
+            limits,
             retained_bytes: self
                 .byte_len()
                 .saturating_mul(2)
@@ -311,6 +467,7 @@ impl CanvasSurface {
             &texts.inputs,
             texts.pixel_work,
         )?;
+        self.current_path = compiled.current_path;
         Ok(self.generation() != before)
     }
 }

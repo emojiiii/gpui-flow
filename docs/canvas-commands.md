@@ -37,7 +37,8 @@ not alter the scene, history or resource generation. Pixel edits are runtime
 content, so configuration Undo does not replay commands.
 
 A later [per-draw clip-path slice](canvas-clips.md) adds batch-local clipping.
-This does not implement current-path construction, clearRect, image/text commands,
+The later [current-path slice](canvas-current-path.md) adds persistent geometry;
+this original batch slice did not implement current paths, clearRect, image/text commands,
 patterns, filters/shadows, non-source-over modes,
 inside/outside strokes, hit testing, persistent context state or browser API
 compatibility. Existing explicit clear/image/subtree/pixel APIs remain available.

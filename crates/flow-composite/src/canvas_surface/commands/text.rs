@@ -7,7 +7,7 @@ pub(super) fn compile(
     text: &Text,
     position: Point,
     color: Color,
-    state: &State<'_>,
+    state: &State,
     budget: &mut clip::Budget,
     total_bytes: &mut usize,
     index: usize,

@@ -18,7 +18,7 @@ impl Compiler<'_> {
         key: &DisplayId,
         crop: Option<Bounds>,
         destination: Bounds,
-        state: &State<'_>,
+        state: &State,
         index: usize,
     ) -> Result<DomainNode, CompositeError> {
         if key.0.len() > 512 {
@@ -69,7 +69,7 @@ impl Compiler<'_> {
         if crop.is_some() {
             self.budget.input(&rect, self.limits)?;
             clips.push(clip::Clip {
-                path: &rect,
+                path: std::sync::Arc::new(rect),
                 rule: FillRule::NonZero,
                 transform: matrix(
                     state.transform

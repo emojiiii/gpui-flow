@@ -7,10 +7,12 @@ use gpui_flow_engine::ElementHandle;
 use gpui_flow_text::{GpuiTextMeasurer, TextMeasureRequest, TextMeasurer, TextMetrics};
 
 impl SceneView {
-    /// Atomic pixel edit. Fonts use the bridge already validated for this App;
+    /// Atomic pixel/current-path edit. Path construction persists across calls;
+    /// transform, opacity and clipping remain local to each command batch.
+    /// Fonts use the bridge already validated for this App;
     /// images are explicit immutable decoded inputs, never fetched here.
     /// This synchronous bounded API is for explicit host commands, not per-frame
-    /// unbounded text layout. Canvas pixels do not enter document Undo history.
+    /// unbounded text layout. Pixels and current paths do not enter Undo history.
     pub fn draw_canvas_commands(
         &mut self,
         target: ElementHandle,

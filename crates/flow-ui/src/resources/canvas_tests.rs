@@ -419,3 +419,408 @@ fn canvas_image_commands_publish_one_resource_without_document_changes_and_rejec
             .is_err()
     );
 }
+
+fn current_path_rectangle() -> [gpui_flow_composite::CanvasCommand; 6] {
+    use gpui_flow_composite::CanvasCommand;
+    [
+        CanvasCommand::BeginPath,
+        CanvasCommand::MoveTo {
+            to: Point::new(1., 1.),
+        },
+        CanvasCommand::LineTo {
+            to: Point::new(7., 1.),
+        },
+        CanvasCommand::LineTo {
+            to: Point::new(7., 6.),
+        },
+        CanvasCommand::LineTo {
+            to: Point::new(1., 6.),
+        },
+        CanvasCommand::ClosePath,
+    ]
+}
+fn fill_current_path() -> gpui_flow_composite::CanvasCommand {
+    gpui_flow_composite::CanvasCommand::FillCurrentPath {
+        paint: Color::WHITE.into(),
+        rule: gpui_flow_scene::FillRule::NonZero,
+    }
+}
+fn assert_empty_current_path(r: &mut SceneResourceAdapter, e: &mut SceneEngine, h: ElementHandle) {
+    r.edit_canvas(e, h, |surface| {
+        assert_eq!(surface.current_path_byte_len(), 0);
+        assert!(!surface.draw_commands(&[fill_current_path()])?);
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn canvas_current_path_cross_call_construction_keeps_pixel_generation_and_upload_until_draw() {
+    let (mut e, mut r, h) = setup();
+    r.prepare_canvases(&mut e).unwrap();
+    let ticket = r.tracker.ticket(&e, h).unwrap();
+    let (upload, generation) = r.canvases.image(ticket).unwrap();
+    let pixels = r.canvas_snapshot(&e, h).unwrap();
+    let scene = e.scene().clone();
+    let revision = e.revision();
+    let commands = current_path_rectangle();
+    for batch in [&commands[..3], &commands[3..]] {
+        r.edit_canvas(&mut e, h, |s| {
+            assert!(!s.draw_commands(batch)?);
+            assert!(s.current_path_byte_len() > 0);
+            Ok(())
+        })
+        .unwrap();
+        let (next_upload, next_generation) = r.canvases.image(ticket).unwrap();
+        assert!(Arc::ptr_eq(&upload, &next_upload));
+        assert_eq!(generation, next_generation);
+        assert!(Arc::ptr_eq(&pixels, &r.canvas_snapshot(&e, h).unwrap()));
+    }
+    r.edit_canvas(&mut e, h, |s| {
+        assert!(s.draw_commands(&[fill_current_path()])?);
+        Ok(())
+    })
+    .unwrap();
+    let (next_upload, next_generation) = r.canvases.image(ticket).unwrap();
+    assert!(!Arc::ptr_eq(&upload, &next_upload));
+    assert_eq!(next_generation, generation + 1);
+    assert_eq!(at(&r, &e, h, 2, 2), [255; 4]);
+    assert_eq!(at(&r, &e, h, 8, 2), [0; 4]);
+    r.edit_canvas(&mut e, h, |s| {
+        assert!(!s.draw_commands(&[gpui_flow_composite::CanvasCommand::BeginPath])?);
+        assert_eq!(s.current_path_byte_len(), 0);
+        Ok(())
+    })
+    .unwrap();
+    let (reset_upload, reset_generation) = r.canvases.image(ticket).unwrap();
+    assert!(Arc::ptr_eq(&next_upload, &reset_upload));
+    assert_eq!(next_generation, reset_generation);
+    assert_empty_current_path(&mut r, &mut e, h);
+    assert_eq!(at(&r, &e, h, 2, 2), [255; 4]);
+    assert_eq!(e.scene(), &scene);
+    assert_eq!(e.revision(), revision);
+    let mut editor = gpui_flow_editor::SceneEditor::from_engine(e);
+    assert!(!editor.undo());
+    assert!(!editor.redo());
+}
+
+#[test]
+fn canvas_current_path_late_failure_rolls_back_path_and_pixels_together() {
+    use gpui_flow_composite::CanvasCommand;
+    let (mut e, mut r, h) = setup();
+    r.edit_canvas(&mut e, h, |s| {
+        s.draw_commands(&current_path_rectangle()).map(|_| ())
+    })
+    .unwrap();
+    let ticket = r.tracker.ticket(&e, h).unwrap();
+    let (upload, generation) = r.canvases.image(ticket).unwrap();
+    let pixels = r.canvas_snapshot(&e, h).unwrap();
+    assert!(
+        r.edit_canvas(&mut e, h, |s| {
+            s.draw_commands(&[
+                fill_current_path(),
+                CanvasCommand::BeginPath,
+                CanvasCommand::MoveTo {
+                    to: Point::new(8., 2.),
+                },
+                CanvasCommand::Restore,
+            ])
+            .map(|_| ())
+        })
+        .is_err()
+    );
+    let (after_upload, after_generation) = r.canvases.image(ticket).unwrap();
+    assert!(Arc::ptr_eq(&upload, &after_upload));
+    assert_eq!(generation, after_generation);
+    assert!(Arc::ptr_eq(&pixels, &r.canvas_snapshot(&e, h).unwrap()));
+    r.edit_canvas(&mut e, h, |s| {
+        s.draw_commands(&[fill_current_path()]).map(|_| ())
+    })
+    .unwrap();
+    assert_eq!(at(&r, &e, h, 2, 2), [255; 4]);
+    assert_eq!(at(&r, &e, h, 8, 2), [0; 4]);
+}
+
+#[test]
+fn canvas_current_path_resets_on_a_b_a_size_and_dpr_changes_before_prepare() {
+    for change in 0..4 {
+        let (mut e, mut r, h) = setup();
+        let mut original = display::Canvas::new(10., 8.);
+        original.safe_resize = true;
+        e.set_property(
+            h,
+            PropertyKey::Shape,
+            serde_json::json!(Shape::from(original.clone())),
+        )
+        .unwrap();
+        r.edit_canvas(&mut e, h, |s| {
+            fill(s)?;
+            s.draw_commands(&current_path_rectangle()).map(|_| ())
+        })
+        .unwrap();
+        let mut changed = original.clone();
+        match change {
+            0 => changed.size = Size::new(4., 4.),
+            1 => changed.pixel_ratio = 2.,
+            // Same physical dimensions still represent a logical-size change.
+            2 => changed.size.width = 9.75,
+            _ => {
+                changed.size = Size::new(4., 4.);
+                changed.safe_resize = false;
+            }
+        }
+        e.set_property(
+            h,
+            PropertyKey::Shape,
+            serde_json::json!(Shape::from(changed)),
+        )
+        .unwrap();
+        e.set_property(
+            h,
+            PropertyKey::Shape,
+            serde_json::json!(Shape::from(original)),
+        )
+        .unwrap();
+        r.prepare_canvases(&mut e).unwrap();
+        assert_empty_current_path(&mut r, &mut e, h);
+        assert_eq!(
+            at(&r, &e, h, 2, 2),
+            if change == 3 {
+                [0; 4]
+            } else {
+                [255, 0, 0, 255]
+            }
+        );
+        if change == 0 {
+            assert_eq!(at(&r, &e, h, 5, 2), [0; 4]);
+        }
+    }
+}
+
+#[test]
+fn canvas_current_path_preserves_cosmetics_clear_and_pixel_exchange() {
+    use gpui_flow_composite::{CanvasPixels, CompositeLimits};
+    let (mut e, mut r, h) = setup();
+    r.edit_canvas(&mut e, h, |s| {
+        s.draw_commands(&current_path_rectangle()).map(|_| ())
+    })
+    .unwrap();
+    let mut config = display::Canvas::new(10., 8.).rounded(2.);
+    config.smooth = false;
+    config.safe_resize = true;
+    e.set_property(
+        h,
+        PropertyKey::Shape,
+        serde_json::json!(Shape::from(config)),
+    )
+    .unwrap();
+    r.prepare_canvases(&mut e).unwrap();
+    let pixel =
+        CanvasPixels::from_rgba(1, 1, vec![255, 0, 0, 255], CompositeLimits::default()).unwrap();
+    r.edit_canvas(&mut e, h, |s| {
+        let path_bytes = s.current_path_byte_len();
+        assert!(path_bytes > 0);
+        s.clear()?;
+        s.write_pixels(&pixel, 0, 0)?;
+        assert_eq!(s.current_path_byte_len(), path_bytes);
+        assert!(s.draw_commands(&[fill_current_path()])?);
+        assert_eq!(s.current_path_byte_len(), path_bytes);
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(at(&r, &e, h, 0, 0), [255, 0, 0, 255]);
+    assert_eq!(at(&r, &e, h, 2, 2), [255; 4]);
+}
+
+#[test]
+fn canvas_current_path_clone_detach_retype_and_recreated_identity_start_empty() {
+    for mode in 0..5 {
+        let (mut e, mut r, h) = setup();
+        r.edit_canvas(&mut e, h, |s| {
+            s.draw_commands(&current_path_rectangle()).map(|_| ())
+        })
+        .unwrap();
+        let target = match mode {
+            0 => {
+                let cloned = e.clone_subtree(h, None, None).unwrap().root;
+                // Cloning cannot consume or reset the source's runtime path.
+                r.edit_canvas(&mut e, h, |s| {
+                    assert!(s.draw_commands(&[fill_current_path()])?);
+                    Ok(())
+                })
+                .unwrap();
+                assert_eq!(at(&r, &e, h, 2, 2), [255; 4]);
+                cloned
+            }
+            1 => {
+                let (detached, _) = e.detach(h).unwrap();
+                assert!(r.canvas_snapshot(&e, h).is_none());
+                e.attach(&detached, None, None).unwrap();
+                h
+            }
+            2 => {
+                e.set_property(
+                    h,
+                    PropertyKey::Shape,
+                    serde_json::json!(Shape::from(display::Rect::new(10., 8.))),
+                )
+                .unwrap();
+                // Retyping creates a fresh runtime identity at the same
+                // document ID; resolve it again for each shape transition.
+                let retyped = e.handle(&"c".into()).unwrap();
+                assert_ne!(retyped, h);
+                e.set_property(
+                    retyped,
+                    PropertyKey::Shape,
+                    serde_json::json!(Shape::from(display::Canvas::new(10., 8.))),
+                )
+                .unwrap();
+                e.handle(&"c".into()).unwrap()
+            }
+            3 => {
+                e.destroy(h).unwrap();
+                e.create("canvas", "c", serde_json::json!({}), None, None)
+                    .unwrap();
+                assert!(r.edit_canvas(&mut e, h, |_| Ok(())).is_err());
+                e.handle(&"c".into()).unwrap()
+            }
+            _ => {
+                let saved = serde_json::to_string(e.scene()).unwrap();
+                assert!(!saved.contains("current_path"));
+                e.reset_scene(serde_json::from_str(&saved).unwrap())
+                    .unwrap();
+                e.handle(&"c".into()).unwrap()
+            }
+        };
+        r.prepare_canvases(&mut e).unwrap();
+        assert_empty_current_path(&mut r, &mut e, target);
+        assert_eq!(at(&r, &e, target, 2, 2), [0; 4]);
+    }
+}
+
+#[test]
+fn canvas_current_path_configuration_undo_does_not_replay_runtime_geometry() {
+    let (e, mut r, h) = setup();
+    let mut editor = gpui_flow_editor::SceneEditor::from_engine(e);
+    r.edit_canvas(&mut editor.engine, h, |s| {
+        s.draw_commands(&current_path_rectangle()).map(|_| ())
+    })
+    .unwrap();
+    assert!(!editor.undo());
+    let mut config = display::Canvas::new(12., 9.);
+    config.safe_resize = true;
+    editor
+        .set_property(
+            h,
+            PropertyKey::Shape,
+            serde_json::json!(Shape::from(config)),
+        )
+        .unwrap();
+    // Undo before preparation is another A→B→A path-reset boundary.
+    assert!(editor.undo());
+    r.prepare_canvases(&mut editor.engine).unwrap();
+    assert_empty_current_path(&mut r, &mut editor.engine, h);
+    r.edit_canvas(&mut editor.engine, h, |s| {
+        s.draw_commands(&current_path_rectangle()).map(|_| ())
+    })
+    .unwrap();
+    assert!(editor.redo());
+    assert_empty_current_path(&mut r, &mut editor.engine, h);
+}
+
+#[test]
+fn canvas_current_path_aggregate_budget_checks_final_replacement_before_publication() {
+    use gpui_flow_composite::{CanvasCommand, CanvasSurface, CompositeLimits};
+    let (mut e, mut r, h) = setup();
+    let mut source =
+        CanvasSurface::new(display::Canvas::new(10., 8.), CompositeLimits::default()).unwrap();
+    let mut commands = vec![
+        CanvasCommand::LineTo {
+            to: Point::new(2., 2.)
+        };
+        256
+    ];
+    commands[0] = CanvasCommand::MoveTo {
+        to: Point::new(1., 1.),
+    };
+    for _ in 0..64 {
+        assert!(!source.draw_commands(&commands).unwrap());
+    }
+    let path_bytes = source.current_path_byte_len();
+    assert!(path_bytes > 16 * 1024 * 1024 / 64);
+    r.prepare_canvases(&mut e).unwrap();
+    let mut rejected = None;
+    for index in 0..64 {
+        let target = if index == 0 {
+            h
+        } else {
+            e.clone_subtree(h, None, None).unwrap().root
+        };
+        r.prepare_canvases(&mut e).unwrap();
+        let ticket = r.tracker.ticket(&e, target).unwrap();
+        let (upload, generation) = r.canvases.image(ticket).unwrap();
+        let pixels = r.canvas_snapshot(&e, target).unwrap();
+        // Host closures can replace a candidate wholesale. The final byte check
+        // must still catch a surface that was built outside the lowered budget.
+        let result = r.edit_canvas(&mut e, target, |s| {
+            *s = source.clone();
+            Ok(())
+        });
+        if result.is_err() {
+            assert!(matches!(
+                result,
+                Err(CanvasEditError::Pixels(
+                    gpui_flow_composite::CompositeError::WorkingSetLimit
+                ))
+            ));
+            let (after_upload, after_generation) = r.canvases.image(ticket).unwrap();
+            assert!(Arc::ptr_eq(&upload, &after_upload));
+            assert_eq!(generation, after_generation);
+            assert!(Arc::ptr_eq(
+                &pixels,
+                &r.canvas_snapshot(&e, target).unwrap()
+            ));
+            rejected = Some(target);
+            break;
+        }
+        assert!(path_bytes * (index + 1) <= 16 * 1024 * 1024);
+    }
+    let rejected = rejected.expect("aggregate current paths must have a separate bound");
+    // A nearly full pool must still allow shared-path configuration updates,
+    // no-allocation commands, ordinary pixel clearing, and releasing geometry.
+    e.set_property(
+        h,
+        PropertyKey::Shape,
+        serde_json::json!(Shape::from(display::Canvas::new(10., 8.).rounded(2.))),
+    )
+    .unwrap();
+    r.prepare_canvases(&mut e).unwrap();
+    let before = r.canvas_snapshot(&e, h).unwrap();
+    assert!(matches!(
+        r.edit_canvas(&mut e, h, |s| s
+            .draw_commands(&[CanvasCommand::LineTo {
+                to: Point::new(3., 3.)
+            },])
+            .map(|_| ())),
+        Err(CanvasEditError::Pixels(
+            gpui_flow_composite::CompositeError::WorkingSetLimit
+        ))
+    ));
+    assert!(Arc::ptr_eq(&before, &r.canvas_snapshot(&e, h).unwrap()));
+    r.edit_canvas(&mut e, h, |s| {
+        assert_eq!(s.current_path_byte_len(), path_bytes);
+        assert!(!s.draw_commands(&[CanvasCommand::Save, CanvasCommand::Restore])?);
+        s.clear()?;
+        assert_eq!(s.current_path_byte_len(), path_bytes);
+        assert!(!s.draw_commands(&[CanvasCommand::BeginPath])?);
+        assert_eq!(s.current_path_byte_len(), 0);
+        Ok(())
+    })
+    .unwrap();
+    assert_empty_current_path(&mut r, &mut e, h);
+    r.edit_canvas(&mut e, rejected, |s| {
+        *s = source.clone();
+        Ok(())
+    })
+    .unwrap();
+}
