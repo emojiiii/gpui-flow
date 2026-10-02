@@ -1,6 +1,6 @@
 # Leafer 对齐任务总表 v1（审阅版）
 
-固定45个去重能力单元，源码包含版本 `17f92d2fec9b136027eceb3c8d8a063fc84cb013`。这是具体范围的开发台账，不是全部Leafer API兼容证明，不用任务数计算工时或百分比。旧39条A–E验收契约仅为交叉索引，不与本表相加；此前31/8快速审计不作为本表完成数。
+固定45个去重能力单元，源码包含版本 `9b12aac930a5e2678dbc5afe0146c42c0e87ae8a`。这是具体范围的开发台账，不是全部Leafer API兼容证明，不用任务数计算工时或百分比。旧39条A–E验收契约仅为交叉索引，不与本表相加；此前31/8快速审计不作为本表完成数。
 
 ## 状态计数
 
@@ -36,7 +36,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | EVT-03 | 事件 / [设备元数据与复合手势](keyboard-routing.md) | 部分实现 | pointer type/buttons/time/pressure、触摸多指、tap/double/longpress的稳定事件契约 | 已有mouse/pointer_id、序号与原生Text双击；不是完整事件族 |
 | EVT-04 | 事件 / [IME与无障碍输入](text-editing.md) | 部分实现 | 中文输入组合/切换/失焦、Tab可达与语义树，定义受支持平台验收 | Kit Textarea提供基础；平台IME边界明确未验 |
 | INT-01 | 交互 / [外部选择移动缩放旋转](text-transform-tools.md) | 有界契约已验证 | 单选/共享root、多选、Image和能力开启Text的仿射手柄；撤销/取消/只读/陈旧capture | Custom及未支持样式拒绝；不改intrinsic尺寸 |
-| INT-02 | 交互 / [内在尺寸编辑](text-box-resize.md) | 部分实现 | 按组件定义尺寸/内容/字体resize策略，与布局所有权及单Undo一致 | 当前只有固定Text盒子模式；字体大小和其他组件策略未齐 |
+| INT-02 | 交互 / [内在尺寸编辑](text-font-resize.md) | 部分实现 | 按组件定义尺寸/内容/字体resize策略，与布局所有权及单Undo一致 | 已支持固定Text盒子和字体大小模式；其他组件intrinsic resize和auto-size ownership覆盖仍缺，整项仍部分 |
 | INT-03 | 交互 / [Text内容编辑会话](text-editing.md) | 有界契约已验证 | 可选内容panel、一次文档Undo、Done/Cancel/blur/target切换、身份和只读保护 | 不是WYSIWYG；IME专项归EVT-04 |
 | INT-04 | 交互 / [自定义内外工具协议](text-editing.md) | 部分实现 | registry、load/update/unload/destroy、策略门控与宿主自定义widget挂载和释放 | 现有controller/registry与Text专用面板；任意内层widget不足 |
 | INT-05 | 交互 / [路径与倾斜中心编辑工具](line-endpoints.md) | 未开始该能力 | Path控制点、skew和pivot交互须各有真实几何/取消/history验收 | 固定Leafer OSS通用点编辑器是stub，不把自建功能称上游已实现；Line端点现有独立基础 |
@@ -88,7 +88,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | EVT-03 | 鼠标/多pointer排斥已有测试；真实时间戳/压力/多指未实现 | 仅鼠标局部验收 | 尚无独立完整验收提交 |
 | EVT-04 | 有会话保护测试；平台组合输入/a11y验收缺失 | IME候选/辅助技术待实现或核实 | 尚无独立完整验收提交 |
 | INT-01 | 最新251 interaction+150 UI受影响记录通过 | 12:46–12:57原生拖动/Shift/UndoRedo/桥撤销与输入关闭通过 | `066b91fe3650f66ff33c1a46d833b85a3db58fb4` |
-| INT-02 | Text盒子12新回归、301受影响通过 | Text盒子13:30–13:34通过；其他策略未验 | `d80996854a161ce4a79b477d208a205a0ec83ef7` |
+| INT-02 | 固定Box已有12新回归；FontSize另有12新回归/282受影响及strict Clippy通过 | Box13:30–13:34与FontSize15:23–15:29均真实窗口退出0，UndoRedo像素一致 | `9b12aac930a5e2678dbc5afe0146c42c0e87ae8a` |
 | INT-03 | editor text_tools/UI会话测试通过 | text-editing.md历史窗口验收；066b91fe对应12:55聚焦输入Escape关闭复验；不扩展为IME验证 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | INT-04 | 工具生命周期测试有；任意自定义UI端到端未完成 | 仅现有Text工具窗口 | 尚无独立完整验收提交 |
 | INT-05 | Line已验证；本项三类工具未开始 | 未实现/未验收 | 尚无独立完整验收提交 |
@@ -181,3 +181,5 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 - 14:40更新：ANI-02有界持续绑定完成并有headless证据；ELM-10文字盒/测量子集完成但整项仍部分；ELM-06 alpha-hit开发中，不预计通过。当前19已验证、16部分、3待核实、1开发中、6未开始。
 
 - 15:02更新：ELM-06 alpha-hit通过但crop内工具尚缺，故整项部分；DAT-04查询索引与随机benchmark开发中。总数和19/16/3/1/6分类计数不变。
+
+- 15:31更新：INT-02固定Text FontSize模式通过自动和原生验收，其他组件intrinsic/auto-size范围仍缺，保持部分，不增加完成计数。

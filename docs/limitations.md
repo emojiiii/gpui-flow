@@ -178,3 +178,9 @@ current paths and patterns remain open ledger scope.
 policy in SceneView, using validated current decoded frames and nearest source
 pixels. Default/pure-engine picking remains geometric. Source alpha is not final
 composited opacity/masks, and this does not add crop inner editing.
+
+
+[Text font-size resize](text-font-resize.md) now joins Transform and fixed Box modes.
+It scales the fixed box/font/padding while preserving affine linear terms and
+Flow's line-height multiplier. It does not add general component intrinsic resize
+or override responsive/auto-size ownership.
