@@ -4,6 +4,8 @@
 #[cfg(feature = "gpui")]
 pub mod gpui_backend;
 #[cfg(feature = "gpui")]
+pub mod gpui_overflow;
+#[cfg(feature = "gpui")]
 pub use gpui_backend::GpuiTextMeasurer;
 #[cfg(feature = "gpui")]
 pub mod gpui_raster;
@@ -115,4 +117,12 @@ mod alignment_tests {
             assert_eq!(align.offset(f32::INFINITY, 20.), 0.);
         }
     }
+}
+
+/// Fixed-box paint policy. Intrinsic measurement always uses original content.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum TextOverflow {
+    #[default]
+    Clip,
+    Ellipsis,
 }

@@ -6,7 +6,9 @@ publish.workspace = true
 
 [features]
 default = []
-gpui = ["dep:gpui"]
+gpui = ["dep:gpui", "dep:unicode-segmentation"]
 
 [dependencies]
 gpui = { workspace = true, optional = true }
+
+unicode-segmentation = { version = "=1.13.3", optional = true }

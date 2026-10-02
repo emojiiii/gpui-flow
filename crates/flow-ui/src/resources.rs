@@ -335,10 +335,13 @@ impl SceneResourceAdapter {
                 Shape::Text(text) => {
                     let request = text_request(&text);
                     let shaped = catch_unwind(AssertUnwindSafe(|| {
-                        crate::text_measure::shape_scene_text(
+                        gpui_flow_text::gpui_overflow::shape_text_in_box(
                             window.text_system(),
                             &request,
                             gpui::Hsla::default(),
+                            crate::text_measure::text_overflow(text.overflow),
+                            text.content_bounds().size.width,
+                            text.content_bounds().size.height,
                         )
                     }))
                     .unwrap_or_else(|_| Err("native text shaping panicked".into()));

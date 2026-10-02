@@ -221,3 +221,41 @@ fn upright_glyphs_under_affine_ancestor_clips_keep_real_mask_geometry() {
     let f = render(&e, Some(&bridge)).unwrap().unwrap();
     assert!(f.premul_rgba.as_chunks::<4>().0.iter().any(|p| p[3] > 0));
 }
+
+#[test]
+fn ellipsis_edit_invalidates_glyph_jobs_without_mutating_source_text() {
+    let (_app, bridge) =
+        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let mut e = SceneEngine::new(scene()).unwrap();
+    let first = request(&e, Some(&bridge));
+    let mut c = CompositeController::default();
+    c.request(first.clone());
+    let work = c.take_work().unwrap();
+    let late = work.run();
+    let content = if let Shape::Text(t) = &e.scene().get(&"text".into()).unwrap().object.shape {
+        t.content.clone()
+    } else {
+        unreachable!()
+    };
+    e.transaction(|s| {
+        s.update_object(&"text".into(), |o| {
+            if let Shape::Text(t) = &mut o.shape {
+                t.overflow = display::TextOverflow::Ellipsis;
+            }
+        })
+    })
+    .unwrap();
+    let next = request(&e, Some(&bridge));
+    assert!(!next.compatible(&first, &"text".into()));
+    c.request(next.clone());
+    assert!(work.cancel.load(Ordering::Relaxed));
+    c.finish(first, late);
+    assert!(c.frame(&"text".into()).is_none());
+    let fresh = c.take_work().unwrap();
+    c.finish(next, fresh.run());
+    assert!(c.frame(&"text".into()).is_some());
+    let Shape::Text(t) = &e.scene().get(&"text".into()).unwrap().object.shape else {
+        unreachable!()
+    };
+    assert_eq!(t.content, content);
+}

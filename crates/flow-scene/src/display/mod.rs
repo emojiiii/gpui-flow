@@ -32,7 +32,7 @@ pub use polygon::Polygon;
 pub use rect::{CornerRadii, Rect};
 use serde::{Deserialize, Serialize};
 pub use star::Star;
-pub use text::{Text, TextAlign, TextVerticalAlign};
+pub use text::{Text, TextAlign, TextOverflow, TextVerticalAlign};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "geometry", rename_all = "snake_case")]

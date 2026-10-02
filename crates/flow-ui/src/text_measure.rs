@@ -1,5 +1,4 @@
 //! Compatibility export for existing `gpui_flow::GpuiTextMeasurer` callers.
-pub(crate) use gpui_flow_text::gpui_backend::shape_text as shape_scene_text;
 pub use gpui_flow_text::{GpuiTextMeasurer, GpuiTextRasterizer};
 
 pub(crate) fn vertical_align(
@@ -10,5 +9,14 @@ pub(crate) fn vertical_align(
         Scene::Top => gpui_flow_text::VerticalAlign::Top,
         Scene::Middle => gpui_flow_text::VerticalAlign::Middle,
         Scene::Bottom => gpui_flow_text::VerticalAlign::Bottom,
+    }
+}
+
+pub(crate) fn text_overflow(
+    overflow: gpui_flow_scene::display::TextOverflow,
+) -> gpui_flow_text::TextOverflow {
+    match overflow {
+        gpui_flow_scene::display::TextOverflow::Clip => gpui_flow_text::TextOverflow::Clip,
+        gpui_flow_scene::display::TextOverflow::Ellipsis => gpui_flow_text::TextOverflow::Ellipsis,
     }
 }

@@ -263,3 +263,6 @@ mod resource_compatibility_tests {
 
 mod registry;
 pub use registry::*;
+
+#[cfg(test)]
+mod overflow_tests;

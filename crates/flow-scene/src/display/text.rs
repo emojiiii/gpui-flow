@@ -16,6 +16,16 @@ pub enum TextVerticalAlign {
     Middle,
     Bottom,
 }
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextOverflow {
+    #[default]
+    Clip,
+    Ellipsis,
+}
+fn is_clip(value: &TextOverflow) -> bool {
+    *value == TextOverflow::Clip
+}
 fn is_top(value: &TextVerticalAlign) -> bool {
     *value == TextVerticalAlign::Top
 }
@@ -40,6 +50,8 @@ pub struct Text {
     pub padding: [f32; 4],
     #[serde(default, skip_serializing_if = "is_top")]
     pub vertical_align: TextVerticalAlign,
+    #[serde(default, skip_serializing_if = "is_clip")]
+    pub overflow: TextOverflow,
 }
 impl Text {
     pub fn new(content: impl Into<String>, size: Size) -> Self {
@@ -54,6 +66,7 @@ impl Text {
             wrap: true,
             padding: [0.; 4],
             vertical_align: TextVerticalAlign::Top,
+            overflow: TextOverflow::Clip,
         }
     }
     /// The shared wrapping, alignment and glyph clipping box. Call validate at
@@ -69,6 +82,9 @@ impl Text {
         )
     }
     pub fn validate(&self) -> Result<(), String> {
+        if self.overflow == TextOverflow::Ellipsis && self.content.len() > 65_536 {
+            return Err("ellipsis text allows at most 64KiB UTF-8 content".into());
+        }
         if !self.size.is_positive()
             || !self.font_size.is_finite()
             || self.font_size <= 0.

@@ -11,6 +11,7 @@ struct TextPaintPlan {
     request: TextMeasureRequest,
     align: TextAlign,
     vertical_align: gpui_flow_text::VerticalAlign,
+    overflow: gpui_flow_text::TextOverflow,
     bounds: Bounds<Pixels>,
 }
 impl TextPaintPlan {
@@ -18,6 +19,7 @@ impl TextPaintPlan {
         let content = text.content_bounds();
         Self {
             vertical_align: crate::text_measure::vertical_align(text.vertical_align),
+            overflow: crate::text_measure::text_overflow(text.overflow),
             request: TextMeasureRequest {
                 content: text.content.clone(),
                 font_family: text.font_family.clone(),
@@ -71,6 +73,7 @@ pub(super) fn text_element(text: &Text, object: &RenderObject) -> AnyElement {
         request,
         align,
         vertical_align,
+        overflow,
         bounds: model_bounds,
     } = TextPaintPlan::new(text, m);
     let own_bounds = gpui_flow_scene::Bounds::new(
@@ -89,13 +92,20 @@ pub(super) fn text_element(text: &Text, object: &RenderObject) -> AnyElement {
     canvas(
         move |_, window, _| {
             catch_unwind(AssertUnwindSafe(|| {
-                crate::text_measure::shape_scene_text(window.text_system(), &request, color.into())
+                gpui_flow_text::gpui_overflow::shape_text_in_box(
+                    window.text_system(),
+                    &request,
+                    color.into(),
+                    overflow,
+                    model_bounds.size.width.into(),
+                    model_bounds.size.height.into(),
+                )
             }))
             .unwrap_or_else(|_| Err("native text shaping panicked".into()))
-            .map(|lines| (lines, px(request.line_height)))
+            .map(|shaped| (shaped, px(request.line_height)))
         },
         move |bounds, result, window, cx| {
-            let (lines, line_height) = match result {
+            let (shaped, line_height) = match result {
                 Ok(value) => value,
                 Err(error) => {
                     eprintln!("gpui-flow text rendering: {error}");
@@ -107,14 +117,10 @@ pub(super) fn text_element(text: &Text, object: &RenderObject) -> AnyElement {
             let mask = native_mask(visible, model_bounds.origin, bounds);
             // GPUI intersects this with the existing host content mask.
             window.with_content_mask(Some(mask), |window| {
-                let block_height = f32::from(line_height)
-                    * lines
-                        .iter()
-                        .map(|line| line.wrap_boundaries.len() + 1)
-                        .sum::<usize>() as f32;
+                let block_height = shaped.block_height;
                 let mut origin = bounds.origin;
                 origin.y += px(vertical_align.offset(bounds.size.height.into(), block_height));
-                for line in lines {
+                for line in shaped.lines {
                     if let Err(error) =
                         line.paint(origin, line_height, align, Some(bounds), window, cx)
                     {

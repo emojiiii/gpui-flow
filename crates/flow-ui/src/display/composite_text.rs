@@ -99,6 +99,7 @@ impl TextPreparation<'_> {
                     return Ok(None);
                 };
                 let request = TextRasterRequest {
+                    overflow: crate::text_measure::text_overflow(text.overflow),
                     vertical_align: crate::text_measure::vertical_align(text.vertical_align),
                     text: TextMeasureRequest {
                         content: text.content.clone(),

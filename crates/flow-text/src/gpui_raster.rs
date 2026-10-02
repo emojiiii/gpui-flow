@@ -1,5 +1,5 @@
 //! Explicit same-platform raster access. No font lookup, shaping, or fallback replacement.
-use crate::{TextMeasureRequest, gpui_backend::shape_text};
+use crate::{TextMeasureRequest, gpui_overflow::shape_text_in_box};
 use gpui::{
     Application, Bounds, DevicePixels, IsZero, Platform, PlatformTextSystem, RenderGlyphParams,
     TextAlign, TextSystem, WindowTextSystem, point,
@@ -28,6 +28,7 @@ pub struct TextRasterRequest {
     pub text: TextMeasureRequest,
     pub align: TextAlign,
     pub vertical_align: crate::VerticalAlign,
+    pub overflow: crate::TextOverflow,
     /// Full alignment/clip box, before viewport clipping: [x, y, width, height].
     pub bounds: [f32; 4],
     /// Screen-logical viewport/host content intersection: [x, y, width, height].
@@ -168,7 +169,15 @@ impl GpuiTextRasterizer {
         }
         .into();
         let system = WindowTextSystem::new(self.shaping.clone());
-        let lines = shape_text(&system, &r.text, color)?;
+        let shaped = shape_text_in_box(
+            &system,
+            &r.text,
+            color,
+            r.overflow,
+            r.bounds[2],
+            r.bounds[3],
+        )?;
+        let lines = shaped.lines;
         let count: usize = lines
             .iter()
             .flat_map(|l| &l.unwrapped_layout.runs)
@@ -179,11 +188,7 @@ impl GpuiTextRasterizer {
         }
         let mut cache: HashMap<RenderGlyphParams, Arc<GlyphBitmap>> = HashMap::new();
         let mut cache_bytes = 0;
-        let block_height = r.text.line_height
-            * lines
-                .iter()
-                .map(|line| line.wrap_boundaries.len() + 1)
-                .sum::<usize>() as f32;
+        let block_height = shaped.block_height;
         let mut line_y = r.bounds[1] + r.vertical_align.offset(r.bounds[3], block_height);
         for line in lines {
             let layout = &line.unwrapped_layout;

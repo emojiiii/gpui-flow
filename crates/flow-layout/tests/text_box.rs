@@ -94,3 +94,23 @@ fn invalid_padding_cannot_partially_commit_reactive_measurement() {
     );
     assert_eq!(e.scene(), &before);
 }
+
+#[test]
+fn ellipsis_never_truncates_intrinsic_measurement_or_changes_measured_size() {
+    for sizing in [TextSizing::Natural, TextSizing::AutoHeight] {
+        let (mut clipped, l, m) = fixture(sizing);
+        let mut ellipsis = clipped.clone();
+        ellipsis
+            .update_object(&"t".into(), |o| {
+                if let Shape::Text(t) = &mut o.shape {
+                    t.overflow = gpui_flow_scene::display::TextOverflow::Ellipsis;
+                }
+            })
+            .unwrap();
+        let measured = l.with_text_measurer(m.clone());
+        measured.apply_to_scene(&mut clipped).unwrap();
+        measured.apply_to_scene(&mut ellipsis).unwrap();
+        assert_eq!(size(&clipped), size(&ellipsis));
+        assert!(m.0.lock().unwrap().iter().all(|r| r.content == "fixture"));
+    }
+}
