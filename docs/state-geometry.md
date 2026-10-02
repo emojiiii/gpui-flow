@@ -178,7 +178,7 @@ only base edits/Undo/Redo should change them. Building the example is not native
 window acceptance; the integration owner records native results separately.
 
 
-## Native functional result and open transition defect
+## Historical native functional result and transition defect
 
 The exact source checkpoint [`1b79a3bb`](https://github.com/emojiiii/gpui-flow/commit/1b79a3bb9d895ac9be29fff5dd58ee151dc229da)
 ran on the dot-cloud Linux desktop from 19:01:57 to 19:05:14 UTC on 2026-10-02,
@@ -194,7 +194,7 @@ also observed. The final shared checks passed 230 UI library tests, 55 focused
 wheel/router/focus tests, 3 mirror tests, and strict UI/interaction and fixture
 Clippy; these overlap separately reported feature checks and are not additive.
 
-APP-05 remains **partial** because an actual rendering defect was observed:
+At that checkpoint, APP-05 remained **partial** because an actual rendering defect was observed:
 CPU-composited child text or a whole composited domain can disappear during a
 transition while changing geometry keys cancel/replace pending work. Settled
 pixels recover, but that does not establish correct continuous presentation.
@@ -204,9 +204,12 @@ an acceptable fix. The frozen receipt remains valid evidence of the defect.
 
 `SceneEvent.local_position` is intentionally calculated by canonical event
 routing, like edit handles and commands. State-aware picking uses presentation
-geometry. For visual local coordinates, convert `event.world_position` through
-`state_styles.geometry_engine(&editor.engine)`. This is an explicit coordinate
-boundary, not a claim of arbitrary upstream state/event equivalence.
+geometry. For visual local coordinates in asynchronous `SceneView`, convert
+`event.world_position` through the accepted `SceneView::presented_geometry()`
+when available. The lower-level `state_styles.geometry_engine(&editor.engine)`
+can describe a newer sampled state, so it does not by itself identify displayed
+geometry. This is an explicit coordinate boundary, not arbitrary upstream
+state/event equivalence.
 
 ## Coherent asynchronous CPU presentation follow-up
 
@@ -279,4 +282,12 @@ navigation input-clock hook was connected, its two focused tests and four mirror
 fixtures were rerun. A second independent source review found no remaining
 blocker in the four corrected paths. The fractional-view and zero-opacity tests
 validate the shared guard and style state; they do not substitute for native GPU
-pixel validation. Native acceptance remains pending at this source checkpoint.
+pixel validation. Native acceptance was pending at that source checkpoint. The subsequent frozen
+Linux revalidation is recorded in [state-coherent-native.md](state-coherent-native.md)
+and its [compact summary](validation/2026-10-02-state-coherent-native-summary.json):
+33 state-only samples retain coherent card/text, and seven clicks match accepted
+geometry. Hard invalidations still intentionally load. The earlier failed window
+evidence remains unchanged. APP-05 is bounded verified for the original fixed
+flags/named/inheritance/per-state transition/geometry set; excluded arbitrary
+properties are not additional closure criteria. Native and automated coverage
+are separated in the report, including canonical event-local coordinates.

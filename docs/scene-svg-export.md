@@ -187,3 +187,16 @@ records source and log hashes. Native SceneView/font acceptance, host file
 delivery and cross-platform comparison are separate from these deterministic
 core tests. This pass did not open a native window, commit, push, trigger Actions
 or deploy.
+
+## Subsequent native acceptance
+
+The frozen Linux SceneView/font/file-delivery run passed its exercised matrix:
+13 physical exports, eight SVG plus two PNG files, three expected atomic
+rejections, 25 screenshots, normal exit 0. Actual resvg readback and an independent
+file audit establish mixed vector plus per-producer Image/Canvas/Text ink; no
+editable text, glyph outlines or SVG/PNG bit-exact claim is made. See the
+[native report](scene-svg-native.md) and
+[compact native record](validation/2026-10-02-scene-svg-native-summary.json).
+Together with the earlier PNG/JPEG/WebP evidence, ELM-11 is bounded verified
+within the existing four-format/fixed-region contract. The earlier core-only
+validation boundary above remains historical.

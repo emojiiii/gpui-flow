@@ -48,7 +48,7 @@
     "scope_note": "Before final router cancellation, clock getter and overflow hardening plus seven added INT-06 cases. Do not claim a fresh complete-suite run for frozen hashes.",
     "log": "/workspace/shared/int06-interaction-tests.log"
   },
-  "native": "not run by this worker; awaiting integrator SceneView scheduling/trace/native checkpoint",
+  "native": "Subsequent physical run accepted the exercised fixed contract; see native_acceptance. Original headless/build-only checkpoint is preserved above.",
   "limits": [
     "Fixed world or one common-parent local rectangular containment",
     "AABB paint bounds, not path/alpha collision",
@@ -57,5 +57,57 @@
     "Bounds and policies runtime-only; no document schema changes",
     "Custom middleware must run before hard constraints; direct editor/other transform commands remain outside optional constraint middleware"
   ],
-  "publication": "No commit, push, Actions or deployment by this worker"
+  "publication": "No commit, push, Actions or deployment by this worker",
+  "native_fixture": {
+    "source": "examples/studio/src/bin/drag_viewport_constraints.rs",
+    "source_sha256": "249422360e7e76b4d703f404eaf2a3717a91bd8a3aa8556b0f729e73d5df32c7",
+    "binary": "/workspace/shared/rust-target-native/debug/drag_viewport_constraints",
+    "binary_sha256": "4dd192f525ca810a2691dca76b51dbdf95b1a45a2807a84ee1b683c384a9c6a1",
+    "recipe": "docs/drag-viewport-native.md",
+    "checks": [
+      {
+        "command": "cargo test --offline --locked -p flow-studio --bin drag_viewport_constraints",
+        "status": "passed",
+        "tests": 2,
+        "log": "/workspace/shared/int06-native-tests.log"
+      },
+      {
+        "command": "cargo check --offline --locked -p flow-studio --bin drag_viewport_constraints",
+        "status": "passed",
+        "tests": null,
+        "log": "/workspace/shared/int06-native-check.log"
+      },
+      {
+        "command": "cargo clippy --offline --locked -p flow-studio --bin drag_viewport_constraints -- -D warnings",
+        "status": "passed",
+        "tests": null,
+        "log": "/workspace/shared/int06-native-clippy.log"
+      },
+      {
+        "command": "cargo build --offline --locked -p flow-studio --bin drag_viewport_constraints",
+        "status": "passed",
+        "tests": null,
+        "log": "/workspace/shared/int06-native-build.log"
+      }
+    ],
+    "shared_libraries": "ldd reported no missing libraries",
+    "physical_window": "The fixture author did not open a window at the build-only checkpoint; independent native QA later ran 2026-10-02T20:12:22Z–20:19:26Z, exit 0.",
+    "trace_limit": "revision/bounds/transforms are explicitly subscription-time observations; exact operation viewport and explicit clock come from SceneInputTrace"
+  },
+  "native_acceptance": {
+    "source_publication": "93ee7f7cabfb7979aeca93ec137ccf81644baeb5",
+    "report": "docs/drag-viewport-native.md",
+    "summary": "docs/validation/2026-10-02-drag-viewport-native-summary.json",
+    "trace_records": 9224,
+    "screenshots": 58,
+    "audit_passed": 33,
+    "audit_failed": 0,
+    "actual_post_release_moving_frames": 19,
+    "source_evidence_counts": {
+      "recorded_int06_hash_match": 13,
+      "pre_link_snapshot_match": 218,
+      "mtime_only_unproven_content_at_build": 6
+    },
+    "scope_note": "Qualified frozen executable acceptance, not complete build-input cryptographic attribution, all-device coverage or a new full-workspace run."
+  }
 }

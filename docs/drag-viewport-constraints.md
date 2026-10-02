@@ -152,3 +152,11 @@ cross-DPR hardware input require their own acceptance evidence.
 
 Exact frozen source hashes and verification scopes are in
 [the validation record](validation/2026-10-02-drag-viewport-summary.json).
+
+The standalone native fixture, trace interpretation and physical acceptance
+steps are in [drag-viewport-native.md](drag-viewport-native.md). Its original build-only
+checkpoint is retained separately from the later 20:12–20:19 UTC physical run:
+9,224 trace records, 58 PNGs, 33/33 audited assertions and 19 actual decaying
+post-release frames. See the [native evidence summary](validation/2026-10-02-drag-viewport-native-summary.json)
+for the exact accepted scope, held-button gaps, 29 subscription/trace mismatches
+and incomplete six-file build provenance. INT-06 is now bounded verified.

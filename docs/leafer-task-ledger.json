@@ -2,16 +2,16 @@
   "schema_version": 1,
   "ledger_version": "v1-review",
   "review": "已锁定45个能力单元和有限验收集合；审阅版，所有扩展/技术依赖显式记录",
-  "as_of": "2026-10-02T19:12:30Z",
-  "source_snapshot": "1b79a3bb9d895ac9be29fff5dd58ee151dc229da",
+  "as_of": "2026-10-02T20:51:00Z",
+  "source_snapshot": "93ee7f7cabfb7979aeca93ec137ccf81644baeb5",
   "upstream": {
     "leafer_ui": "1e11641d3ea6b0211c83447268a90b8d58feec25",
     "leafer_core": "1d703303ff0759ce4973d54c87eeb8192dddc570",
     "leafer_in": "3eb445bf34debb638766615282224b77108bf610"
   },
   "counts": {
-    "bounded_verified": 28,
-    "partial": 14,
+    "bounded_verified": 31,
+    "partial": 11,
     "not_started": 3,
     "needs_verification": 0,
     "in_progress": 0
@@ -355,19 +355,27 @@
       "id": "INT-06",
       "category": "交互",
       "title": "拖动约束与高级视口",
-      "status": "partial",
+      "status": "bounded_verified",
       "acceptance": "固定世界/父局部矩形drag bounds、可开关网格/边缘吸附、viewport min/max及惯性取消",
-      "boundary": "多指设备传递归EVT-03；不加入自动寻路/物理碰撞",
-      "reference_doc": "docs/plugins.md",
-      "implementation_snapshot": "99392f7c35f956f8765ed5730423df19e3d474cd",
+      "boundary": "固定矩形AABB及有限惯性；多指归EVT-03，无自动寻路/物理碰撞；持鼠Escape/guide像素仅模型覆盖，6个源文件仅mtime来源证据",
+      "reference_doc": "docs/drag-viewport-constraints.md",
+      "implementation_snapshot": "93ee7f7cabfb7979aeca93ec137ccf81644baeb5",
       "evidence_commit": null,
-      "automatic": "基础交互已测；高级约束无完整测试",
-      "native": "基础pan/zoom已验，完整项未验",
+      "automatic": "28约束+7 picked-wheel、2原生夹具、2导航适配focused及strict通过；较早334 interaction在最终加固之前，不冒充新全套",
+      "native": "20:12–20:19退出0；9224真实trace/58PNG/33项审计通过；world/parent-local、独立吸附、边界、19帧衰减及6种中断、只读导航/Undo通过",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/scroller/src/Scroller.ts",
         "symbols_or_contract": "Scroller/config；UI Dragger约束为固定扩展契约"
       },
-      "technical_dependencies": []
+      "technical_dependencies": [],
+      "evidence_summary": "docs/validation/2026-10-02-drag-viewport-native-summary.json",
+      "native_report": "docs/drag-viewport-native.md",
+      "verification_limits": [
+        "13个INT源码hash与218个预链接snapshot匹配；6个mtime-only文件无原始link时内容证明，不能宣称完整可复现源码归因",
+        "29个toolbar/reset后的PointerCancel trace与订阅viewport不同步；未把订阅几何当逐输入快照",
+        "原生未覆盖持鼠Escape/focus/reset、拖动中guide像素、硬件DPR及跨平台；实际AltTab为release后tail"
+      ],
+      "evidence_publication_note": "This documentation revision adds the native report/ledger evidence after source 93ee7f7cabfb7979aeca93ec137ccf81644baeb5; no self-referential evidence commit is claimed."
     },
     {
       "id": "APP-01",
@@ -448,20 +456,35 @@
       "id": "APP-05",
       "category": "外观",
       "title": "状态样式与过渡",
-      "status": "partial",
+      "status": "bounded_verified",
       "acceptance": "hover/press/focus/selected/disabled、命名状态/继承、每态transition及geometry变化",
-      "boundary": "现有paint-only实色/opacity和placeholder；每态/geometry/更多插值缺",
+      "boundary": "固定实色/opacity、每态timing、x/y及Rect/Ellipse/Text/Image/Box/Frame尺寸；不含任意属性/rotation/scale/skew/更广插值；hard invalidation仍loading，event.local_position仍canonical",
       "reference_doc": "docs/state-geometry.md",
-      "implementation_snapshot": "1b79a3bb9d895ac9be29fff5dd58ee151dc229da",
+      "implementation_snapshot": "93ee7f7cabfb7979aeca93ec137ccf81644baeb5",
       "evidence_commit": null,
-      "automatic": "74 property/state focused；共享UI230、显式wheel7与mirror3通过，strict通过；新coherent修复另验",
-      "native": "19:01:57–19:05:14退出0；51记录/18PNG实际expanded与relocated点击/wheel、禁用、编辑Undo/Redo通过，但过渡期间CPU域闪失，仍部分",
+      "automatic": "历史74 property/state；修订UI245含13 coherent和2导航回归；最终hook后2导航+4镜像focused复验，strict/链接通过（重叠非全套）",
+      "native": "旧51记录/18PNG失败证据保留；19:43–19:48新72记录/57PNG、33状态样本card/text完整，7点击匹配accepted geometry；硬失效12样本仍loading，退出0",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/state/src/index.ts",
         "symbols_or_contract": "state样式安装/切换；transition集成"
       },
       "technical_dependencies": [],
-      "open_issue": "Changing state geometry cancels incompatible CPU work; accepted paint and matching hit must be retained coherently before APP05 closes."
+      "evidence_summary": "docs/validation/2026-10-02-state-coherent-native-summary.json",
+      "native_report": "docs/state-coherent-native.md",
+      "historical_failed_native_evidence": "docs/validation/2026-10-02-state-geometry-summary.json",
+      "evidence_publication_note": "This documentation revision adds the native report/ledger evidence after source 93ee7f7cabfb7979aeca93ec137ccf81644baeb5; no self-referential evidence commit is claimed.",
+      "resolved_issue": "Earlier CPU-domain transition disappearance repaired by retained whole-presentation/accepted-hit coherence, with 33 state-only samples and seven accepted-geometry click checks; original failed evidence remains.",
+      "fixed_contract_review": {
+        "earliest_local_ledger_snapshot": "8d98280030ee1f908a4819daa83e55ad63b73256",
+        "ledger_blob": "f06bf789f2e8baa49ea945e93c9b899307506127",
+        "acceptance_unchanged": true,
+        "decision": "All listed fixed axes have source, model and bounded native evidence. Arbitrary properties/rotation/scale/skew are not new completion criteria."
+      },
+      "verification_limits": [
+        "Native snapshots do not inspect every vsync; hard canonical/resource/view invalidations still intentionally withdraw old content.",
+        "SceneEvent.local_position remains canonical; state-aware picking uses accepted display geometry.",
+        "Button inheritance, all six shape sizes, reactive-layout projection, animated-alpha source hits, late ABA completion, fractional guard, empty-domain recovery, upload failure and retirement saturation are automated coverage, not this fixture’s physical acceptance."
+      ]
     },
     {
       "id": "APP-06",
@@ -748,19 +771,28 @@
       "id": "ELM-11",
       "category": "元素",
       "title": "Canvas与场景导出",
-      "status": "partial",
-      "acceptance": "Canvas RGBA/PNG已实现；必补固定Scene区域PNG/JPEG/WebP和SVG，含背景/透明度/裁切范围及缺资源拒绝",
-      "boundary": "文件选择器/自动下载不是引擎API；字体嵌入或完整外部SVG导入不在本项",
+      "status": "bounded_verified",
+      "acceptance": "Canvas RGBA/PNG已实现；固定Scene区域PNG/JPEG/WebP和SVG，含背景/透明度/裁切范围及缺资源拒绝",
+      "boundary": "固定区域PNG/JPEG/lossless-WebP/mixed-SVG；Image/Canvas/Text为分节点PNG，无editable text/outlines或SVG/PNG位等价；不含字体嵌入/完整SVG导入",
       "reference_doc": "docs/scene-raster-export.md",
-      "implementation_snapshot": "99392f7c35f956f8765ed5730423df19e3d474cd",
-      "evidence_commit": "99392f7c35f956f8765ed5730423df19e3d474cd",
-      "automatic": "Scene栅格导出21核心+7 UI新回归，264 composite与191 UI lib通过；严格Clippy/链接通过",
-      "native": "17:01–17:07真实14尝试：10文件独立解码验证，4预期拒绝保留预览；DPR/crop/alpha/Undo/视口独立，退出0；SVG仍缺",
+      "implementation_snapshot": "93ee7f7cabfb7979aeca93ec137ccf81644baeb5",
+      "evidence_commit": null,
+      "automatic": "先前栅格21核心+7 UI；SVG28 focused、294 composite、5夹具及strict/check/链接通过；各阶段重叠非新workspace全套",
+      "native": "先前PNG/JPEG/WebP14尝试10文件4拒绝；19:59–20:03 SVG13尝试8SVG+2PNG/3拒绝、25PNG截图、真实resvg+独立文件审计，退出0",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/export/src/export.ts",
         "symbols_or_contract": "ExportModule.export / syncExport；JSON和SVG分支，栅格编码"
       },
-      "technical_dependencies": []
+      "technical_dependencies": [],
+      "evidence_summary": "docs/validation/2026-10-02-scene-svg-native-summary.json",
+      "native_report": "docs/scene-svg-native.md",
+      "prior_raster_evidence": "docs/validation/2026-10-02-scene-export-summary.json",
+      "verification_limits": [
+        "PNG/JPEG/WebP原生由先前99392f7c checkpoint建立，本次未重复JPEG/WebP",
+        "SVG保持真实vector加独立Image/Canvas/Text ink；unsupported effects原子拒绝",
+        "完整SVG native resvg回读与独立XML/embedded-PNG审计分列；不声称第二次独立full-SVG渲染或pixel equality"
+      ],
+      "evidence_publication_note": "This documentation revision adds the native report/ledger evidence after source 93ee7f7cabfb7979aeca93ec137ccf81644baeb5; no self-referential evidence commit is claimed."
     },
     {
       "id": "CUS-01",
@@ -870,5 +902,8 @@
       "remote_tree": "5cac576e31b7f709ac05115e86b016b20abda9b8",
       "provenance": "Compared exact tested tree to verified remote tree: only docs/container-corners.md differs; all code/build/test inputs identical. Native windows not part of this command."
     }
-  }
+  },
+  "publication_note": "Integrator verified remote main at the recorded source snapshot/tree. Native archives and original linked-build provenance remain separately qualified; this documentation update runs no new build or full-workspace suite.",
+  "source_publication_url": "https://github.com/emojiiii/gpui-flow/commit/93ee7f7cabfb7979aeca93ec137ccf81644baeb5",
+  "published_source_tree": "a8f08d035dde97d13eecc932630e8fdda65dfb42"
 }

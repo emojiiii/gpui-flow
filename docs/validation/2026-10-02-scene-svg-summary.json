@@ -79,5 +79,11 @@
     "push": false,
     "github_actions": false,
     "deploy": false
+  },
+  "native_followup": {
+    "source_publication": "93ee7f7cabfb7979aeca93ec137ccf81644baeb5",
+    "report": "docs/scene-svg-native.md",
+    "summary": "docs/validation/2026-10-02-scene-svg-native-summary.json",
+    "scope_note": "The original core-only run above opened no window. Later independent physical acceptance adds eight SVG/two PNG files and three expected rejections; no SVG/PNG bit-exact or editable-text claim."
   }
 }

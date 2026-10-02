@@ -336,3 +336,11 @@ claim SVG support, lossy WebP, cross-platform font equality, all native scenario
 large-scene performance, a process-wide memory cap, or workspace-wide validation.
 No code, build, UI run, publication, Actions or deployment was performed by the
 independent file-audit pass.
+
+### Subsequent SVG closure
+
+The raster checkpoint above remains unchanged and does not itself establish SVG.
+The later [mixed SVG native report](scene-svg-native.md) and
+[compact evidence](validation/2026-10-02-scene-svg-native-summary.json) add the
+missing fourth format. Their combined evidence closes ELM-11's fixed-region
+PNG/JPEG/lossless-WebP/mixed-SVG contract, retaining all per-format limitations.

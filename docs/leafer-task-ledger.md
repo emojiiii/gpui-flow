@@ -1,11 +1,11 @@
 # Leafer 对齐任务总表 v1（审阅版）
 
-固定45个去重能力单元，最近框架源码版本 `ca44fa4372128d3d1b11e6148e337cb3404d78a5`，原生夹具工作区来源逐项单列。这是具体范围的开发台账，不是全部Leafer API兼容证明，不用任务数计算工时或百分比。旧39条A–E验收契约仅为交叉索引，不与本表相加；此前31/8快速审计不作为本表完成数。
+固定45个去重能力单元，本轮已验证远端框架源码 [`93ee7f7c`](https://github.com/emojiiii/gpui-flow/commit/93ee7f7cabfb7979aeca93ec137ccf81644baeb5)，原生夹具工作区来源逐项单列。这是具体范围的开发台账，不是全部Leafer API兼容证明，不用任务数计算工时或百分比。旧39条A–E验收契约仅为交叉索引，不与本表相加；此前31/8快速审计不作为本表完成数。
 
 ## 状态计数
 
-- 有界契约已验证：28
-- 部分实现：14
+- 有界契约已验证：31
+- 部分实现：11
 - 未开始该能力：3
 - 待核实验收：0
 - 开发/验收中：0
@@ -40,12 +40,12 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | INT-03 | 交互 / [Text内容编辑会话](text-editing.md) | 有界契约已验证 | 可选内容panel、一次文档Undo、Done/Cancel/blur/target切换、身份和只读保护 | 不是WYSIWYG；IME专项归EVT-04 |
 | INT-04 | 交互 / [自定义内外工具协议](text-editing.md) | 部分实现 | registry、load/update/unload/destroy、策略门控与宿主自定义widget挂载和释放 | 现有controller/registry与Text专用面板；任意内层widget不足 |
 | INT-05 | 交互 / [路径与倾斜中心编辑工具](line-endpoints.md) | 未开始该能力 | Path控制点、skew和pivot交互须各有真实几何/取消/history验收 | 固定Leafer OSS通用点编辑器是stub，不把自建功能称上游已实现；Line端点现有独立基础 |
-| INT-06 | 交互 / [拖动约束与高级视口](plugins.md) | 部分实现 | 固定世界/父局部矩形drag bounds、可开关网格/边缘吸附、viewport min/max及惯性取消 | 多指设备传递归EVT-03；不加入自动寻路/物理碰撞 |
+| INT-06 | 交互 / [拖动约束与高级视口](drag-viewport-constraints.md) | 有界契约已验证 | 固定世界/父局部矩形drag bounds、可开关网格/边缘吸附、viewport min/max及惯性取消 | 固定AABB及有限惯性；多指归EVT-03，无自动寻路/物理碰撞；持鼠/guide物理覆盖与6文件来源限制单列 |
 | APP-01 | 外观 / [有序填充与渐变](appearance.md) | 有界契约已验证 | 多层矢量fill、实色/线性/径向、多stop、透明度与缓存/DPR预算 | Text/Image多paint不在此项支持子集 |
 | APP-02 | 外观 / [高级描边](stroke-alignment.md) | 部分实现 | cap/join/miter/dash、闭合及开放轮廓内外对齐、scale-fixed；bounds/hit/paint同源 | 现有居中及闭合inside/outside；开放和scale-fixed缺 |
 | APP-03 | 外观 / [隔离混合与蒙版擦除](compositing.md) | 部分实现 | 组透明度/多paint隔离、固定blend集合、mask/erase覆盖关系与hit规则 | 已有有界CPU及owned backdrop；Custom/外部任意backdrop与erase缺 |
 | APP-04 | 外观 / [阴影与固定滤镜集合](multiple-shadows.md) | 部分实现 | 已有leaf/group inner/outer多影；必补spread/box/scale-fixed shadow、blur、backgroundBlur及grayscale并有像素/预算测试 | backgroundBlur仅可在拥有完整背景的有界surface执行；不承诺任意宿主backdrop |
-| APP-05 | 外观 / [状态样式与过渡](state-styles.md) | 部分实现 | hover/press/focus/selected/disabled、命名状态/继承、每态transition及geometry变化 | 现有paint-only实色/opacity和placeholder；每态/geometry/更多插值缺 |
+| APP-05 | 外观 / [状态样式与过渡](state-geometry.md) | 有界契约已验证 | hover/press/focus/selected/disabled、命名状态/继承、每态transition及geometry变化 | 固定实色/opacity、每态timing、x/y及六种size；任意属性/rotation/scale/skew等为边界；hard invalidation loading与canonical event-local坐标保留 |
 | APP-06 | 外观 / [GPU局部绘制后端](engine.md) | 未开始该能力 | 后端真正消费persistent damage并有像素等价/工作量对照 | CPU dirty和damage记录已归DAT-04；GPUI当前full-frame |
 | LAY-01 | 布局 / [固定与内容流式布局](flow-layout.md) | 有界契约已验证 | row/column、wrap/reverse、padding/gap/grow/minmax、auto-size/嵌套固定点/hidden排除 | 百分比/baseline/shrinkContent归LAY-03；不是CSS完整实现 |
 | LAY-02 | 布局 / [响应派生与事务所有权](reactive-layout.md) | 有界契约已验证 | 安装binding后普通编辑提交前派生、白名单/有界固定点/冲突拒绝、一次Undo | 不是全局observer/帧合并局部依赖调度 |
@@ -61,7 +61,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | ELM-08 | 元素 / [Canvas矢量上下文批次](canvas-clips.md) | 有界契约已验证 | Path填充/描边、transform/alpha/save/restore/冻结clip栈；晚失败原子回滚 | 无持久current path/context；图文分别归ELM-09/10 |
 | ELM-09 | 元素 / [Canvas图像批次](canvas-image-commands.md) | 有界契约已验证 | immutable image输入、source crop/destination/DPR、仿射/clip/alpha和单代际原子提交 | 不取URL；负尺寸拒绝；不保证浏览器精确filter边缘 |
 | ELM-10 | 元素 / [Canvas文字与路径/图案状态](canvas-text-commands.md) | 部分实现 | 必选fillText、measureText、strokeText；beginPath/moveTo/lineTo/quadraticCurveTo/bezierCurveTo/closePath；createPattern的repeat/no-repeat与transform | 不包含DOM focus控件、CSS字体parser或全部浏览器context状态；新增操作另增范围 |
-| ELM-11 | 元素 / [Canvas与场景导出](scene-raster-export.md) | 部分实现 | Canvas RGBA/PNG已实现；必补固定Scene区域PNG/JPEG/WebP和SVG，含背景/透明度/裁切范围及缺资源拒绝 | 文件选择器/自动下载不是引擎API；字体嵌入或完整外部SVG导入不在本项 |
+| ELM-11 | 元素 / [Canvas与场景导出](scene-raster-export.md) | 有界契约已验证 | Canvas RGBA/PNG已实现；固定Scene区域PNG/JPEG/WebP和SVG，含背景/透明度/裁切范围及缺资源拒绝 | WebP为lossless；SVG保留vector并嵌每节点Image/Canvas/Text PNG，无editable text/outlines或SVG/PNG位等价；不含完整SVG导入 |
 | CUS-01 | 自定义元素 / [动态几何命中与宿主呈现](custom-geometry-validation.md) | 有界契约已验证 | custom属性驱动几何/bounds/hit、显式native renderer、实例隔离；拒绝不支持合成 | schema本身归DAT-01；不双计工厂 |
 | CUS-02 | 自定义元素 / [自定义resize和异步资源协议](custom-nodes.md) | 未开始该能力 | 自定义尺寸/编辑策略与测量、异步ready/cancel事件正式接入 | 任意宿主回调能实现不等于框架已提供协议 |
 | ANI-01 | 交互插件 / [有界属性动画时序](animation-timing.md) | 有界契约已验证 | 稀疏关键帧、delay/repeat/direction/speed、seek/pause/conflict/cancel和单Undo | 不是嵌套timeline；motion binding归ANI-02 |
@@ -92,12 +92,12 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | INT-03 | editor text_tools/UI会话测试通过 | text-editing.md历史窗口验收；066b91fe对应12:55聚焦输入Escape关闭复验；不扩展为IME验证 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | INT-04 | 工具生命周期测试有；任意自定义UI端到端未完成 | 仅现有Text工具窗口 | 尚无独立完整验收提交 |
 | INT-05 | Line已验证；本项三类工具未开始 | 未实现/未验收 | 尚无独立完整验收提交 |
-| INT-06 | 基础交互已测；高级约束无完整测试 | 基础pan/zoom已验，完整项未验 | 尚无独立完整验收提交 |
+| INT-06 | 28约束+7 wheel、2夹具+2导航focused及strict通过；较早334 interaction非最终全套 | 9224trace/58PNG/33审计通过；19实际衰减帧、6种tail中断、约束/吸附/只读/Undo，退出0 | `93ee7f7cabfb7979aeca93ec137ccf81644baeb5`；[原生证据与来源限制](validation/2026-10-02-drag-viewport-native-summary.json) |
 | APP-01 | appearance/gradient和CPU对应回归通过 | 历史渐变/多paint窗口及Canvas矢量窗口通过 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | APP-02 | Kurbo/Lyon/i_overlay已有回归；缺失行为未测 | 已实现子集有原生像素；全项未验 | 尚无独立完整验收提交 |
 | APP-03 | 现有多种blend/alpha mask CPU与UI通过 | 已有真实合成窗口；全固定源码契约未齐 | 尚无独立完整验收提交 |
 | APP-04 | 现有shadow/inner/group回归通过 | 历史受限视觉检查；缺失模式未验 | 尚无独立完整验收提交 |
-| APP-05 | 74 property/state focused与共享UI/wheel/mirror、strict通过 | 51记录/18PNG证实实际geometry hit与Undo，但过渡CPU域闪失，仍部分待coherent修复 | 源码[`1b79a3bb`](https://github.com/emojiiii/gpui-flow/commit/1b79a3bb9d895ac9be29fff5dd58ee151dc229da)，[缺陷与功能证据](validation/2026-10-02-state-geometry-summary.json) |
+| APP-05 | 历史74 state；修订UI245含13coherent，最终hook后2导航/4镜像focused复验，strict/链接通过（重叠） | 新72记录/57PNG，33状态样本完整，7点击符合accepted geometry；12硬失效样本loading保留，退出0 | `93ee7f7cabfb7979aeca93ec137ccf81644baeb5`；[coherent复验](validation/2026-10-02-state-coherent-native-summary.json)，[原始失败证据](validation/2026-10-02-state-geometry-summary.json)保留 |
 | APP-06 | 无GPU damage消费测试 | 未实现/未验收 | 尚无独立完整验收提交 |
 | LAY-01 | flow/auto_size/reverse/item_boxes/gap/taffy对应全套通过 | 核心是纯measure/arrange契约；窗口专门矩阵仍未宣称 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | LAY-02 | engine derivation及layout reactive/ratio/text测试通过 | 纯提交契约；Text盒子窗口验证其普通编辑路径 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
@@ -113,7 +113,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | ELM-08 | 11矢量+7clip新回归、360/367受影响记录通过 | 11:41和11:57窗口、DPR/回滚/重绘像素对照通过 | `e4f7d9455f7aaaf38d160951c330ae03249435d1` |
 | ELM-09 | 12新回归；63 composite+18 UI=81聚焦通过，strict Clippy/link通过 | 14:00:18–14:03:12 Linux窗口退出0；DPR1/2、crop/透明源/反射/clip/晚失败/resize/Undo/Clear；三组像素区域一致 | `0ab6ffbf8bdbdb837a30f6cbf193e5506cb0124d` |
 | ELM-10 | FillTextBox/同源measure已实现：8新回归、119不同受影响检查及严格Clippy通过；stroke/current path/pattern未实现 | 14:37–14:39双DPR真实字形/clip/bridge/measure/resize/Undo/Clear退出0，四组像素一致 | `003288b3a9b4178890c162a4f1271f3b8dd41f4f` |
-| ELM-11 | Scene栅格导出21核心+7 UI新回归，264 composite与191 UI lib通过；严格Clippy/链接通过 | 17:01–17:07真实14尝试：10文件独立解码验证，4预期拒绝保留预览；DPR/crop/alpha/Undo/视口独立，退出0；SVG仍缺 | `99392f7c35f956f8765ed5730423df19e3d474cd` |
+| ELM-11 | 先前栅格21核心+7 UI；SVG28 focused/294 composite/5夹具及strict通过（重叠） | 先前PNG/JPEG/WebP10文件4拒绝；新SVG13尝试8SVG+2PNG/3拒绝、真实resvg及独立审计，退出0 | `93ee7f7cabfb7979aeca93ec137ccf81644baeb5`；[SVG证据](validation/2026-10-02-scene-svg-native-summary.json)，[先前栅格](validation/2026-10-02-scene-export-summary.json) |
 | CUS-01 | 9项新回归、12既有registry与184 UI库检查通过；strict Clippy及链接通过 | 16:32–16:36八步真实点击/UndoRedo/双实例/renderer fallback/整域拒绝与恢复；49状态检查0失败、13 renderer输入；退出0 | `09bc537a551da09d4cb7c407e22ee10d49d3c667` |
 | CUS-02 | 无完整协议验收 | 未实现/未验收 | 尚无独立完整验收提交 |
 | ANI-01 | 10月2日workspace日志包含animation/sequences/timing/editor_playback通过；旧文档pending需修正 | 纯显式时钟契约；不宣称新动画窗口验收 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
@@ -193,3 +193,9 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 - 2026-10-02 18:32：ELM-06按固定alpha+crop合同闭环，27项有界已验证/18项未闭环；DAT-03发布严格12tag子集但保留部分，不缩减冻结验收范围。
 
 - 2026-10-02 19:12：INS-02真实重叠层/输入/坐标/生命周期闭环，28项有界已验证/17项未闭环。APP-05已增加geometry/每态transition但真实过渡出现CPU域闪失，保留部分并修复，不能以settle正确充当通过。
+
+
+- 2026-10-02 20:51：INT-06固定拖动/吸附/视口/惯性、ELM-11固定四种导出格式、APP-05冻结状态/继承/每态过渡/有界geometry合同闭环，**31项有界已验证、11部分、3未开始，总数45不变**。APP-05 coherent修复有33状态样本和7次accepted-geometry点击证据；原失败记录、hard invalidation loading及canonical event-local边界保留。最初固定验收文字与当前相同，不能把未列入的任意属性/rotation/scale/skew变成新增收口条件。没有新增构建、原生窗口或workspace全套声明。
+- 本轮源码已核实发布：`93ee7f7cabfb7979aeca93ec137ccf81644baeb5`，tree `a8f08d035dde97d13eecc932630e8fdda65dfb42`。INT-06的13精确源码/218预链接快照/6仅mtime分类、29取消订阅时间差，以及SVG mixed-raster/非位等价边界不会因发布而消失。
+
+本轮三项的证据报告随本次文档修订新增，JSON的`evidence_commit`暂为空；表中`93ee7f7c`仅表示已发布实现源码，不声称后续报告已在该源码提交内。
