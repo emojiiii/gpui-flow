@@ -1,14 +1,14 @@
 # Leafer 对齐任务总表 v1（审阅版）
 
-固定45个去重能力单元，源码包含版本 `4b47d2597030de8a49fb08d9e2b62587604c37ab`。这是具体范围的开发台账，不是全部Leafer API兼容证明，不用任务数计算工时或百分比。旧39条A–E验收契约仅为交叉索引，不与本表相加；此前31/8快速审计不作为本表完成数。
+固定45个去重能力单元，源码包含版本 `09bc537a551da09d4cb7c407e22ee10d49d3c667`。这是具体范围的开发台账，不是全部Leafer API兼容证明，不用任务数计算工时或百分比。旧39条A–E验收契约仅为交叉索引，不与本表相加；此前31/8快速审计不作为本表完成数。
 
 ## 状态计数
 
-- 有界契约已验证：20
-- 部分实现：16
-- 未开始该能力：6
-- 待核实验收：3
-- 开发/验收中：0
+- 有界契约已验证：24
+- 部分实现：15
+- 未开始该能力：5
+- 待核实验收：0
+- 开发/验收中：1
 
 有界已验证仅表示本行支持集合有实际证据，不表示整个上游模块完全对齐。源码、自动检查、真实窗口分别记录。未开始指本项新增能力，不以已有依赖代码冒充实现。目标是继续完成表内未闭环行为；技术依赖不因此被删除，也不能以“今晚”为由虚报通过。
 
@@ -29,10 +29,10 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | INS-01 | 实例 / [代际身份与树操作](engine.md) | 有界契约已验证 | create/clone/detach/reattach/reparent/destroy保留或更换身份有明确定义；奇异/循环原子拒绝 | 不是多App分层组合 |
 | INS-02 | 实例 / [多层App实例组合](leafer-source-map.md) | 未开始该能力 | 多层画布树、跨层事件/坐标转发、独立生命周期与销毁 | 多个普通SceneView并排不等于App分层 |
 | LIF-01 | 生命周期 / [订阅与拥有资源销毁](resource-lifecycle.md) | 有界契约已验证 | once/off/scoped disposal、destroy exactly once、旧token和迟到job不重定向 | 不包含后台加载器硬取消 |
-| LIF-02 | 生命周期 / [资源就绪与呈现回执](resource-lifecycle.md) | 待核实验收 | Ready/ViewReady/Complete含失败取消，真实加载/替换/销毁/paint事件顺序 | ViewReady是paint回执，不是GPU fence |
+| LIF-02 | 生命周期 / [资源就绪与呈现回执](resource-lifecycle-validation.md) | 有界契约已验证 | Ready/ViewReady/Complete含失败取消，真实加载/替换/销毁/paint事件顺序 | ViewReady是paint回执，不是GPU fence |
 | LIF-03 | 生命周期 / [加载取消与媒体资源桥](resource-lifecycle.md) | 部分实现 | 共享加载字节预算、无引用任务硬取消、媒体统一代际票据和错误传播 | 现有GPUI image及有界本地媒体路径不是完整资源服务 |
-| EVT-01 | 事件 / [树路由与默认动作顺序](engine.md) | 部分实现 | capture/target/bubble、once/off、监听队列和prevent-default；原生适配器trace与纯路由一致 | 现有鼠标路由已实现；全链trace对照尚缺 |
-| EVT-02 | 事件 / [键盘与程序焦点](focus-routing.md) | 待核实验收 | KeyDown/Up、重复/Space、Focus/Blur重定向、窗口失焦清理及实例隔离 | 不把Kit文本输入当完整IME/a11y |
+| EVT-01 | 事件 / [树路由与默认动作顺序](focus-keyboard-validation.md) | 有界契约已验证 | capture/target/bubble、once/off、监听队列和prevent-default；原生适配器trace与纯路由一致 | 限定现有鼠标/默认动作与精确trace；设备扩展归EVT-03，不声称全浏览器事件兼容 |
+| EVT-02 | 事件 / [键盘与程序焦点](focus-keyboard-validation.md) | 有界契约已验证 | KeyDown/Up、重复/Space、Focus/Blur重定向、窗口失焦清理及实例隔离 | 不把Kit文本输入当完整IME/a11y |
 | EVT-03 | 事件 / [设备元数据与复合手势](keyboard-routing.md) | 部分实现 | pointer type/buttons/time/pressure、触摸多指、tap/double/longpress的稳定事件契约 | 已有mouse/pointer_id、序号与原生Text双击；不是完整事件族 |
 | EVT-04 | 事件 / [IME与无障碍输入](text-editing.md) | 部分实现 | 中文输入组合/切换/失焦、Tab可达与语义树，定义受支持平台验收 | Kit Textarea提供基础；平台IME边界明确未验 |
 | INT-01 | 交互 / [外部选择移动缩放旋转](text-transform-tools.md) | 有界契约已验证 | 单选/共享root、多选、Image和能力开启Text的仿射手柄；撤销/取消/只读/陈旧capture | Custom及未支持样式拒绝；不改intrinsic尺寸 |
@@ -62,11 +62,11 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | ELM-09 | 元素 / [Canvas图像批次](canvas-image-commands.md) | 有界契约已验证 | immutable image输入、source crop/destination/DPR、仿射/clip/alpha和单代际原子提交 | 不取URL；负尺寸拒绝；不保证浏览器精确filter边缘 |
 | ELM-10 | 元素 / [Canvas文字与路径/图案状态](canvas-text-commands.md) | 部分实现 | 必选fillText、measureText、strokeText；beginPath/moveTo/lineTo/quadraticCurveTo/bezierCurveTo/closePath；createPattern的repeat/no-repeat与transform | 不包含DOM focus控件、CSS字体parser或全部浏览器context状态；新增操作另增范围 |
 | ELM-11 | 元素 / [Canvas与场景导出](canvas-pixels.md) | 部分实现 | Canvas RGBA/PNG已实现；必补固定Scene区域PNG/JPEG/WebP和SVG，含背景/透明度/裁切范围及缺资源拒绝 | 文件选择器/自动下载不是引擎API；字体嵌入或完整外部SVG导入不在本项 |
-| CUS-01 | 自定义元素 / [动态几何命中与宿主呈现](engine.md) | 待核实验收 | custom属性驱动几何/bounds/hit、显式native renderer、实例隔离；拒绝不支持合成 | schema本身归DAT-01；不双计工厂 |
+| CUS-01 | 自定义元素 / [动态几何命中与宿主呈现](custom-geometry-validation.md) | 有界契约已验证 | custom属性驱动几何/bounds/hit、显式native renderer、实例隔离；拒绝不支持合成 | schema本身归DAT-01；不双计工厂 |
 | CUS-02 | 自定义元素 / [自定义resize和异步资源协议](custom-nodes.md) | 未开始该能力 | 自定义尺寸/编辑策略与测量、异步ready/cancel事件正式接入 | 任意宿主回调能实现不等于框架已提供协议 |
 | ANI-01 | 交互插件 / [有界属性动画时序](animation-timing.md) | 有界契约已验证 | 稀疏关键帧、delay/repeat/direction/speed、seek/pause/conflict/cancel和单Undo | 不是嵌套timeline；motion binding归ANI-02 |
 | ANI-02 | 交互插件 / [持续运动路径动画](motion-path-animation.md) | 有界契约已验证 | 按时钟距离/切线绑定位置/旋转，变化失效/冲突/销毁/取消/history一致 | source/祖先变化保守取消，不自动refollow；无路径生长/文字沿路径/自动timer；完成后显式finish_editor封Undo |
-| ANI-03 | 交互插件 / [组合动画时钟与定位控制](animation-timing.md) | 未开始该能力 | 必选AnimateList式并行与串行子动画、offset、父时钟seek/pause/reverse、结束样式及一次Undo | jump/join、physics、无限嵌套和跨所有跳帧回调不属于v1有限集合，新增须显式扩项 |
+| ANI-03 | 交互插件 / [组合动画时钟与定位控制](animation-timing.md) | 开发/验收中 | 必选AnimateList式并行与串行子动画、offset、父时钟seek/pause/reverse、结束样式及一次Undo | jump/join、physics、无限嵌套和跨所有跳帧回调不属于v1有限集合，新增须显式扩项 |
 
 ## 自动化、原生与版本证据
 
@@ -81,10 +81,10 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | INS-01 | engine实例、clone/reparent和资源迟到结果测试通过 | 纯引擎项，不要求窗口 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | INS-02 | 无该项验收证据 | 未实现/未验收 | 尚无独立完整验收提交 |
 | LIF-01 | engine生命周期与resources对应测试已通过 | 纯归属逻辑；原生资源回执另列LIF-02 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
-| LIF-02 | 模型和适配器测试通过；旧文档与后续原生证据需逐条对账 | Canvas窗口已观察；完整加载/失败生命周期原生矩阵待核实 | 尚无独立完整验收提交 |
+| LIF-02 | 18项engine resource与37项UI资源通过，含7项新增；实际Flow Arc释放独立测试 | 16:24–16:29完整16步、62条真实记录零违规；2 Ready/2 ViewReady/6 Complete；旧source/attachment/generation、失败取消和重挂载通过；退出0 | `f5ab200c6f6bfaf786742b9b0ace8a530de0d6cf` |
 | LIF-03 | 部分代际/容量测试已过；硬取消/媒体桥未实现 | 未完整验收 | 尚无独立完整验收提交 |
-| EVT-01 | 纯event_router及生命周期测试通过 | 有原生鼠标操作，缺明确trace全链对照 | 尚无独立完整验收提交 |
-| EVT-02 | keyboard/focus测试通过；旧文档原生pending需对账 | Space/失焦已有操作证据；程序焦点完整矩阵待核实 | 尚无独立完整验收提交 |
+| EVT-01 | 38项focus/keyboard +2 fixture/comparator +179 UI通过；独立断言预期路由而非仅比较相等 | 16:07–16:13真实474条完整输入/输出与独立router一致；insideUp与outsideCancel契约均验；退出0 | `0d81d182407191427019c08f49fdc351837de57b` |
+| EVT-02 | 38项focus/keyboard含活动capture/Space失焦清理；2 comparator与179 UI通过 | 真实A/A/B/Clear、repeat/Shift、首Space阻止、重定向/死代际、双实例/host输入与AltTab已验；活动Escape及持有Space失焦仅纯测试，未冒称原生覆盖 | `0d81d182407191427019c08f49fdc351837de57b` |
 | EVT-03 | 鼠标/多pointer排斥已有测试；真实时间戳/压力/多指未实现 | 仅鼠标局部验收 | 尚无独立完整验收提交 |
 | EVT-04 | 有会话保护测试；平台组合输入/a11y验收缺失 | IME候选/辅助技术待实现或核实 | 尚无独立完整验收提交 |
 | INT-01 | 最新251 interaction+150 UI受影响记录通过 | 12:46–12:57原生拖动/Shift/UndoRedo/桥撤销与输入关闭通过 | `066b91fe3650f66ff33c1a46d833b85a3db58fb4` |
@@ -114,11 +114,11 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | ELM-09 | 12新回归；63 composite+18 UI=81聚焦通过，strict Clippy/link通过 | 14:00:18–14:03:12 Linux窗口退出0；DPR1/2、crop/透明源/反射/clip/晚失败/resize/Undo/Clear；三组像素区域一致 | `0ab6ffbf8bdbdb837a30f6cbf193e5506cb0124d` |
 | ELM-10 | FillTextBox/同源measure已实现：8新回归、119不同受影响检查及严格Clippy通过；stroke/current path/pattern未实现 | 14:37–14:39双DPR真实字形/clip/bridge/measure/resize/Undo/Clear退出0，四组像素一致 | `003288b3a9b4178890c162a4f1271f3b8dd41f4f` |
 | ELM-11 | RGBA/PNG11新回归、338受影响通过 | 10:25 PNG预览及4份解码核验；Scene/SVG未验 | `61ac2522c7194ae2a63240b63afa8cc4808a67a8` |
-| CUS-01 | registry动态几何及renderer adapter已有测试 | primitives自定义点击/撤销完整原生证据待核实 | 尚无独立完整验收提交 |
+| CUS-01 | 9项新回归、12既有registry与184 UI库检查通过；strict Clippy及链接通过 | 16:32–16:36八步真实点击/UndoRedo/双实例/renderer fallback/整域拒绝与恢复；49状态检查0失败、13 renderer输入；退出0 | `09bc537a551da09d4cb7c407e22ee10d49d3c667` |
 | CUS-02 | 无完整协议验收 | 未实现/未验收 | 尚无独立完整验收提交 |
 | ANI-01 | 10月2日workspace日志包含animation/sequences/timing/editor_playback通过；旧文档pending需修正 | 纯显式时钟契约；不宣称新动画窗口验收 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | ANI-02 | 29新回归；102 animation含doctest和17原placement通过，严格3crate Clippy通过 | 纯显式时钟/引擎与editor契约，未新增原生窗口 | `457bdede25ac8bb06b452bde4038d6c54e6e5dac` |
-| ANI-03 | 无嵌套timeline行为验收 | 未实现/未验收 | 尚无独立完整验收提交 |
+| ANI-03 | 已按固定串并行/offset/父时钟/结束样式/一次Undo边界实现，独立回归正在进行；未验收 | 纯显式时钟API，尚无最终验收证据 | 尚无独立完整验收提交 |
 
 ## 上游符号与技术依赖
 
@@ -183,3 +183,5 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 - 15:02更新：ELM-06 alpha-hit通过但crop内工具尚缺，故整项部分；DAT-04查询索引与随机benchmark开发中。总数和19/16/3/1/6分类计数不变。
 
 - 15:31更新：INT-02固定Text FontSize模式通过自动和原生验收，其他组件intrinsic/auto-size范围仍缺，保持部分，不增加完成计数。
+
+- 2026-10-02 16:36：以真实trace/paint/renderer回执闭环EVT-01、EVT-02、LIF-02、CUS-01；固定总数45不变，24已验证、21未闭环。ANI-03进入开发；所有原生与纯测试覆盖差异逐项保留。

@@ -125,14 +125,19 @@ inner top-left, not absolute desktop coordinates.
    Undo must recover again. Keep evidence for both rejection and recovery.
 8. Press Owned canvas in view 1 and Sample after paint. All of its scene output,
    including the green root outside the group, must disappear as one rejected
-   canvas; there is no native overlay/fallback. View 2 stays intact. Switch back
+   canvas; no Custom renderer or ordinary scene root bypasses rejection. Editor
+   selection outlines and diagnostic chrome remain outside scene output and are
+   expected to stay visible. View 2 stays intact. Switch back
    to Domains mode and Sample: complete native output recovers without document
    edits or lost radius/history. Close the window and verify process exit.
 
-Every claimed input requires actual physical event records and all state checks
-must have `isolated=true`, `geometry_ok=true`, `hit_ok=true`. Screenshot-only
-labels, callback counts without pixels, or model-only commands do not satisfy
-native acceptance. Record each unperformed step as unverified.
+Every claimed Custom hit requires actual physical event records, and all state
+checks must have `isolated=true`, `geometry_ok=true`, `hit_ok=true`. This frozen
+probe suppresses operations with no routed target events: physical no-hit
+clicks therefore require an operator receipt plus unchanged-state evidence,
+rather than a nonexistent native-input record. Screenshot-only labels, callback
+counts without pixels, or model-only commands do not satisfy native acceptance.
+Record each unperformed step as unverified.
 
 ## Boundaries
 
@@ -170,6 +175,73 @@ The integration receipt contains the copied binary, complete source archive,
 build-input manifest verified before/after final checks and linking, owned-file
 manifest, and test/Clippy/link logs. No source changed during that build window.
 
-Native results must be appended by the integrator after the physical script;
-they are not inferred from these checks. These are focused local results, not
-full-workspace or cross-platform certification.
+These are focused local results, not full-workspace or cross-platform
+certification. The separate physical receipt below establishes native acceptance.
+
+
+## Native acceptance and independent audit, 2026-10-02
+
+The integrator executed all eight physical steps in the cloud Linux native
+window from **16:32:39 to 16:36:38 UTC**. The frozen binary above exited normally
+with code **0** and empty stderr. The separately audited receipt supports
+**CUS-01: bounded contract verified**; it does not add Custom compositing support.
+
+The source checkpoint is remote
+`09bc537a551da09d4cb7c407e22ee10d49d3c667`, locally represented by
+`1edfa9e29efdd4d2cf6a97ff7808c2a5687522d8`, with tree
+`96158cdd734dac404fedd3f0d51d745272605eea`. Every frozen build-input hash was
+independently compared with that local checkpoint: zero mismatches. The
+integrator verified the remote checkpoint and zero GitHub Actions runs; native
+execution and these local checks are not a remote CI result.
+
+The [compact audit summary](validation/2026-10-02-custom-geometry-summary.json)
+contains source/binary/receipt/raw-log hashes, screenshot hashes, independently
+checked assertions, and 45 selected exact payloads with original JSONL line
+numbers. The complete trace has **81 records**: 49 state checks, 13 changed
+renderer-input records, 12 native input records, six queued Custom clicks and
+one initial snapshot. All state flags are true and every native input error
+list is empty. The independent audit recomputed contours, bounds, resolved
+radius, canonical gray paint, hit expectations and other-view invariance from
+the actual payloads instead of accepting the reported booleans alone.
+
+Observed results:
+
+- View 1 grew from 40 to 70 at the stable center, then shrank on the newly hit
+  expanded-only point. Undo/Redo restored the exact radius/bounds/hit behavior;
+  clicking after Undo used the restored radius. View 2 repeated its own
+  grow/shrink and Undo/Redo without changing view 1
+- Removing only view 1's renderer exposed the gray fallback, retaining its
+  revision and callback count. A real fallback click still grew geometry.
+  Reinstalling resumed the cyan host renderer with that current geometry;
+  view 2 remained amber and retained its own canonical state
+- Settled checks **36/37** both report `UnsupportedShape("custom")` for
+  `domain`, identical canonical state and view 1 renderer count **48**.
+  The screenshot shows neither the cyan Custom nor its purple sibling, while
+  the green outside root remains. Undo clears diagnostics and resumes callbacks
+  at check **40**; repeated Redo/Undo rejects and recovers again by check **45**
+- OwnedCanvas at check **47** rejects the complete scene, including the green
+  outside root. Its editor selection outline and diagnostic chrome remain;
+  these are outside scene compositing, not a Custom/native producer fallback.
+  Returning to Domains at check **49** restores the full cyan/purple/green
+  output, clears diagnostics and resumes the renderer, with canonical state
+  unchanged from checks 45 and 47. View 2 remains intact throughout
+
+The screenshots `initial`, `grow`, `undo`, `fallback`, `domain-rejected`,
+`domain-recovered`, `owned-rejected` and `final` were inspected against these
+records. They and the full raw trace remain in the integration receipt directory
+`custom-geometry-validation-20261002T161415Z`; the compact summary is checked in.
+The raw JSONL SHA-256 is
+`9e2927341ae31d86a656f6f610c8817bd4f0f28a8c9f197260d02a2fa362efa3`.
+
+### Physical miss evidence boundary
+
+Before check 1 the operator physically clicked desktop `(181,518)` and
+`(283,580)`, corresponding to canvas-local `(72,96)` and `(174,158)`, then Sample
+at `(420,315)`. The integrator confirmed both panels stayed radius 40/revision 0
+and no Custom Click occurred. Check 1 records that unchanged state and both
+miss probes; the engine and fixture tests independently assert the same contour
+semantics. These two physical misses are **operator-observed**, not independently
+reconstructed from pointer records: this fixed probe omits no-target operations.
+Successful Custom clicks do have exact native pointer/click records. No CUS
+probe source or instrumentation changed between its frozen build and physical
+run; unrelated later working-tree edits are outside this receipt.

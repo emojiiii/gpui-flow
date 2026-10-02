@@ -75,9 +75,12 @@ focus unless they explicitly request a focus transfer.
    Press Space again: it must now arm navigation. Release and confirm false.
 4. Hold an accepted Space press, left-drag a card, move outside its SceneView
    into the surrounding host chrome and release the mouse. The native trace
-   must include the outside PointerUp, release `pan` capture and retain object
-   geometry/selection. Release Space; it must be false despite prevention.
-   Repeat a pan and press Escape to confirm capture/edit cleanup.
+   must include `PointerCancel`, release `pan` capture, clear Space/editing and
+   restore the pre-pan viewport. Existing `on_mouse_up_out` intentionally cancels
+   rather than forwarding PointerUp; no Click should be emitted. An inside pan
+   release instead emits PointerUp, releases capture and retains its final pan.
+   Release Space; it must be false despite prevention. A separate active-pan
+   Escape check may be performed, but must not be inferred from idle Escape.
 5. In view 1 press **Clear**, **Redirect next A → B**, then **Focus A**.
    The Focus listener queues a transfer to B. The final owner must be B and the
    original host Focus(A) result false. Type `r`: the KeyDown listener queues a
@@ -86,8 +89,10 @@ focus unless they explicitly request a focus transfer.
    not change the live owner. The mirrored error should match; this expected
    diagnostic is not a comparison failure.
 6. Focus A in view 1 and hold Space; press **Focus B** in view 2, then release
-   Space. View 1's actual native FocusLost must clear its focus/Space/capture.
-   View 2 receives only its own keys and begins with fresh repeat state. Press
+   Space. View 1 must finish with focus/Space/capture cleared. The host control
+   click may deliver PointerCancel before native FocusLost; record this order
+   rather than attributing all held-state cleanup to FocusLost. View 2 receives
+   only its own keys and begins with fresh repeat state. Press
    **Clear** in view 1 while view 2 is focused and continue typing: view 2 must
    retain native focus. Repeat the programmatic A/B/Clear sequence in view 2.
 7. Focus a card, then click the real **host text input** and type `host123`.
@@ -130,9 +135,68 @@ receiving the same events; the opt-in trace variant is diagnostic only.
   and `cargo clippy -p flow-studio --bin focus_keyboard_trace -- -D warnings`:
   passed (offline, one shared Cargo job)
 - `cargo build -p flow-studio --bin focus_keyboard_trace`: linked successfully
-- Physical native inspection is delegated to the integrator; it is not claimed
-  by these automated results
+- Physical native inspection was subsequently completed as recorded below;
+  automated checks alone are not its evidence
 
-The broad earlier Studio all-target check also passed before the independently
-in-progress resource probe was added. Final focus validation uses the explicit
-binary target above; it does not certify unrelated unfinished examples.
+## Native receipt and acceptance, 2026-10-02
+
+The integrator operated the actual native window from 16:07:37 to 16:13:10 UTC.
+It exited normally with code 0 and empty stderr. The frozen binary SHA256 is
+`f8931568055beb6601d5863f06a1c5b80b1f0da3796da89a746e0687e82ae897`.
+Source publication is commit
+`0d81d182407191427019c08f49fdc351837de57b`, tree
+`f1b105ffb11a3d3fe61537a0b822e88c8133110f`.
+
+The raw log contains 500 JSON lines, of which 474 are compared operations
+(view 1: 432; view 2: 42). An independent audit compared the actual native and
+pure payloads again, confirmed zero mismatches and no trace-limit marker, and
+asserted the expected behavior below independently of equality. Raw-log SHA256:
+`e86bd573389e73be96a4626abec0e105b999502526d718652da6846854a154de`.
+The [compact durable evidence](validation/2026-10-02-focus-keyboard-summary.json)
+contains provenance, exact operation indices, 41 complete native/pure payload
+pairs and exact host-input/control records. `V1:50` means view 1 operation 50,
+not a raw-log line number; the evidence includes both.
+
+- Programmatic focus: V1:2/4/6/8 and V2:21/23/25/27 prove A/A/B/Clear,
+  no events for the same owner, ordered Blur → Focus, correct related targets,
+  and non-cancelable notifications without fabricated pointer input
+- Keyboard: V1:21–48 contains an initial down, 26 repeated downs and release;
+  V1:16 preserves Shift. Refocus at V1:347 followed by V1:348 restarts repeat
+- Space: V1:50 prevents the first down; every held repeat through V1:60 remains
+  unarmed. V1:61 is prevented Up with Space false. V1:62–71 is an accepted
+  hold; prevented Up at V1:72 clears it
+- Queued requests: V1:305 redirects Focus(A) to B and the host result is false;
+  V1:306 redirects B to A from KeyDown. V1:308 rejects the destroyed-generation
+  destination, records the expected stale-handle error and retains A
+- Instance isolation: V1:310 arms Space, V1:311 PointerCancel clears it, V2:13
+  acquires B, and V1:312 FocusLost clears the old logical focus. V2:15 has fresh
+  repeat state; V1:314 Clear does not steal V2's keyboard input at V2:18
+- Host text input: V1:330 records FocusLost/Blur. Physical individual key presses
+  produce `host123`, then `host123more` across unrelated V2:34 Clear. Scene
+  operation counts remain unchanged during each typing span and both logical
+  owners remain empty. The initial unsuccessful paste-style attempt is excluded
+- Native window loss: operator Alt-Tab/window switching corresponds to V1:343
+  FocusLost and later inert loss notifications; V1:347/348 proves recovery
+- Outside release: V1:86 starts pan capture; V1:288 still has nonzero pan and
+  capture. V1:289 is PointerCancel, with capture/editing/Space cleared and pan
+  restored to zero. This verifies the existing cancellation contract, not an
+  outside PointerUp guarantee
+- Inside release: V1:358 emits PointerUp then Click. In the later pan,
+  V1:430 emits PointerUp, releases capture and retains pan approximately
+  (59.0009, 25.0004). V1:431 prevents Space Up but clears Space and retains pan
+
+**Recommendation:** the fixed EVT-01 tree-routing/default-action acceptance and
+EVT-02 keyboard/programmatic-focus acceptance are met for this existing bounded
+contract, combining the actual native matrix with the focused pure tests.
+Existing pure tests establish capture/target/bubble, once/off, listener queues,
+prevention and active terminal cleanup; this native run supplies the formerly
+missing exact adapter/pure trace comparison and programmatic focus matrix.
+
+**Explicit limits:** native Escape at V1:291/292 occurred after capture had already
+been released; active-pan Escape is proven only by pure tests. Physical window
+FocusLost occurred without an armed capture/Space latch, and the cross-view
+control click cleared Space with PointerCancel before FocusLost. Native held-state
+FocusLost cleanup therefore remains a pure-test assertion rather than a claim
+from this session. Native-declined focus, IME, accessibility, Tab navigation,
+touch/multiple devices, pressure, native timestamps and general double-click
+routing remain outside this acceptance. No source behavior changed during QA.

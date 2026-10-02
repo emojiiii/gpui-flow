@@ -190,3 +190,5 @@ cargo +1.98.1 run --locked -p flow-studio
 当前容器内阴影采用完整子树真实alpha。BeforeChildren与StrokeAfterChildren保持不同插入点，自身inner不回灌自身outer，子级最终效果进入父源；PassThrough隔离拒绝与预算保持不变。运行 `container_inner_shadows` 查看原生示例，本轮883项headless（8项原有忽略）、97项UI、共享预算fixture、严格Clippy/格式/docs、原生链接与目标窗口smoke通过；完整边界与未验项目见[契约](docs/container-inner-shadows.md#validation)。
 
 Text presentation case and hard-newline paragraph spacing now share native/CPU layout and measurement. See [the bounded contract](docs/text-case-paragraph-spacing.md); run `cargo run -p flow-studio --bin text_paragraph_styles` for the paired view.
+
+Native acceptance receipts: [focus/keyboard exact input replay](docs/focus-keyboard-validation.md), [resource readiness and paint](docs/resource-lifecycle-validation.md), and [Custom geometry and host renderers](docs/custom-geometry-validation.md). These include exact-source, automatic-test and physical-window evidence separately.

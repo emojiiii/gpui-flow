@@ -145,6 +145,55 @@ relevant source files and the local command logs were preserved with the binary.
 This is focused resource evidence, not a claim that all workspace targets ran in
 this validation batch. No Actions or deployment was run.
 
-Physical native acceptance remains **pending** until screenshots and the captured
-trace for the above matrix have been reviewed. Do not upgrade LIF-02 from this
-document's authored script or passing model tests alone.
+### Physical native result: bounded acceptance passed
+
+The integrator performed the complete physical sequence on Linux from
+**2026-10-02 16:24:36 to 16:29:31 UTC**, using the frozen binary above. The window
+was closed normally and the captured process exit was **0**. All ten supplied
+screenshots were visually reviewed, including actual green/purple checker
+pixels, stale-source/attachment/instance placeholders, denial after late
+completion, the producer failure, the dropped view and the remounted completion.
+
+The [checked-in evidence summary](validation/2026-10-02-resource-lifecycle-summary.json)
+contains the run receipt, all **62 exact JSON records**, screenshot hashes,
+indexed assertions, parsed milestone counts and source hashes. Its raw JSONL
+SHA-256 is
+`23a92d0fa4f8e48ef24ec1253fcac0956c54eb355e0fd3723108e8f6c779affc`.
+The summary is below 100 KiB; the binary and PNG files remain local validation
+artifacts. The integrator verified source checkpoint
+`f5ab200c6f6bfaf786742b9b0ace8a530de0d6cf`, tree
+`b2a5441be7e7a13e6de9ba08bf609538c6b94052`, and zero Actions runs. The six recorded
+lifecycle source/test files in the local index exactly match the frozen inputs.
+
+Audit findings:
+
+- All 62 records have `violations=0`, with contiguous sequence numbers
+- Sixteen observed resource tickets each have exactly one terminal event
+- Ready and ViewReady each occur once for engine 1 and once for engine 2;
+  the six Complete events are unique per engine/document/resource epoch
+- All ViewReady/Complete events have a nonzero host paint-traversal witness;
+  all milestone counts independently match the current resource states
+- A/B/A changes hero generation 3 to 5 while preserving handle and attachment;
+  old backend job 1 produces no Loaded/Complete; only job 2 loads generation 5
+- Remount preserves the handle but changes attachment 0 to 5 and generation
+  6 to 7; the old cancellation is `dispatched=false`; only job 4 loads it
+- Destroy/recreate preserves the ID but changes handle generation 1 to 2,
+  attachment 5 to 8 and resource generation 8 to 9; old job 5 cannot populate
+  the recreated image, and its cancellation is `dispatched=false`
+- Cancellation completes with `p=0 l=1 f=1 c=2`; old job 7 finishing later
+  neither loads the hero nor repeats Complete. Failure completes with
+  `p=0 l=1 f=2 c=1`
+- Drop/remount preserves the external cache history and changes the engine
+  owner from 1 to 2; fresh Ready/ViewReady precede job 9's Loaded and Complete
+- Repeated redraws were physically performed and no duplicate stages appear.
+  The Redraw button emits no action record, so its exact click count is operator
+  evidence rather than independently recoverable from the JSON
+
+This closes **LIF-02's bounded readiness/native-paint acceptance gap** for the
+validated controlled in-memory ImageCache path together with the tracker and
+adapter regressions. It does not upgrade LIF-03. A decoded cache result is used
+here, so file/network decoding itself was not exercised. The session drops a
+settled failed view; cancellation on disposal of a still-pending view remains
+unit-tested rather than part of this native session. GPU presentation fences,
+hard cancellation, byte budgets and native heap ownership measurements remain
+outside the claim, as described above.
