@@ -1,7 +1,6 @@
 # Canvas decoded-image command batches
 
-Status: implementation and 11 new CPU regressions pass; affected UI checks,
-native linking and real-window acceptance are being completed. Not full 2D-context
+Status: implementation, 12 new regressions and real Linux-window acceptance pass. Not full 2D-context
 or browser drawImage parity.
 
 `CanvasCommand::DrawImage { image, source, destination }` and
@@ -44,3 +43,36 @@ defines full-image, destination-size and source/destination rectangle overloads.
 Flow offers one typed bounded variant with explicit immutable inputs. Text draw
 commands, persistent context/current paths, image patterns, every composition mode
 and full browser context compatibility remain outside this slice.
+
+
+## Validation
+
+**81 affected checks passed, zero failed/ignored**: 63 composite Canvas tests
+(including 11 new image-command tests) and 18 UI Canvas tests (including one new
+resource/identity test). Strict composite/UI all-targets Clippy, example Clippy,
+format checks and actual native linking passed. Unchanged unrelated suites were
+not rerun. Tests cover image/vector ordering and per-draw alpha, source crop at
+DPR2, transparent out-of-image source mapping, reflection/frozen clips/restore,
+missing/failed/late input rollback, finite rectangles and budgets, smoothing
+compared pixel-for-pixel to direct image draw, shared aliases, immutable self-snapshot
+input and stale/destroyed Canvas handles.
+
+The `canvas_images` window ran 2026-10-02 14:00:18–14:03:12 UTC and closed normally
+with exit 0 and empty stdout/stderr. Actual DPR1/DPR2 views showed the full frame,
+a rotated cropped quadrant, transparent source margin, reflected alpha image,
+curved and nested even-odd clips, a subsequent independent batch, late missing-input
+rejection, safe shrink/configuration Undo, Clear and redraw. Pixels intentionally
+are not restored by configuration Undo. Three artwork-region comparisons were
+pixel-identical: before/after rejection, unclipped/redraw and unclipped/Clear+redraw.
+Smoothing alternatives and immutable self-draw have automated pixel coverage;
+the native fixture used smooth rendering. No cross-platform or browser exactness
+claim is made.
+
+Exact source checkpoint `0ab6ffbf8bdbdb837a30f6cbf193e5506cb0124d`, tree
+`8fdee85586c864b0636e99f4eead209838e12801`; source archive SHA-256
+`d7a0c4afd17169d7962d1f0ee2a4c6029569e954264ce6e068e273346e7e286b`;
+binary SHA-256
+`d4789b6d7130f7654f03991625a2e23c8e1273d305458b98e0f4ccda57b89721`.
+Source was unchanged throughout native acceptance. Screenshots and the normal
+close receipt are retained with validation artifacts. Run
+`cargo run --locked -p flow-studio --bin canvas_images` to reproduce.

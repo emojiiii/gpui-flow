@@ -6,6 +6,8 @@ Status: historical source research plus a separately labelled current source map
 
 > 基线说明：下方差距矩阵记录源码研究时的 `43eda10` 状态。后续已实现的引擎身份/生命周期/schema/dirty 缓存及原生事件接入见 [engine.md](engine.md)，不要把历史矩阵的“absent”误读为最新状态。后续批次实现了[多层矢量 paints](appearance.md)和[显式行列布局](flow-layout.md)；另有基础属性动画和编辑器安全播放会话；完整外观合成/效果、全局响应式布局调度、完整timeline/高级状态过渡/运动路径仍然缺失。
 
+当前去重能力任务与证据台账见[45项审阅表](leafer-task-ledger.md)，不与本文39条交叉验收契约相加。
+
 ## 当前增量状态（源码能力，不覆盖历史基线）
 
 - 引擎实例、生命周期、registry/schema、dirty 缓存、默认动作前事件路由：已实现，见 [engine.md](engine.md)
@@ -45,6 +47,7 @@ Status: historical source research plus a separately labelled current source map
 - Text变换增量：[局部字形像素的仿射绘制](text-affine.md)复用Affine最大奇异值、同App字体与现有图像compositor，支持旋转/反射/非均匀/剪切并保留uniform原路径；精确local mask、祖先裁切、字形预算/陈旧任务/Undo贯通。新增9项回归，376项受影响测试通过；真实Unicode/装饰/overflow/透明度/bridge恢复/十一Undo窗口退出0，恢复画面逐像素一致。外部编辑手柄、富文本及effect自身变换限制保持
 - Text交互增量：[字体能力控制的外部变换手柄](text-transform-tools.md)默认保持uniform约束，匹配字体bridge启用纯solid无effect Text非均匀/旋转及共享roots；几何/插件/命令/派生布局使用同一runtime能力，撤销能力先取消capture。新增9项回归，401项受影响检查通过；真实单选/仿射父级/混合与roots/Shift/UndoRedo/只读/viewport窗口及聚焦输入关闭复验均退出0。仍为transform-only，不改Text盒子或字体大小
 - Text盒子交互增量：[固定盒子尺寸与reflow手柄](text-box-resize.md)作为显式Box模式复用已有resize/capture/事务；保持字体、padding和仿射线性项，支持真实换行/ellipsis、固定对边、Shift比例和一次Undo，派生布局覆盖目标时原子拒绝。新增12项回归，301项受影响检查通过；真实Linux宽高/仿射父级/模式切换/只读/UndoRedo窗口退出0，Redo画面逐像素一致。默认transform不变，字体大小拖动和响应auto-size所有权覆盖仍缺
+- Canvas图像批次增量：[不可变图片/crop/变换/裁切原子绘制](canvas-image-commands.md)在独立模块复用image compositor；物理源像素到逻辑目标/DPR、越界透明与晚失败回滚清晰。新增12项回归，81项聚焦检查通过；真实双DPR/clip/crop/reflection/resize/Undo/Clear窗口退出0，三组画面像素一致。无URL取用，完整context及文字命令仍缺
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
 ## 九类能力当前边界（含待验证源码增量）

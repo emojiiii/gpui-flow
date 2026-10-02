@@ -1,0 +1,179 @@
+# Leafer 对齐任务总表 v1（审阅版）
+
+固定45个去重能力单元，源码包含版本 `0ab6ffbf8bdbdb837a30f6cbf193e5506cb0124d`。这是具体范围的开发台账，不是全部Leafer API兼容证明，不用任务数计算工时或百分比。旧39条A–E验收契约仅为交叉索引，不与本表相加；此前31/8快速审计不作为本表完成数。
+
+## 状态计数
+
+- 有界契约已验证：18
+- 部分实现：15
+- 未开始该能力：8
+- 待核实验收：3
+- 开发/验收中：1
+
+有界已验证仅表示本行支持集合有实际证据，不表示整个上游模块完全对齐。源码、自动检查、真实窗口分别记录。未开始指本项新增能力，不以已有依赖代码冒充实现。目标是继续完成表内未闭环行为；技术依赖不因此被删除，也不能以“今晚”为由虚报通过。
+
+ID与有限验收集合由本表定义，状态随证据更新。扩大范围须留下变更记录，新增行为另增ID并明确变更总数，不拆小方法美化进度。表内标出的Flow扩展不是固定OSS源码已有实现。跨平台验收、闭源插件、浏览器DOM控件和真实Agent供应商不计本轮Linux画布对齐范围。
+
+## 固定参考
+
+UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87eeb8192dddc570`；plugins `3eb445bf34debb638766615282224b77108bf610`。每项具体来源见下表，接口和实现不一致时以后者为准，stub不构成已实现行为。字词段间距等Text集合来自固定ITextStyleInputData，未把未证实的rich runs作为Leafer必选项。
+
+## 去重任务与验收
+
+| ID | 类别/能力 | 状态 | 固定验收集合 | 边界/排除 |
+|---|---|---|---|---|
+| DAT-01 | 数据 / [元素工厂与属性schema](engine.md) | 有界契约已验证 | 内置及Custom注册、默认值/版本/验证；非法输入原子拒绝 | 运行时回调不序列化；不含Leafer格式导入 |
+| DAT-02 | 数据 / [原子属性与历史](engine.md) | 有界契约已验证 | 有类型setter、批量首旧末新、一次revision及UndoRedo，失败无部分修改 | 直接可信宿主底层修改不是权限边界 |
+| DAT-03 | 数据 / [版本化文档与有限Leafer映射](display-scenes.md) | 部分实现 | 必选现有Scene JSON v1读写/未知版本拒绝；固定原语tag、transform、基础paint的Leafer JSON映射，未知属性明确拒绝并往返 | 不含JS回调、任意computed缓存或完整上游JSON兼容；迁移仅在存在正式v2时定义 |
+| DAT-04 | 数据 / [查询与增量缓存性能](engine.md) | 部分实现 | 固定id/name/tag/class/子树条件与顺序；随机仿射+重挂载对照、固定fixture重算计数及CPU benchmark | 无通用CSS选择器语言；不声称GPU局部绘制 |
+| INS-01 | 实例 / [代际身份与树操作](engine.md) | 有界契约已验证 | create/clone/detach/reattach/reparent/destroy保留或更换身份有明确定义；奇异/循环原子拒绝 | 不是多App分层组合 |
+| INS-02 | 实例 / [多层App实例组合](leafer-source-map.md) | 未开始该能力 | 多层画布树、跨层事件/坐标转发、独立生命周期与销毁 | 多个普通SceneView并排不等于App分层 |
+| LIF-01 | 生命周期 / [订阅与拥有资源销毁](resource-lifecycle.md) | 有界契约已验证 | once/off/scoped disposal、destroy exactly once、旧token和迟到job不重定向 | 不包含后台加载器硬取消 |
+| LIF-02 | 生命周期 / [资源就绪与呈现回执](resource-lifecycle.md) | 待核实验收 | Ready/ViewReady/Complete含失败取消，真实加载/替换/销毁/paint事件顺序 | ViewReady是paint回执，不是GPU fence |
+| LIF-03 | 生命周期 / [加载取消与媒体资源桥](resource-lifecycle.md) | 部分实现 | 共享加载字节预算、无引用任务硬取消、媒体统一代际票据和错误传播 | 现有GPUI image及有界本地媒体路径不是完整资源服务 |
+| EVT-01 | 事件 / [树路由与默认动作顺序](engine.md) | 部分实现 | capture/target/bubble、once/off、监听队列和prevent-default；原生适配器trace与纯路由一致 | 现有鼠标路由已实现；全链trace对照尚缺 |
+| EVT-02 | 事件 / [键盘与程序焦点](focus-routing.md) | 待核实验收 | KeyDown/Up、重复/Space、Focus/Blur重定向、窗口失焦清理及实例隔离 | 不把Kit文本输入当完整IME/a11y |
+| EVT-03 | 事件 / [设备元数据与复合手势](keyboard-routing.md) | 部分实现 | pointer type/buttons/time/pressure、触摸多指、tap/double/longpress的稳定事件契约 | 已有mouse/pointer_id、序号与原生Text双击；不是完整事件族 |
+| EVT-04 | 事件 / [IME与无障碍输入](text-editing.md) | 部分实现 | 中文输入组合/切换/失焦、Tab可达与语义树，定义受支持平台验收 | Kit Textarea提供基础；平台IME边界明确未验 |
+| INT-01 | 交互 / [外部选择移动缩放旋转](text-transform-tools.md) | 有界契约已验证 | 单选/共享root、多选、Image和能力开启Text的仿射手柄；撤销/取消/只读/陈旧capture | Custom及未支持样式拒绝；不改intrinsic尺寸 |
+| INT-02 | 交互 / [内在尺寸编辑](text-box-resize.md) | 部分实现 | 按组件定义尺寸/内容/字体resize策略，与布局所有权及单Undo一致 | 当前只有固定Text盒子模式；字体大小和其他组件策略未齐 |
+| INT-03 | 交互 / [Text内容编辑会话](text-editing.md) | 有界契约已验证 | 可选内容panel、一次文档Undo、Done/Cancel/blur/target切换、身份和只读保护 | 不是WYSIWYG；IME专项归EVT-04 |
+| INT-04 | 交互 / [自定义内外工具协议](text-editing.md) | 部分实现 | registry、load/update/unload/destroy、策略门控与宿主自定义widget挂载和释放 | 现有controller/registry与Text专用面板；任意内层widget不足 |
+| INT-05 | 交互 / [路径与倾斜中心编辑工具](line-endpoints.md) | 未开始该能力 | Path控制点、skew和pivot交互须各有真实几何/取消/history验收 | 固定Leafer OSS通用点编辑器是stub，不把自建功能称上游已实现；Line端点现有独立基础 |
+| INT-06 | 交互 / [拖动约束与高级视口](plugins.md) | 部分实现 | 固定世界/父局部矩形drag bounds、可开关网格/边缘吸附、viewport min/max及惯性取消 | 多指设备传递归EVT-03；不加入自动寻路/物理碰撞 |
+| APP-01 | 外观 / [有序填充与渐变](appearance.md) | 有界契约已验证 | 多层矢量fill、实色/线性/径向、多stop、透明度与缓存/DPR预算 | Text/Image多paint不在此项支持子集 |
+| APP-02 | 外观 / [高级描边](stroke-alignment.md) | 部分实现 | cap/join/miter/dash、闭合及开放轮廓内外对齐、scale-fixed；bounds/hit/paint同源 | 现有居中及闭合inside/outside；开放和scale-fixed缺 |
+| APP-03 | 外观 / [隔离混合与蒙版擦除](compositing.md) | 部分实现 | 组透明度/多paint隔离、固定blend集合、mask/erase覆盖关系与hit规则 | 已有有界CPU及owned backdrop；Custom/外部任意backdrop与erase缺 |
+| APP-04 | 外观 / [阴影与固定滤镜集合](multiple-shadows.md) | 部分实现 | 已有leaf/group inner/outer多影；必补spread/box/scale-fixed shadow、blur、backgroundBlur及grayscale并有像素/预算测试 | backgroundBlur仅可在拥有完整背景的有界surface执行；不承诺任意宿主backdrop |
+| APP-05 | 外观 / [状态样式与过渡](state-styles.md) | 部分实现 | hover/press/focus/selected/disabled、命名状态/继承、每态transition及geometry变化 | 现有paint-only实色/opacity和placeholder；每态/geometry/更多插值缺 |
+| APP-06 | 外观 / [GPU局部绘制后端](engine.md) | 未开始该能力 | 后端真正消费persistent damage并有像素等价/工作量对照 | CPU dirty和damage记录已归DAT-04；GPUI当前full-frame |
+| LAY-01 | 布局 / [固定与内容流式布局](flow-layout.md) | 有界契约已验证 | row/column、wrap/reverse、padding/gap/grow/minmax、auto-size/嵌套固定点/hidden排除 | 百分比/baseline/shrinkContent归LAY-03；不是CSS完整实现 |
+| LAY-02 | 布局 / [响应派生与事务所有权](reactive-layout.md) | 有界契约已验证 | 安装binding后普通编辑提交前派生、白名单/有界固定点/冲突拒绝、一次Undo | 不是全局observer/帧合并局部依赖调度 |
+| LAY-03 | 布局 / [高级尺寸与局部调度](flow-layout.md) | 未开始该能力 | 固定父尺寸百分比、shrinkContent、文字baseline行对齐、依赖dirty子树与单帧合并；循环/所有权冲突原子拒绝 | 受父尺寸确定性约束；不实现全CSS布局或无界observer网络 |
+| LAY-04 | 布局 / [同源文字测量与重排](text-measurement.md) | 有界契约已验证 | 同GPUI shaping的Natural/AutoHeight、字体metrics失效、真实测量推动布局 | 富排版的字词段间距归ELM-04 |
+| ELM-01 | 元素 / [矢量原语与实际几何](ellipse-arcs.md) | 有界契约已验证 | Rect/Ellipse/Line/Polygon/Star/Path/Pen各独立模块；四角/弧环/数据API贯通bounds/hit/CPU | 不包含通用点编辑器或完整SVG文档 |
+| ELM-02 | 元素 / [Path距离查询与显式定位](path-placement.md) | 有界契约已验证 | Kurbo局部弧长/切线、世界点、显式目标定位；自依赖/祖先/奇异/陈旧拒绝 | 持续动画绑定归ANI-02 |
+| ELM-03 | 元素 / [Group Box Frame容器裁切](container-corners.md) | 有界契约已验证 | 分离组件/paint phases/四角、嵌套真实clip，bounds/hit/CPU/native一致受能力限制 | 不扩大Custom/特殊effect能力 |
+| ELM-04 | 元素 / [Text固定排版属性](text-affine.md) | 部分实现 | 已有font/wrap/align/padding/ellipsis/italic/decoration/affine；必补letterSpacing、wordSpacing、paraIndent、paraSpacing、textCase、writingMode和autoSizeAlign | 富runs/WYSIWYG不是此次固定ITextStyleInputData属性集，作为额外范围另立项 |
+| ELM-05 | 元素 / [Image真实帧与几何呈现](image-corners.md) | 有界契约已验证 | 静态/动画帧、fit、四角及仿射/复杂clip，真实CPU像素和资源代际 | alpha hit/crop内编辑归ELM-06；解码与URL权限归宿主 |
+| ELM-06 | 元素 / [Image像素命中与内编辑](image-transform-tools.md) | 未开始该能力 | decoded-alpha hit阈值/缩放/当前帧和crop内工具必须一致且可撤销 | OSS未找到Image专属crop inner editor；属于框架明确扩展，不虚称上游已有 |
+| ELM-07 | 元素 / [Canvas拥有像素与生命周期](canvas-component.md) | 有界契约已验证 | 独立配置、运行时surface、DPR/smooth/safe-resize/clear/draw/snapshot、代际释放 | 像素不进文档/Undo；非整视图OwnedCanvas |
+| ELM-08 | 元素 / [Canvas矢量上下文批次](canvas-clips.md) | 有界契约已验证 | Path填充/描边、transform/alpha/save/restore/冻结clip栈；晚失败原子回滚 | 无持久current path/context；图文分别归ELM-09/10 |
+| ELM-09 | 元素 / [Canvas图像批次](canvas-image-commands.md) | 有界契约已验证 | immutable image输入、source crop/destination/DPR、仿射/clip/alpha和单代际原子提交 | 不取URL；负尺寸拒绝；不保证浏览器精确filter边缘 |
+| ELM-10 | 元素 / [Canvas文字与路径/图案状态](canvas-image-commands.md) | 未开始该能力 | 必选fillText、measureText、strokeText；beginPath/moveTo/lineTo/quadraticCurveTo/bezierCurveTo/closePath；createPattern的repeat/no-repeat与transform | 不包含DOM focus控件、CSS字体parser或全部浏览器context状态；新增操作另增范围 |
+| ELM-11 | 元素 / [Canvas与场景导出](canvas-pixels.md) | 部分实现 | Canvas RGBA/PNG已实现；必补固定Scene区域PNG/JPEG/WebP和SVG，含背景/透明度/裁切范围及缺资源拒绝 | 文件选择器/自动下载不是引擎API；字体嵌入或完整外部SVG导入不在本项 |
+| CUS-01 | 自定义元素 / [动态几何命中与宿主呈现](engine.md) | 待核实验收 | custom属性驱动几何/bounds/hit、显式native renderer、实例隔离；拒绝不支持合成 | schema本身归DAT-01；不双计工厂 |
+| CUS-02 | 自定义元素 / [自定义resize和异步资源协议](custom-nodes.md) | 未开始该能力 | 自定义尺寸/编辑策略与测量、异步ready/cancel事件正式接入 | 任意宿主回调能实现不等于框架已提供协议 |
+| ANI-01 | 交互插件 / [有界属性动画时序](animation-timing.md) | 有界契约已验证 | 稀疏关键帧、delay/repeat/direction/speed、seek/pause/conflict/cancel和单Undo | 不是嵌套timeline；motion binding归ANI-02 |
+| ANI-02 | 交互插件 / [持续运动路径动画](motion-path-queries.md) | 开发/验收中 | 按时钟距离/切线绑定位置/旋转，变化失效/冲突/销毁/取消/history一致 | 查询/一次定位已归ELM-02，不能算本项完成 |
+| ANI-03 | 交互插件 / [组合动画时钟与定位控制](animation-timing.md) | 未开始该能力 | 必选AnimateList式并行与串行子动画、offset、父时钟seek/pause/reverse、结束样式及一次Undo | jump/join、physics、无限嵌套和跨所有跳帧回调不属于v1有限集合，新增须显式扩项 |
+
+## 自动化、原生与版本证据
+
+所有行的源码包含版本在页首，**不是该SHA整个工程重新跑过全部测试**。历史全套证据WS-20261002的[原日志](validation/2026-10-02-workspace-tests.log)为1215通过、0失败、8原有忽略，命令为`cargo test --locked --workspace --lib --tests`；测试树`3b237095928057d2e00e897a9a3822f8117d088e`与已回读验证的远端`a08670a2fbe2882997d21d6a9f812d4197d3da74`仅一份文档不同，代码/构建/测试输入完全相同。日志与源快照hash见JSON。此记录不含真实窗口，也不冒充后续变更未跑过的全套结果。
+
+| ID | 自动化证据 | 原生证据 | 证据提交 |
+|---|---|---|---|
+| DAT-01 | engine/registry、engine及metadata测试已在10月2日全套记录通过 | 纯引擎项，不要求窗口 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
+| DAT-02 | engine/engine及editor历史测试在全套记录通过 | 纯引擎项，不要求窗口 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
+| DAT-03 | 当前serde roundtrip通过；跨格式/迁移未实现 | 未验收 | 尚无独立完整验收提交 |
+| DAT-04 | 有确定性40轮对照与重算计数；随机重挂载/正式benchmark待补 | 纯数据项，不要求窗口 | 尚无独立完整验收提交 |
+| INS-01 | engine实例、clone/reparent和资源迟到结果测试通过 | 纯引擎项，不要求窗口 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
+| INS-02 | 无该项验收证据 | 未实现/未验收 | 尚无独立完整验收提交 |
+| LIF-01 | engine生命周期与resources对应测试已通过 | 纯归属逻辑；原生资源回执另列LIF-02 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
+| LIF-02 | 模型和适配器测试通过；旧文档与后续原生证据需逐条对账 | Canvas窗口已观察；完整加载/失败生命周期原生矩阵待核实 | 尚无独立完整验收提交 |
+| LIF-03 | 部分代际/容量测试已过；硬取消/媒体桥未实现 | 未完整验收 | 尚无独立完整验收提交 |
+| EVT-01 | 纯event_router及生命周期测试通过 | 有原生鼠标操作，缺明确trace全链对照 | 尚无独立完整验收提交 |
+| EVT-02 | keyboard/focus测试通过；旧文档原生pending需对账 | Space/失焦已有操作证据；程序焦点完整矩阵待核实 | 尚无独立完整验收提交 |
+| EVT-03 | 鼠标/多pointer排斥已有测试；真实时间戳/压力/多指未实现 | 仅鼠标局部验收 | 尚无独立完整验收提交 |
+| EVT-04 | 有会话保护测试；平台组合输入/a11y验收缺失 | IME候选/辅助技术待实现或核实 | 尚无独立完整验收提交 |
+| INT-01 | 最新251 interaction+150 UI受影响记录通过 | 12:46–12:57原生拖动/Shift/UndoRedo/桥撤销与输入关闭通过 | `066b91fe3650f66ff33c1a46d833b85a3db58fb4` |
+| INT-02 | Text盒子12新回归、301受影响通过 | Text盒子13:30–13:34通过；其他策略未验 | `d80996854a161ce4a79b477d208a205a0ec83ef7` |
+| INT-03 | editor text_tools/UI会话测试通过 | text-editing.md历史窗口验收；066b91fe对应12:55聚焦输入Escape关闭复验；不扩展为IME验证 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
+| INT-04 | 工具生命周期测试有；任意自定义UI端到端未完成 | 仅现有Text工具窗口 | 尚无独立完整验收提交 |
+| INT-05 | Line已验证；本项三类工具未开始 | 未实现/未验收 | 尚无独立完整验收提交 |
+| INT-06 | 基础交互已测；高级约束无完整测试 | 基础pan/zoom已验，完整项未验 | 尚无独立完整验收提交 |
+| APP-01 | appearance/gradient和CPU对应回归通过 | 历史渐变/多paint窗口及Canvas矢量窗口通过 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
+| APP-02 | Kurbo/Lyon/i_overlay已有回归；缺失行为未测 | 已实现子集有原生像素；全项未验 | 尚无独立完整验收提交 |
+| APP-03 | 现有多种blend/alpha mask CPU与UI通过 | 已有真实合成窗口；全固定源码契约未齐 | 尚无独立完整验收提交 |
+| APP-04 | 现有shadow/inner/group回归通过 | 历史受限视觉检查；缺失模式未验 | 尚无独立完整验收提交 |
+| APP-05 | state_styles/transitions/named测试通过 | 旧状态原生说明不完整，需补验 | 尚无独立完整验收提交 |
+| APP-06 | 无GPU damage消费测试 | 未实现/未验收 | 尚无独立完整验收提交 |
+| LAY-01 | flow/auto_size/reverse/item_boxes/gap/taffy对应全套通过 | 核心是纯measure/arrange契约；窗口专门矩阵仍未宣称 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
+| LAY-02 | engine derivation及layout reactive/ratio/text测试通过 | 纯提交契约；Text盒子窗口验证其普通编辑路径 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
+| LAY-03 | 无完整行为验收 | 未实现/未验收 | 尚无独立完整验收提交 |
+| LAY-04 | text measurement与layout text回归通过 | Text padding/italic/overflow多次同源对照窗口通过 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
+| ELM-01 | Ellipse25、Rect20、Path23新回归及headless批次通过 | 模型几何和CPU为主；Ellipse/Rect专项窗口未声称通过 | `6796dc885cecbb155fb00d2eb4736c64bb51afb0` |
+| ELM-02 | 查询17及定位17新回归通过 | 只读/显式引擎API，不要求新增窗口 | `d914a1ef0fec79b25fb67cb7f76f2c7f774ec55d` |
+| ELM-03 | 容器16新回归；全套1215及后续Text/Image clip回归通过 | 后续Text/Image真实复杂祖先窗口通过；早期角切片原生仅adapter | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
+| ELM-04 | 多个字体/排版/CPU/UI聚焦记录通过 | 已实现子集有多次真实对照和Undo；富runs等未验 | `650046049c42377dfa9f98b223f43496b71bd161` |
+| ELM-05 | 16新回归、664受影响通过（1原有忽略） | 08:45–08:49真实静态/动画/旋转/clip/Undo通过 | `cfe28b01e81c8bfba2cdc0e277bdbdb0a0375dc9` |
+| ELM-06 | 当前几何hit和outer工具不覆盖本项 | 未实现/未验收 | 尚无独立完整验收提交 |
+| ELM-07 | 24新回归及356受影响通过 | Canvas实际Draw/Clear/resize/Undo窗口通过 | `d365f5a9e533e823e43e09db5154935e01b68c49` |
+| ELM-08 | 11矢量+7clip新回归、360/367受影响记录通过 | 11:41和11:57窗口、DPR/回滚/重绘像素对照通过 | `e4f7d9455f7aaaf38d160951c330ae03249435d1` |
+| ELM-09 | 12新回归；63 composite+18 UI=81聚焦通过，strict Clippy/link通过 | 14:00:18–14:03:12 Linux窗口退出0；DPR1/2、crop/透明源/反射/clip/晚失败/resize/Undo/Clear；三组像素区域一致 | `0ab6ffbf8bdbdb837a30f6cbf193e5506cb0124d` |
+| ELM-10 | 无该项完整实现测试 | 未实现/未验收 | 尚无独立完整验收提交 |
+| ELM-11 | RGBA/PNG11新回归、338受影响通过 | 10:25 PNG预览及4份解码核验；Scene/SVG未验 | `61ac2522c7194ae2a63240b63afa8cc4808a67a8` |
+| CUS-01 | registry动态几何及renderer adapter已有测试 | primitives自定义点击/撤销完整原生证据待核实 | 尚无独立完整验收提交 |
+| CUS-02 | 无完整协议验收 | 未实现/未验收 | 尚无独立完整验收提交 |
+| ANI-01 | 10月2日workspace日志包含animation/sequences/timing/editor_playback通过；旧文档pending需修正 | 纯显式时钟契约；不宣称新动画窗口验收 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
+| ANI-02 | 独立motion binding实现启动；新代码尚未验收 | 未实现/未验收 | 尚无独立完整验收提交 |
+| ANI-03 | 无嵌套timeline行为验收 | 未实现/未验收 | 尚无独立完整验收提交 |
+
+## 上游符号与技术依赖
+
+| ID | 固定来源/符号或Flow契约 | 技术依赖 |
+|---|---|---|
+| DAT-01 | [UICreator / registerUI；类型注册与factory契约](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/platform/platform/src/creator/UICreator.ts) | 现有Rust/GPUI依赖内实施 |
+| DAT-02 | [Leaf.set / LeafData属性提交；Flow保留原子事务差异](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/display/src/Leaf.ts) | 现有Rust/GPUI依赖内实施 |
+| DAT-03 | [UI.one / toJSON / clone（固定可映射属性集合）](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/UI.ts) | 现有Rust/GPUI依赖内实施 |
+| DAT-04 | [Finder；core Watcher / Layouter / Renderer](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/find/src/Finder.ts) | 现有Rust/GPUI依赖内实施 |
+| INS-01 | [Branch.add / __realRemoveChild / clear；Leaf.destroy](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/display/src/Branch.ts) | 现有Rust/GPUI依赖内实施 |
+| INS-02 | [App 多层Leafer组合](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/app/src/App.ts) | 先确定多surface坐标/输入转发与所有权；避免GPUI窗口默认事件路由冲突 |
+| LIF-01 | [Eventer.on / off / once / destroy；Leaf.destroy](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/event/src/Eventer.ts) | 现有Rust/GPUI依赖内实施 |
+| LIF-02 | [Leafer ready/viewReady/created相关阶段](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/Leafer.ts) | 现有Rust/GPUI依赖内实施 |
+| LIF-03 | [Image资源完成；Flow加载预算/取消为安全扩展](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/Image.ts) | 现有Rust/GPUI依赖内实施 |
+| EVT-01 | [emit tree phases；Interaction指针默认顺序](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/interaction/interaction/src/emit.ts) | 现有Rust/GPUI依赖内实施 |
+| EVT-02 | [native keyboard/blur适配；Flow程序焦点为显式契约](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/interaction/interaction-web/src/Interaction.ts) | 现有Rust/GPUI依赖内实施 |
+| EVT-03 | [Interaction.pointerDown / pointerMoveReal / pointerUp / pointerCancel](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/interaction/interaction/src/Interaction.ts) | 现有Rust/GPUI依赖内实施 |
+| EVT-04 | [InnerEditor生命周期；IME/a11y是宿主平台验收，不声称OSS含完整协议](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/editor/src/tool/InnerEditor.ts) | 实际输入法/辅助技术及目标平台窗口；云端Linux鼠标验收不能替代平台IME/a11y |
+| INT-01 | [EditBox resize/rotate外部手柄](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/editor/src/display/EditBox.ts) | 现有Rust/GPUI依赖内实施 |
+| INT-02 | [scaleResize / Text.__scaleResize / scaleResizeFontSize](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/resize/src/resize.ts) | 现有Rust/GPUI依赖内实施 |
+| INT-03 | [InnerEditor；Flow内容panel保留不同取消语义](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/editor/src/tool/InnerEditor.ts) | 现有Rust/GPUI依赖内实施 |
+| INT-04 | [EditToolCreator / EditTool / InnerEditor](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/editor/src/tool/EditToolCreator.ts) | 现有Rust/GPUI依赖内实施 |
+| INT-05 | [EditPoint / EditorSkewEvent / EditorRotateEvent；通用point工具stub单列扩展](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/editor/src/display/EditPoint.ts) | 现有Rust/GPUI依赖内实施 |
+| INT-06 | [Scroller/config；UI Dragger约束为固定扩展契约](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/scroller/src/Scroller.ts) | 现有Rust/GPUI依赖内实施 |
+| APP-01 | [Compute 多层paint及gradient处理](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/paint/src/Compute.ts) | 现有Rust/GPUI依赖内实施 |
+| APP-02 | [IStrokeAttrData / IStrokeInputData；strokeAlign、cap/join/dash/scale-fixed语义](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/interface/src/ICommonAttr.ts) | 现有Rust/GPUI依赖内实施 |
+| APP-03 | [MaskModule及UIRender隔离/混合](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/mask/src/index.ts) | 现有Rust/GPUI依赖内实施 |
+| APP-04 | [EffectModule；Shadow / InnerShadow / Blur / BackgroundBlur；ICommonAttr grayscale](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/effect/src/index.ts) | background blur须读取拥有的backdrop，不能读取任意外部宿主画面 |
+| APP-05 | [state样式安装/切换；transition集成](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/state/src/index.ts) | 现有Rust/GPUI依赖内实施 |
+| APP-06 | [Renderer damage消费；需要GPUI后端对应能力](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/partner/renderer/src/Renderer.ts) | 当前GPUI整帧架构；需后端可消费damage接口/实现，不能仅改Flow字段完成 |
+| LAY-01 | [flowX / flowY；common gap/wrap，x/y grow/align](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/flow/src/layout/flowX.ts) | 现有Rust/GPUI依赖内实施 |
+| LAY-02 | [Layouter有序处理；Flow固定点/原子规则不同](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/partner/layouter/src/Layouter.ts) | 现有Rust/GPUI依赖内实施 |
+| LAY-03 | [flow layout data；未映射的百分比/baseline为Flow显式扩展](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/flow/src/layout/common/data.ts) | 现有Rust/GPUI依赖内实施 |
+| LAY-04 | [getDrawData / createRows / TextLayout（同源测量契约）](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/text/src/TextConvert.ts) | 现有Rust/GPUI依赖内实施 |
+| ELM-01 | [Rect/Ellipse/Line/Polygon/Star/Path/Pen独立display模块](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/UI.ts) | 现有Rust/GPUI依赖内实施 |
+| ELM-02 | [getMotionPoint / motionAround / motionRotation](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/motion-path/src/index.ts) | 现有Rust/GPUI依赖内实施 |
+| ELM-03 | [Box / Frame / Group；UIRender子级裁切阶段](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/Box.ts) | 现有Rust/GPUI依赖内实施 |
+| ELM-04 | [ITextStyleInputData固定字段：letterSpacing/wordSpacing/paraIndent/paraSpacing/textCase/writingMode/autoSizeAlign](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/interface/src/ICommonAttr.ts) | 现有Rust/GPUI依赖内实施 |
+| ELM-05 | [Image尺寸/fit/corner与资源呈现](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/Image.ts) | 现有Rust/GPUI依赖内实施 |
+| ELM-06 | [UIHit像素命中参考；crop inner工具是明确Flow扩展](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/hit/src/UIHit.ts) | 现有Rust/GPUI依赖内实施 |
+| ELM-07 | [Canvas context / draw / clear / resize](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/Canvas.ts) | 现有Rust/GPUI依赖内实施 |
+| ELM-08 | [CanvasDrawPath / CanvasTransform / CanvasState / CanvasCompositing](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/interface/src/canvas/ICanvas.ts) | 现有Rust/GPUI依赖内实施 |
+| ELM-09 | [CanvasDrawImage.drawImage三个重载](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/interface/src/canvas/ICanvas.ts) | 现有Rust/GPUI依赖内实施 |
+| ELM-10 | [CanvasText / CanvasPath / createPattern / CanvasPattern.setTransform](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/interface/src/canvas/ICanvas.ts) | 同App字体bridge和字形预算；strokeText需要真实描边语义，不能以bbox替代 |
+| ELM-11 | [ExportModule.export / syncExport；JSON和SVG分支，栅格编码](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/export/src/export.ts) | 现有Rust/GPUI依赖内实施 |
+| CUS-01 | [registerUI/registerData / 自定义类；Flow确定性geometry/hit职责](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/UI.ts) | 现有Rust/GPUI依赖内实施 |
+| CUS-02 | [EditTool协议；Flow异步资源与resize provider扩展](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/editor/src/tool/EditTool.ts) | 需定义宿主异步回调与identity/attachment cancellation API |
+| ANI-01 | [Animate.play / pause / seek，repeat/reverse/swing语义](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/animate/src/Animate.ts) | 现有Rust/GPUI依赖内实施 |
+| ANI-02 | [Transition.register(motion/motionRotation) / getMotionPoint / motionPath](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/motion-path/src/index.ts) | 现有Rust/GPUI依赖内实施 |
+| ANI-03 | [AnimateList.play / seek / endingStyle；具体父子组合语义需按固定行为设计](https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/animate/src/AnimateList.ts) | 现有Rust/GPUI依赖内实施 |
+
+## 状态变更记录
+
+- 2026-10-02：初稿45项为17已验证、15部分、3待核实、1开发中、9未开始
+- 本审阅版：Canvas图像原生验收通过（ELM-09），提升为有界已验证；运动绑定ANI-02开始开发，不算完成
+- 收口开放集合：Canvas文字/路径/图案列举固定操作；Text列举固定属性；导出固定PNG/JPEG/WebP/SVG；明确硬件/平台依赖。新增范围不得静默加入
+
+完整机器可读记录见 [JSON](leafer-task-ledger.json)。下一轮先补待核实的事件/焦点/资源/custom证据，不将不明历史项目当作新代码完成。

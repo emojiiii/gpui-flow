@@ -156,3 +156,11 @@ single-selection mode. Width/height and anchoring translation change while font
 size, padding and affine linear terms stay fixed. Default transform-only behavior
 and shared-selection transforms remain. Font-size dragging, auto-height ownership
 overrides, arbitrary component intrinsic resizing and WYSIWYG editing are absent.
+
+
+Canvas [decoded-image batches](canvas-image-commands.md) now share vector/context
+transform, alpha, clipping and atomic publication. Crop coordinates are physical
+source pixels and destinations are logical units. Negative rectangles are rejected;
+images remain explicit immutable host inputs. Text draw commands and persistent
+context/pattern APIs remain outside this slice. The [task ledger](leafer-task-ledger.md)
+tracks bounded completion separately from partial and unverified capabilities.
