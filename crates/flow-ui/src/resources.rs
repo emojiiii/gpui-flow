@@ -941,6 +941,9 @@ mod tests {
 mod canvas_tests;
 
 #[cfg(test)]
+mod image_hit_tests;
+
+#[cfg(test)]
 mod text_box_tests {
     use super::*;
     #[test]

@@ -11,3 +11,4 @@ gpui-kit.workspace = true
 gpui-flow.workspace = true
 
 serde_json.workspace = true
+image.workspace = true

@@ -1797,6 +1797,7 @@ dependencies = [
  "gpui-flow",
  "gpui-flow-text",
  "gpui-kit",
+ "image",
  "serde_json",
 ]
 

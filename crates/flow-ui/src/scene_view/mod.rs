@@ -2,6 +2,7 @@
 mod composite;
 mod canvas_commands;
 mod interaction;
+pub(crate) mod image_hit;
 mod plugins;
 mod render;
 mod text_edit;
@@ -50,6 +51,7 @@ pub struct SceneView {
     composite_geometry: Option<gpui_flow_composite::RasterViewport>,
     text_rasterizer: Option<std::sync::Arc<gpui_flow_text::GpuiTextRasterizer>>,
     resources: Option<crate::resources::SceneResourceAdapter>,
+    image_alpha_hits: image_hit::ImageHitPolicies,
     pub resource_error: Option<String>,
     pub renderers: crate::display::DisplayRegistry,
     /// Opt-in paint-only state presentation; never writes editor documents.
@@ -106,6 +108,7 @@ impl SceneView {
             composite_geometry: None,
             text_rasterizer: None,
             resources,
+            image_alpha_hits: Default::default(),
             resource_error,
             renderers: crate::display::DisplayRegistry::default(),
             state_styles,
@@ -310,9 +313,10 @@ impl SceneView {
         WorldPoint::new(p.x.into(), p.y.into()) - self.origin
     }
     fn hit(&self, p: WorldPoint) -> Option<DisplayId> {
-        self.editor
-            .engine
+        self.image_alpha_hits
             .hit_test(
+                &self.editor.engine,
+                self.resources.as_ref(),
                 p,
                 HitTestOptions {
                     tolerance: 4. / self.editor.viewport.zoom,
