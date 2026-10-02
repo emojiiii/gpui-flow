@@ -196,13 +196,21 @@ pub(crate) fn canvas_inputs(
     request: gpui_flow_composite::CanvasTextRequest<'_>,
     backend: Option<&TextBackendSnapshot>,
 ) -> Result<gpui_flow_composite::CanvasTextOutput, CompositeError> {
+    canvas_inputs_with_cancel(request, backend, &AtomicBool::new(false))
+}
+
+pub(crate) fn canvas_inputs_with_cancel(
+    request: gpui_flow_composite::CanvasTextRequest<'_>,
+    backend: Option<&TextBackendSnapshot>,
+    cancelled: &AtomicBool,
+) -> Result<gpui_flow_composite::CanvasTextOutput, CompositeError> {
     let mut source_bytes = 0;
     let mut remaining_work = request.limits.max_surface_writes;
     let mut inputs = TextInputs::default();
     TextPreparation {
         backend,
         viewport: request.viewport,
-        cancelled: &AtomicBool::new(false),
+        cancelled,
         retained: request.retained_bytes,
         source_bytes: &mut source_bytes,
         remaining_work: &mut remaining_work,

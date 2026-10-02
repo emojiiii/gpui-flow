@@ -1,8 +1,9 @@
 //! Retained-scene canvas, independent of node graphs, media runners and Studio chrome.
-mod composite;
 mod canvas_commands;
-mod interaction;
+mod composite;
+pub(crate) mod export;
 mod input_trace;
+mod interaction;
 pub use input_trace::*;
 pub(crate) mod image_hit;
 mod plugins;

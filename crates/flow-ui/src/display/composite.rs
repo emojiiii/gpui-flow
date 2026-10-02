@@ -278,6 +278,23 @@ fn selected_image(
     bytes: &mut u64,
     capacity: u64,
 ) -> Result<Arc<StaticImage>, CompositeError> {
+    selected_image_with_limits(
+        image,
+        frame_index,
+        bytes,
+        capacity,
+        CompositeLimits::default(),
+    )
+}
+/// Reuse the same decoded-frame conversion for explicit scene export, where a
+/// caller may lower limits below the interactive renderer's fixed defaults.
+pub(crate) fn selected_image_with_limits(
+    image: &RenderImage,
+    frame_index: usize,
+    bytes: &mut u64,
+    capacity: u64,
+    limits: CompositeLimits,
+) -> Result<Arc<StaticImage>, CompositeError> {
     if frame_index >= image.frame_count() {
         return Err(CompositeError::InvalidImage);
     }
@@ -291,12 +308,8 @@ fn selected_image(
     if next > capacity.min(MAX_RETAINED) {
         return Err(CompositeError::WorkingSetLimit);
     }
-    let input = StaticImage::from_straight_bgra(
-        size.width.0 as u32,
-        size.height.0 as u32,
-        data,
-        CompositeLimits::default(),
-    )?;
+    let input =
+        StaticImage::from_straight_bgra(size.width.0 as u32, size.height.0 as u32, data, limits)?;
     *bytes = next;
     Ok(Arc::new(input))
 }

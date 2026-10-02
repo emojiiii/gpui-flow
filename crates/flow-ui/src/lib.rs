@@ -38,8 +38,8 @@ pub use gpui_flow_animation as animation;
 mod text_measure;
 pub use text_measure::*;
 
-mod image_playback;
 mod image_hit;
+mod image_playback;
 pub use image_hit::{ImageAlphaHit, ImageHitFallback};
 /// Native resource lifecycle adapter and host image authorization.
 pub mod resources;
