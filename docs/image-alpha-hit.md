@@ -89,3 +89,32 @@ and unchanged document revision/serialization/Undo.
 
 Native window validation and aggregate verification are reported separately;
 these focused regressions do not imply full Leafer Image/editor parity.
+
+
+## Verified Linux checkpoint
+
+The 18 new alpha-hit tests pass. The complete affected UI library passes 171
+tests, zero failed/ignored; strict UI all-targets and example Clippy, example check
+and actual native linking pass. This is not a rerun of unrelated workspace crates.
+
+The frozen `image_alpha_hit` window ran 2026-10-02 14:55:16–15:00:42 UTC and
+closed normally with exit 0. Real clicks verified transparent clickthrough to the
+underlay, acceptance at alpha 128 above threshold zero, rejection at threshold
+128 equality, opaque acceptance, default geometric compatibility, current-frame
+alpha changes after seek, pending pass-through versus geometric fallback, failed
+source pass-through, affine Cover mapping, rounded/ancestor clip rejection, and
+opt-in expiration/reinstallation after remount. Pointer target and selection
+readouts agreed. The stderr log contained exactly 13 expected pointer-down target
+lines; stdout was empty. Fill, zoom/DPR, threshold 127/255, repeated A→B→A and
+invalid-frame permutations have automated coverage, not separate native claims
+from this window. No crop editor or final composited-alpha picking is implied.
+
+Exact source checkpoint `17f92d2fec9b136027eceb3c8d8a063fc84cb013`, tree
+`ed04add17394263c367cd081d91ff6a214d8a8b0`; source archive SHA-256
+`31129f56edb7747fbcace061f25d4f8b464832a94cb6d09e52a547c5dfb8caff`;
+binary SHA-256
+`05e4ddb3b85c1fd302e79a9e8508d20f753bc8b22010087e750cc7a0c1bcd2eb`.
+The prebuilt executable was frozen before parallel query-index/font-resize work;
+those later sources are not covered by this native receipt. Screenshots, target
+trace and normal close receipt remain with the validation artifacts. Reproduce:
+`cargo run --locked -p flow-studio --bin image_alpha_hit`.

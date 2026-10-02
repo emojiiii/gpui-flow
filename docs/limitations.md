@@ -172,3 +172,9 @@ edits cancel conservatively; there is no automatic refollow, path reveal or
 text-on-path. Canvas now also has [same-backend text-box draw and measurement](canvas-text-commands.md);
 this is top-left box layout, not browser baseline overloads. Stroke text, persistent
 current paths and patterns remain open ledger scope.
+
+
+[Image source-alpha picking](image-alpha-hit.md) is now an opt-in runtime attachment
+policy in SceneView, using validated current decoded frames and nearest source
+pixels. Default/pure-engine picking remains geometric. Source alpha is not final
+composited opacity/masks, and this does not add crop inner editing.

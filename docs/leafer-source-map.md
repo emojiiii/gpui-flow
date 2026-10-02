@@ -50,6 +50,7 @@ Status: historical source research plus a separately labelled current source map
 - Canvas图像批次增量：[不可变图片/crop/变换/裁切原子绘制](canvas-image-commands.md)在独立模块复用image compositor；物理源像素到逻辑目标/DPR、越界透明与晚失败回滚清晰。新增12项回归，81项聚焦检查通过；真实双DPR/clip/crop/reflection/resize/Undo/Clear窗口退出0，三组画面像素一致。无URL取用，完整context及文字命令仍缺
 - Motion动画绑定增量：[显式时钟/seek的单目标持续绑定](motion-path-animation.md)复用路径定位、既有Schedule和PlaybackToken；source/祖先变化保守取消，帧Animation origin、初始delay精确恢复、失败不推进clock，完成可封一个Undo。29项新回归、119项受影响headless检查及严格Clippy通过；没有新增原生界面/自动timer/路径生长或文字沿路径
 - Canvas文字增量：[同源字体盒绘制与测量](canvas-text-commands.md)复用TextPreparation/真实GPUI字形，明确top-left而非浏览器baseline；字体像素与work统一预算，晚失败不发布。8项新回归、119项不同检查通过；真实双DPR/Unicode/clip/字体桥撤销/测量/resize/Undo/Clear窗口退出0，四组像素区域一致。strokeText/current path/pattern仍缺
+- Image像素命中增量：[代际安全的可选source alpha过滤](image-alpha-hit.md)复用真实已解码帧/资源票据和原paint顺序几何候选；nearest源像素、显式阈值和pending/failed回退，不重新取URL/解码。18项新回归、171项UI通过；真实透明穿透/阈值/换帧/失败资源/affine clip/remount窗口退出0。默认几何不变，最终合成alpha和crop内编辑仍缺
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
 ## 九类能力当前边界（含待验证源码增量）
