@@ -387,6 +387,7 @@ impl PluginHost {
                 let context = PluginContext {
                     editor,
                     policy: self.policy,
+                    transforms: TransformCapabilities::default(),
                     connection: &self.connection,
                     capture_owner: self.capture_owner(),
                 };
@@ -396,6 +397,7 @@ impl PluginHost {
                 let context = PluginContext {
                     editor,
                     policy: self.policy,
+                    transforms: TransformCapabilities::default(),
                     connection: &self.connection,
                     capture_owner: capture_owner.as_deref(),
                 };
@@ -478,6 +480,7 @@ impl PluginHost {
             let context = PluginContext {
                 editor,
                 policy: self.policy,
+                transforms: TransformCapabilities::default(),
                 connection: &self.connection,
                 capture_owner: self.capture.as_ref().map(|c| c.owner.as_str()),
             };

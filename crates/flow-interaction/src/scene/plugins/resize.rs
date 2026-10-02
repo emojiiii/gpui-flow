@@ -62,7 +62,11 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
                     if cx.editor.editing() || p.modifiers.space {
                         return;
                     }
-                    let Some(geometry) = SceneSelectionResizeGeometry::for_selection(cx.editor)
+                    let Some(geometry) =
+                        SceneSelectionResizeGeometry::for_selection_with_capabilities(
+                            cx.editor,
+                            cx.transforms,
+                        )
                     else {
                         return;
                     };
@@ -124,7 +128,11 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
                     return;
                 };
                 let geometry = if handle.is_some() {
-                    let Some(geometry) = SceneResizeGeometry::for_target(cx.editor, &id) else {
+                    let Some(geometry) = SceneResizeGeometry::for_target_with_capabilities(
+                        cx.editor,
+                        &id,
+                        cx.transforms,
+                    ) else {
                         return;
                     };
                     Some(geometry)
@@ -235,7 +243,12 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
                         transform
                     };
                     if resize.handle.is_some()
-                        && !SceneResizeGeometry::accepts_transform(cx.editor, &resize.id, transform)
+                        && !SceneResizeGeometry::accepts_transform_with_capabilities(
+                            cx.editor,
+                            &resize.id,
+                            transform,
+                            cx.transforms,
+                        )
                     {
                         out.command(SceneCommand::CancelGesture);
                         return;
@@ -253,15 +266,22 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
                     });
                 } else if cx.capture_owner.is_none() {
                     let cursor = if let HitTarget::ObjectResizeHandle { id, handle } = &p.hit {
-                        SceneResizeGeometry::for_target(cx.editor, &DisplayId::from(id.clone()))
-                            .and_then(|g| g.screen_handles(cx.editor))
-                            .and_then(|handles| handles.into_iter().find(|h| h.handle == *handle))
-                            .map_or(CanvasCursor::Default, |h| h.cursor)
+                        SceneResizeGeometry::for_target_with_capabilities(
+                            cx.editor,
+                            &DisplayId::from(id.clone()),
+                            cx.transforms,
+                        )
+                        .and_then(|g| g.screen_handles(cx.editor))
+                        .and_then(|handles| handles.into_iter().find(|h| h.handle == *handle))
+                        .map_or(CanvasCursor::Default, |h| h.cursor)
                     } else if let HitTarget::SelectionResizeHandle { handle } = p.hit {
-                        SceneSelectionResizeGeometry::for_selection(cx.editor)
-                            .and_then(|g| g.screen_handles(cx.editor))
-                            .and_then(|handles| handles.into_iter().find(|h| h.handle == handle))
-                            .map_or(CanvasCursor::Default, |h| h.cursor)
+                        SceneSelectionResizeGeometry::for_selection_with_capabilities(
+                            cx.editor,
+                            cx.transforms,
+                        )
+                        .and_then(|g| g.screen_handles(cx.editor))
+                        .and_then(|handles| handles.into_iter().find(|h| h.handle == handle))
+                        .map_or(CanvasCursor::Default, |h| h.cursor)
                     } else {
                         CanvasCursor::Default
                     };

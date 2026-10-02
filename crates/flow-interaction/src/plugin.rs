@@ -8,11 +8,18 @@ pub enum PluginLifecycle {
     Cancelled,
     Uninstalled,
 }
+/// Host-declared rendering support used by transform tools, separate from Edit permission.
+/// Default preserves native-only Text constraints. This runtime value is not document data.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TransformCapabilities {
+    pub affine_text: bool,
+}
 /// The editor cannot be mutated through a plugin context. All changes must be
 /// expressed as commands and pass host policy after every middleware hook.
 pub struct PluginContext<'a, D = Editor> {
     pub editor: &'a D,
     pub policy: AccessPolicy,
+    pub transforms: TransformCapabilities,
     pub connection: &'a ConnectionDrag,
     pub capture_owner: Option<&'a str>,
 }

@@ -1,6 +1,6 @@
 //! Shared bounded outer-handle geometry for native paint, picking and input.
 use super::object_editable;
-use crate::CanvasCursor;
+use crate::{CanvasCursor, TransformCapabilities};
 use gpui_flow_core::{Point, Rect};
 use gpui_flow_editor::{ResizeHandle, SceneEditor};
 use gpui_flow_engine::{ElementHandle, InstanceState};
@@ -24,6 +24,13 @@ impl SceneResizeGeometry {
     /// force uniform resizing of the complete subtree. Custom renderers have
     /// no transform contract here, so Custom subtrees are explicitly excluded.
     pub fn for_target(editor: &SceneEditor, id: &DisplayId) -> Option<Self> {
+        Self::for_target_with_capabilities(editor, id, TransformCapabilities::default())
+    }
+    pub fn for_target_with_capabilities(
+        editor: &SceneEditor,
+        id: &DisplayId,
+        capabilities: TransformCapabilities,
+    ) -> Option<Self> {
         if !object_editable(editor.scene(), id) {
             return None;
         }
@@ -38,7 +45,7 @@ impl SceneResizeGeometry {
         }
         let world = editor.engine.world_transform(id).ok()?;
         let inverse = world.inverse()?;
-        if !Self::accepts_scene_transform(editor.scene(), id, node.object.transform) {
+        if !Self::accepts_scene_transform(editor.scene(), id, node.object.transform, capabilities) {
             return None;
         }
         let mut pending = vec![id];
@@ -49,10 +56,12 @@ impl SceneResizeGeometry {
                 Shape::Custom(_) => return None,
                 Shape::Text(_) => {
                     let matrix = editor.engine.world_transform(next).ok()?;
-                    if !native_transform_supported(matrix) {
-                        return None;
+                    if !affine_text_supported(&node.object, capabilities) {
+                        if !native_transform_supported(matrix) {
+                            return None;
+                        }
+                        uniform = true;
                     }
-                    uniform = true;
                 }
                 _ => {}
             }
@@ -102,16 +111,36 @@ impl SceneResizeGeometry {
     /// composition through ancestors. Never turn a working native Text descendant
     /// into an unsupported rotated/skewed/nonuniform presentation.
     pub fn accepts_transform(editor: &SceneEditor, id: &DisplayId, transform: Affine) -> bool {
-        Self::validate_subtree(editor.scene(), id, transform, false)
+        Self::accepts_transform_with_capabilities(
+            editor,
+            id,
+            transform,
+            TransformCapabilities::default(),
+        )
+    }
+    pub fn accepts_transform_with_capabilities(
+        editor: &SceneEditor,
+        id: &DisplayId,
+        transform: Affine,
+        capabilities: TransformCapabilities,
+    ) -> bool {
+        Self::validate_subtree(editor.scene(), id, transform, false, capabilities)
     }
     pub(crate) fn accepts_scene_transform(
         scene: &Scene,
         id: &DisplayId,
         transform: Affine,
+        capabilities: TransformCapabilities,
     ) -> bool {
-        Self::validate_subtree(scene, id, transform, true)
+        Self::validate_subtree(scene, id, transform, true, capabilities)
     }
-    fn validate_subtree(scene: &Scene, id: &DisplayId, transform: Affine, selection: bool) -> bool {
+    fn validate_subtree(
+        scene: &Scene,
+        id: &DisplayId,
+        transform: Affine,
+        selection: bool,
+        capabilities: TransformCapabilities,
+    ) -> bool {
         let Some(node) = scene.get(id) else {
             return false;
         };
@@ -131,7 +160,8 @@ impl SceneResizeGeometry {
                 || !world.is_finite()
                 || world.inverse().is_none()
                 || (matches!(node.object.shape, Shape::Text(_))
-                    && !native_transform_supported(world))
+                    && !native_transform_supported(world)
+                    && !affine_text_supported(&node.object, capabilities))
             {
                 return false;
             }
@@ -144,6 +174,21 @@ impl SceneResizeGeometry {
         }
         true
     }
+}
+pub(crate) fn affine_text_supported(
+    object: &gpui_flow_scene::DisplayObject,
+    capabilities: TransformCapabilities,
+) -> bool {
+    capabilities.affine_text
+        && matches!(&object.shape, Shape::Text(t) if t.content.len() <= 65_536 && t.font_family.len() <= 512)
+        && !object.style.has_shadows()
+        && !object.style.has_inner_shadows()
+        && object.style.strokes().next().is_none()
+        && object.style.fills().count() <= 1
+        && object
+            .style
+            .fills()
+            .all(|p| matches!(p, gpui_flow_scene::Paint::Solid { .. }))
 }
 fn native_transform_supported(m: Affine) -> bool {
     m.is_positive_uniform_scale_translation()
@@ -204,13 +249,22 @@ pub struct SceneResizeRoot {
 }
 impl SceneSelectionResizeGeometry {
     pub fn for_selection(editor: &SceneEditor) -> Option<Self> {
+        Self::for_selection_with_capabilities(editor, TransformCapabilities::default())
+    }
+    pub fn for_selection_with_capabilities(
+        editor: &SceneEditor,
+        capabilities: TransformCapabilities,
+    ) -> Option<Self> {
         if editor.selection.ids.len() < 2 {
             return None;
         }
-        Self::for_nonempty_selection(editor)
+        Self::for_nonempty_selection(editor, capabilities)
     }
     /// Shared frozen-root machinery also serves single-object pointer rotation.
-    pub(crate) fn for_nonempty_selection(editor: &SceneEditor) -> Option<Self> {
+    pub(crate) fn for_nonempty_selection(
+        editor: &SceneEditor,
+        capabilities: TransformCapabilities,
+    ) -> Option<Self> {
         if editor.selection.ids.is_empty()
             || editor
                 .selection
@@ -224,9 +278,14 @@ impl SceneSelectionResizeGeometry {
         let mut uniform = false;
         let mut roots = Vec::new();
         for id in editor.selection.roots(editor.scene()) {
-            let geometry = SceneResizeGeometry::for_target(editor, &id)?;
-            if !SceneResizeGeometry::accepts_scene_transform(editor.scene(), &id, geometry.original)
-            {
+            let geometry =
+                SceneResizeGeometry::for_target_with_capabilities(editor, &id, capabilities)?;
+            if !SceneResizeGeometry::accepts_scene_transform(
+                editor.scene(),
+                &id,
+                geometry.original,
+                capabilities,
+            ) {
                 return None;
             }
             let world_bounds = editor.engine.world_bounds(&id).ok()??;

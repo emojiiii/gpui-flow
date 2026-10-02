@@ -39,6 +39,7 @@ struct SelectionCapture {
 pub struct ScenePluginHost {
     plugins: Vec<Entry>,
     policy: AccessPolicy,
+    transforms: TransformCapabilities,
     sequence: u64,
     capture: Option<Capture>,
     gesture_owner: Option<String>,
@@ -55,6 +56,7 @@ impl Default for ScenePluginHost {
         Self {
             plugins: Vec::new(),
             policy: AccessPolicy::default(),
+            transforms: TransformCapabilities::default(),
             sequence: 0,
             capture: None,
             gesture_owner: None,
@@ -76,6 +78,22 @@ impl ScenePluginHost {
         let mut host = Self::default();
         super::plugins::install_defaults(&mut host).expect("unique builtin plugin IDs");
         host
+    }
+    pub fn transform_capabilities(&self) -> TransformCapabilities {
+        self.transforms
+    }
+    /// Cancels an active gesture before changing presentation constraints.
+    pub fn set_transform_capabilities(
+        &mut self,
+        capabilities: TransformCapabilities,
+        editor: &mut SceneEditor,
+    ) -> DispatchReport {
+        let mut report = DispatchReport::default();
+        if self.transforms != capabilities {
+            self.cancel_active(editor, &mut report);
+            self.transforms = capabilities;
+        }
+        report
     }
     pub fn policy(&self) -> AccessPolicy {
         self.policy
@@ -411,6 +429,7 @@ impl ScenePluginHost {
                 let context = PluginContext {
                     editor,
                     policy: self.policy,
+                    transforms: self.transforms,
                     connection: &self.connection,
                     capture_owner: self.capture_owner(),
                 };
@@ -420,6 +439,7 @@ impl ScenePluginHost {
                 let context = PluginContext {
                     editor,
                     policy: self.policy,
+                    transforms: self.transforms,
                     connection: &self.connection,
                     capture_owner: capture_owner.as_deref(),
                 };
@@ -534,6 +554,7 @@ impl ScenePluginHost {
             let context = PluginContext {
                 editor,
                 policy: self.policy,
+                transforms: self.transforms,
                 connection: &self.connection,
                 capture_owner: self.capture.as_ref().map(|c| c.owner.as_str()),
             };
@@ -648,6 +669,7 @@ impl ScenePluginHost {
                 )))
             }
         };
+        let capabilities = self.transforms;
         let rotation_batch = matches!(command, SceneCommand::SetRotationTransforms { .. });
         match command {
             SceneCommand::CapturePointer { pointer_id }
@@ -847,8 +869,18 @@ impl ScenePluginHost {
                 }
                 let id = instance.id.clone();
                 require_editable(&id)?;
-                if super::SceneResizeGeometry::for_target(editor, &id).is_none()
-                    || !super::SceneResizeGeometry::accepts_transform(editor, &id, transform)
+                if super::SceneResizeGeometry::for_target_with_capabilities(
+                    editor,
+                    &id,
+                    capabilities,
+                )
+                .is_none()
+                    || !super::SceneResizeGeometry::accepts_transform_with_capabilities(
+                        editor,
+                        &id,
+                        transform,
+                        capabilities,
+                    )
                 {
                     return Err(InteractionError::InvalidInput(
                         "unsupported resize transform or subtree".into(),
@@ -865,6 +897,7 @@ impl ScenePluginHost {
                                 scene,
                                 &id,
                                 node.object.transform,
+                                capabilities,
                             )
                         {
                             return Err(SceneError::InvalidGeometry(
@@ -884,7 +917,13 @@ impl ScenePluginHost {
             }
             SceneCommand::SetResizeTransforms { transforms }
             | SceneCommand::SetRotationTransforms { transforms } => {
-                if rotation_batch && super::SceneRotationGeometry::for_selection(editor).is_none() {
+                if rotation_batch
+                    && super::SceneRotationGeometry::for_selection_with_capabilities(
+                        editor,
+                        capabilities,
+                    )
+                    .is_none()
+                {
                     return Err(InteractionError::InvalidInput(
                         "unsupported rotation selection".into(),
                     ));
@@ -939,11 +978,16 @@ impl ScenePluginHost {
                         .flatten()
                         .is_some_and(|bounds| bounds.size.is_positive())
                         || (rotation_batch
-                            && !super::SceneRotationGeometry::accepts_subtree(editor.scene(), id))
+                            && !super::SceneRotationGeometry::accepts_subtree(
+                                editor.scene(),
+                                id,
+                                capabilities,
+                            ))
                         || !super::SceneResizeGeometry::accepts_scene_transform(
                             editor.scene(),
                             id,
                             *transform,
+                            capabilities,
                         )
                     {
                         return Err(InteractionError::InvalidInput(
@@ -969,11 +1013,16 @@ impl ScenePluginHost {
                                 .ok_or_else(|| SceneError::MissingNode(id.clone()))?;
                             if !object_editable(scene, id)
                                 || (rotation_batch
-                                    && !super::SceneRotationGeometry::accepts_subtree(scene, id))
+                                    && !super::SceneRotationGeometry::accepts_subtree(
+                                        scene,
+                                        id,
+                                        capabilities,
+                                    ))
                                 || !super::SceneResizeGeometry::accepts_scene_transform(
                                     scene,
                                     id,
                                     node.object.transform,
+                                    capabilities,
                                 )
                             {
                                 return Err(SceneError::InvalidGeometry(

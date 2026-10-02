@@ -1,5 +1,6 @@
 //! Center-pivot pointer rotation reusing the existing frozen selection roots.
 use super::{SceneResizeGeometry, SceneSelectionResizeGeometry};
+use crate::TransformCapabilities;
 use gpui_flow_core::Point;
 use gpui_flow_editor::{ResizeHandle, SceneEditor};
 use gpui_flow_scene::{DisplayId, Scene, Shape};
@@ -22,15 +23,22 @@ pub struct SceneRotationHandle {
 }
 impl SceneRotationGeometry {
     pub fn for_selection(editor: &SceneEditor) -> Option<Self> {
-        let selection = SceneSelectionResizeGeometry::for_nonempty_selection(editor)?;
+        Self::for_selection_with_capabilities(editor, TransformCapabilities::default())
+    }
+    pub fn for_selection_with_capabilities(
+        editor: &SceneEditor,
+        capabilities: TransformCapabilities,
+    ) -> Option<Self> {
+        let selection = SceneSelectionResizeGeometry::for_nonempty_selection(editor, capabilities)?;
         for id in editor.selection.roots(editor.scene()) {
-            if !Self::accepts_subtree(editor.scene(), &id) {
+            if !Self::accepts_subtree(editor.scene(), &id, capabilities) {
                 return None;
             }
         }
         let (pivot, stem) = if editor.selection.ids.len() == 1 {
             let id = editor.selection.ids.iter().next()?;
-            let geometry = SceneResizeGeometry::for_target(editor, id)?;
+            let geometry =
+                SceneResizeGeometry::for_target_with_capabilities(editor, id, capabilities)?;
             (
                 geometry.world.transform_point(geometry.bounds.center()),
                 geometry
@@ -50,7 +58,11 @@ impl SceneRotationGeometry {
     /// Text and custom producers still have no arbitrary-transform contract.
     /// Images use exact geometry-driven CPU domains when native painting cannot
     /// represent the pose. Reject the complete unsupported subtree.
-    pub(crate) fn accepts_subtree(scene: &Scene, id: &DisplayId) -> bool {
+    pub(crate) fn accepts_subtree(
+        scene: &Scene,
+        id: &DisplayId,
+        capabilities: TransformCapabilities,
+    ) -> bool {
         if !scene
             .local_bounds(id)
             .ok()
@@ -64,7 +76,10 @@ impl SceneRotationGeometry {
             let Some(node) = scene.get(id) else {
                 return false;
             };
-            if matches!(node.object.shape, Shape::Text(_) | Shape::Custom(_)) {
+            if matches!(node.object.shape, Shape::Custom(_))
+                || (matches!(node.object.shape, Shape::Text(_))
+                    && !super::resize_handles::affine_text_supported(&node.object, capabilities))
+            {
                 return false;
             }
             pending.extend(&node.children);

@@ -73,7 +73,10 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneRotatePlugin {
                     && !p.modifiers.space
                     && !cx.editor.editing() =>
             {
-                let Some(geometry) = SceneRotationGeometry::for_selection(cx.editor) else {
+                let Some(geometry) = SceneRotationGeometry::for_selection_with_capabilities(
+                    cx.editor,
+                    cx.transforms,
+                ) else {
                     return;
                 };
                 let Some(last_angle) = angle(
@@ -139,7 +142,11 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneRotatePlugin {
                     )
                 {
                     let cursor = if p.hit == HitTarget::SelectionRotateHandle
-                        && SceneRotationGeometry::for_selection(cx.editor).is_some()
+                        && SceneRotationGeometry::for_selection_with_capabilities(
+                            cx.editor,
+                            cx.transforms,
+                        )
+                        .is_some()
                     {
                         CanvasCursor::Crosshair
                     } else {

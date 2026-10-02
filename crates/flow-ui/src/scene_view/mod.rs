@@ -225,6 +225,13 @@ impl SceneView {
         {
             return Err("text rasterizer belongs to a different GPUI Application".into());
         }
+        let report = self.interactions.set_transform_capabilities(
+            gpui_flow_interaction::TransformCapabilities {
+                affine_text: bridge.is_some(),
+            },
+            &mut self.editor,
+        );
+        self.apply_input_report(report, cx);
         self.text_rasterizer = bridge;
         cx.notify();
         Ok(())
@@ -360,15 +367,19 @@ impl SceneView {
         }
         if self.editor.selection.ids.len() > 1 {
             let geometry =
-                gpui_flow_interaction::scene::SceneSelectionResizeGeometry::for_selection(
-                    &self.editor,
+                gpui_flow_interaction::scene::SceneSelectionResizeGeometry::for_selection_with_capabilities(
+                    &self.editor, self.interactions.transform_capabilities(),
                 )?;
             return Some((None, geometry.screen_handles(&self.editor)?));
         }
         let id = self.editor.selection.ids.iter().next()?.clone();
         let handles =
-            gpui_flow_interaction::scene::SceneResizeGeometry::for_target(&self.editor, &id)?
-                .screen_handles(&self.editor)?;
+            gpui_flow_interaction::scene::SceneResizeGeometry::for_target_with_capabilities(
+                &self.editor,
+                &id,
+                self.interactions.transform_capabilities(),
+            )?
+            .screen_handles(&self.editor)?;
         Some((Some(id), handles))
     }
     fn rotation_handle(&self) -> Option<gpui_flow_interaction::scene::SceneRotationHandle> {
@@ -382,8 +393,11 @@ impl SceneView {
         {
             return None;
         }
-        gpui_flow_interaction::scene::SceneRotationGeometry::for_selection(&self.editor)?
-            .screen_handle(&self.editor)
+        gpui_flow_interaction::scene::SceneRotationGeometry::for_selection_with_capabilities(
+            &self.editor,
+            self.interactions.transform_capabilities(),
+        )?
+        .screen_handle(&self.editor)
     }
     fn selection_corners(&self, id: &DisplayId) -> Option<[WorldPoint; 4]> {
         let bounds = self.editor.engine.local_bounds(id).ok()??;
