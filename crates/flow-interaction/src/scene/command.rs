@@ -125,6 +125,10 @@ pub enum SceneCommand {
     },
     Undo,
     Redo,
+    /// Atomic normalized navigation result, also used by bounds middleware.
+    SetViewport {
+        viewport: gpui_flow_core::Viewport,
+    },
     Pan {
         delta: Point,
     },
@@ -151,7 +155,9 @@ impl SceneCommand {
             | Self::ClearSelection
             | Self::SelectAll
             | Self::SelectRect { .. } => Capability::Selection,
-            Self::Pan { .. } | Self::Zoom { .. } | Self::Fit { .. } => Capability::Navigation,
+            Self::Pan { .. } | Self::Zoom { .. } | Self::Fit { .. } | Self::SetViewport { .. } => {
+                Capability::Navigation
+            }
             _ => Capability::Edit,
         })
     }

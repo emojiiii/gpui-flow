@@ -1,0 +1,61 @@
+{
+  "task": "INT-06",
+  "checked_at_utc": "2026-10-02T19:31:00Z",
+  "base_commit": "d81313d3808ddb0146e47aa195a7af77ade533ea",
+  "scope": "retained-scene fixed drag constraints, snapping, bounded viewport and explicit-clock inertia; final native integration recorded separately",
+  "files_sha256": {
+    "crates/flow-interaction/src/plugin.rs": "f1c5e90590100ae13445dfac28619edc9f30e1cd67d429ad1711251a7abadd51",
+    "crates/flow-interaction/src/scene/command.rs": "96cc8218464601b3fbe89883a892aea02e2565d49548610e78ee29a0ffe9234d",
+    "crates/flow-interaction/src/scene/host.rs": "e7b8aff50829ab12f8e4c467cf5b4f8e4f7f18117966a15245778b0cb0459055",
+    "crates/flow-interaction/src/scene/router.rs": "414a9b0bb411024d139f51bce0b75967e044f3ea07f1679fca3443effd9dab02",
+    "crates/flow-interaction/src/scene/plugins/constraints.rs": "aaa735c360336a23b6fa0235c6104e8fe61db9bc8f0029b12f387f723736c945",
+    "crates/flow-interaction/src/scene/plugins/inertia.rs": "ee8787e05c8685262cbe17fd8f8b7e431499edcfd9c38305e9fac4f2dc3b2600",
+    "crates/flow-interaction/src/scene/plugins/drag.rs": "a67a8e237e09abd3133c145b366fbee829b90651b45ab7a7012f39b1b9fd03ef",
+    "crates/flow-interaction/src/scene/plugins/pan.rs": "d756f208f7924def63269306ae1370fa2257c02c88e49ebfcb288fc8a8e4f410",
+    "crates/flow-interaction/src/scene/plugins/zoom.rs": "0bc37b9f57e37219dc499fbc450ba41a693d8f95b52603e4f194a7dd6575908e",
+    "crates/flow-interaction/src/scene/plugins/snapping.rs": "4b1671e11b99dbe627b6f419ae38e94ab147855127ed1cd04f875f9d146a3b92",
+    "crates/flow-interaction/src/scene/plugins/mod.rs": "d77b33429a6ac4bca473ff388988244cf2ff9bf4780264a533c87eb1beaccc9d",
+    "crates/flow-interaction/tests/drag_viewport_constraints.rs": "a415501dfa17db5597a0e1e207306bb8957eceb5566c8fcdf2827a46752ecb65"
+  },
+  "final_checks": [
+    {
+      "command": "cargo test --offline --locked -p gpui-flow-interaction --test drag_viewport_constraints --test picked_wheel",
+      "status": "passed",
+      "tests": {
+        "drag_viewport_constraints": 28,
+        "picked_wheel": 7
+      },
+      "log": "/workspace/shared/int06-final-tests.log"
+    },
+    {
+      "command": "cargo clippy --offline --locked -p gpui-flow-interaction --all-targets -- -D warnings",
+      "status": "passed",
+      "log": "/workspace/shared/int06-final-clippy.log"
+    },
+    {
+      "command": "rustfmt --edition 2024 --check [owned .rs files]",
+      "status": "passed"
+    },
+    {
+      "command": "git diff --check -- crates/flow-interaction docs/drag-viewport-constraints.md",
+      "status": "passed"
+    }
+  ],
+  "earlier_check": {
+    "command": "cargo test --offline --locked -p gpui-flow-interaction",
+    "status": "passed",
+    "tests": 334,
+    "scope_note": "Before final router cancellation, clock getter and overflow hardening plus seven added INT-06 cases. Do not claim a fresh complete-suite run for frozen hashes.",
+    "log": "/workspace/shared/int06-interaction-tests.log"
+  },
+  "native": "not run by this worker; awaiting integrator SceneView scheduling/trace/native checkpoint",
+  "limits": [
+    "Fixed world or one common-parent local rectangular containment",
+    "AABB paint bounds, not path/alpha collision",
+    "No multi-touch/pinch/device rotation or OS wheel-phase inference (EVT-03)",
+    "No drag-out auto-scroll, bounce/collision physics or spatial-index performance claim",
+    "Bounds and policies runtime-only; no document schema changes",
+    "Custom middleware must run before hard constraints; direct editor/other transform commands remain outside optional constraint middleware"
+  ],
+  "publication": "No commit, push, Actions or deployment by this worker"
+}

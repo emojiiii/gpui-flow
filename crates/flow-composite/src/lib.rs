@@ -10,6 +10,7 @@ mod nonseparable;
 mod plan;
 mod raster;
 mod scene_export;
+mod scene_svg;
 mod shadow;
 mod text;
 mod vector;
@@ -182,3 +183,6 @@ mod canvas_text_command_tests;
 
 #[cfg(test)]
 mod scene_export_tests;
+
+#[cfg(test)]
+mod scene_svg_tests;

@@ -10,7 +10,9 @@ mod layer_host;
 pub use input_trace::*;
 mod image_crop;
 pub(crate) mod image_hit;
+mod navigation;
 mod plugins;
+mod presentation;
 mod render;
 mod text_edit;
 use crate::{
@@ -59,11 +61,13 @@ pub struct SceneView {
     pub composite_diagnostics: Vec<gpui_flow_composite::CompositeIssue>,
     pub compositing_pending: bool,
     pub(crate) compositing: crate::display::composite::CompositeController,
+    presentations: presentation::Presentations,
     composite_geometry: Option<gpui_flow_composite::RasterViewport>,
     text_rasterizer: Option<std::sync::Arc<gpui_flow_text::GpuiTextRasterizer>>,
     resources: Option<crate::resources::SceneResourceAdapter>,
     image_alpha_hits: image_hit::ImageHitPolicies,
     frame_layout: flow_layout::FrameLayoutState,
+    navigation_frames: navigation::NavigationFrames,
     image_crop: Option<image_crop::ImageCropMode>,
     pub resource_error: Option<String>,
     pub renderers: crate::display::DisplayRegistry,
@@ -103,7 +107,9 @@ impl SceneView {
                 let _ = tools.dispose(&mut this.editor, &mut this.interactions);
             }
             this.text_input = None;
+            this.navigation_frames.cancel();
             this.compositing.dispose(cx);
+            this.presentations = Default::default();
             if let Some(resources) = &mut this.resources {
                 let _ = resources.dispose(&mut this.editor.engine);
             }
@@ -120,11 +126,13 @@ impl SceneView {
             composite_diagnostics: vec![],
             compositing_pending: false,
             compositing: Default::default(),
+            presentations: Default::default(),
             composite_geometry: None,
             text_rasterizer: None,
             resources,
             image_alpha_hits: Default::default(),
             frame_layout: Default::default(),
+            navigation_frames: Default::default(),
             image_crop: None,
             resource_error,
             renderers: crate::display::DisplayRegistry::default(),
@@ -337,18 +345,15 @@ impl SceneView {
             include_locked: true,
             ..Default::default()
         };
-        let hit = if let Some(geometry) = self.state_styles.geometry_engine(&self.editor.engine) {
-            self.image_alpha_hits.hit_test_with_geometry(
-                &self.editor.engine,
-                geometry,
-                self.resources.as_ref(),
-                p,
-                options,
-            )
-        } else {
-            self.image_alpha_hits
-                .hit_test(&self.editor.engine, self.resources.as_ref(), p, options)
-        };
+        let geometry = self.presentation_hit_geometry()?;
+        let hit = self.image_alpha_hits.hit_test_presented(
+            &self.editor.engine,
+            geometry,
+            self.resources.as_ref(),
+            p,
+            options,
+            self.presentation_hit_key(),
+        );
         hit.ok().flatten().map(|hit| hit.id)
     }
     fn line_handles(

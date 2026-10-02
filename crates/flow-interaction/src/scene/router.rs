@@ -180,6 +180,13 @@ impl SceneEventRouter {
         action_budget: &mut usize,
     ) -> RoutedReport {
         let mut out = RoutedReport::default();
+        // This runs only after dispatch_picked_wheel has validated its target.
+        // New input retires an inertial tail even when a tree listener prevents
+        // its default action; unrelated capture/edit ownership stays untouched.
+        let navigation_stopped = matches!(
+            event,
+            CanvasEvent::PointerDown(_) | CanvasEvent::Wheel { .. } | CanvasEvent::KeyDown { .. }
+        ) && host.stop_navigation_tail();
         // Instance loss cannot leave keyboard defaults armed for a replacement
         // object with the same public ID. A new click establishes fresh focus.
         if self
@@ -375,6 +382,7 @@ impl SceneEventRouter {
             out.default = host.dispatch(editor, event.clone());
         }
         out.default.default_prevented |= prevented;
+        out.default.handled |= navigation_stopped;
         if let CanvasEvent::PointerDown(p) = &event
             && !prevented
         {

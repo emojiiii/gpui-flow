@@ -447,3 +447,30 @@ Current [bounded container inner shadows](container-inner-shadows.md) extend the
 leaf slice to Group/Box/Frame, preserving explicit paint phases, actual subtree
 alpha, independent own effects and existing budgets. See that contract for the
 current validation scope; older slice receipts above remain historical.
+
+## State presentation admission and atomic publication
+
+For a SceneView with registered state styles, state ticks now use the coherent
+whole-presentation gate described in [state-geometry.md](state-geometry.md#coherent-asynchronous-cpu-presentation-follow-up).
+Unlike arbitrary canonical geometry edits, these runtime-only samples may retain
+an older placement only together with its complete native paint and matching hit
+geometry. One admitted CPU batch finishes without per-vsync cancellation, all
+outputs receive actual paint-phase atlas uploads under an explicit zero-opacity parent, then the
+whole scene presentation swaps at a render boundary. Canonical/resource/viewport
+and ownership changes still invalidate immediately. The default non-state path
+and its conservative stale-frame rules remain unchanged.
+
+Cancellation after upload additionally tracks warmed-but-unpublished images until
+safe retirement. Those images count against retained surface bytes, and only one
+obsolete uploaded batch may block work; it cannot accumulate behind new workers.
+Batch publication reserves retirement capacity for all replaced/removed domains
+before changing any accepted domain. Upload errors keep the previous coherent
+presentation when possible and remain explicit diagnostics.
+
+The gate also retains successful empty/offscreen results for unchanged domains,
+so native-only state changes do not wait for a CPU image that intentionally does
+not exist. A common subtree guard revalidates actual layout/clip/DPR in prepaint
+and paint, covering native and custom children along with CPU domains. Accepted
+animated-image samples supply alpha hits while a newer CPU batch is pending.
+Upload preflight uses a zero-opacity Div scope with positive image bounds, rather
+than a zero-size clip which may round outwards to one device pixel.

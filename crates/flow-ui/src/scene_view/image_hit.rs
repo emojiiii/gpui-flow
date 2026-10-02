@@ -59,6 +59,7 @@ impl ImageHitPolicies {
         }
         true
     }
+    #[cfg(test)]
     pub(crate) fn hit_test(
         &self,
         engine: &SceneEngine,
@@ -70,6 +71,7 @@ impl ImageHitPolicies {
     }
     /// Resource identity stays canonical while geometry follows the accepted
     /// presentation snapshot. A snapshot never owns resource tickets or policies.
+    #[cfg(test)]
     pub(crate) fn hit_test_with_geometry(
         &self,
         engine: &SceneEngine,
@@ -77,6 +79,17 @@ impl ImageHitPolicies {
         resources: Option<&SceneResourceAdapter>,
         world: Point,
         options: HitTestOptions,
+    ) -> Result<Option<HitTestResult>, EngineError> {
+        self.hit_test_presented(engine, geometry, resources, world, options, None)
+    }
+    pub(crate) fn hit_test_presented(
+        &self,
+        engine: &SceneEngine,
+        geometry: &SceneEngine,
+        resources: Option<&SceneResourceAdapter>,
+        world: Point,
+        options: HitTestOptions,
+        presentation: Option<&crate::display::composite::RequestKey>,
     ) -> Result<Option<HitTestResult>, EngineError> {
         // Resolve each current resource observation once. Only valid decoded
         // samples may bypass metadata's fit geometry; unavailable resources keep
@@ -105,9 +118,18 @@ impl ImageHitPolicies {
                 if image.source != canonical_image.source {
                     return AlphaSample::Failed;
                 }
-                let observation =
-                    resources.composite_image(engine, &object.id, &canonical_image.source);
-                match observation.image {
+                let live = resources.composite_image(engine, &object.id, &canonical_image.source);
+                let observation = if let Some(accepted) =
+                    presentation.and_then(|key| key.image_sample(&object.id))
+                {
+                    if !accepted.resource_eq(&live) {
+                        return AlphaSample::Failed;
+                    }
+                    accepted
+                } else {
+                    &live
+                };
+                match &observation.image {
                     Ok(frame) => {
                         let size = frame.size(observation.frame_index);
                         let alpha = frame.as_bytes(observation.frame_index).and_then(|bytes| {

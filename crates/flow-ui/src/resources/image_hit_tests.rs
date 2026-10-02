@@ -613,3 +613,103 @@ fn state_geometry_without_alpha_policy_uses_existing_presented_engine_hits() {
             .is_none()
     );
 }
+
+#[test]
+fn coherent_cpu_alpha_hits_use_displayed_frame_and_reject_revoked_generation() {
+    use crate::display::composite::RequestKey;
+    use gpui_flow_composite::{CompositeLimits, RasterViewport, SceneUnit};
+    let mut source = scene();
+    source
+        .update_object(&"image".into(), |object| {
+            object.style.blend_mode = gpui_flow_scene::BlendMode::Normal
+        })
+        .unwrap();
+    let (mut engine, mut resources, mut policies) = setup(source);
+    load(&mut engine, &mut resources, vec![frame(0), frame(255)]);
+    install(&mut policies, &engine, strict());
+    let visible = BTreeSet::from(["image".into()]);
+    resources.sample_images(&engine, &visible, Duration::ZERO, true);
+    let bounds = gpui_flow_scene::Bounds::new(Point::ZERO, Size::new(100., 100.));
+    let domains = gpui_flow_composite::scene_units(engine.scene(), CompositeLimits::default())
+        .unwrap()
+        .into_iter()
+        .filter_map(|unit| match unit {
+            SceneUnit::Domain(domain) => Some(*domain),
+            _ => None,
+        })
+        .collect();
+    let accepted = RequestKey::new(
+        domains,
+        &engine,
+        RasterViewport {
+            world_to_screen: Affine::IDENTITY,
+            canvas_bounds: bounds,
+            content_mask: bounds,
+            device_scale: 1.,
+        },
+        1,
+    )
+    .with_resources(&engine, Some(&resources));
+    assert_eq!(
+        accepted.image_sample(&"image".into()).unwrap().frame_index,
+        0
+    );
+    resources.sample_images(&engine, &visible, Duration::from_millis(20), true);
+    let query = |key: Option<&RequestKey>| {
+        policies
+            .hit_test_presented(
+                &engine,
+                &engine,
+                Some(&resources),
+                Point::new(50., 50.),
+                HitTestOptions::default(),
+                key,
+            )
+            .unwrap()
+            .unwrap()
+            .id
+    };
+    assert_eq!(
+        query(None),
+        DisplayId::from("image"),
+        "live/native frame is now opaque"
+    );
+    assert_eq!(
+        query(Some(&accepted)),
+        DisplayId::from("back"),
+        "retained CPU pixels are still transparent"
+    );
+    assert!(accepted.presentation_current(
+        &engine,
+        Some(&resources),
+        None,
+        accepted.viewport,
+        accepted.window
+    ));
+    let handle = engine.handle(&"image".into()).unwrap();
+    assert!(resources.set_image_playing(&engine, handle, Duration::from_millis(20), false));
+    assert!(!accepted.presentation_current(
+        &engine,
+        Some(&resources),
+        None,
+        accepted.viewport,
+        accepted.window
+    ));
+    // Even direct callers cannot borrow the opaque live frame after the accepted
+    // sample's resource/playback generation has been invalidated.
+    assert_eq!(
+        policies
+            .hit_test_presented(
+                &engine,
+                &engine,
+                Some(&resources),
+                Point::new(50., 50.),
+                HitTestOptions::default(),
+                Some(&accepted)
+            )
+            .unwrap()
+            .unwrap()
+            .id,
+        DisplayId::from("back")
+    );
+}

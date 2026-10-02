@@ -59,6 +59,9 @@ impl SceneView {
         event: input::CanvasEvent,
         cx: &mut Context<Self>,
     ) -> bool {
+        if !self.synchronize_navigation_input(cx) {
+            return false;
+        }
         self.reconcile_image_crop_editor(cx);
         let (operation, report) = match event {
             input::CanvasEvent::Wheel {
@@ -114,6 +117,9 @@ impl SceneView {
         }
         let allowed = report.errors.is_empty() && !report.default.default_prevented;
         self.apply_routed_report(report, cx);
+        if !self.interactions.needs_navigation_frame() {
+            self.navigation_frames.cancel();
+        }
         allowed
     }
     pub(super) fn apply_routed_report(

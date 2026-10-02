@@ -159,6 +159,7 @@ fn extension(format: SceneExportFormat) -> &'static str {
         SceneExportFormat::Png => "png",
         SceneExportFormat::Jpeg { .. } => "jpg",
         SceneExportFormat::WebPLossless => "webp",
+        SceneExportFormat::Svg => "svg",
     }
 }
 fn decode(output: &SceneExport) -> Result<image::RgbaImage, String> {
@@ -166,11 +167,174 @@ fn decode(output: &SceneExport) -> Result<image::RgbaImage, String> {
         SceneExportFormat::Png => image::ImageFormat::Png,
         SceneExportFormat::Jpeg { .. } => image::ImageFormat::Jpeg,
         SceneExportFormat::WebPLossless => image::ImageFormat::WebP,
+        SceneExportFormat::Svg => return decode_svg(output),
     };
     image::load_from_memory_with_format(&output.bytes, format)
         .map(|i| i.to_rgba8())
         .map_err(|e| e.to_string())
 }
+// Read only this freshly generated bounded export. All file/URL resolution is
+// disabled, and the only admitted embedded resource type is PNG.
+fn decode_svg(output: &SceneExport) -> Result<image::RgbaImage, String> {
+    let options = resvg::usvg::Options {
+        image_href_resolver: resvg::usvg::ImageHrefResolver {
+            resolve_data: Box::new(|mime, data, _| {
+                (mime == "image/png").then_some(resvg::usvg::ImageKind::PNG(data))
+            }),
+            resolve_string: Box::new(|_, _| None),
+        },
+        ..Default::default()
+    };
+    let tree = resvg::usvg::Tree::from_data(&output.bytes, &options).map_err(|e| e.to_string())?;
+    let size = tree.size().to_int_size();
+    if (size.width(), size.height()) != (output.width, output.height) {
+        return Err("SVG root dimensions differ from the complete export".into());
+    }
+    let limits = CompositeLimits::default();
+    if output.width > limits.max_dimension
+        || output.height > limits.max_dimension
+        || u64::from(output.width) * u64::from(output.height) > limits.max_pixels
+    {
+        return Err("SVG preview dimensions exceed fixture readback limits".into());
+    }
+    let mut pixels = resvg::tiny_skia::Pixmap::new(output.width, output.height)
+        .ok_or("SVG readback allocation failed")?;
+    resvg::render(
+        &tree,
+        resvg::tiny_skia::Transform::identity(),
+        &mut pixels.as_mut(),
+    );
+    let mut rgba = image::RgbaImage::new(output.width, output.height);
+    for (destination, source) in rgba.pixels_mut().zip(pixels.pixels()) {
+        let color = source.demultiply();
+        destination.0 = [color.red(), color.green(), color.blue(), color.alpha()];
+    }
+    Ok(rgba)
+}
+
+fn svg_structure(output: &SceneExport) -> Result<Value, String> {
+    let source = std::str::from_utf8(&output.bytes).map_err(|e| e.to_string())?;
+    let document = resvg::usvg::roxmltree::Document::parse(source).map_err(|e| e.to_string())?;
+    let root = document.root_element();
+    if !root.has_tag_name(("http://www.w3.org/2000/svg", "svg")) {
+        return Err("export is not an SVG document".into());
+    }
+    let allowed = [
+        "svg",
+        "g",
+        "defs",
+        "clipPath",
+        "path",
+        "rect",
+        "linearGradient",
+        "radialGradient",
+        "stop",
+        "image",
+    ];
+    for node in document.descendants().filter(|node| node.is_element()) {
+        if !allowed.contains(&node.tag_name().name()) {
+            return Err(format!(
+                "unexpected SVG element: {}",
+                node.tag_name().name()
+            ));
+        }
+        for attribute in node.attributes() {
+            if attribute.name() == "href"
+                && !attribute.value().starts_with("data:image/png;base64,")
+            {
+                return Err(
+                    "SVG fixture unexpectedly references an external/non-PNG resource".into(),
+                );
+            }
+        }
+    }
+    let vector = document
+        .descendants()
+        .find(|node| node.attribute("data-flow-id") == Some("vector"))
+        .ok_or("SVG fixture lost the canonical vector producer")?;
+    let vector_paths = vector
+        .descendants()
+        .filter(|node| node.has_tag_name("path") && node.attribute("fill").is_some())
+        .count();
+    if vector_paths == 0 || vector.descendants().any(|node| node.has_tag_name("image")) {
+        return Err("canonical vector producer was missing or replaced by raster content".into());
+    }
+    let mut rasters = Vec::new();
+    for node in document
+        .descendants()
+        .filter(|node| node.has_tag_name("image"))
+    {
+        let owner = node
+            .ancestors()
+            .find_map(|node| node.attribute("data-flow-id"))
+            .ok_or("SVG image has no canonical producer owner")?;
+        let kind = node
+            .attribute("data-flow-raster")
+            .ok_or("SVG raster kind is missing")?;
+        if ![
+            ("image", "image"),
+            ("canvas", "canvas"),
+            ("text", "text-ink"),
+        ]
+        .contains(&(owner, kind))
+        {
+            return Err("unexpected per-producer SVG image/ink ownership".into());
+        }
+        if node
+            .attribute(("http://www.w3.org/1999/xlink", "href"))
+            .is_none_or(|href| !href.starts_with("data:image/png;base64,"))
+        {
+            return Err("SVG producer is not a self-contained PNG image".into());
+        }
+        rasters.push(json!({"producer":owner,"kind":kind,"width":node.attribute("width"),"height":node.attribute("height")}));
+    }
+    if rasters.len() != 3
+        || ["image", "canvas", "text"].into_iter().any(|owner| {
+            rasters
+                .iter()
+                .filter(|node| node["producer"] == owner)
+                .count()
+                != 1
+        })
+    {
+        return Err("fixture requires exactly one Image, Canvas and Text ink image".into());
+    }
+    Ok(json!({
+        "root_view_box":root.attribute("viewBox"),
+        "xml_path_count":document.descendants().filter(|node|node.has_tag_name("path")).count(),
+        "clip_count":document.descendants().filter(|node|node.has_tag_name("clipPath")).count(),
+        "vector_producer_painted_paths":vector_paths,
+        "vector_producer_raster_nodes":0,
+        "embedded_png_count":rasters.len(),
+        "raster_producers":rasters,
+        "editable_text_nodes":0,
+        "external_resource_references":0,
+        "mixed_svg_not_whole_scene_bitmap":true,
+        "text_policy":"same-App shaped ink PNG per Text node; no editable text or glyph outlines"
+    }))
+}
+
+fn pixel_difference(actual: &image::RgbaImage, reference: &image::RgbaImage) -> Value {
+    assert_eq!(actual.dimensions(), reference.dimensions());
+    let mut changed_pixels = 0u64;
+    let mut changed_channels = 0u64;
+    let mut sum = 0u64;
+    let mut maximum = 0u8;
+    for (a, b) in actual.pixels().zip(reference.pixels()) {
+        changed_pixels += u64::from(a != b);
+        for (a, b) in a.0.into_iter().zip(b.0) {
+            let delta = a.abs_diff(b);
+            changed_channels += u64::from(delta != 0);
+            sum += u64::from(delta);
+            maximum = maximum.max(delta);
+        }
+    }
+    json!({"changed_pixels":changed_pixels,"changed_channels":changed_channels,
+        "max_channel_delta":maximum,"sum_absolute_channel_delta":sum,
+        "mean_absolute_channel_delta":sum as f64 / actual.as_raw().len() as f64,
+        "comparison":"independent SVG renderer versus PNG; statistics only, no pixel-equivalence assertion"})
+}
+
 fn write_new(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let mut file = std::fs::OpenOptions::new()
         .write(true)
@@ -215,8 +379,8 @@ fn verify(view: &SceneView, request: SceneExportRequest) -> Result<VerifiedExpor
             "decoded extent differs from requested crop"
         );
         assert_eq!((output.width, output.height), expected);
-        // A second supported lossless encoding provides actual decoded-file
-        // equality, not equality of encoded bytes or a screenshot comparison.
+        // PNG/WebP retain exact decoded-file equality. SVG uses independent
+        // resvg readback with measured differences, never a bit-exact claim.
         let reference_format = if request.format == SceneExportFormat::Png {
             SceneExportFormat::WebPLossless
         } else {
@@ -234,14 +398,20 @@ fn verify(view: &SceneView, request: SceneExportRequest) -> Result<VerifiedExpor
         let reference = decode(&reference)?;
         assert_eq!(decoded.dimensions(), reference.dimensions());
         let corner = decoded.get_pixel(0, 0).0;
-        let exact = !matches!(request.format, SceneExportFormat::Jpeg { .. });
+        let exact = matches!(
+            request.format,
+            SceneExportFormat::Png | SceneExportFormat::WebPLossless
+        );
+        let is_svg = request.format == SceneExportFormat::Svg;
+        let svg_structure = is_svg.then(|| svg_structure(&output)).transpose()?;
+        let svg_difference = is_svg.then(|| pixel_difference(&decoded, &reference));
         if exact {
             assert_eq!(
                 decoded.as_raw(),
                 reference.as_raw(),
                 "PNG/WebP decoded pixel mismatch"
             );
-        } else {
+        } else if matches!(request.format, SceneExportFormat::Jpeg { .. }) {
             // Both full and cropped fixtures leave a >8px empty corner.
             for (actual, expected) in
                 corner
@@ -254,6 +424,17 @@ fn verify(view: &SceneView, request: SceneExportRequest) -> Result<VerifiedExpor
                 );
             }
             assert!(decoded.pixels().all(|p| p.0[3] == 255));
+        } else {
+            let background = request.background;
+            assert_eq!(
+                corner,
+                [background.r, background.g, background.b, background.a],
+                "SVG explicit-background corner differs"
+            );
+            assert!(
+                decoded.pixels().any(|p| p.0[..3] != corner[..3]),
+                "SVG decoded output lost all fixture content"
+            );
         }
         let mut alpha = [0usize; 3];
         for p in decoded.pixels() {
@@ -267,8 +448,11 @@ fn verify(view: &SceneView, request: SceneExportRequest) -> Result<VerifiedExpor
         }
         let readback = json!({"decoded_dimensions": [decoded.width(), decoded.height()],
             "decoded_rgba_fnv1a64": fingerprint(decoded.as_raw()), "reference_rgba_fnv1a64": fingerprint(reference.as_raw()),
-            "reference_format": extension(reference_format), "lossless_exact": exact,
-            "jpeg_background_probe": if exact { Value::Null } else { json!(true) },
+            "reference_format": extension(reference_format),
+            "lossless_exact": if is_svg { Value::Null } else { json!(exact) },
+            "jpeg_background_probe": if matches!(request.format, SceneExportFormat::Jpeg { .. }) { json!(true) } else { Value::Null },
+            "svg_decoder": if is_svg { json!("resvg 0.46.0; PNG-only embedded resources; file/URL resolver disabled") } else { Value::Null },
+            "svg_structure": svg_structure, "svg_png_difference": svg_difference,
             "corner_rgba": corner, "alpha_zero_partial_opaque": alpha});
         Ok(VerifiedExport {
             output,
@@ -359,7 +543,7 @@ impl Lab {
             preview: None,
             preview_label: "No export yet".into(),
             status:
-                "Ready fixture resolves on paint. Click PNG, JPEG or WebP to export and verify."
+                "Ready fixture resolves on paint. Click PNG, JPEG, WebP or SVG to export and verify."
                     .into(),
             sequence: 0,
             bridge_enabled: true,
@@ -625,6 +809,7 @@ impl Render for Lab {
                 .child(ControlButton::new("png","Export PNG").on_click(cx.listener(|s,_,_,cx|s.export(SceneExportFormat::Png,cx))))
                 .child(ControlButton::new("jpeg","JPEG 90").on_click(cx.listener(|s,_,_,cx|s.export(SceneExportFormat::Jpeg{quality:90},cx))))
                 .child(ControlButton::new("webp","Lossless WebP").on_click(cx.listener(|s,_,_,cx|s.export(SceneExportFormat::WebPLossless,cx))))
+                .child(ControlButton::new("svg","Mixed SVG").on_click(cx.listener(|s,_,_,cx|s.export(SceneExportFormat::Svg,cx))))
                 .child(ControlButton::new("dpr","DPR 1 / 2").on_click(cx.listener(|s,_,_,cx|{s.dpr=if s.dpr==1. {2.} else {1.};cx.notify();})))
                 .child(ControlButton::new("crop","Full / crop").on_click(cx.listener(|s,_,_,cx|{s.cropped = !s.cropped;cx.notify();})))
                 .child(ControlButton::new("background","Opaque / alpha").on_click(cx.listener(|s,_,_,cx|{s.opaque = !s.opaque;cx.notify();}))))
@@ -645,7 +830,7 @@ impl Render for Lab {
                     .child(div().h(px(28.)).child(format!("Decoded file preview · {}",self.preview_label)))
                     .child(preview)))
             .child(div().h(px(130.)).px_4().py_2().text_sm()
-                .child("Clipped rotated vector · Unicode Upper + paragraph gap · embedded alpha image · owned Canvas pixels.\nPNG/WebP: exact decoded equality. JPEG: dimensions + explicit background. Preview never enters the source scene.\n")
+                .child("Clipped rotated vector · Unicode Upper + paragraph gap · embedded alpha image · owned Canvas pixels.\nPNG/WebP: exact decoded equality. JPEG: dimensions + explicit background.\nSVG: vector shapes + per-node image/Canvas/text ink; independent resvg preview and pixel-difference receipt.\n")
                 .child(self.status.clone()))
     }
 }
@@ -664,7 +849,7 @@ fn main() {
                 ..Default::default()
             },
             move |window, cx| {
-                window.set_window_title("gpui-flow · scene raster export");
+                window.set_window_title("gpui-flow · scene raster and mixed SVG export");
                 cx.new(|cx| Lab::new(bridge, cx))
             },
         )
@@ -676,6 +861,8 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Override the GPUI glob's test macro: these are ordinary headless tests.
+    use core::prelude::v1::test;
     #[test]
     fn receipt_fingerprint_has_stable_known_vectors() {
         assert_eq!(fingerprint(b""), "cbf29ce484222325");
@@ -712,5 +899,117 @@ mod tests {
         let rgba = canvas_pattern();
         assert_eq!((rgba.width(), rgba.height()), (100, 70));
         assert_eq!(&rgba.rgba()[..4], &[0, 0, 0, 0]);
+    }
+    #[test]
+    fn svg_difference_receipt_reports_real_deltas_without_an_equality_claim() {
+        let actual = image::RgbaImage::from_raw(2, 1, vec![10, 0, 0, 255, 0, 20, 0, 255]).unwrap();
+        let reference = image::RgbaImage::from_raw(2, 1, vec![0, 0, 0, 255, 0, 0, 0, 255]).unwrap();
+        let difference = pixel_difference(&actual, &reference);
+        assert_eq!(difference["changed_pixels"], 2);
+        assert_eq!(difference["changed_channels"], 2);
+        assert_eq!(difference["max_channel_delta"], 20);
+        assert_eq!(difference["sum_absolute_channel_delta"], 30);
+        assert_eq!(difference["mean_absolute_channel_delta"], 3.75);
+        assert!(
+            difference["comparison"]
+                .as_str()
+                .unwrap()
+                .contains("no pixel-equivalence")
+        );
+    }
+
+    fn synthetic_svg_fixture() -> SceneExport {
+        use gpui_flow::composite::{
+            ImageInputs, SceneExportPlan, SceneExportPreparation, StaticImage, TextImage,
+            TextInputs,
+        };
+        let limits = CompositeLimits::default();
+        let mut images = ImageInputs::default();
+        images.insert(
+            "image".into(),
+            Ok(Arc::new(
+                StaticImage::from_straight_bgra(1, 1, &[0, 0, 255, 255], limits).unwrap(),
+            )),
+        );
+        images.insert(
+            "canvas".into(),
+            Ok(Arc::new(
+                StaticImage::from_straight_bgra(1, 1, &[0, 255, 0, 255], limits).unwrap(),
+            )),
+        );
+        // This headless decoder test supplies synthetic ink, not a native font
+        // acceptance claim. Native clicks exercise the installed same-App bridge.
+        let mut text = TextInputs::default();
+        text.insert(
+            "text".into(),
+            Ok(Some(Arc::new(TextImage {
+                image: Arc::new(
+                    StaticImage::from_straight_bgra(1, 1, &[0, 0, 0, 255], limits).unwrap(),
+                ),
+                local_bounds: SceneBounds::new(ScenePoint::ZERO, SceneSize::new(252., 104.)),
+            }))),
+        );
+        SceneExportPlan::new(
+            &document(),
+            SceneExportRequest {
+                world_bounds: SceneBounds::new(ScenePoint::ZERO, SceneSize::new(WIDTH, HEIGHT)),
+                scale: 1.,
+                pixel_ratio: 1.,
+                background: BACKGROUND,
+                format: SceneExportFormat::Svg,
+            },
+            limits,
+        )
+        .unwrap()
+        .encode_with_inputs(
+            &images,
+            &text,
+            SceneExportPreparation::default(),
+            &std::sync::atomic::AtomicBool::new(false),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn svg_fixture_receipt_proves_vectors_and_separate_raster_producers() {
+        let output = synthetic_svg_fixture();
+        let receipt = svg_structure(&output).unwrap();
+        assert_eq!(extension(output.request.format), "svg");
+        assert_eq!(receipt["mixed_svg_not_whole_scene_bitmap"], true);
+        assert_eq!(receipt["embedded_png_count"], 3);
+        assert_eq!(receipt["vector_producer_painted_paths"], 1);
+        assert_eq!(receipt["editable_text_nodes"], 0);
+        let decoded = decode(&output).unwrap();
+        assert_eq!(decoded.dimensions(), (440, 320));
+        assert_eq!(decoded.get_pixel(0, 0).0, [232, 238, 247, 255]);
+        assert_eq!(decoded.get_pixel(335, 100).0, [255, 0, 0, 255]);
+        assert_eq!(decoded.get_pixel(330, 220).0, [0, 255, 0, 255]);
+        assert_eq!(decoded.get_pixel(80, 260).0, [0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn svg_fixture_rejects_external_resource_or_whole_scene_bitmap_claims() {
+        let mut output = synthetic_svg_fixture();
+        let original = String::from_utf8(output.bytes.clone()).unwrap();
+        output.bytes = original
+            .replacen(
+                "data:image/png;base64,",
+                "file:///unavailable-fixture.png?",
+                1,
+            )
+            .into_bytes();
+        assert!(
+            svg_structure(&output)
+                .unwrap_err()
+                .contains("external/non-PNG")
+        );
+        output.bytes = original
+            .replacen("data-flow-id=\"vector\"", "data-flow-id=\"missing\"", 1)
+            .into_bytes();
+        assert!(
+            svg_structure(&output)
+                .unwrap_err()
+                .contains("canonical vector")
+        );
     }
 }

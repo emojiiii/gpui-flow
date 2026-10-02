@@ -69,6 +69,7 @@ impl SceneView {
         if !matches!(self.layer_host, LayerHostState::Managed(id) if id == owner) {
             return;
         }
+        self.navigation_frames.cancel();
         let _ = self.set_flow_frame_queue(None, cx);
         self.focus_lost(cx);
         self.router = SceneEventRouter::new();
@@ -78,6 +79,7 @@ impl SceneView {
         self.text_input = None;
         self.image_crop = None;
         self.compositing.dispose(cx);
+        self.presentations = Default::default();
         release_composite_keys(&mut self.compositing);
         if let Some(mut resources) = self.resources.take() {
             let _ = resources.dispose(&mut self.editor.engine);

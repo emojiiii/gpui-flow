@@ -25,11 +25,10 @@ pub(super) fn geometry(
     }
 }
 impl SceneView {
-    pub(super) fn request_composites(
+    pub(super) fn composite_key(
         &mut self,
         domains: Vec<DomainSource>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
+        window: &Window,
     ) -> Option<Arc<RequestKey>> {
         let mut viewport = self.composite_geometry?;
         // Pan/zoom may change between layout and this render. Canvas placement
@@ -50,7 +49,19 @@ impl SceneView {
             .with_resources(&self.editor.engine, self.resources.as_ref())
             .with_text_backend(self.text_rasterizer.as_ref()),
         );
-        let mut retired = self.compositing.request(key.clone());
+        Some(key)
+    }
+    pub(super) fn request_composite_key(
+        &mut self,
+        key: Arc<RequestKey>,
+        coherent: Option<bool>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let mut retired = match coherent {
+            Some(retain) => self.compositing.request_coherent(key, retain),
+            None => self.compositing.request(key),
+        };
         for frame in retired.drain(..) {
             self.compositing
                 .retire(frame, window, cx.entity().downgrade());
@@ -73,12 +84,12 @@ impl SceneView {
             })
             .detach();
         }
-        self.compositing.requested.clone()
     }
     pub(super) fn composite_element(
         &self,
         id: DisplayId,
         key: Arc<RequestKey>,
+        coherent: bool,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let entity = cx.entity().downgrade();
@@ -86,13 +97,25 @@ impl SceneView {
         canvas(
             |_, _, _| (),
             move |bounds, _, window, cx| {
-                if !key.text_current() || geometry(bounds, viewport, window) != key.viewport {
+                if !key.text_current()
+                    || window.window_handle().window_id().as_u64() != key.window
+                    || geometry(bounds, viewport, window) != key.viewport
+                {
                     return;
                 }
                 // Query immediately before upload, after earlier domains may
                 // have accepted/retired images in this same paint phase.
                 let Some((frame, candidate, fallback)) = entity
                     .update(cx, |this, _| {
+                        if coherent {
+                            if !this.presentation_draw_current(&key) {
+                                return None;
+                            }
+                            return this
+                                .compositing
+                                .presentation_frame(&key, &id)
+                                .map(|frame| (frame, false, None));
+                        }
                         if this.compositing.requested.as_ref() != Some(&key) {
                             return None;
                         }
@@ -118,6 +141,15 @@ impl SceneView {
                         });
                     }
                     Err(error) => {
+                        if coherent {
+                            let _ = entity.update(cx, |this, _| {
+                                this.presentation_paint_failed(&key, id.clone(), error);
+                            });
+                            window.on_next_frame(move |_, cx| {
+                                let _ = entity.update(cx, |_, cx| cx.notify());
+                            });
+                            return;
+                        }
                         let _ = entity.update(cx, |this, _| {
                             this.compositing.upload_failed(&key, &id, error)
                         });

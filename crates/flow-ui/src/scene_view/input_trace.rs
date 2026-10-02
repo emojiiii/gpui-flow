@@ -7,6 +7,10 @@ use gpui_flow_interaction::{CanvasEvent, DispatchReport, scene::RoutedReport};
 #[derive(Debug, Clone, PartialEq)]
 pub enum SceneInputOperation {
     Canvas(CanvasEvent),
+    /// A real native animation callback, separately replayable from input time.
+    NavigationFrame {
+        now: std::time::Duration,
+    },
     /// Wheel target picked from the current rendered geometry/source alpha.
     /// Explicit None is background and must not fall back to canonical picking.
     PickedWheel {
@@ -27,6 +31,8 @@ pub enum SceneInputOperation {
 #[derive(Debug, Clone)]
 pub struct SceneInputTrace {
     pub operation: SceneInputOperation,
+    /// Last accepted explicit navigation clock; input sync never advances motion.
+    pub navigation_time: std::time::Duration,
     pub events: Vec<SceneEvent>,
     pub default: DispatchReport,
     pub errors: Vec<String>,
@@ -51,6 +57,7 @@ impl SceneInputTrace {
     ) -> Self {
         Self {
             operation,
+            navigation_time: host.navigation_time(),
             events: report.events.clone(),
             default: report.default.clone(),
             errors: report.errors.clone(),

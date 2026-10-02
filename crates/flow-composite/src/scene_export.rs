@@ -1,4 +1,5 @@
-//! Fixed world-region export through the existing owned-domain compositor.
+//! Fixed world-region raster export through the owned-domain compositor, and
+//! mixed SVG export preserving vector geometry with embedded producer pixels.
 //! No resource loading, scene mutation, viewport capture, or filesystem effects.
 use crate::{
     CanvasBackdrop, CanvasTextOutput, CanvasTextRequest, CompositeError, CompositeLimits,
@@ -11,8 +12,8 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-/// Only codecs present in the locked dependency graph. WebP is VP8L lossless;
-/// a lossy WebP quality setting is deliberately not offered.
+/// Raster codecs from the locked dependency graph and self-contained mixed SVG.
+/// WebP is VP8L lossless; no lossy WebP quality setting is offered.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SceneExportFormat {
     Png,
@@ -21,6 +22,9 @@ pub enum SceneExportFormat {
         quality: u8,
     },
     WebPLossless,
+    /// Self-contained mixed SVG: geometry stays vector; Image, Canvas and
+    /// same-backend Text ink are individually embedded lossless PNG images.
+    Svg,
 }
 impl SceneExportFormat {
     pub fn mime_type(self) -> &'static str {
@@ -28,6 +32,7 @@ impl SceneExportFormat {
             Self::Png => "image/png",
             Self::Jpeg { .. } => "image/jpeg",
             Self::WebPLossless => "image/webp",
+            Self::Svg => "image/svg+xml",
         }
     }
 }
@@ -35,7 +40,7 @@ impl SceneExportFormat {
 /// Explicit world crop, independent of any editor pan, zoom, grid or overlays.
 /// Physical dimensions are ceil(world extent * scale * pixel_ratio). Geometry
 /// is clipped to the exact world crop, including coverage of fractional edges.
-/// PNG/WebP preserve alpha. JPEG flattens fractional crop-edge alpha onto the
+/// PNG/WebP/SVG preserve alpha. JPEG flattens fractional crop-edge alpha onto the
 /// required opaque background; there is no implicit white-background policy.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SceneExportRequest {
@@ -173,7 +178,11 @@ impl SceneExportPlan {
             width: width as u32,
             height: height as u32,
         };
-        plan.encoding_limits(0)?;
+        if request.format == SceneExportFormat::Svg {
+            crate::scene_svg::validate(&plan.source)?;
+        } else {
+            plan.encoding_limits(0)?;
+        }
         Ok(plan)
     }
     /// Existing images(), canvases(), text_sources() and ids() supply the host
@@ -202,6 +211,7 @@ impl SceneExportPlan {
     }
     fn encoding_work(&self) -> u64 {
         match self.request.format {
+            SceneExportFormat::Svg => 0,
             SceneExportFormat::Png => self.pixels() * 3,
             // The JPEG encoder reads full edge-padded 8x8 blocks.
             SceneExportFormat::Jpeg { .. } => {
@@ -213,6 +223,7 @@ impl SceneExportPlan {
     fn codec_scratch(&self) -> u64 {
         const FIXED: u64 = 8 * 1024 * 1024;
         match self.request.format {
+            SceneExportFormat::Svg => 0,
             SceneExportFormat::Png | SceneExportFormat::Jpeg { .. } => FIXED,
             // Locked image-webp 0.2.4 copies RGBA and builds an internal Vec
             // frame. Four <=15-bit Huffman codes/pixel plus header/run slack
@@ -243,13 +254,26 @@ impl SceneExportPlan {
     }
     /// Reuse the existing same-backend Canvas text producer contract. Other
     /// retained bytes exclude ImageInputs/TextInputs and the future output.
-    /// Encoding work is withheld from the producer's remaining work budget.
+    /// Raster encoding work is withheld from the producer's remaining budget.
+    /// SVG has no full-frame raster reservation; host work, per-producer PNG
+    /// codecs and bounded XML serialization are charged cumulatively at encode.
     pub fn text_request<'a>(
         &'a self,
         images: &ImageInputs,
         retained_bytes: u64,
     ) -> Result<CanvasTextRequest<'a>, CompositeError> {
         let retained = retained_bytes.saturating_add(images.byte_len());
+        if self.request.format == SceneExportFormat::Svg {
+            if retained > self.limits.max_surface_bytes {
+                return Err(CompositeError::WorkingSetLimit);
+            }
+            return Ok(CanvasTextRequest {
+                source: &self.source,
+                viewport: self.viewport,
+                limits: self.limits,
+                retained_bytes: retained,
+            });
+        }
         self.encoding_limits(retained)?;
         Ok(CanvasTextRequest {
             source: &self.source,
@@ -296,6 +320,9 @@ impl SceneExportPlan {
         cancelled: &AtomicBool,
     ) -> Result<SceneExport, CompositeError> {
         check(cancelled)?;
+        if self.request.format == SceneExportFormat::Svg {
+            return crate::scene_svg::encode(self, images, texts, preparation, cancelled);
+        }
         let retained = preparation
             .retained_bytes
             .saturating_add(images.byte_len())
@@ -377,6 +404,7 @@ impl SceneExportPlan {
                 )
             }
             SceneExportFormat::Png => unreachable!("PNG uses StaticImage::encode_png"),
+            SceneExportFormat::Svg => unreachable!("SVG uses scene_svg::encode"),
         };
         if let Some(error) = output.error {
             return Err(error);

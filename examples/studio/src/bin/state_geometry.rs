@@ -6,7 +6,7 @@ use gpui_flow::{
         StateGeometry, StateGeometryStyles, StateKey, StatePaint, StateStyles, StateTransition,
         StateTransitionOverrides, StateTransitions,
     },
-    scene::{Affine, Color, DisplayObject, Scene, Shape, Size, Style, display},
+    scene::{Affine, BlendMode, Color, DisplayObject, Scene, Shape, Size, Style, display},
 };
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -23,7 +23,10 @@ impl Lab {
             .insert(
                 DisplayObject::new("card", display::Frame::new(300., 180.).rounded(24.))
                     .with_transform(Affine::translation(130., 100.))
-                    .with_style(Style::fill(Color::hex(0x344760))),
+                    .with_style(Style {
+                        blend_mode: BlendMode::Normal,
+                        ..Style::fill(Color::hex(0x344760))
+                    }),
                 None,
                 None,
             )
@@ -139,11 +142,12 @@ impl Lab {
                 && !matches!(trace.operation, gpui_flow::SceneInputOperation::Canvas(gpui_flow::interaction::CanvasEvent::PointerMove(_)))
             {
                 let view = view.read(cx);
-                let projected = view.state_styles.geometry_presentation(&view.editor.engine).unwrap_or(view.editor.scene());
-                let card = &projected.get(&"card".into()).unwrap().object;
-                println!("state_geometry input={:?} projected_x={} projected_width={} canonical_revision={} state_error={:?} errors={:?}",
-                    trace.operation, card.transform.tx, card.shape.local_bounds().unwrap().size.width,
-                    view.editor.engine.revision(), view.state_style_error, trace.errors);
+                let card = view.presented_geometry().and_then(|scene| scene.get(&"card".into()));
+                println!("state_geometry input={:?} accepted_x={:?} accepted_width={:?} canonical_revision={} pending={} state_error={:?} composite_errors={:?} errors={:?}",
+                    trace.operation, card.map(|node| node.object.transform.tx),
+                    card.and_then(|node| node.object.shape.local_bounds().map(|bounds| bounds.size.width)),
+                    view.editor.engine.revision(), view.compositing_pending, view.state_style_error,
+                    view.composite_diagnostics, trace.errors);
             }
         }).detach();
         Self {

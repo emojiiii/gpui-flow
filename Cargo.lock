@@ -1798,6 +1798,7 @@ dependencies = [
  "gpui-flow-text",
  "gpui-kit",
  "image",
+ "resvg 0.46.0",
  "serde_json",
 ]
 
@@ -2443,10 +2444,13 @@ dependencies = [
 name = "gpui-flow-composite"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "gpui-flow-core",
  "gpui-flow-scene",
  "image",
  "png 0.17.16",
+ "resvg 0.46.0",
+ "roxmltree 0.21.1",
  "serde_json",
  "tiny-skia",
 ]

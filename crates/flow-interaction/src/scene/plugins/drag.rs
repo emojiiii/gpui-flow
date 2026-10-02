@@ -81,8 +81,15 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneDragPlugin {
                     anchor: bounds.origin,
                     started: false,
                 });
-                out.command(SceneCommand::CapturePointer {
+                out.command(SceneCommand::CapturePointerForSelection {
                     pointer_id: p.pointer_id,
+                    targets: cx
+                        .editor
+                        .selection
+                        .roots(cx.editor.scene())
+                        .iter()
+                        .filter_map(|id| cx.editor.engine.handle(id))
+                        .collect(),
                 });
                 out.effect(CanvasEffect::Cursor(CanvasCursor::Grab));
             }

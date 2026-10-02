@@ -1,5 +1,7 @@
 //! Independently installed retained-scene behavior using CanvasPlugin<SceneEditor, SceneCommand>.
+mod constraints;
 mod drag;
+mod inertia;
 mod keyboard;
 mod line;
 mod pan;
@@ -10,14 +12,16 @@ mod snapping;
 mod zoom;
 use super::ScenePluginHost;
 use crate::InteractionError;
+pub use constraints::*;
 pub use drag::SceneDragPlugin;
+pub use inertia::*;
 pub use keyboard::SceneKeyboardPlugin;
 pub use line::SceneLineEndpointPlugin;
 pub use pan::ScenePanPlugin;
 pub use resize::{SceneResizePlugin, TextResizeMode};
 pub use rotate::SceneRotatePlugin;
 pub use selection::SceneSelectionPlugin;
-pub use snapping::SceneSnappingPlugin;
+pub use snapping::{SceneEdgeSnappingPlugin, SceneSnappingPlugin};
 pub use zoom::SceneZoomPlugin;
 pub fn install_defaults(host: &mut ScenePluginHost) -> Result<(), InteractionError> {
     host.install(SceneSelectionPlugin::default())?;

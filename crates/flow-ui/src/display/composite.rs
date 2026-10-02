@@ -34,6 +34,8 @@ pub(crate) struct RequestKey {
     pub window: u64,
     revision: u64,
     document_epoch: u64,
+    engine: u64,
+    layout_provider: Option<gpui_flow_engine::LayoutProviderId>,
     text_backend: Option<TextBackendSnapshot>,
 }
 impl RequestKey {
@@ -71,6 +73,8 @@ impl RequestKey {
             window,
             revision: engine.revision(),
             document_epoch: engine.document_epoch(),
+            engine: engine.engine_id(),
+            layout_provider: engine.layout_provider(),
             text_backend: None,
         }
     }
@@ -129,10 +133,41 @@ impl RequestKey {
             .as_ref()
             .is_none_or(TextBackendSnapshot::current)
     }
+    pub fn image_sample(
+        &self,
+        id: &DisplayId,
+    ) -> Option<&crate::resources::CompositeImageObservation> {
+        self.domains.iter().find_map(|domain| domain.images.get(id))
+    }
+    /// State samples may move every object, but may never cross a canonical,
+    /// resource, font, viewport or ownership boundary. Check the saved sources
+    /// against live resource observations, not the next sample's domain layout.
+    pub fn presentation_current(
+        &self,
+        engine: &SceneEngine,
+        resources: Option<&crate::resources::SceneResourceAdapter>,
+        bridge: Option<&Arc<gpui_flow_text::GpuiTextRasterizer>>,
+        viewport: RasterViewport,
+        window: u64,
+    ) -> bool {
+        self.text_current()
+            && self.animation_only(
+                &Self::new(
+                    self.domains.iter().map(|d| d.source.clone()).collect(),
+                    engine,
+                    viewport,
+                    window,
+                )
+                .with_resources(engine, resources)
+                .with_text_backend(bridge),
+            )
+    }
     // Frame selection is soft invalidation. Everything else is semantic and
     // cancels stale work, including a seek/pause generation and A/B/A resources.
     fn animation_only(&self, other: &Self) -> bool {
         self.text_backend == other.text_backend
+            && self.engine == other.engine
+            && self.layout_provider == other.layout_provider
             && self.window == other.window
             && self.viewport == other.viewport
             && self.document_epoch == other.document_epoch
@@ -168,6 +203,8 @@ impl RequestKey {
     }
     fn same_domain_sample(&self, other: &Self, id: &DisplayId) -> bool {
         self.text_backend == other.text_backend
+            && self.engine == other.engine
+            && self.layout_provider == other.layout_provider
             && self.window == other.window
             && self.viewport == other.viewport
             && self.document_epoch == other.document_epoch
@@ -176,6 +213,8 @@ impl RequestKey {
     }
     fn compatible(&self, other: &Self, id: &DisplayId) -> bool {
         self.text_backend == other.text_backend
+            && self.engine == other.engine
+            && self.layout_provider == other.layout_provider
             && self.window == other.window
             && self.viewport == other.viewport
             && self.document_epoch == other.document_epoch
@@ -235,6 +274,7 @@ pub(crate) struct CompositeController {
     cancel: Arc<AtomicBool>,
     candidates: BTreeMap<DisplayId, Option<ImageFrame>>,
     accepted: BTreeMap<DisplayId, Accepted>,
+    accepted_empty: BTreeMap<DisplayId, Arc<RequestKey>>,
     errors: Vec<CompositeIssue>,
     blocked_uploads: BTreeSet<DisplayId>,
     retired_bytes: u64,
@@ -243,6 +283,9 @@ pub(crate) struct CompositeController {
     // Frame-local failures are memoized by selected-frame vector, not promoted
     // to resource-wide failure. Metadata stays bounded even for many images.
     failed_samples: BTreeMap<DisplayId, BTreeMap<Vec<usize>, (u64, CompositeError)>>,
+    coherent_retention: bool,
+    uploaded: BTreeSet<DisplayId>,
+    obsolete_uploads: Vec<ImageFrame>,
 }
 impl Default for CompositeController {
     fn default() -> Self {
@@ -253,12 +296,16 @@ impl Default for CompositeController {
             cancel: Arc::new(AtomicBool::new(false)),
             candidates: BTreeMap::new(),
             accepted: BTreeMap::new(),
+            accepted_empty: BTreeMap::new(),
             errors: vec![],
             blocked_uploads: BTreeSet::new(),
             retired_bytes: 0,
             budget_epoch: 0,
             running_budget_epoch: 0,
             failed_samples: BTreeMap::new(),
+            coherent_retention: false,
+            uploaded: BTreeSet::new(),
+            obsolete_uploads: Vec::new(),
         }
     }
 }
@@ -443,6 +490,16 @@ impl CompositeController {
     /// Replaces the one pending request; an old worker is only cooperatively
     /// cancelled and must finish before another worker can start.
     pub fn request(&mut self, key: Arc<RequestKey>) -> Vec<ImageFrame> {
+        self.coherent_retention = false;
+        self.request_inner(key, true)
+    }
+    /// The caller retains the entire old paint and hit snapshot, and validates
+    /// its canonical/resource provenance before requesting coherent retention.
+    pub fn request_coherent(&mut self, key: Arc<RequestKey>, retain: bool) -> Vec<ImageFrame> {
+        self.coherent_retention = retain;
+        self.request_inner(key, false)
+    }
+    fn request_inner(&mut self, key: Arc<RequestKey>, coalesce: bool) -> Vec<ImageFrame> {
         if self.requested.as_ref() == Some(&key) {
             return vec![];
         }
@@ -450,7 +507,10 @@ impl CompositeController {
             .requested
             .as_ref()
             .is_some_and(|old| key.animation_only(old));
-        if animation_only && (self.running || self.candidates.values().any(Option::is_some)) {
+        if coalesce
+            && animation_only
+            && (self.running || self.candidates.values().any(Option::is_some))
+        {
             // One admitted snapshot can finish and upload even when every newer
             // vsync chooses another frame. The next render samples latest time;
             // there is no per-tick queue and no starvation of a slow worker.
@@ -460,7 +520,14 @@ impl CompositeController {
         // A -> B -> A may return to the same presented values/revision after
         // A's unaccepted candidate was cleared. Completion is request-local.
         self.completed = None;
-        self.candidates.clear();
+        for (id, frame) in std::mem::take(&mut self.candidates) {
+            if self.uploaded.contains(&id)
+                && let Some(frame) = frame
+            {
+                self.obsolete_uploads.push(frame);
+            }
+        }
+        self.uploaded.clear();
         if !animation_only {
             self.errors.clear();
             self.blocked_uploads.clear();
@@ -491,9 +558,19 @@ impl CompositeController {
         };
         let mut allowance = MAX_RETIRED.saturating_sub(self.retired_bytes);
         let mut retired = Vec::new();
+        self.obsolete_uploads.retain(|frame| {
+            if frame.bytes <= allowance {
+                allowance -= frame.bytes;
+                retired.push(frame.clone());
+                false
+            } else {
+                true
+            }
+        });
         self.accepted.retain(|id, old| {
-            let obsolete = !key.compatible(&old.key, id)
-                || self.candidates.get(id).is_some_and(Option::is_none);
+            let obsolete = !self.coherent_retention
+                && (!key.compatible(&old.key, id)
+                    || self.candidates.get(id).is_some_and(Option::is_none));
             if obsolete && old.frame.bytes <= allowance {
                 allowance -= old.frame.bytes;
                 retired.push(old.frame.clone());
@@ -502,10 +579,17 @@ impl CompositeController {
                 true
             }
         });
+        self.accepted_empty
+            .retain(|id, old| self.coherent_retention || key.compatible(old, id));
         retired
     }
     fn held_bytes(&self) -> u64 {
         self.retired_bytes
+            + self
+                .obsolete_uploads
+                .iter()
+                .map(|frame| frame.bytes)
+                .sum::<u64>()
             + self.accepted.values().map(|v| v.frame.bytes).sum::<u64>()
             + self
                 .candidates
@@ -516,7 +600,11 @@ impl CompositeController {
     }
     pub fn take_work(&mut self) -> Option<Work> {
         let key = self.requested.as_ref()?;
-        if !key.text_current() || self.running || self.completed.as_ref() == Some(key) {
+        if !key.text_current()
+            || self.running
+            || !self.obsolete_uploads.is_empty()
+            || self.completed.as_ref() == Some(key)
+        {
             return None;
         }
         if key.domains.is_empty() {
@@ -540,6 +628,12 @@ impl CompositeController {
             {
                 settled.insert(id.clone());
                 settled_bytes += accepted.frame.bytes;
+            } else if self
+                .accepted_empty
+                .get(id)
+                .is_some_and(|old| key.same_domain_sample(old, id))
+            {
+                settled.insert(id.clone());
             } else if self.blocked_uploads.contains(id)
                 || self.errors.iter().any(|issue| {
                     &issue.object == id
@@ -717,6 +811,7 @@ impl CompositeController {
             return None;
         };
         self.errors.retain(|e| &e.object != id);
+        self.accepted_empty.remove(id);
         // An accepted domain must not retain decoded images from unrelated,
         // later removed/revoked domains in the same request batch.
         let mut domain_key = (**key).clone();
@@ -749,6 +844,125 @@ impl CompositeController {
     }
     pub fn block_upload(&mut self, id: DisplayId) {
         self.blocked_uploads.insert(id);
+    }
+    pub fn presentation_paint_failed(&mut self, id: DisplayId, error: String) {
+        self.blocked_uploads.insert(id.clone());
+        self.errors.retain(|issue| issue.object != id);
+        self.errors.push(CompositeIssue {
+            object: id,
+            error: CompositeError::UploadFailed(error),
+        });
+    }
+    /// Read only the published batch. Pending candidates cannot leak into an
+    /// older native/geometry snapshot, even if one domain finishes early.
+    pub fn presentation_frame(&self, key: &RequestKey, id: &DisplayId) -> Option<ImageFrame> {
+        key.text_current().then_some(())?;
+        self.accepted
+            .get(id)
+            .filter(|accepted| key.same_domain_sample(&accepted.key, id))
+            .map(|accepted| accepted.frame.clone())
+    }
+    pub fn presentation_uploads(&self, key: &Arc<RequestKey>) -> Vec<(DisplayId, ImageFrame)> {
+        if self.requested.as_ref() != Some(key) || !key.text_current() {
+            return vec![];
+        }
+        self.candidates
+            .iter()
+            .filter(|(id, _)| !self.uploaded.contains(*id))
+            .filter_map(|(id, frame)| frame.clone().map(|frame| (id.clone(), frame)))
+            .collect()
+    }
+    pub fn presentation_uploaded(
+        &mut self,
+        key: &Arc<RequestKey>,
+        id: &DisplayId,
+        image: &Arc<RenderImage>,
+    ) {
+        if self.requested.as_ref() == Some(key)
+            && key.text_current()
+            && self
+                .candidates
+                .get(id)
+                .and_then(Option::as_ref)
+                .is_some_and(|candidate| Arc::ptr_eq(&candidate.image, image))
+        {
+            self.uploaded.insert(id.clone());
+        }
+    }
+    /// Atomic batch publication occurs only after all real uploads succeeded.
+    /// Live retirement pressure is checked for the entire swap, not per domain.
+    pub fn publish_presentation(&mut self, key: &Arc<RequestKey>) -> Option<Vec<ImageFrame>> {
+        if self.requested.as_ref() != Some(key)
+            || self.completed.as_ref() != Some(key)
+            || !key.text_current()
+            || !self.errors.is_empty()
+            || !self.blocked_uploads.is_empty()
+        {
+            return None;
+        }
+        let mut next_bytes = 0;
+        for domain in &key.domains {
+            let id = domain.source.root_id();
+            match self.candidates.get(id) {
+                Some(Some(frame)) if self.uploaded.contains(id) => next_bytes += frame.bytes,
+                Some(None) => {}
+                None if self
+                    .accepted_empty
+                    .get(id)
+                    .is_some_and(|old| key.same_domain_sample(old, id)) => {}
+                None => next_bytes += self.presentation_frame(key, id)?.bytes,
+                _ => return None,
+            }
+        }
+        let replaced_bytes = self
+            .accepted
+            .iter()
+            .filter(|(id, _)| {
+                self.candidates.contains_key(*id)
+                    || !key.domains.iter().any(|d| d.source.root_id() == *id)
+            })
+            .map(|(_, accepted)| accepted.frame.bytes)
+            .sum::<u64>();
+        if next_bytes > MAX_RETAINED || self.retired_bytes + replaced_bytes > MAX_RETIRED {
+            return None;
+        }
+        let mut retired = Vec::new();
+        self.accepted.retain(|id, old| {
+            let replace = self.candidates.contains_key(id)
+                || !key.domains.iter().any(|d| d.source.root_id() == id);
+            if replace {
+                retired.push(old.frame.clone());
+            }
+            !replace
+        });
+        self.accepted_empty.retain(|id, _| {
+            !self.candidates.contains_key(id)
+                && key
+                    .domains
+                    .iter()
+                    .any(|domain| domain.source.root_id() == id)
+        });
+        for (id, frame) in std::mem::take(&mut self.candidates) {
+            let mut domain_key = (**key).clone();
+            domain_key.domains.retain(|d| d.source.root_id() == &id);
+            let domain_key = Arc::new(domain_key);
+            if let Some(frame) = frame {
+                self.accepted.insert(
+                    id,
+                    Accepted {
+                        key: domain_key,
+                        frame,
+                    },
+                );
+            } else {
+                self.accepted_empty.insert(id, domain_key);
+            }
+        }
+        self.uploaded.clear();
+        Some(retired)
+    }
+    pub fn presentation_failed(&self) -> bool {
+        !self.running && self.completed == self.requested && !self.errors.is_empty()
     }
     pub fn old_frame(&self, id: &DisplayId) -> Option<ImageFrame> {
         self.accepted
@@ -785,6 +999,14 @@ impl CompositeController {
                 cx.drop_image(c.image, None);
             }
         }
+        for frame in std::mem::take(&mut self.obsolete_uploads) {
+            cx.drop_image(frame.image, None);
+        }
+        self.requested = None;
+        self.accepted_empty.clear();
+        self.completed = None;
+        self.uploaded.clear();
+        self.coherent_retention = false;
     }
 }
 pub(crate) fn paint(frame: &ImageFrame, window: &mut Window) -> Result<(), String> {
@@ -816,7 +1038,7 @@ mod tests {
         );
     }
 
-    fn engine() -> SceneEngine {
+    pub(super) fn engine() -> SceneEngine {
         use gpui_flow_scene::{BlendMode, DisplayObject, Scene, Style, display};
         let mut s = Scene::new();
         s.insert(
@@ -836,7 +1058,7 @@ mod tests {
         .unwrap();
         SceneEngine::new(s).unwrap()
     }
-    fn key(e: &SceneEngine) -> Arc<RequestKey> {
+    pub(super) fn key(e: &SceneEngine) -> Arc<RequestKey> {
         use gpui_flow_scene::{Affine, Bounds, Point, Size};
         let domains = gpui_flow_composite::scene_units(e.scene(), CompositeLimits::default())
             .unwrap()
@@ -1820,7 +2042,7 @@ mod tests {
             drop(retry);
         }
     }
-    fn animated_key() -> Arc<RequestKey> {
+    pub(super) fn animated_key() -> Arc<RequestKey> {
         let mut e = engine();
         e.transaction(|s| {
             s.update_object(&"r".into(), |o| {
@@ -2638,3 +2860,6 @@ mod text_clip_tests;
 
 #[cfg(test)]
 mod affine_text_tests;
+
+#[cfg(test)]
+mod presentation_tests;

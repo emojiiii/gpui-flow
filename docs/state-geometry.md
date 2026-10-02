@@ -207,3 +207,76 @@ routing, like edit handles and commands. State-aware picking uses presentation
 geometry. For visual local coordinates, convert `event.world_position` through
 `state_styles.geometry_engine(&editor.engine)`. This is an explicit coordinate
 boundary, not a claim of arbitrary upstream state/event equivalence.
+
+## Coherent asynchronous CPU presentation follow-up
+
+The follow-up renderer separates the latest sampled state from the displayed
+presentation. `SceneView` keeps at most one displayed snapshot and one admitted
+CPU snapshot. A snapshot contains all native objects, domain ordering, and the
+matching canonical-paint geometry engine. The state clock and retargeting continue
+while a worker runs; intermediate samples coalesce, and the next admission uses
+current time. A slow admitted worker is not cancelled by subsequent state ticks.
+
+CPU completion alone does not publish. All candidate domains first pass a real
+GPUI atlas upload in the paint phase, using positive image bounds inside an explicit zero-opacity parent. Once the complete batch has uploaded and retirement capacity is
+available, the next render swaps the entire native/CPU presentation and picking
+geometry together. No old-pixels/new-hit interval or synchronous UI rasterization
+is used. The old complete presentation stays visible while this happens.
+`SceneView::presented_geometry()` reports the displayed geometry; the lower-level
+`SceneStateStyles::geometry_presentation()` continues to report the latest valid
+state sample and should not be used to infer asynchronous display acceptance.
+
+Canonical engine identity/revision/document epoch, attachment identity, layout
+provider, window/viewport/origin/clip/DPR, resource/playback generation, font
+backend, compositing mode, layer owner, crop mode, background and grid changes
+invalidate retained presentations. Picking checks provenance directly, including
+before another render, and is suppressed when no valid displayed presentation
+exists. These hard boundaries may still show a loading interval. They must not
+reuse removed objects or stale resource pixels. A post-preflight atlas/paint
+failure also withdraws the displayed hit snapshot and reports an upload error.
+
+Existing pixel limits remain: one CPU job, 32 MiB output batches, 32 MiB retirement,
+and the shared 128 MiB adapter surface ceiling. Warmed candidates superseded by
+hard invalidation are charged until retired; a queued obsolete upload batch blocks
+new work until it drains, preventing hidden GPU allocation accumulation. This is
+coherent bounded asynchronous presentation, not a guaranteed frame-rate claim.
+
+The native `state_geometry` card now explicitly uses Normal isolation, so hover,
+press, focus, named motion and disabled transitions always exercise the CPU route.
+Its input logs report accepted geometry and compositor status. Recheck rapid
+enter/leave/press and named reversal without blank text/card frames, then click the
+visible expanded/moving edge. Also recheck canonical edit/Undo/Redo, zoom, disabled
+mid-motion and close during work. Native acceptance for this follow-up must be
+recorded separately from the earlier functional-only result above.
+
+Initial follow-up local checks on 2026-10-02, before independent source review:
+239 UI library tests passed,
+including nine new controller/whole-presentation regressions (the prior 230 are
+included, not additional). Strict Clippy passed for UI library/tests and the
+`state_geometry` demo, and the demo linked successfully. The new tests exercise
+partial batch upload, wrong upload identity, held geometry/native-paint coherence,
+399 busy samples with a rapid reversal, stale A/B/A completion, live canonical
+and ownership checks, resource generation, viewport/DPR changes, upload failure
+recovery and retirement saturation. These headless checks are not a native
+continuous-presentation acceptance result.
+
+
+Independent source review identified and corrected four additional cases before
+native revalidation: all native/custom and CPU children now share a prepaint/paint
+provenance guard; source-alpha hits in retained CPU images use the accepted image
+frame after validating its live resource generation; fully clipped/offscreen CPU
+results retain an accepted-empty marker so unchanged domains do not stall later
+native-only state frames; and upload preflight uses an exact zero-opacity Div
+scope instead of an empty clip, whose device-pixel rounding could expose a pixel
+at fractional origins or DPR. The upload still has positive image bounds and
+executes the real atlas insertion. Regression checks were added for each case.
+
+Revised follow-up checks: all 245 current UI library tests passed, including 13
+coherence regressions and two navigation-integration tests. Strict UI library/test
+Clippy passed, as did four focus/input mirror fixture tests, strict Clippy for
+both affected demos, and the rebuilt `state_geometry` binary. After the final
+navigation input-clock hook was connected, its two focused tests and four mirror
+fixtures were rerun. A second independent source review found no remaining
+blocker in the four corrected paths. The fractional-view and zero-opacity tests
+validate the shared guard and style state; they do not substitute for native GPU
+pixel validation. Native acceptance remains pending at this source checkpoint.

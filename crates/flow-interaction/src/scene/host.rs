@@ -52,6 +52,8 @@ pub struct ScenePluginHost {
     guides: Vec<SnapGuide>,
     cursor: CanvasCursor,
     event_button: Option<PointerButton>,
+    navigation_time: std::time::Duration,
+    navigation_frame: bool,
 }
 impl Default for ScenePluginHost {
     fn default() -> Self {
@@ -69,6 +71,8 @@ impl Default for ScenePluginHost {
             guides: Vec::new(),
             cursor: CanvasCursor::Default,
             event_button: None,
+            navigation_time: std::time::Duration::ZERO,
+            navigation_frame: false,
         }
     }
 }
@@ -165,7 +169,7 @@ impl ScenePluginHost {
             return Err(InteractionError::InvalidPluginId);
         }
         let mut cancellation = DispatchReport::default();
-        if self.capture.is_some() || self.gesture_owner.is_some() {
+        if self.capture.is_some() || self.gesture_owner.is_some() || self.needs_navigation_frame() {
             self.cancel_active(editor, &mut cancellation);
         }
         let report = if self.plugins.iter().any(|p| p.id == id) {
@@ -193,7 +197,7 @@ impl ScenePluginHost {
             .position(|p| p.id == id)
             .ok_or_else(|| InteractionError::UnknownPlugin(id.into()))?;
         let mut report = DispatchReport::default();
-        if self.owns_active(id) {
+        if self.owns_active(id) || self.needs_navigation_frame() {
             self.cancel_active(editor, &mut report);
         }
         self.plugins[index]
@@ -219,6 +223,7 @@ impl ScenePluginHost {
         }
         if self.capture.is_some()
             || self.gesture_owner.is_some()
+            || self.needs_navigation_frame()
             || (!enabled && self.owns_active(id))
         {
             self.cancel_active(editor, &mut report);
@@ -355,8 +360,136 @@ impl ScenePluginHost {
                     })
             })
     }
+    /// Synchronize event timestamps without moving the displayed viewport.
+    /// Use this before input; reserve advance_navigation for actual frames.
+    /// Backwards time cancels all active work and reports an error.
+    pub fn synchronize_navigation_time(
+        &mut self,
+        editor: &mut SceneEditor,
+        now: std::time::Duration,
+    ) -> DispatchReport {
+        let mut report = DispatchReport::default();
+        if now < self.navigation_time || !editor.viewport.is_valid() {
+            self.cancel_active(editor, &mut report);
+            report.errors.push(InteractionError::InvalidInput(
+                "navigation clock moved backwards or viewport is invalid".into(),
+            ));
+            return report;
+        }
+        self.navigation_time = now;
+        for entry in &mut self.plugins {
+            if entry.enabled {
+                entry.plugin.on_time(now);
+            }
+        }
+        report
+    }
+    /// Advance only on explicit application frames. Time is monotonic since a
+    /// fixed origin. Stop scheduling as soon as needs_navigation_frame is false.
+    pub fn advance_navigation(
+        &mut self,
+        editor: &mut SceneEditor,
+        now: std::time::Duration,
+    ) -> DispatchReport {
+        let mut report = self.synchronize_navigation_time(editor, now);
+        if !report.errors.is_empty() {
+            return report;
+        }
+        if self.capture_target_stale(editor) {
+            self.cancel_active(editor, &mut report);
+            return report;
+        }
+        for index in 0..self.plugins.len() {
+            if !self.plugins[index].enabled {
+                continue;
+            }
+            let id = self.plugins[index].id.clone();
+            let owner = self.capture_owner().map(str::to_owned);
+            let context = PluginContext {
+                editor,
+                policy: self.policy,
+                transforms: self.transforms,
+                connection: &self.connection,
+                capture_owner: owner.as_deref(),
+            };
+            let mut output = PluginOutput::default();
+            self.plugins[index]
+                .plugin
+                .on_frame(now, &context, &mut output);
+            for command in output.commands {
+                // Frames only animate navigation, never document edits or capture.
+                if command.capability() != Some(Capability::Navigation) {
+                    report.errors.push(InteractionError::InvalidInput(
+                        "navigation frames may only emit navigation commands".into(),
+                    ));
+                    self.cancel_active(editor, &mut report);
+                    return report;
+                }
+                self.navigation_frame = true;
+                let result = self.process(editor, &id, command, &mut report);
+                self.navigation_frame = false;
+                if let Err(error) = result {
+                    report.errors.push(error);
+                    self.cancel_active(editor, &mut report);
+                    return report;
+                }
+            }
+            // No clipboard, fit, or other executable side effect from a frame.
+            for effect in output.effects {
+                if matches!(
+                    effect,
+                    CanvasEffect::Cursor(_)
+                        | CanvasEffect::Guides(_)
+                        | CanvasEffect::ViewportChanged
+                ) {
+                    self.effect(effect, &mut report);
+                }
+            }
+        }
+        report
+    }
+    pub fn navigation_time(&self) -> std::time::Duration {
+        self.navigation_time
+    }
+    /// Mandatory input cleanup for a completed navigation tail. It never
+    /// restores snapshots or cancels an unrelated document/capture owner.
+    pub(crate) fn stop_navigation_tail(&mut self) -> bool {
+        let mut stopped = false;
+        for entry in &mut self.plugins {
+            if entry.enabled
+                && entry.plugin.needs_frame()
+                && self
+                    .capture
+                    .as_ref()
+                    .is_none_or(|capture| capture.owner != entry.id)
+                && self
+                    .gesture_owner
+                    .as_ref()
+                    .is_none_or(|owner| owner != &entry.id)
+            {
+                entry.plugin.on_lifecycle(PluginLifecycle::Cancelled);
+                stopped = true;
+            }
+        }
+        stopped
+    }
+    pub fn needs_navigation_frame(&self) -> bool {
+        self.plugins
+            .iter()
+            .any(|entry| entry.enabled && entry.plugin.needs_frame())
+    }
     pub fn dispatch(&mut self, editor: &mut SceneEditor, event: CanvasEvent) -> DispatchReport {
         let mut report = DispatchReport::default();
+        if self.needs_navigation_frame()
+            && matches!(
+                event,
+                CanvasEvent::PointerDown(_)
+                    | CanvasEvent::Wheel { .. }
+                    | CanvasEvent::KeyDown { .. }
+            )
+        {
+            report.handled |= self.stop_navigation_tail();
+        }
         if self.capture_target_stale(editor) {
             self.cancel_active(editor, &mut report);
             return report;
@@ -365,6 +498,17 @@ impl ScenePluginHost {
             self.cancel_active(editor, &mut report);
             report.errors.push(InteractionError::InvalidInput(
                 "invalid editor viewport".into(),
+            ));
+            return report;
+        }
+        if let CanvasEvent::Wheel {
+            position, delta, ..
+        } = &event
+            && (!position.is_finite() || !delta.is_finite())
+        {
+            self.cancel_active(editor, &mut report);
+            report.errors.push(InteractionError::InvalidInput(
+                "wheel coordinates and deltas must be finite".into(),
             ));
             return report;
         }
@@ -508,6 +652,7 @@ impl ScenePluginHost {
         {
             return Err(InteractionError::CapabilityDenied(capability));
         }
+        let move_selection = matches!(command, SceneCommand::MoveSelectionTo { .. });
         let session_identity = match &command {
             SceneCommand::SetSessionProperty {
                 token, handle, key, ..
@@ -587,6 +732,16 @@ impl ScenePluginHost {
             && !self.allows(capability)
         {
             return Err(InteractionError::CapabilityDenied(capability));
+        }
+        if move_selection && !matches!(command, SceneCommand::MoveSelectionTo { .. }) {
+            return Err(InteractionError::InvalidInput(
+                "middleware cannot change a selection move command kind".into(),
+            ));
+        }
+        if self.navigation_frame && command.capability() != Some(Capability::Navigation) {
+            return Err(InteractionError::InvalidInput(
+                "navigation frame middleware cannot emit editing commands".into(),
+            ));
         }
         if let Some((token, handle, key)) = session_identity
             && !matches!(&command, SceneCommand::SetSessionProperty { token: actual_token, handle: actual_handle, key: actual_key, .. }
@@ -863,6 +1018,11 @@ impl ScenePluginHost {
                 editor.translate_selection(delta)?;
             }
             SceneCommand::MoveSelectionTo { anchor } => {
+                if self.capture_target_stale(editor) {
+                    return Err(InteractionError::InvalidInput(
+                        "stale selection drag".into(),
+                    ));
+                }
                 if !anchor.is_finite() {
                     return Err(InteractionError::InvalidInput("invalid move anchor".into()));
                 }
@@ -871,6 +1031,13 @@ impl ScenePluginHost {
                 }
                 if let Some(bounds) = selection_bounds(editor)? {
                     editor.translate_selection(anchor - bounds.origin)?;
+                }
+                if let Some(guard) = self
+                    .capture
+                    .as_mut()
+                    .and_then(|c| c.selection_guard.as_mut())
+                {
+                    guard.accepted_revision = editor.engine.revision();
                 }
             }
             SceneCommand::SetTransform { id, transform } => {
@@ -1292,6 +1459,12 @@ impl ScenePluginHost {
             }
             SceneCommand::Redo => {
                 editor.redo();
+            }
+            SceneCommand::SetViewport { viewport } => {
+                if !viewport.is_valid() {
+                    return Err(InteractionError::InvalidInput("invalid viewport".into()));
+                }
+                editor.viewport = viewport;
             }
             SceneCommand::Pan { delta } => {
                 if !editor.viewport.pan_by(delta) {

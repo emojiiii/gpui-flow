@@ -1,0 +1,83 @@
+{
+  "date": "2026-10-02",
+  "scope": "ELM-11 fixed-region mixed SVG core serialization and deterministic readback tests",
+  "source_state": "Uncommitted working-tree files; hashes identify this focused implementation, not a published revision",
+  "source_files_sha256": {
+    "crates/flow-composite/Cargo.toml": "1a5fe9f74a9b28ea876793eb1620cdc906be4e649cde4c892431794bd0b95f33",
+    "crates/flow-composite/src/lib.rs": "e65777f13b7af6483806ce104430f10c9dd24e9f67fb4d39c53c96ebdac5c791",
+    "crates/flow-composite/src/scene_export.rs": "94b40c66c61c87dcdb53cd27da160ff0022b1690467ce4176b68a25b5941ca07",
+    "crates/flow-composite/src/scene_svg.rs": "0f143cdf6259ef84fa29824929c8e97cfba8223daeb154a03a362659898bf78d",
+    "crates/flow-composite/src/scene_svg_tests.rs": "de9afa66cc08b5f0f7c0c193220c644fa2ab7aabc9c10a8dccd9976236eaf243",
+    "docs/scene-raster-export.md": "57b6ab520b5c05f7314061fff4f62b8f6c87718befab631db7b63febc6ff58a1",
+    "docs/scene-svg-export.md": "c0c693204002399460cf465d67a7ccefb12fcb35ee212458dfc72c086a73fb6a"
+  },
+  "pinned_leafer_source": {
+    "url": "https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/export/src/export.ts",
+    "blob": "00250118fe511418e5ae3e04d8b413991fc95489",
+    "observation": "SVG branch delegates to leaf.toSVG; crop/scale/DPR behavior is in a separate raster branch"
+  },
+  "commands": [
+    {
+      "command": "cargo check --locked --offline -p gpui-flow-composite",
+      "exit": 0
+    },
+    {
+      "command": "cargo test --locked --offline -p gpui-flow-composite scene_svg_tests -- --test-threads=1",
+      "exit": 0,
+      "passed": 28,
+      "failed": 0
+    },
+    {
+      "command": "cargo clippy --locked --offline -p gpui-flow-composite --all-targets -- -D warnings",
+      "exit": 0
+    },
+    {
+      "command": "cargo test --locked --offline -p gpui-flow-composite -- --test-threads=1",
+      "exit": 0,
+      "passed": 294,
+      "failed": 0,
+      "doc_tests": 0
+    },
+    {
+      "command": "rustfmt --edition 2024 --check changed Rust leaf files",
+      "exit": 0
+    },
+    {
+      "command": "git diff --check -- crates/flow-composite docs/scene-raster-export.md docs/scene-svg-export.md",
+      "exit": 0
+    }
+  ],
+  "environment": {
+    "cargo_jobs": 1,
+    "offline": true,
+    "locked": true,
+    "native_window_opened": false,
+    "system_font_lookup_in_readback": false
+  },
+  "decoders": {
+    "xml": "roxmltree 0.21.1",
+    "svg_readback": "resvg 0.46.0 with raster-images; no text/system-fonts",
+    "embedded_png": "base64 0.22.1 and png 0.17.16"
+  },
+  "logs_sha256": {
+    "scene-svg-check.log": "8752bd3c8945c2db266ed9c09bfd048e9078e6b9c88642e7fbcb4bf3c2082020",
+    "scene-svg-tests.log": "440760998385a0d2a724d28aac5e2d6ba837745d7814053bd4d9d760aabd2a5a",
+    "scene-svg-clippy.log": "cbafccb9c652a77b0768822c94105cc22511c2ef586c2f487bb5254d95d06a17",
+    "scene-svg-composite-all-tests.log": "5c5d30c9074a3ae01c44ba991f04051d90e1cf7cf18f9696f652296ff83f19ba",
+    "scene-svg-format.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "scene-svg-diff-check.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "limitations": [
+    "Mixed SVG: vector geometry; per-node raster Image/Canvas/Text ink, with no editable text or glyph outlines",
+    "Alpha masks, non-Normal/non-PassThrough blends, visible shadows/inner shadows, Custom and unsupported Text styles atomically reject",
+    "No source URL, credentials, font, arbitrary metadata or text content copied into SVG",
+    "No native UI acceptance or cross-platform/consumer pixel-equivalence claim",
+    "Explicit buffer and existing geometry/codec limits, not process-wide allocator or latency bound"
+  ],
+  "actions": {
+    "commit": false,
+    "push": false,
+    "github_actions": false,
+    "deploy": false
+  }
+}

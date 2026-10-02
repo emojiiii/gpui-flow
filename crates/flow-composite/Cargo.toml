@@ -13,6 +13,12 @@ tiny-skia = { version = "=0.11.4", default-features = false, features = ["std", 
 
 # Streaming PNG export reuses the version already present in Cargo.lock.
 png = "=0.17.16"
+# Already-locked encoder, used only for self-contained SVG image data.
+base64 = "=0.22.1"
 
 [dev-dependencies]
 serde_json.workspace = true
+
+# Independent XML/readback validation; no system font lookup.
+roxmltree = "=0.21.1"
+resvg = { version = "=0.46.0", default-features = false, features = ["raster-images"] }

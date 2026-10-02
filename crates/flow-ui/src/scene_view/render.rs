@@ -1,9 +1,10 @@
 use super::*;
 use crate::display::DisplayElement;
 use gpui_flow_composite::{CanvasBackdrop, CanvasGrid, CompositeLimits, SceneUnit};
-struct StateFrame {
-    objects: Vec<RenderObject>,
-    units: Vec<SceneUnit>,
+#[derive(Clone, Default, PartialEq)]
+pub(super) struct StateFrame {
+    pub(super) objects: Vec<RenderObject>,
+    pub(super) units: Vec<SceneUnit>,
 }
 fn animation_images(
     frame: &StateFrame,
@@ -29,7 +30,7 @@ fn animation_images(
     }
     visible
 }
-fn state_render_frame_with_canvas(
+pub(super) fn state_render_frame_with_canvas(
     editor: &SceneEditor,
     router: &gpui_flow_interaction::scene::SceneEventRouter,
     styles: &mut gpui_flow_interaction::scene::SceneStateStyles,
@@ -126,6 +127,7 @@ fn state_render_objects(
 }
 impl Render for SceneView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.prepare_navigation_frame(window, cx);
         self.layer_reconcile_mode();
         self.reconcile_text_editor(window, cx);
         self.reconcile_image_crop_editor(cx);
@@ -248,7 +250,8 @@ impl Render for SceneView {
         if let Some(resources) = &mut self.resources {
             resources.sample_images(&self.editor.engine, &visible, now, active);
         }
-        let composite_key = self.request_composites(domains, window, cx);
+        let key = self.composite_key(domains, window);
+        let (frame, composite_key, coherent) = self.coherent_presentation(frame, key, window, cx);
         // Semantic recovery can clear an upload/domain error without starting a
         // job (an unchanged accepted frame is reusable). Re-evaluate after the
         // reset so playback wakes even when no worker completion will notify us.
@@ -268,6 +271,10 @@ impl Render for SceneView {
             .collect();
         self.composite_diagnostics
             .extend(self.compositing.diagnostics());
+        if coherent {
+            self.composite_diagnostics
+                .retain(|issue| issue.error != gpui_flow_composite::CompositeError::StaleFrame);
+        }
         self.compositing_pending = self.compositing.pending();
         if self.state_style_error.is_none() && self.state_styles.has_active_transitions() {
             let entity = cx.entity().downgrade();
@@ -409,6 +416,7 @@ impl Render for SceneView {
             })
             .when(!managed_layer, |view| view.track_focus(&self.focus))
             .child(background);
+        let mut content = div().absolute().size_full();
         let objects = frame
             .objects
             .into_iter()
@@ -420,9 +428,10 @@ impl Render for SceneView {
                 SceneUnit::NativePhase { id, phase } => (id, phase),
                 SceneUnit::Domain(domain) => {
                     if let Some(key) = &composite_key {
-                        view = view.child(self.composite_element(
+                        content = content.child(self.composite_element(
                             domain.root_id().clone(),
                             key.clone(),
+                            coherent,
                             cx,
                         ));
                     }
@@ -437,13 +446,13 @@ impl Render for SceneView {
                 self.diagnostics.extend(object.diagnostics());
             }
             if phase != gpui_flow_scene::PaintPhase::All {
-                view = view.child(DisplayElement::new(object).with_paint_phase(phase));
+                content = content.child(DisplayElement::new(object).with_paint_phase(phase));
                 continue;
             }
             if let gpui_flow_scene::Shape::Custom(custom) = &object.object.shape
                 && let Some(renderer) = self.renderers.get(&custom.kind)
             {
-                view = view.child(renderer.render(&object, window, cx));
+                content = content.child(renderer.render(&object, window, cx));
             } else {
                 let image = if matches!(object.object.shape, gpui_flow_scene::Shape::Image(_)) {
                     Some(
@@ -471,15 +480,27 @@ impl Render for SceneView {
                     })
                     .unwrap_or(0);
                 let element = DisplayElement::new(object);
-                view = match image {
+                content = match image {
                     Some(image) => {
-                        view.child(element.with_image(image).selected_frame(selected_frame))
+                        content.child(element.with_image(image).selected_frame(selected_frame))
                     }
-                    None => view.child(element),
+                    None => content.child(element),
                 };
             }
         }
+        view = if coherent {
+            view.child(self.presentation_content(
+                content.into_any_element(),
+                composite_key.clone(),
+                cx,
+            ))
+        } else {
+            view.child(content)
+        };
         view = view.child(overlay);
+        if coherent {
+            view = view.child(self.presentation_upload_element(cx));
+        }
         if let Some(frame) = resource_frame {
             let entity = cx.entity().downgrade();
             // This callback is a real GPUI paint boundary, not a timer that
@@ -504,7 +525,12 @@ impl Render for SceneView {
                 .size_full(),
             );
         }
-        if self.compositing.loading_visible() || !self.composite_diagnostics.is_empty() {
+        let loading = if coherent {
+            composite_key.is_none() && self.compositing.pending()
+        } else {
+            self.compositing.loading_visible()
+        };
+        if loading || !self.composite_diagnostics.is_empty() {
             let message = self
                 .composite_diagnostics
                 .first()

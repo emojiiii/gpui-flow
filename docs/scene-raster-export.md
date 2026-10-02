@@ -2,7 +2,9 @@
 
 This is the bounded raster subset of **ELM-11**, implemented on 2026-10-02,
 including the SceneView resource/font bridge and focused Linux native acceptance.
-It does not complete ELM-11: scene SVG export remains open.
+The separate bounded [mixed SVG branch](scene-svg-export.md) preserves vector
+geometry and embeds Image/Canvas/Text ink per producer. Its supported-effects
+boundary and acceptance are documented separately.
 
 ## Reused implementation
 
@@ -220,7 +222,7 @@ whereas the pinned upstream export flow can fill behind already rendered pixels.
 It rejects unavailable resources immediately instead of waiting internally.
 These choices are explicit contracts, not claims of full Leafer export parity.
 
-Still open: scene SVG, trim/padding/slice/rotated clip options, alternate relative
+Still open: broader SVG effects/editable text, trim/padding/slice/rotated clip options, alternate relative
 spaces, automatic resource waiting, auto-download/data URLs, per-format metadata,
 font embedding, lossy WebP, arbitrary native Custom rendering, and broader
 cross-platform/performance acceptance.

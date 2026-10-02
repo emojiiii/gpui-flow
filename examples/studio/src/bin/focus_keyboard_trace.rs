@@ -135,8 +135,24 @@ impl Mirror {
             policy,
         }
     }
+    #[cfg(test)]
     fn replay(&mut self, operation: SceneInputOperation) -> SceneInputTrace {
+        self.replay_at(operation, std::time::Duration::ZERO)
+    }
+    fn replay_at(
+        &mut self,
+        operation: SceneInputOperation,
+        now: std::time::Duration,
+    ) -> SceneInputTrace {
+        if !matches!(operation, SceneInputOperation::NavigationFrame { .. }) {
+            let sync = self.host.synchronize_navigation_time(&mut self.editor, now);
+            assert!(sync.errors.is_empty());
+        }
         let report = match &operation {
+            SceneInputOperation::NavigationFrame { now } => RoutedReport {
+                default: self.host.advance_navigation(&mut self.editor, *now),
+                ..Default::default()
+            },
             SceneInputOperation::Canvas(event) => {
                 self.router
                     .dispatch(&mut self.editor, &mut self.host, event.clone())
@@ -199,6 +215,9 @@ fn operation_value(operation: &SceneInputOperation) -> Value {
         })
     };
     match operation {
+        SceneInputOperation::NavigationFrame { now } => {
+            json!({"kind":"NavigationFrame", "secs":now.as_secs(), "nanos":now.subsec_nanos()})
+        }
         SceneInputOperation::PickedWheel {
             position,
             delta,
@@ -247,6 +266,7 @@ fn operation_value(operation: &SceneInputOperation) -> Value {
 fn trace_value(trace: &SceneInputTrace) -> Value {
     json!({
         "operation": operation_value(&trace.operation),
+        "navigation_time": {"secs":trace.navigation_time.as_secs(), "nanos":trace.navigation_time.subsec_nanos()},
         "events": trace.events.iter().map(event_value).collect::<Vec<_>>(),
         "default": {
             "handled": trace.default.handled, "prevented": trace.default.default_prevented,
@@ -317,7 +337,8 @@ impl Lab {
             lab.subscriptions
                 .push(cx.subscribe(&lab.views[index], move |this, _, event, cx| {
                     if let SceneViewEvent::InputTrace(native) = event {
-                        let pure = this.mirrors[index].replay(native.operation.clone());
+                        let pure = this.mirrors[index]
+                            .replay_at(native.operation.clone(), native.navigation_time);
                         let native_value = trace_value(native);
                         let pure_value = trace_value(&pure);
                         let matched = native_value == pure_value;
@@ -533,6 +554,26 @@ mod tests {
         assert!(background.events.is_empty());
         assert_eq!(operation_value(&target.operation)["target"], "a");
         assert!(operation_value(&background.operation)["target"].is_null());
+    }
+    #[test]
+    fn navigation_trace_replays_input_time_without_synthetic_motion() {
+        use std::time::Duration;
+        let mut mirror = Mirror::new();
+        let initial = mirror.editor.viewport;
+        let trace = mirror.replay_at(
+            SceneInputOperation::Canvas(CanvasEvent::PointerLeave),
+            Duration::from_millis(40),
+        );
+        assert_eq!(trace.navigation_time, Duration::from_millis(40));
+        assert_eq!(trace.viewport, initial);
+        let trace = mirror.replay_at(
+            SceneInputOperation::NavigationFrame {
+                now: Duration::from_millis(56),
+            },
+            Duration::from_millis(56),
+        );
+        assert_eq!(trace.navigation_time, Duration::from_millis(56));
+        assert_eq!(trace.viewport, initial);
     }
     #[test]
     fn fixture_exercises_cancellation_redirect_and_dead_generation() {

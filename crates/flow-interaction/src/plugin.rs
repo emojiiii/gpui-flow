@@ -78,6 +78,20 @@ pub trait CanvasPlugin<D = Editor, C = CanvasCommand> {
         _output: &mut PluginOutput<C>,
     ) {
     }
+    /// Clock-only synchronization before input, without advancing navigation.
+    fn on_time(&mut self, _now: std::time::Duration) {}
+    /// Explicit monotonic application time. Default hooks keep existing plugins
+    /// inert; no timer or OS clock is created by the plugin host.
+    fn on_frame(
+        &mut self,
+        _now: std::time::Duration,
+        _context: &PluginContext<'_, D>,
+        _output: &mut PluginOutput<C>,
+    ) {
+    }
+    fn needs_frame(&self) -> bool {
+        false
+    }
     fn filter_command(
         &mut self,
         _command: &mut C,

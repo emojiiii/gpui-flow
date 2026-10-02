@@ -12,3 +12,5 @@ gpui-flow.workspace = true
 
 serde_json.workspace = true
 image.workspace = true
+# Independent SVG byte readback for the scene_export fixture; already locked.
+resvg = { version = "=0.46.0", default-features = false, features = ["raster-images"] }
