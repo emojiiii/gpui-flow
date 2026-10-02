@@ -410,7 +410,7 @@ fn custom_schema_and_text_input_normalize_to_one_stable_commit() {
             },
             |data: &serde_json::Value| {
                 let shape = display::Ellipse::circle(data["radius"].as_f64().unwrap() as f32);
-                Ok((shape.bounds(), vec![shape.flatten(0.1)]))
+                Ok((shape.bounds(), shape.flatten(0.1)))
             },
         ))
         .unwrap();

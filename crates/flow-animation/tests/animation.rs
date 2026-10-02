@@ -198,7 +198,7 @@ fn custom_engine(reject_middle: bool) -> SceneEngine {
                     return Err("test rejects intermediate geometry".into());
                 }
                 let shape = display::Ellipse::circle(radius);
-                Ok((shape.bounds(), vec![shape.flatten(0.1)]))
+                Ok((shape.bounds(), shape.flatten(0.1)))
             },
         ))
         .unwrap();

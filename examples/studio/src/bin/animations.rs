@@ -68,7 +68,7 @@ fn engine() -> SceneEngine {
             },
             |value: &serde_json::Value| {
                 let circle = display::Ellipse::circle(value["radius"].as_f64().unwrap() as f32);
-                Ok((circle.bounds(), vec![circle.flatten(0.1)]))
+                Ok((circle.bounds(), circle.flatten(0.1)))
             },
         ))
         .unwrap();

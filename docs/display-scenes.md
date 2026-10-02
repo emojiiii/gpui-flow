@@ -142,3 +142,10 @@ cargo run --locked -p flow-studio --bin composition
 SceneView 使用 `interaction::scene::ScenePluginHost`，与 FlowCanvas 共用 CanvasPlugin 泛型协议、CanvasEvent、PluginLifecycle 和 AccessPolicy。场景文档命令为 SceneCommand，图文档命令为 CanvasCommand；二者不能混用。set_editable、set_access_policy、install_plugin、uninstall_plugin、replace_plugin、set_plugin_enabled 均经相同的取消/只读规则。SceneSnappingPlugin 可选安装；场景没有图端口，因此不安装 connection 插件。
 
 Text/Image 已支持平移与正等比缩放下的嵌套矩形 Frame/Box 裁切，图片 fit 和文本对齐使用原完整尺寸；空交集不绘制、不命中。见 [原生矩形裁切](native-clipping.md)。
+
+
+## Ellipse advanced geometry
+
+The Ellipse component now supports bounded clockwise arcs, pie sectors and rings.
+Its real geometry bounds, multi-contour fill/stroke/hit and CPU composite pixels
+share the same curve data. See [semantics, migration and validation](ellipse-arcs.md).

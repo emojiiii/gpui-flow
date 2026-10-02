@@ -36,6 +36,8 @@ Group/Box/Frame外阴影使用完整子树alpha，包含子阴影、mask结果�
 
 新增[显式可撤销路径定位](docs/path-placement.md)：按源Path/Pen局部弧长把目标局部锚点放到世界路径点，选择性按切线旋转并保持世界尺度/剪切/手性；拒绝自身/祖先依赖、失效handle、奇异父变换及布局覆盖，沿用一次原子提交与Undo/取消。17项新回归、四个headless crate共345项测试及严格Clippy通过；没有安装自动跟随或动画绑定。
 
+新增[Ellipse弧线、扇形和圆环组件能力](docs/ellipse-arcs.md)：保留旧JSON与默认整椭圆路径，独立组件生成共享曲线，接入真实bounds/hit、填充/描边、CPU像素、dirty和Undo。新增25项回归，八个headless crate共806项测试及严格Clippy通过；[图例](docs/images/ellipse-arcs.svg)由实际组件几何生成并检查。`Ellipse::flatten`现返回多轮廓，Rust调用迁移见契约；本批未运行原生窗口/GPU。
+
 ## 架构层次
 
 1. **display / scene**：Rect、Ellipse、Line、Polygon、Star、Path、Pen、Text、Image、Group、Box、Frame 独立文件；统一 identity、style、affine transform、层级、命中、事件、JSON

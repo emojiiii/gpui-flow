@@ -43,7 +43,7 @@ registry.register(CustomDefinition::new(
     |properties: &Value| {
         let radius = properties["radius"].as_f64().unwrap() as f32;
         let circle = display::Ellipse::circle(radius);
-        Ok((circle.bounds(), vec![circle.flatten(0.1)]))
+        Ok((circle.bounds(), circle.flatten(0.1)))
     },
 ))?;
 let mut engine = SceneEngine::with_registry(Scene::new(), registry)?;

@@ -338,7 +338,7 @@ fn later_schema_failure_rolls_back_all_targets_and_clocks_and_preserves_playback
                     return Err("intermediate radius rejected".into());
                 }
                 let shape = display::Ellipse::circle(radius);
-                Ok((shape.bounds(), vec![shape.flatten(0.1)]))
+                Ok((shape.bounds(), shape.flatten(0.1)))
             },
         ))
         .unwrap();

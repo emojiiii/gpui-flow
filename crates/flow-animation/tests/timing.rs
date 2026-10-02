@@ -664,7 +664,7 @@ fn rejected_frame_preserves_fractional_clock_carry_playback_and_prior_history() 
                     return Err("reject midpoint".into());
                 }
                 let shape = display::Ellipse::circle(radius);
-                Ok((shape.bounds(), vec![shape.flatten(0.1)]))
+                Ok((shape.bounds(), shape.flatten(0.1)))
             },
         ))
         .unwrap();

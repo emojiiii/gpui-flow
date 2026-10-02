@@ -35,7 +35,7 @@ fn registry(counter: Arc<AtomicUsize>) -> ElementRegistry {
                 counter.fetch_add(1, Ordering::Relaxed);
                 let r = props["radius"].as_f64().unwrap() as f32;
                 let ellipse = display::Ellipse::circle(r);
-                Ok((ellipse.bounds(), vec![ellipse.flatten(0.1)]))
+                Ok((ellipse.bounds(), ellipse.flatten(0.1)))
             },
         ))
         .unwrap();

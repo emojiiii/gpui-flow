@@ -28,6 +28,7 @@ Status: historical source research plus a separately labelled current source map
 - Path/Pen数据增量：[规范化SVG导出与原子数据编辑](path-data.md)，有类型属性key、保留Path/Pen身份、dirty/bounds/hit及历史；23项新回归与四个headless crate共311项测试通过，1项原有忽略；未新增通用控制点编辑工具或宣称Leafer完整编辑器对齐
 - Motion-path查询增量：[局部弧长/距离/切线和世界点查询](motion-path-queries.md)复用Kurbo；Path/Pen、退化与尖点、仿射父级及新查询失效边界已有17项回归。自动跟随/动画绑定/路径生长/文字路径仍缺，不把只读查询等同完整插件
 - 路径定位增量：[显式锚点/切线姿态定位](path-placement.md)按局部弧长生成世界姿态，经目标父逆矩阵写入；自依赖/祖先依赖及布局覆盖原子拒绝，保持形状/身份并参与Undo。17项新回归与四crate共345项测试通过；不含持续binding/时钟/原生编辑工具
+- Ellipse组件增量：[弧线/扇形/圆环及环形扇区](ellipse-arcs.md)在独立文件复用Kurbo生成曲线，贯通实际bounds/hit、共享多轮廓、CPU像素与撤销；25项新回归及八crate共806项测试通过。默认整椭圆保持；角度规范化差异与Rust flatten迁移已明确，原生窗口未验
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
 ## 九类能力当前边界（含待验证源码增量）

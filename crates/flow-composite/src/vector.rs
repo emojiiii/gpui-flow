@@ -89,9 +89,16 @@ fn shader(paint: &Paint) -> Result<tiny_skia::Shader<'static>, CompositeError> {
     shader.ok_or_else(|| CompositeError::InvalidGeometry("gradient cannot be represented".into()))
 }
 pub(crate) fn path(shape: &Shape) -> Result<Option<Path>, CompositeError> {
+    let ellipse_path = match shape {
+        Shape::Ellipse(ellipse) if !ellipse.is_default_oval() => {
+            Some(ellipse.to_path().map_err(CompositeError::InvalidGeometry)?)
+        }
+        _ => None,
+    };
     let commands = match shape {
         Shape::Path(p) => Some(&p.commands),
         Shape::Pen(p) => Some(&p.path.commands),
+        Shape::Ellipse(_) => ellipse_path.as_ref().map(|p| &p.commands),
         _ => None,
     };
     if let Some(commands) = commands {

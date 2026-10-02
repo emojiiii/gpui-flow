@@ -331,7 +331,7 @@ fn reactive_custom_geometry_animation_updates_parent_and_cancel_restores_exact_b
             },
             |p: &serde_json::Value| {
                 let shape = display::Ellipse::circle(p["radius"].as_f64().unwrap() as f32);
-                Ok((shape.bounds(), vec![shape.flatten(0.1)]))
+                Ok((shape.bounds(), shape.flatten(0.1)))
             },
         ))
         .unwrap();
@@ -445,7 +445,7 @@ fn custom_definition_panic_during_tick_preserves_every_scene_value_clock_and_pla
                     panic!("geometry implementation failed");
                 }
                 let shape = display::Ellipse::circle(r);
-                Ok((shape.bounds(), vec![shape.flatten(0.1)]))
+                Ok((shape.bounds(), shape.flatten(0.1)))
             },
         ))
         .unwrap();

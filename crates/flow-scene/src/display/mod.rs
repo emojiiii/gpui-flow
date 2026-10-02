@@ -86,7 +86,7 @@ impl Shape {
     pub fn local_bounds(&self) -> Option<Bounds> {
         match self {
             Self::Rect(s) => Some(s.bounds()),
-            Self::Ellipse(s) => Some(s.bounds()),
+            Self::Ellipse(s) => s.geometry_bounds(),
             Self::Line(s) => Some(s.bounds()),
             Self::Polygon(s) => s.bounds(),
             Self::Star(s) => s.bounds(),
@@ -105,7 +105,7 @@ impl Shape {
     pub fn flatten(&self, tolerance: f32) -> Vec<Contour> {
         match self {
             Self::Rect(s) => vec![s.flatten(tolerance)],
-            Self::Ellipse(s) => vec![s.flatten(tolerance)],
+            Self::Ellipse(s) => s.flatten(tolerance),
             Self::Line(s) => vec![s.flatten()],
             Self::Polygon(s) => vec![s.flatten()],
             Self::Star(s) => vec![s.flatten()],
@@ -129,7 +129,7 @@ impl Shape {
     pub fn contains_geometry(&self, point: Point, rule: crate::FillRule) -> bool {
         match self {
             Self::Rect(s) => crate::geometry::rounded_contains(s.bounds(), s.corner_radius, point),
-            Self::Ellipse(s) => s.contains(point),
+            Self::Ellipse(s) => s.contains_with_rule(point, rule),
             Self::Box(s) => crate::geometry::rounded_contains(s.bounds(), s.corner_radius, point),
             Self::Frame(s) => crate::geometry::rounded_contains(s.bounds(), s.corner_radius, point),
             Self::Text(s) => s.bounds().contains(point),
@@ -190,7 +190,7 @@ impl Shape {
                 size(s.size)?;
                 radius(s.corner_radius)?;
             }
-            Self::Ellipse(s) => size(s.size)?,
+            Self::Ellipse(s) => s.validate()?,
             Self::Line(s) => {
                 if !s.start.is_finite() || !s.end.is_finite() {
                     return Err("line coordinates must be finite".into());

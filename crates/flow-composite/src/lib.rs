@@ -141,3 +141,6 @@ mod inner_shadow_tests;
 
 #[cfg(test)]
 mod container_inner_shadow_tests;
+
+#[cfg(test)]
+mod ellipse_tests;

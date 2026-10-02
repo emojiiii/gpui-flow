@@ -391,7 +391,7 @@ fn custom_property_is_normalized_before_edit_transaction_measures_content() {
             },
             |data: &serde_json::Value| {
                 let shape = display::Ellipse::circle(data["radius"].as_f64().unwrap() as f32);
-                Ok((shape.bounds(), vec![shape.flatten(0.1)]))
+                Ok((shape.bounds(), shape.flatten(0.1)))
             },
         ))
         .unwrap();
