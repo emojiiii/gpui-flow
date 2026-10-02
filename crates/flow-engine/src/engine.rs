@@ -333,6 +333,18 @@ impl SceneEngine {
         let changes = self.transaction(|scene| scene.insert(object, parent, index))?;
         Ok((self.handle(&id).expect("created"), changes))
     }
+    /// Atomically replace local Path/Pen geometry while retaining kind, identity,
+    /// transforms and style. Invalid/oversized data leaves the engine unchanged.
+    pub fn set_path_data(
+        &mut self,
+        handle: ElementHandle,
+        path: gpui_flow_scene::display::Path,
+    ) -> Result<ChangeSet, EngineError> {
+        // Validate before serde can replace non-finite floats with JSON null.
+        path.to_svg().map_err(EngineError::Property)?;
+        let value = serde_json::to_value(path).map_err(|e| EngineError::Property(e.to_string()))?;
+        self.set_property(handle, PropertyKey::PathData, value)
+    }
     pub fn set_property(
         &mut self,
         handle: ElementHandle,

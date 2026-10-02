@@ -4,6 +4,7 @@
 use super::{Path, PathCommand};
 use crate::Point;
 use kurbo::{Arc, Point as KPoint, SvgArc, Vec2};
+use std::fmt::Write;
 use svgtypes::{PathParser, PathSegment as S};
 
 const MAX_BYTES: usize = 1_048_576;
@@ -33,6 +34,68 @@ fn push(out: &mut Vec<PathCommand>, command: PathCommand) -> Result<(), String> 
 }
 
 impl Path {
+    /// Export normalized absolute M/L/Q/C/Z path data, never an SVG document.
+    /// Validates before returning any data. The SVG adapter's 1 MiB, 16384
+    /// command and +/-1e6 coordinate limits also apply to typed path updates.
+    /// Arcs imported by `from_svg` remain cubic curves; source spelling and
+    /// shorthand commands are not retained. Negative zero is written as zero.
+    pub fn to_svg(&self) -> Result<String, String> {
+        if self.commands.len() > MAX_COMMANDS {
+            return Err("SVG path exceeds 16384 normalized commands".into());
+        }
+        self.validate()?;
+        let number = |value: f32| -> Result<f32, String> {
+            scalar(value as f64)?;
+            Ok(if value == 0. { 0. } else { value })
+        };
+        let mut out = String::new();
+        for command in &self.commands {
+            if !out.is_empty() {
+                out.push(' ');
+            }
+            match *command {
+                PathCommand::MoveTo { to } => {
+                    write!(out, "M{} {}", number(to.x)?, number(to.y)?).unwrap();
+                }
+                PathCommand::LineTo { to } => {
+                    write!(out, "L{} {}", number(to.x)?, number(to.y)?).unwrap();
+                }
+                PathCommand::QuadraticTo { control, to } => {
+                    write!(
+                        out,
+                        "Q{} {} {} {}",
+                        number(control.x)?,
+                        number(control.y)?,
+                        number(to.x)?,
+                        number(to.y)?
+                    )
+                    .unwrap();
+                }
+                PathCommand::CubicTo {
+                    control1,
+                    control2,
+                    to,
+                } => {
+                    write!(
+                        out,
+                        "C{} {} {} {} {} {}",
+                        number(control1.x)?,
+                        number(control1.y)?,
+                        number(control2.x)?,
+                        number(control2.y)?,
+                        number(to.x)?,
+                        number(to.y)?
+                    )
+                    .unwrap();
+                }
+                PathCommand::Close => out.push('Z'),
+            }
+            if out.len() > MAX_BYTES {
+                return Err("SVG path exceeds 1 MiB output limit".into());
+            }
+        }
+        Ok(out)
+    }
     /// Import SVG path data (`d`), not an SVG document or external resource.
     /// Supports M/L/H/V/C/S/Q/T/A/Z, both absolute and relative. Elliptical
     /// arcs become cubic curves at Kurbo's 0.1 local-unit tolerance; no exact

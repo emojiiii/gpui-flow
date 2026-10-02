@@ -205,6 +205,25 @@ pub(crate) fn diff(
                             property_dirty(&name),
                         );
                     }
+                } else if key == "shape"
+                    && a[key]["type"] == b[key]["type"]
+                    && matches!(a[key]["type"].as_str(), Some("path" | "pen"))
+                {
+                    let data = |shape: &Value| {
+                        if shape["type"] == "pen" {
+                            shape["geometry"]["path"].clone()
+                        } else {
+                            shape["geometry"].clone()
+                        }
+                    };
+                    record_property(
+                        &mut change,
+                        &id,
+                        "path.data",
+                        &data(&a[key]),
+                        &data(&b[key]),
+                        property_dirty("path.data"),
+                    );
                 } else if key == "shape" && a[key]["type"] == "text" && b[key]["type"] == "text" {
                     record_property(
                         &mut change,

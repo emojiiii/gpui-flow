@@ -386,6 +386,8 @@ pub enum PropertyKey {
     Shape,
     /// Plain content of a built-in Text, preserving its layout box and typography.
     TextContent,
+    /// Normalized Path data, preserving whether the element is a Path or Pen.
+    PathData,
     Custom(String),
 }
 impl PropertyKey {
@@ -414,6 +416,7 @@ impl PropertyKey {
             Self::Mask => "mask".into(),
             Self::Shape => "shape".into(),
             Self::TextContent => "text.content".into(),
+            Self::PathData => "path.data".into(),
         }
     }
 }
@@ -422,6 +425,31 @@ pub(crate) fn apply_property(
     key: &PropertyKey,
     value: Value,
 ) -> Result<(), EngineError> {
+    if *key == PropertyKey::PathData {
+        let target = match &mut object.shape {
+            Shape::Path(path) => path,
+            Shape::Pen(pen) => &mut pen.path,
+            _ => {
+                return Err(EngineError::Property(
+                    "path data requires a built-in Path or Pen element".into(),
+                ));
+            }
+        };
+        let commands = value
+            .get("commands")
+            .and_then(Value::as_array)
+            .ok_or_else(|| EngineError::Property("path data requires a commands array".into()))?;
+        if commands.len() > 16_384 {
+            return Err(EngineError::Property(
+                "path data exceeds 16384 commands".into(),
+            ));
+        }
+        let path: gpui_flow_scene::display::Path =
+            serde_json::from_value(value).map_err(|e| EngineError::Property(e.to_string()))?;
+        path.to_svg().map_err(EngineError::Property)?;
+        *target = path;
+        return Ok(());
+    }
     if *key == PropertyKey::TextContent {
         let Shape::Text(text) = &mut object.shape else {
             return Err(EngineError::Property(
@@ -466,7 +494,9 @@ pub(crate) fn property_dirty(name: &str) -> DirtyFlags {
         | "style.inner_shadow_layers" => DirtyFlags::PAINT,
         "mask" => DirtyFlags::PAINT | DirtyFlags::GEOMETRY,
         "transform" => DirtyFlags::TRANSFORM | DirtyFlags::HIT,
-        "shape" | "text.content" => DirtyFlags::GEOMETRY | DirtyFlags::PAINT | DirtyFlags::HIT,
+        "shape" | "text.content" | "path.data" => {
+            DirtyFlags::GEOMETRY | DirtyFlags::PAINT | DirtyFlags::HIT
+        }
         "style.stroke" | "style.stroke_layers" | "style.fill_rule" => {
             DirtyFlags::GEOMETRY | DirtyFlags::PAINT | DirtyFlags::HIT
         }
@@ -517,6 +547,7 @@ impl PropertyKey {
             Self::Shadow => (PropertyType::Any, Some(Value::Null)),
             Self::HitPolicy | Self::FillRule => (PropertyType::String, None),
             Self::Shape => (PropertyType::Object, None),
+            Self::PathData => (PropertyType::Object, Some(json!({"commands": []}))),
             Self::Data | Self::Fill | Self::Stroke => (PropertyType::Any, None),
             Self::Custom(_) => return None,
         };

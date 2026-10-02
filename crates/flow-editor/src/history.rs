@@ -356,6 +356,17 @@ impl SceneEditor {
         }
         Ok(())
     }
+    /// Replace local Path/Pen data as one undoable edit, or join the current
+    /// generic edit transaction. Parse SVG separately with `Path::from_svg`.
+    pub fn set_path_data(
+        &mut self,
+        handle: ElementHandle,
+        path: gpui_flow_scene::display::Path,
+    ) -> Result<(), SceneError> {
+        path.to_svg().map_err(EngineError::Property)?;
+        let value = serde_json::to_value(path).map_err(|e| EngineError::Property(e.to_string()))?;
+        self.set_property(handle, PropertyKey::PathData, value)
+    }
     /// Validated instance property mutation participates in the same undo history.
     pub fn set_property(
         &mut self,
