@@ -1,12 +1,14 @@
 //! A bounded, transaction-local vector context over the existing compositor.
 mod clip;
 mod image;
+mod text;
 use super::CanvasSurface;
 use crate::{CompositeError, CompositeLimits, DomainNode, DomainSource, ImageInputs, TextInputs};
 use clip::{Budget, Clip};
 use gpui_flow_scene::{
-    Affine, Bounds, DisplayId, DisplayObject, FillRule, Paint, Stroke, StrokeAlignment, Style,
-    display::{Group, Path},
+    Affine, Bounds, Color, DisplayId, DisplayObject, FillRule, Paint, Point, Stroke,
+    StrokeAlignment, Style,
+    display::{Group, Path, Text},
 };
 
 /// Maximum operations, including state operations, in one atomic batch.
@@ -47,6 +49,13 @@ pub enum CanvasCommand {
         image: DisplayId,
         source: Option<Bounds>,
         destination: Bounds,
+    },
+    /// Solid text in an explicit local box. Position anchors its top-left,
+    /// not an HTML alphabetic baseline. Fonts/ink are supplied by the host.
+    FillTextBox {
+        text: Text,
+        position: Point,
+        color: Color,
     },
 }
 #[derive(Clone)]
@@ -98,8 +107,27 @@ fn source(
     let mut draws = 0usize;
     let mut budget = Budget::default();
     let mut images = ImageInputs::default();
+    let mut text_bytes = 0usize;
     for command in commands {
         let (path, style) = match command {
+            CanvasCommand::FillTextBox {
+                text,
+                position,
+                color,
+            } => {
+                draws += 1;
+                children.push(text::compile(
+                    text,
+                    *position,
+                    *color,
+                    &state,
+                    &mut budget,
+                    &mut text_bytes,
+                    draws,
+                    limits,
+                )?);
+                continue;
+            }
             CanvasCommand::DrawImage {
                 image,
                 source,
@@ -252,12 +280,51 @@ impl CanvasSurface {
         commands: &[CanvasCommand],
         inputs: &ImageInputs,
     ) -> Result<bool, CompositeError> {
+        self.draw_commands_with_text(commands, inputs, |_| Ok(CanvasTextOutput::default()))
+    }
+    /// Invoke an explicit host font producer after command admission and before
+    /// pixel mutation. Raster work and glyph buffers share composition budgets.
+    pub fn draw_commands_with_text(
+        &mut self,
+        commands: &[CanvasCommand],
+        inputs: &ImageInputs,
+        prepare: impl FnOnce(CanvasTextRequest<'_>) -> Result<CanvasTextOutput, CompositeError>,
+    ) -> Result<bool, CompositeError> {
         let Some((source, images)) = source(commands, self.limits, inputs, self.config.smooth)?
         else {
             return Ok(false);
         };
+        let texts = prepare(CanvasTextRequest {
+            source: &source,
+            viewport: self.raster_viewport(),
+            limits: self.limits,
+            retained_bytes: self
+                .byte_len()
+                .saturating_mul(2)
+                .saturating_add(images.byte_len()),
+        })?;
         let before = self.generation();
-        self.draw(&source, Affine::IDENTITY, &images, &TextInputs::default())?;
+        self.draw_with_preparation_work(
+            &source,
+            Affine::IDENTITY,
+            &images,
+            &texts.inputs,
+            texts.pixel_work,
+        )?;
         Ok(self.generation() != before)
     }
+}
+
+/// Domain IDs are batch-local; never cache font inputs by ID alone.
+pub struct CanvasTextRequest<'a> {
+    pub source: &'a DomainSource,
+    pub viewport: crate::RasterViewport,
+    pub limits: CompositeLimits,
+    pub retained_bytes: u64,
+}
+#[derive(Default)]
+pub struct CanvasTextOutput {
+    pub inputs: TextInputs,
+    /// Actual glyph raster writes, charged before compositing can publish.
+    pub pixel_work: u64,
 }

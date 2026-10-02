@@ -1,5 +1,6 @@
 //! Retained-scene canvas, independent of node graphs, media runners and Studio chrome.
 mod composite;
+mod canvas_commands;
 mod interaction;
 mod plugins;
 mod render;

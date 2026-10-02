@@ -58,6 +58,7 @@ pub(crate) struct TextPreparation<'a> {
     pub retained: u64,
     pub source_bytes: &'a mut u64,
     pub remaining_work: &'a mut u64,
+    pub limits: CompositeLimits,
 }
 impl TextPreparation<'_> {
     pub fn domain(&mut self, source: &DomainSource, inputs: &mut TextInputs) {
@@ -129,7 +130,7 @@ impl TextPreparation<'_> {
                 let capacity = (32 * 1024 * 1024u64)
                     .saturating_sub(*self.source_bytes)
                     .min(
-                        CompositeLimits::default()
+                        self.limits
                             .max_surface_bytes
                             .saturating_sub(self.retained)
                             .saturating_sub(*self.source_bytes),
@@ -170,7 +171,7 @@ impl TextPreparation<'_> {
                     raster.width,
                     raster.height,
                     raster.premul_rgba,
-                    CompositeLimits::default(),
+                    self.limits,
                 )?;
                 *self.source_bytes += bytes;
                 exact_local_clip = space.exact_local_clip;
@@ -186,6 +187,33 @@ impl TextPreparation<'_> {
             }
         }
     }
+}
+
+/// Reuse the same same-App glyph producer for one admitted Canvas command batch.
+pub(crate) fn canvas_inputs(
+    request: gpui_flow_composite::CanvasTextRequest<'_>,
+    backend: Option<&TextBackendSnapshot>,
+) -> Result<gpui_flow_composite::CanvasTextOutput, CompositeError> {
+    let mut source_bytes = 0;
+    let mut remaining_work = request.limits.max_surface_writes;
+    let mut inputs = TextInputs::default();
+    TextPreparation {
+        backend,
+        viewport: request.viewport,
+        cancelled: &AtomicBool::new(false),
+        retained: request.retained_bytes,
+        source_bytes: &mut source_bytes,
+        remaining_work: &mut remaining_work,
+        limits: request.limits,
+    }
+    .domain(request.source, &mut inputs);
+    if backend.is_some_and(|b| !b.current()) {
+        return Err(CompositeError::Superseded);
+    }
+    Ok(gpui_flow_composite::CanvasTextOutput {
+        inputs,
+        pixel_work: request.limits.max_surface_writes - remaining_work,
+    })
 }
 
 fn source_clip(full_source: bool, bounds: [f32; 4], viewport: RasterViewport) -> Option<Bounds> {

@@ -350,6 +350,7 @@ impl Work {
                 retained: self.retained,
                 source_bytes: &mut source_bytes,
                 remaining_work: &mut remaining_work,
+                limits: CompositeLimits::default(),
             };
             for domain in &self.key.domains {
                 if !self.settled.contains(domain.source.root_id()) {

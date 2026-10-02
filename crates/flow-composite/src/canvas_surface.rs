@@ -1,7 +1,9 @@
 //! Imperative, bounded Canvas pixels. All writes publish one immutable snapshot;
 //! failed admission/rendering leaves both pixels and generation unchanged.
 mod commands;
-pub use commands::{CanvasCommand, MAX_CANVAS_COMMANDS, MAX_CANVAS_STATE_DEPTH};
+pub use commands::{
+    CanvasCommand, CanvasTextOutput, CanvasTextRequest, MAX_CANVAS_COMMANDS, MAX_CANVAS_STATE_DEPTH,
+};
 mod pixels;
 pub use pixels::CanvasPixels;
 
@@ -63,6 +65,18 @@ impl CanvasSurface {
             self.pixels.width() as f32 / self.config.size.width,
             self.pixels.height() as f32 / self.config.size.height,
         )
+    }
+    fn raster_viewport(&self) -> RasterViewport {
+        let rect = Bounds::new(
+            Point::ZERO,
+            Size::new(self.pixels.width() as f32, self.pixels.height() as f32),
+        );
+        RasterViewport {
+            world_to_screen: self.scale(),
+            canvas_bounds: rect,
+            content_mask: rect,
+            device_scale: 1.,
+        }
     }
     fn admit_work(&self, passes: u64) -> Result<(), CompositeError> {
         if (self.pixels.width() as u64 * self.pixels.height() as u64).saturating_mul(passes)
@@ -224,6 +238,16 @@ impl CanvasSurface {
         images: &ImageInputs,
         texts: &TextInputs,
     ) -> Result<(), CompositeError> {
+        self.draw_with_preparation_work(source, local_to_canvas, images, texts, 0)
+    }
+    fn draw_with_preparation_work(
+        &mut self,
+        source: &DomainSource,
+        local_to_canvas: Affine,
+        images: &ImageInputs,
+        texts: &TextInputs,
+        preparation_work: u64,
+    ) -> Result<(), CompositeError> {
         let inverse = source
             .root_transform()
             .inverse()
@@ -239,6 +263,7 @@ impl CanvasSurface {
         );
         // Current + candidate surface are admitted before compositor scratch.
         let mut budget = PixelBudget::new(self.limits, self.byte_len().saturating_mul(2))?;
+        budget.charge_input_work(preparation_work)?;
         budget.charge_input_work(self.pixels.width() as u64 * self.pixels.height() as u64 * 3)?;
         let frame = rasterize_with_inputs(
             source,
