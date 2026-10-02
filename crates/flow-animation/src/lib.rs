@@ -1,5 +1,7 @@
 //! Deterministic opt-in animation using live instance handles and atomic mutations.
 #![doc = include_str!("../README.md")]
+mod motion;
+pub use motion::*;
 mod sequence;
 pub use sequence::*;
 mod tween;

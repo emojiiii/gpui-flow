@@ -1,5 +1,5 @@
 //! Explicit one-shot path placement. No persistent follower or frame scheduler.
-use crate::{ChangeSet, ElementHandle, EngineError, InstanceState, SceneEngine};
+use crate::{ChangeOrigin, ChangeSet, ElementHandle, EngineError, InstanceState, SceneEngine};
 use gpui_flow_scene::{Affine, DisplayId, Point, Scene, SceneError, Shape};
 
 /// One placement request. Distance is measured in the source path's local
@@ -44,8 +44,19 @@ impl SceneEngine {
         path: ElementHandle,
         options: PathPlacement,
     ) -> Result<ChangeSet, EngineError> {
+        self.place_on_path_with_origin(target, path, options, ChangeOrigin::Edit)
+    }
+    /// The same atomic placement contract with explicit frame provenance.
+    pub fn place_on_path_with_origin(
+        &mut self,
+        target: ElementHandle,
+        path: ElementHandle,
+        options: PathPlacement,
+        origin: ChangeOrigin,
+    ) -> Result<ChangeSet, EngineError> {
         let plan = Placement::prepare(self, target, path, options)?;
-        self.transaction_validated(
+        self.transaction_validated_with_origin(
+            origin,
             |scene| scene.update_object(&plan.target, |object| object.transform = plan.local),
             |scene| plan.validate(scene),
         )

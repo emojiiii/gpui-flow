@@ -307,9 +307,19 @@ impl SceneEngine {
         edit: impl FnOnce(&mut Scene) -> Result<(), SceneError>,
         validate: impl FnOnce(&Scene) -> Result<(), SceneError>,
     ) -> Result<ChangeSet, EngineError> {
+        self.transaction_validated_with_origin(ChangeOrigin::Edit, edit, validate)
+    }
+    /// A validated transaction with an explicit provenance, including animation
+    /// frames. Validation still runs after derived layout and before commit.
+    pub fn transaction_validated_with_origin(
+        &mut self,
+        origin: ChangeOrigin,
+        edit: impl FnOnce(&mut Scene) -> Result<(), SceneError>,
+        validate: impl FnOnce(&Scene) -> Result<(), SceneError>,
+    ) -> Result<ChangeSet, EngineError> {
         let mut next = self.scene.clone();
         edit(&mut next)?;
-        self.apply_validated(next, ChangeOrigin::Edit, CommitMode::Normal, validate)
+        self.apply_validated(next, origin, CommitMode::Normal, validate)
     }
     pub fn replace_scene(&mut self, scene: Scene) -> Result<ChangeSet, EngineError> {
         self.apply(scene, ChangeOrigin::UndoRedo, CommitMode::Normal)

@@ -203,6 +203,56 @@ impl SceneEditor {
         self.playback.as_mut().expect("active playback").last_frame = last_frame;
         Ok(changes)
     }
+    /// Token-owned atomic frame with post-layout validation and no per-frame
+    /// history entry. Failure preserves both the playback baseline and last frame.
+    pub fn apply_playback_transaction_validated(
+        &mut self,
+        token: PlaybackToken,
+        edit: impl FnOnce(&mut Scene) -> Result<(), SceneError>,
+        validate: impl FnOnce(&Scene) -> Result<(), SceneError>,
+    ) -> Result<ChangeSet, EngineError> {
+        if !self.is_playback_active(token) {
+            return Err(EngineError::Property(
+                "playback ended or token belongs to another editor".into(),
+            ));
+        }
+        let changes = self.engine.transaction_validated_with_origin(
+            ChangeOrigin::Animation,
+            edit,
+            validate,
+        )?;
+        self.observed_revision = self.engine.revision();
+        self.selection.retain_existing(self.engine.scene());
+        let last_frame = self.snapshot();
+        self.playback.as_mut().expect("active playback").last_frame = last_frame;
+        Ok(changes)
+    }
+    /// Token-owned path-placement frame, retaining the engine's source/anchor
+    /// post-layout validation. Does not end playback or create a per-frame Undo.
+    pub fn apply_playback_path_placement(
+        &mut self,
+        token: PlaybackToken,
+        target: ElementHandle,
+        path: ElementHandle,
+        options: gpui_flow_engine::PathPlacement,
+    ) -> Result<ChangeSet, EngineError> {
+        if !self.is_playback_active(token) {
+            return Err(EngineError::Property(
+                "playback ended or token belongs to another editor".into(),
+            ));
+        }
+        let changes = self.engine.place_on_path_with_origin(
+            target,
+            path,
+            options,
+            ChangeOrigin::Animation,
+        )?;
+        self.observed_revision = self.engine.revision();
+        self.selection.retain_existing(self.engine.scene());
+        let last_frame = self.snapshot();
+        self.playback.as_mut().expect("active playback").last_frame = last_frame;
+        Ok(changes)
+    }
     /// Keep the final pose as exactly one undoable edit, preserving prior edits.
     pub fn finish_playback(&mut self, token: PlaybackToken) -> bool {
         if !self.is_playback_active(token) {
