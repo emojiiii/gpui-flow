@@ -967,3 +967,62 @@ fn aligned_stroke_boxes_reflow_on_alignment_width_and_restore_in_one_undo() {
     assert_eq!(editor.scene(), &after);
     assert_stable(&layout, editor.scene());
 }
+
+#[test]
+fn aligned_open_path_stroke_boxes_reflow_and_restore_closure_in_one_undo() {
+    use gpui_flow_scene::StrokeAlignment;
+    let (mut scene, mut layout) = fixture(200., 50.);
+    style(&mut layout).gap = 3.;
+    add(&mut scene, "a", 20., 20., 4.);
+    add(&mut scene, "b", 20., 20., 4.);
+    scene
+        .update_object(&"a".into(), |o| {
+            o.shape = display::Path::from_svg("M0 0H20V20H0Z").unwrap().into();
+            o.style.stroke = Some(
+                Stroke::new(Color::BLACK, 4.)
+                    .with_alignment(StrokeAlignment::Outside)
+                    .with_cap(StrokeCap::Butt)
+                    .with_join(StrokeJoin::Miter),
+            );
+        })
+        .unwrap();
+    layout.apply_to_scene(&mut scene).unwrap();
+    assert_slot(&scene, "a", 0., 0., 28., 28.);
+    assert_slot(&scene, "b", 31., 0., 24., 24.);
+    let before = scene.clone();
+    let mut editor = SceneEditor::new(scene).unwrap();
+    layout.install_reactive(&mut editor.engine).unwrap();
+    editor
+        .transaction(|s| {
+            s.update_object(&"a".into(), |o| {
+                o.shape = display::Path::from_svg("M0 0H20V20H0").unwrap().into();
+            })
+        })
+        .unwrap();
+    // Butt caps leave the missing left edge unexpanded; the following item
+    // must move with the actual final stroke mesh in the same transaction.
+    assert_slot(editor.scene(), "a", 0., 0., 24., 28.);
+    assert_slot(editor.scene(), "b", 27., 0., 24., 24.);
+    assert_stable(&layout, editor.scene());
+    let open = editor.scene().clone();
+    assert!(editor.undo());
+    assert_eq!(editor.scene(), &before);
+    assert!(!editor.undo());
+    assert!(editor.redo());
+    assert_eq!(editor.scene(), &open);
+    editor
+        .transaction(|s| {
+            s.update_object(&"a".into(), |o| {
+                o.style.stroke.as_mut().unwrap().alignment = StrokeAlignment::Inside;
+            })
+        })
+        .unwrap();
+    assert_slot(editor.scene(), "a", 0., 0., 20., 20.);
+    assert_slot(editor.scene(), "b", 23., 0., 24., 24.);
+    let inside = editor.scene().clone();
+    assert!(editor.undo());
+    assert_eq!(editor.scene(), &open);
+    assert!(editor.redo());
+    assert_eq!(editor.scene(), &inside);
+    assert_stable(&layout, editor.scene());
+}

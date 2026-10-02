@@ -1582,124 +1582,201 @@ fn aligned_stroke_layers_use_fill_rule_order_and_apply_alpha_once() {
 #[test]
 fn aligned_compound_fill_rule_changes_pixels_and_forbids_stale_placement() {
     use gpui_flow_scene::{FillRule, Stroke, StrokeAlignment, StrokeJoin};
-    let mut s = Scene::new();
-    s.insert(group("g", 1.), None, None).unwrap();
-    insert(
-        &mut s,
-        DisplayObject::new(
-            "p",
-            display::Path::from_svg("M0 0H40V40H0Z M10 10H30V30H10Z").unwrap(),
-        )
-        .with_transform(Affine::translation(10., 10.))
-        .with_style(Style {
-            fill: None,
-            stroke: Some(
-                Stroke::new(Color::rgba(255, 0, 0, 128), 4.)
-                    .with_join(StrokeJoin::Miter)
-                    .with_alignment(StrokeAlignment::Outside),
-            ),
-            ..Default::default()
-        }),
-        "g",
-    );
-    let a = source(&s);
-    assert_eq!(at(&render(&s), 21, 30), [0, 0, 0, 0]);
-    s.update_object(&"p".into(), |o| o.style.fill_rule = FillRule::EvenOdd)
-        .unwrap();
-    assert!(!a.placement_eq(&source(&s)));
-    assert_eq!(at(&render(&s), 21, 30), [128, 0, 0, 128]);
-    // The outside corner is a union of triangles, not accumulated alpha.
-    assert_eq!(at(&render(&s), 8, 8), [128, 0, 0, 128]);
+    for data in [
+        "M0 0H40V40H0Z M10 10H30V30H10Z",
+        "M0 0H40V40H0 M10 10H30V30H10Z",
+    ] {
+        let mut s = Scene::new();
+        s.insert(group("g", 1.), None, None).unwrap();
+        insert(
+            &mut s,
+            DisplayObject::new("p", display::Path::from_svg(data).unwrap())
+                .with_transform(Affine::translation(10., 10.))
+                .with_style(Style {
+                    fill: None,
+                    stroke: Some(
+                        Stroke::new(Color::rgba(255, 0, 0, 128), 4.)
+                            .with_join(StrokeJoin::Miter)
+                            .with_alignment(StrokeAlignment::Outside),
+                    ),
+                    ..Default::default()
+                }),
+            "g",
+        );
+        let a = source(&s);
+        assert_eq!(at(&render(&s), 21, 30), [0, 0, 0, 0]);
+        s.update_object(&"p".into(), |o| o.style.fill_rule = FillRule::EvenOdd)
+            .unwrap();
+        assert!(!a.placement_eq(&source(&s)));
+        assert_eq!(at(&render(&s), 21, 30), [128, 0, 0, 128]);
+        // The outside corner is a union of triangles, not accumulated alpha.
+        assert_eq!(at(&render(&s), 8, 8), [128, 0, 0, 128]);
+    }
 }
 #[test]
 fn aligned_stroke_pixels_match_picking_under_reflection_scale_rotation_and_nested_clips() {
     use gpui_flow_scene::{FillRule, HitTestOptions, Stroke, StrokeAlignment};
-    let mut s = Scene::new();
-    s.insert(group("g", 1.), None, None).unwrap();
-    insert(
-        &mut s,
-        unpainted_container("outer", display::Frame::new(68., 64.).rounded(14.))
-            .with_transform(Affine::translation(10., 10.)),
-        "g",
-    );
-    insert(
-        &mut s,
-        unpainted_container("inner", display::Frame::new(58., 56.).rounded(8.))
-            .with_transform(Affine::translation(4., 3.)),
-        "outer",
-    );
-    insert(
-        &mut s,
-        DisplayObject::new(
-            "p",
-            display::Path::from_svg("M0 0H40V40H0Z M10 10H30V30H10Z").unwrap(),
-        )
-        .with_transform(
-            Affine::translation(44., 5.) * Affine::rotation(13.) * Affine::scale(-1.1, 1.2),
-        )
-        .with_style(Style {
-            fill: None,
-            fill_rule: FillRule::EvenOdd,
-            stroke: Some(
-                Stroke::new(Color::rgba(255, 0, 0, 128), 4.)
-                    .with_alignment(StrokeAlignment::Outside),
-            ),
-            ..Default::default()
-        }),
-        "inner",
-    );
-    let frame = render(&s);
-    // Build the shared geometry once for the dense pixel oracle; separately
-    // check Scene picking on a grid so the test does not benchmark repeated
-    // scene validation/tessellation tens of thousands of times.
-    let item = s
-        .paint_list()
-        .unwrap()
-        .into_iter()
-        .find(|p| p.object.id.as_str() == "p")
-        .unwrap();
-    let inverse = item.world_transform.inverse().unwrap();
-    let mesh = item
-        .object
-        .shape
-        .stroke_mesh_with_rule(
-            item.object.style.stroke.as_ref().unwrap(),
-            item.object.style.fill_rule,
-        )
-        .unwrap();
-    let painted = |p| {
-        mesh.hit_test(inverse.transform_point(p), 0.)
-            && item.clips.iter().all(|clip| clip.contains(p))
-    };
-    let mut verified = 0;
-    for y in 12..72 {
-        for x in 12..75 {
-            let p = Point::new(x as f32 + 0.5, y as f32 + 0.5);
-            let expected = painted(p);
-            if x % 8 == 0 && y % 8 == 0 {
-                assert_eq!(
-                    s.hit_test(p, HitTestOptions::default())
-                        .unwrap()
-                        .is_some_and(|h| h.id.as_str() == "p"),
-                    expected
-                );
+    for data in [
+        "M0 0H40V40H0Z M10 10H30V30H10Z",
+        "M0 0H40V40H0",
+        "M0 0H40V40H0 M10 10H30V30H10Z",
+    ] {
+        for alignment in [StrokeAlignment::Inside, StrokeAlignment::Outside] {
+            let mut s = Scene::new();
+            s.insert(group("g", 1.), None, None).unwrap();
+            insert(
+                &mut s,
+                unpainted_container("outer", display::Frame::new(68., 64.).rounded(14.))
+                    .with_transform(Affine::translation(10., 10.)),
+                "g",
+            );
+            insert(
+                &mut s,
+                unpainted_container("inner", display::Frame::new(58., 56.).rounded(8.))
+                    .with_transform(Affine::translation(4., 3.)),
+                "outer",
+            );
+            insert(
+                &mut s,
+                DisplayObject::new("p", display::Path::from_svg(data).unwrap())
+                    .with_transform(
+                        Affine::translation(44., 5.)
+                            * Affine::rotation(13.)
+                            * Affine::scale(-1.1, 1.2),
+                    )
+                    .with_style(Style {
+                        fill: None,
+                        fill_rule: FillRule::EvenOdd,
+                        stroke: Some(
+                            Stroke::new(Color::rgba(255, 0, 0, 128), 4.).with_alignment(alignment),
+                        ),
+                        ..Default::default()
+                    }),
+                "inner",
+            );
+            let frame = render(&s);
+            // Build the shared geometry once for the dense pixel oracle; separately
+            // check Scene picking on a grid so the test does not benchmark repeated
+            // scene validation/tessellation tens of thousands of times.
+            let item = s
+                .paint_list()
+                .unwrap()
+                .into_iter()
+                .find(|p| p.object.id.as_str() == "p")
+                .unwrap();
+            let inverse = item.world_transform.inverse().unwrap();
+            let mesh = item
+                .object
+                .shape
+                .stroke_mesh_with_rule(
+                    item.object.style.stroke.as_ref().unwrap(),
+                    item.object.style.fill_rule,
+                )
+                .unwrap();
+            let painted = |p| {
+                mesh.hit_test(inverse.transform_point(p), 0.)
+                    && item.clips.iter().all(|clip| clip.contains(p))
+            };
+            let mut verified = 0;
+            for y in 12..72 {
+                for x in 12..75 {
+                    let p = Point::new(x as f32 + 0.5, y as f32 + 0.5);
+                    let expected = painted(p);
+                    if x % 8 == 0 && y % 8 == 0 {
+                        assert_eq!(
+                            s.hit_test(p, HitTestOptions::default())
+                                .unwrap()
+                                .is_some_and(|h| h.id.as_str() == "p"),
+                            expected
+                        );
+                    }
+                    // Compare full-coverage pixels away from stroke/clip AA boundaries.
+                    // Four corners alone can miss a thin clipped wedge inside a pixel.
+                    if [-1.2, -0.6, 0.0, 0.6, 1.2].into_iter().all(|dx| {
+                        [-1.2, -0.6, 0.0, 0.6, 1.2]
+                            .into_iter()
+                            .all(|dy| painted(p + Point::new(dx, dy)) == expected)
+                    }) {
+                        let alpha = if frame.screen_bounds.contains(p) {
+                            at(&frame, x, y)[3]
+                        } else {
+                            0
+                        };
+                        assert_eq!(alpha, if expected { 128 } else { 0 }, "{p:?}");
+                        verified += 1;
+                    }
+                }
             }
-            // Compare full-coverage pixels away from stroke/clip AA boundaries.
-            // Four corners alone can miss a thin clipped wedge inside a pixel.
-            if [-1.2, -0.6, 0.0, 0.6, 1.2].into_iter().all(|dx| {
-                [-1.2, -0.6, 0.0, 0.6, 1.2]
-                    .into_iter()
-                    .all(|dy| painted(p + Point::new(dx, dy)) == expected)
-            }) {
-                let alpha = if frame.screen_bounds.contains(p) {
-                    at(&frame, x, y)[3]
-                } else {
-                    0
-                };
-                assert_eq!(alpha, if expected { 128 } else { 0 }, "{p:?}");
-                verified += 1;
-            }
+            assert!(verified > 1000);
         }
     }
-    assert!(verified > 1000);
+}
+#[test]
+fn aligned_open_strokes_have_no_closure_ink_and_union_retraced_alpha_once() {
+    use gpui_flow_scene::{FillRule, Stroke, StrokeAlignment, StrokeCap, StrokeJoin};
+    for alignment in [StrokeAlignment::Inside, StrokeAlignment::Outside] {
+        let mut s = Scene::new();
+        s.insert(group("g", 1.), None, None).unwrap();
+        insert(
+            &mut s,
+            DisplayObject::new("p", display::Path::from_svg("M10 10H50V50H10").unwrap())
+                .with_style(Style {
+                    fill: None,
+                    stroke: Some(
+                        Stroke::new(Color::rgba(255, 0, 0, 128), 4.)
+                            .with_alignment(alignment)
+                            .with_cap(StrokeCap::Butt)
+                            .with_join(StrokeJoin::Miter),
+                    ),
+                    ..Default::default()
+                }),
+            "g",
+        );
+        let f = render(&s);
+        let outside = alignment == StrokeAlignment::Outside;
+        assert_eq!(
+            at(&f, 25, 12),
+            if outside { [0; 4] } else { [128, 0, 0, 128] }
+        );
+        assert_eq!(at(&f, 11, 30), [0; 4]);
+        if outside {
+            assert_eq!(at(&f, 25, 7), [128, 0, 0, 128]);
+            assert_eq!(at(&f, 52, 8), [128, 0, 0, 128]);
+        }
+        let first = source(&s);
+        s.update_object(&"p".into(), |o| {
+            o.shape = display::Path::from_svg("M10 10H50V50H10Z").unwrap().into();
+        })
+        .unwrap();
+        assert!(!first.placement_eq(&source(&s)));
+        assert_eq!(
+            at(&render(&s), if outside { 8 } else { 11 }, 30),
+            [128, 0, 0, 128]
+        );
+    }
+    // The open fill mask of a retraced line is empty under either rule.
+    // Outside must union overlapping doubled-stroke triangles with NonZero.
+    for rule in [FillRule::NonZero, FillRule::EvenOdd] {
+        let mut s = Scene::new();
+        s.insert(group("g", 1.), None, None).unwrap();
+        insert(
+            &mut s,
+            DisplayObject::new("p", display::Path::from_svg("M10 30H50H10H50").unwrap())
+                .with_style(Style {
+                    fill: None,
+                    fill_rule: rule,
+                    stroke: Some(
+                        Stroke::new(Color::rgba(255, 0, 0, 128), 4.)
+                            .with_alignment(StrokeAlignment::Outside)
+                            .with_cap(StrokeCap::Round),
+                    ),
+                    ..Default::default()
+                }),
+            "g",
+        );
+        let f = render(&s);
+        for (x, y) in [(25, 30), (25, 27), (8, 30), (51, 30)] {
+            assert_eq!(at(&f, x, y), [128, 0, 0, 128], "{rule:?} ({x}, {y})");
+        }
+    }
 }

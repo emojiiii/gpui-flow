@@ -620,3 +620,59 @@ fn group_shadow_preserves_image_and_text_descendant_ink_holes() {
         assert_eq!(pixel(&f, 26., 26., 1.), [0; 4]);
     }
 }
+
+#[test]
+fn aligned_open_stroke_shadows_never_add_the_implicit_closing_edge() {
+    use gpui_flow_scene::{Stroke, StrokeAlignment, StrokeCap, StrokeJoin};
+    for alignment in [StrokeAlignment::Inside, StrokeAlignment::Outside] {
+        let mut s = scene(0.);
+        s.update_object(&"r".into(), |o| {
+            o.shape = display::Path::from_svg("M0 0H10V10H0").unwrap().into();
+            o.style.fill = None;
+            o.style.stroke = Some(
+                Stroke::new(Color::WHITE, 2.)
+                    .with_alignment(alignment)
+                    .with_cap(StrokeCap::Butt)
+                    .with_join(StrokeJoin::Miter),
+            );
+        })
+        .unwrap();
+        let f = render(&s);
+        let outside = alignment == StrokeAlignment::Outside;
+        assert_eq!(pixel(&f, if outside { 39. } else { 41. }, 25., 1.), [0; 4]);
+        assert_eq!(
+            pixel(&f, 45., if outside { 19. } else { 21. }, 1.),
+            [255, 0, 0, 255]
+        );
+        assert_eq!(
+            pixel(&f, if outside { 51. } else { 49. }, 25., 1.),
+            [255, 0, 0, 255]
+        );
+    }
+}
+
+#[test]
+fn aligned_empty_inside_has_neither_source_ink_nor_blurred_shadow() {
+    use gpui_flow_scene::{FillRule, Stroke, StrokeAlignment};
+    for rule in [FillRule::NonZero, FillRule::EvenOdd] {
+        let mut s = scene(4.);
+        s.update_object(&"r".into(), |o| {
+            o.shape = display::Path::from_svg("M0 0L10 10L20 20L0 0")
+                .unwrap()
+                .into();
+            o.style.fill = None;
+            o.style.fill_rule = rule;
+            o.style.stroke =
+                Some(Stroke::new(Color::WHITE, 4.).with_alignment(StrokeAlignment::Inside));
+        })
+        .unwrap();
+        let frame = rasterize(
+            &source(&s),
+            viewport(),
+            &mut PixelBudget::new(CompositeLimits::default(), 0).unwrap(),
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        assert!(frame.is_none_or(|frame| frame.premul_rgba.iter().all(|&channel| channel == 0)));
+    }
+}

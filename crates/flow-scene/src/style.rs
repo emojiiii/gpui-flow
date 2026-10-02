@@ -112,7 +112,8 @@ pub enum StrokeJoin {
     #[default]
     Round,
 }
-/// Side of a closed vector boundary on which the stroke is painted.
+/// Side of the vector fill region on which the stroke is painted.
+/// Open contours close implicitly for the mask only, never for the stroke.
 /// Center is the legacy default, including when old JSON omits this field.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -128,8 +129,9 @@ fn default_miter_limit() -> f32 {
 /// Maximum dash entries before odd patterns are repeated to form an even period.
 pub const MAX_STROKE_DASH_ENTRIES: usize = 256;
 /// Local-space stroke. Missing fields retain the original centered, solid,
-/// round-cap, round-join appearance. Inside/outside require closed vector
-/// contours. Advanced geometry has the budgets documented on `StrokeMesh`.
+/// round-cap, round-join appearance. Inside/outside use the vector fill region,
+/// including implicit closure of open contours. Advanced geometry has the
+/// budgets documented on `StrokeMesh`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Stroke {
     pub paint: Paint,

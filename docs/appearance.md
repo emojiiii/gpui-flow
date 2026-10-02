@@ -17,7 +17,7 @@ not Leafer API compatibility or its full compositing/effect pipeline.
 The precise order for one vector object is **base fill → fill layers → base
 stroke → stroke layers**. Each fill uses the object's `fill_rule`. Each stroke
 has its own paint, width and local-space stroke style, including opt-in
-[closed-contour Inside/Outside alignment](stroke-alignment.md). The defaults
+[open/closed Inside/Outside alignment](stroke-alignment.md). The defaults
 remain solid with round caps/joins; opt-in cap/join/miter/dash options are
 described below. Every layer supports the
 existing solid, multi-stop linear and radial paints. Coordinates remain local
@@ -64,7 +64,7 @@ gradients whose stops are all transparent, and zero-width strokes do not extend
 bounds or create stroke hits. Intrinsic content is retained even when all paints
 are transparent. Parent aggregate bounds, transformed bounds, clips and damage
 planning consume the same result. See [alignment](stroke-alignment.md) for the
-closed-contour, Boolean-work and numerical admission limits.
+open/closed-contour, Boolean-work and numerical admission limits.
 
 Painted hit testing considers every fill and the union of active
 strokes. Fills keep the existing winding rule. Default solid-round strokes keep
@@ -132,7 +132,7 @@ use the old solid-round defaults, while external Rust `Stroke { paint, width }`
 literals need new fields, a constructor or `..Stroke::default()`. New serializers
 include the stroke fields: backward reading does not mean byte-identical JSON.
 
-SceneView now routes required vector boundaries through [bounded CPU compositing](compositing.md): complete Group/multi-paint opacity, internal Normal/Multiply/Screen, and sibling alpha masks are real pixel operations. Static and selected animated-image pixels reuse the GPUI loader/cache and join the bounded CPU path with Contain/Cover/Fill, transforms and alpha. Text can join domains through the explicit same-platform raster bridge for solid plain text with positive uniform scale; missing bridges, unsupported text styles and Custom domains fail as a whole, and arbitrary host-GPUI blend backdrops are explicitly rejected. Opt-in `SceneCompositing::OwnedCanvas` includes the view-owned opaque theme background, grid and whole presented Scene for top-level backdrop mixing; the default per-domain path remains unchanged. Ordinary native objects keep their previous route; standalone DisplayElement reports when SceneView compositing is required. Closed-contour Inside/Outside strokes now share the bounded final mesh described
+SceneView now routes required vector boundaries through [bounded CPU compositing](compositing.md): complete Group/multi-paint opacity, internal Normal/Multiply/Screen, and sibling alpha masks are real pixel operations. Static and selected animated-image pixels reuse the GPUI loader/cache and join the bounded CPU path with Contain/Cover/Fill, transforms and alpha. Text can join domains through the explicit same-platform raster bridge for solid plain text with positive uniform scale; missing bridges, unsupported text styles and Custom domains fail as a whole, and arbitrary host-GPUI blend backdrops are explicitly rejected. Opt-in `SceneCompositing::OwnedCanvas` includes the view-owned opaque theme background, grid and whole presented Scene for top-level backdrop mixing; the default per-domain path remains unchanged. Ordinary native objects keep their previous route; standalone DisplayElement reports when SceneView compositing is required. Open and closed Inside/Outside strokes now share the bounded final mesh described
 in [stroke alignment](stroke-alignment.md). Shadow/filter effects and scale-fixed
 strokes remain absent. Paint-only states and property animation remain separate inputs to the presented tree.
 CPU damage preparation is not partial GPU rendering.

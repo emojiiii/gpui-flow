@@ -640,33 +640,54 @@ mod tests {
             scene::StrokeAlignment::Outside,
         ] {
             for rule in [scene::FillRule::NonZero, scene::FillRule::EvenOdd] {
-                let stroke = Stroke::new(Color::WHITE, 4.).with_alignment(alignment);
-                let mut obj = object(Style {
-                    fill: None,
-                    fill_rule: rule,
-                    stroke: Some(stroke.clone()),
-                    ..Default::default()
-                });
-                obj.object.shape = scene::display::Path::from_svg("M0 0H40V40H0Z M10 10H30V30H10Z")
-                    .unwrap()
-                    .into();
-                obj.screen_transform = Affine::translation(52., 18.)
-                    * Affine::rotation(14.)
-                    * Affine::scale(-1.7, 0.8);
-                let mesh = obj
-                    .object
-                    .shape
-                    .stroke_mesh_with_rule(&stroke, rule)
-                    .unwrap();
-                let expected: Vec<_> = mesh
-                    .triangles()
-                    .iter()
-                    .map(|t| t.map(|p| obj.screen_transform.transform_point(p)))
-                    .collect();
-                for dpr in [1., 1.5, 2.] {
-                    let paints = prepare_vector_paints(&obj, point(px(0.), px(0.)), dpr);
-                    assert_eq!(paints.len(), 1);
-                    assert_eq!(triangles(&paints[0].path), expected);
+                for data in [
+                    "M0 0H40V40H0Z M10 10H30V30H10Z",
+                    "M0 0H40V40H0",
+                    "M0 0H40V40H0 M10 10H30V30H10Z",
+                    "M0 0C12 30 26 -10 40 10",
+                    "M0 0H40H0H40",
+                ] {
+                    for dashed in [false, true] {
+                        let mut stroke = Stroke::new(Color::WHITE, 4.)
+                            .with_alignment(alignment)
+                            .with_cap(scene::StrokeCap::Square)
+                            .with_join(scene::StrokeJoin::Miter);
+                        if dashed {
+                            stroke = stroke.with_dashes(vec![6., 4., 2.], -3.);
+                        }
+                        let mut obj = object(Style {
+                            fill: None,
+                            fill_rule: rule,
+                            stroke: Some(stroke.clone()),
+                            ..Default::default()
+                        });
+                        obj.object.shape = scene::display::Path::from_svg(data).unwrap().into();
+                        obj.screen_transform = Affine::translation(52., 18.)
+                            * Affine::rotation(14.)
+                            * Affine::scale(-1.7, 0.8);
+                        let mesh = obj
+                            .object
+                            .shape
+                            .stroke_mesh_with_rule(&stroke, rule)
+                            .unwrap();
+                        let origin = point(px(5.), px(7.));
+                        let screen = Affine::translation(5., 7.) * obj.screen_transform;
+                        let expected: Vec<_> = mesh
+                            .triangles()
+                            .iter()
+                            .map(|t| t.map(|p| screen.transform_point(p)))
+                            .collect();
+                        for dpr in [1., 1.5, 2.] {
+                            let paints = prepare_vector_paints(&obj, origin, dpr);
+                            assert_eq!(paints.len(), 1);
+                            assert_eq!(paints[0].layer, PaintLayer::Stroke(0));
+                            assert_eq!(
+                                triangles(&paints[0].path),
+                                expected,
+                                "{alignment:?} {rule:?} {data} dashed={dashed} dpr={dpr}"
+                            );
+                        }
+                    }
                 }
             }
         }

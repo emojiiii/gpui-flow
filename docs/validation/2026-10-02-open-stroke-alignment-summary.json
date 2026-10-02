@@ -1,0 +1,136 @@
+{
+  "recorded_utc": "2026-10-02T21:39:50.476310+00:00",
+  "feature": "APP-02 open-contour Inside/Outside stroke alignment increment",
+  "state": "implementation and automated validation complete; native acceptance pending; APP-02 remains partial because scale-fixed is absent",
+  "repository_head_at_recording": "fab70ec211abca078a37057c49852181ab52be91",
+  "environment": "Linux cloud; /workspace/shared/gpui-flow-native-env.sh; existing shared native Cargo target; CARGO_BUILD_JOBS=1; no incremental compilation; debug info disabled; 3 GiB free-space floor",
+  "checks": [
+    {
+      "command": "cargo test --locked --offline",
+      "result": "passed",
+      "log": "/workspace/shared/open-stroke-alignment-validation-20261002T2126Z/default-tests.log",
+      "log_sha256": "54ff5dc2e03a1846719c1d13f809df538d9e77a269335b4ba3c658904a6f7b84",
+      "passed": 1566,
+      "failed": 0,
+      "ignored": 10
+    },
+    {
+      "command": "cargo test --locked --offline -p gpui-flow --lib",
+      "result": "passed",
+      "log": "/workspace/shared/open-stroke-alignment-validation-20261002T2126Z/ui-tests.log",
+      "log_sha256": "70a4529c59826bb8532ca66214155b350ddf50cdd7d749d2dda03ebe1ea5f7af",
+      "passed": 252,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "command": "cargo test --locked --offline -p flow-studio --bin stroke_alignment",
+      "result": "passed",
+      "log": "/workspace/shared/open-stroke-alignment-validation-20261002T2126Z/demo-tests.log",
+      "log_sha256": "1273e18a624ab374ac869d73ee46abca0491e54aeb1c0c931f416577c82c51da",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "command": "cargo clippy --workspace --all-targets --locked --offline -- -D warnings",
+      "result": "passed",
+      "log": "/workspace/shared/open-stroke-alignment-validation-20261002T2126Z/clippy.log",
+      "log_sha256": "0033cbd0d14c68fd6c0069f0196e2f10e2f5de28aa056bf14ed4626b11636a8b"
+    },
+    {
+      "command": "cargo clippy --manifest-path docs/examples/Cargo.toml --all-targets --locked --offline -- -D warnings",
+      "result": "passed",
+      "log": "/workspace/shared/open-stroke-alignment-validation-20261002T2126Z/docs-clippy.log",
+      "log_sha256": "4252070501137a9f944f1e1c48101c1e1a95eb07bcb2724a72ac6b21ce195dae"
+    },
+    {
+      "command": "cargo fmt --all -- --check",
+      "result": "passed",
+      "log": "/workspace/shared/open-stroke-alignment-validation-20261002T2126Z/fmt.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": "cargo fmt --manifest-path docs/examples/Cargo.toml --all -- --check",
+      "result": "passed",
+      "log": "/workspace/shared/open-stroke-alignment-validation-20261002T2126Z/docs-fmt.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed",
+      "log": "/workspace/shared/open-stroke-alignment-validation-20261002T2126Z/diff-check.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": "cargo build --locked --offline -p flow-studio --bin stroke_alignment",
+      "result": "passed",
+      "log": "/workspace/shared/open-stroke-alignment-validation-20261002T2126Z/build.log",
+      "log_sha256": "c860b4f0e231b6be1a3ba615a4f52609be674a9c173b1ead8587899e5fbabe4d"
+    }
+  ],
+  "counts_note": "Default suite includes doctests and 10 existing ignored tests. Focused early checks overlap these final runs and are not added. Native preparation tests are automated geometry assertions, not window/pixel acceptance.",
+  "contract": [
+    "Original open centerlines retain caps, joins and dash restarts; only their fill mask closes implicitly.",
+    "Open collinear contours contribute no own fill region but retain stroke centerlines. One combined fill-rule region handles mixed open/closed contours.",
+    "Empty masks: Inside empty; Outside canonical NonZero union of doubled stroke. Fill paint presence is irrelevant.",
+    "Empty/move-only/all-gap paths have no ink. Zero-length open segments keep Lyon Butt-empty or Round/Square cap semantics. Expected post-dash ink erased by f32/Lyon/grid processing remains a precision error.",
+    "Existing coordinate/width/grid/source/output/Boolean work ceilings remain, including implicit closing-edge checks and atomic scene rejection.",
+    "Canvas command strokes remain centered-only. No scale-fixed, arrowheads, per-side fields or broad parity expansion."
+  ],
+  "regressions": [
+    "Scene alignment: 21 integration tests plus direct collapsed-extrusion unit test; existing ellipse arc rejection replaced by positive alignment/no-chord regression",
+    "Engine geometry/bounds/hit/damage and layout stroke-box reflow with Undo/Redo",
+    "CPU/SVG single-alpha triangle union, blank closure edges, compound fill rules, transformed and clipped mesh agreement",
+    "Inside-empty and actual-open-mesh shadow coverage",
+    "Native prepared triangles share final mesh at DPR 1/1.5/2",
+    "Seven-scenario, two-geometry native fixture control tour with caps/joins, negative odd dash phase, fill rules, affine and clip controls"
+  ],
+  "build_inputs": {
+    "before": "/workspace/shared/open-stroke-alignment-validation-20261002T2126Z/build-inputs-before.json",
+    "after": "/workspace/shared/open-stroke-alignment-validation-20261002T2126Z/build-inputs-after.json",
+    "identical": true,
+    "files": 475,
+    "manifest_sha256": "73cbe7437ca6a9e9a691c8d9d1049724fc156308685e64320380f89310cc0fd7",
+    "scope": "Every file below crates/, examples/, .cargo/; all repository Rust sources, Cargo manifests/locks, toolchain files and build scripts. Includes compile-time READMEs/GIF assets. Excludes .git."
+  },
+  "binary": {
+    "path": "/workspace/shared/rust-target-native/debug/stroke_alignment",
+    "bytes": 177965744,
+    "sha256": "db27b77721da84594aeb244beb11a17ab389d516671da2cab623db500afa7b8f"
+  },
+  "fixture": {
+    "source": "examples/studio/src/bin/stroke_alignment.rs",
+    "source_sha256": "7224460a48416eed2a3bbe4b5aa36e52ef1d2491395a5e12e38ad24eb24019d7",
+    "scenarios": [
+      "Open L",
+      "Open Q/C curve",
+      "Straight Line",
+      "Closed outer + open inner",
+      "SVG open arc",
+      "Ellipse open arc",
+      "Closed baseline"
+    ],
+    "dash_patterns": {
+      "even": [
+        36,
+        24
+      ],
+      "odd": [
+        36,
+        24,
+        12
+      ],
+      "odd_phase": -13
+    },
+    "diagnostics": "One JSON stderr record at startup and per action, including accepted change/error, revision, geometry/style/fill rule/transform/clip, and six backend/alignment panel IDs",
+    "footer": "Natural-height and nonshrinking; native layout still requires visual acceptance"
+  },
+  "disk_free_after_bytes": 4229419008,
+  "untested": [
+    "Native open-contour comparison window/interaction acceptance",
+    "Windows/macOS/browser pixel equivalence",
+    "Broad performance and exact analytic-curve topology below documented 0.1 local-unit flattening tolerance"
+  ],
+  "publication_note": "Automated validation only; native acceptance is pending and source publication is recorded separately. No GitHub Actions or deployment was run."
+}

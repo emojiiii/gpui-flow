@@ -97,7 +97,7 @@ impl Shape {
         self.validate()?;
         let aligned = stroke.alignment != StrokeAlignment::Center;
         // Keep legacy inactive centered strokes free of flatten/tessellation
-        // requirements. Aligned inputs still validate their closed domain.
+        // requirements. Aligned inputs still validate their vector domain.
         if !aligned && (stroke.width == 0.0 || !stroke.paint.is_visible()) {
             return Ok(StrokeMesh::default());
         }
@@ -108,7 +108,7 @@ impl Shape {
         if stroke.width == 0.0 || !stroke.paint.is_visible() {
             return Ok(StrokeMesh::default());
         }
-        let path = stroke_path(&contours, stroke)?;
+        let (path, expects_ink) = stroke_path(&contours, stroke)?;
         let options = StrokeOptions::default()
             .with_line_width(if aligned {
                 stroke.width * 2.0
@@ -135,7 +135,13 @@ impl Shape {
             return Err("stroke mesh budget exceeded".into());
         }
         let mesh = if aligned {
-            align_mesh(output.triangles, &contours, stroke.alignment, fill_rule)?
+            align_mesh(
+                output.triangles,
+                &contours,
+                stroke.alignment,
+                fill_rule,
+                expects_ink,
+            )?
         } else {
             StrokeMesh {
                 triangles: output.triangles,
@@ -210,7 +216,7 @@ fn lyon_point(p: kurbo::Point) -> Result<lyon_tessellation::math::Point, String>
     }
     Ok(p)
 }
-fn stroke_path(contours: &[Contour], stroke: &Stroke) -> Result<Path, String> {
+fn stroke_path(contours: &[Contour], stroke: &Stroke) -> Result<(Path, bool), String> {
     let mut input = Vec::new();
     let mut length = 0.0f64;
     for contour in contours {
@@ -262,6 +268,12 @@ fn stroke_path(contours: &[Contour], stroke: &Stroke) -> Result<Path, String> {
     };
     let mut builder = Path::builder();
     let mut open = false;
+    // Record expected ink AFTER dash splitting but BEFORE f32 conversion and
+    // Lyon merging. Empty/move-only/all-gap paths are legal; losing a real
+    // segment or a requested zero-length cap during extrusion is not.
+    let mut expects_ink = false;
+    let mut current = kurbo::Point::ZERO;
+    let mut start = current;
     for event in events {
         match event {
             PathEl::MoveTo(p) => {
@@ -269,16 +281,21 @@ fn stroke_path(contours: &[Contour], stroke: &Stroke) -> Result<Path, String> {
                     builder.end(false);
                 }
                 builder.begin(lyon_point(p)?);
+                current = p;
+                start = p;
                 open = true;
             }
             PathEl::LineTo(p) => {
                 if !open {
                     return Err("stroke dash output has no subpath start".into());
                 }
+                expects_ink |= current != p || stroke.cap != StrokeCap::Butt;
+                current = p;
                 builder.line_to(lyon_point(p)?);
             }
             PathEl::ClosePath => {
                 if open {
+                    expects_ink |= current != start || stroke.cap != StrokeCap::Butt;
                     builder.end(true);
                     open = false;
                 }
@@ -292,7 +309,7 @@ fn stroke_path(contours: &[Contour], stroke: &Stroke) -> Result<Path, String> {
     if open {
         builder.end(false);
     }
-    Ok(builder.build())
+    Ok((builder.build(), expects_ink))
 }
 
 #[derive(Default)]
@@ -362,12 +379,11 @@ fn check_aligned_point(p: Point) -> Result<(), String> {
     Ok(())
 }
 fn check_aligned_contours(contours: &[Contour], stroke: &Stroke) -> Result<(), String> {
+    // One potential fill edge per point, including each open contour's
+    // implicit closing edge. Empty and move-only paths remain bounded too.
     let edges = contours.iter().map(|c| c.points.len()).sum::<usize>();
     if edges > MAX_ALIGNED_STROKE_EDGES {
         return Err("aligned stroke Boolean input edge budget exceeded".into());
-    }
-    if contours.is_empty() || contours.iter().any(|c| !c.closed || c.points.len() < 3) {
-        return Err("aligned strokes require nonempty closed vector contours".into());
     }
     if stroke.width > MAX_ALIGNED_STROKE_COORDINATE {
         return Err("aligned stroke width exceeds the coordinate precision limit".into());
@@ -379,18 +395,29 @@ fn check_aligned_contours(contours: &[Contour], stroke: &Stroke) -> Result<(), S
         for &p in &c.points {
             check_aligned_point(p)?;
         }
-        // Signed area alone would incorrectly reject a self-intersecting bow tie.
-        let a = c.points[0];
-        let noncollinear = c.points.windows(2).any(|p| {
-            let (b, d) = (p[0], p[1]);
-            (b.x as f64 - a.x as f64) * (d.y as f64 - a.y as f64)
-                != (b.y as f64 - a.y as f64) * (d.x as f64 - a.x as f64)
-        });
-        if !noncollinear {
-            return Err("aligned stroke contour is degenerate".into());
+        // Closed degenerate contours retain the existing admission boundary.
+        // Open collinear contours have an empty fill mask, but their original
+        // centerlines (including zero-length caps) must still be stroked.
+        if c.closed && !noncollinear(&c.points) {
+            return Err("aligned stroke closed contour is degenerate".into());
         }
     }
     Ok(())
+}
+// Do not use signed area: bow ties can have zero signed area but a nonempty
+// fill region. Choose a distinct anchor so repeated/backtracked points cannot
+// hide a later non-collinear point.
+fn noncollinear(points: &[Point]) -> bool {
+    let Some(&a) = points.first() else {
+        return false;
+    };
+    let Some(&b) = points.iter().find(|&&p| p != a) else {
+        return false;
+    };
+    points.iter().any(|p| {
+        (b.x as f64 - a.x as f64) * (p.y as f64 - a.y as f64)
+            != (b.y as f64 - a.y as f64) * (p.x as f64 - a.x as f64)
+    })
 }
 struct OverlayBudget(usize);
 impl OverlayBudget {
@@ -420,6 +447,7 @@ fn align_mesh(
     contours: &[Contour],
     alignment: StrokeAlignment,
     fill_rule: FillRule,
+    expects_ink: bool,
 ) -> Result<StrokeMesh, String> {
     // Bound conversion and overlay allocations before collecting another copy.
     let source_edges = contours.iter().map(|c| c.points.len()).sum::<usize>();
@@ -445,7 +473,7 @@ fn align_mesh(
             .try_float_to_int(&[p.x as f64, p.y as f64])
             .map_err(|e| format!("aligned stroke coordinate conversion failed: {e:?}"))
     };
-    let fill = contours
+    let quantized = contours
         .iter()
         .map(|c| c.points.iter().copied().map(&convert).collect())
         .collect::<Result<IntContours, String>>()?;
@@ -455,16 +483,29 @@ fn align_mesh(
         .0
         .checked_sub(source_edges.saturating_mul(source_edges))
         .ok_or("aligned stroke precision work budget exceeded")?;
-    check_fill_precision(contours, &fill)?;
+    check_fill_precision(contours, &quantized)?;
+    // Fill/clip implicitly closes open contours, without ever closing their
+    // stroke centerlines. Mathematically collinear open contours contribute no
+    // region. Still validate and charge their source edges above; a nonempty
+    // region that collapsed on the grid must never be mistaken for this case.
+    let fill: IntContours = contours
+        .iter()
+        .zip(quantized)
+        .filter_map(|(c, ints)| noncollinear(&c.points).then_some(ints))
+        .collect();
     budget.charge(source_edges)?;
     // Canonicalize the fill first: its winding may differ from the stroke union.
-    let region = Overlay::from_subj(&fill).overlay(
-        OverlayRule::Subject,
-        match fill_rule {
-            FillRule::EvenOdd => OverlayFillRule::EvenOdd,
-            FillRule::NonZero => OverlayFillRule::NonZero,
-        },
-    );
+    let region = if fill.is_empty() {
+        Vec::new()
+    } else {
+        Overlay::from_subj(&fill).overlay(
+            OverlayRule::Subject,
+            match fill_rule {
+                FillRule::EvenOdd => OverlayFillRule::EvenOdd,
+                FillRule::NonZero => OverlayFillRule::NonZero,
+            },
+        )
+    };
     output_budget(&region)?;
     let mut stroke = Vec::with_capacity(triangles.len());
     for triangle in triangles {
@@ -490,22 +531,40 @@ fn align_mesh(
         stroke.push(vec![a, b, c]);
     }
     if stroke.is_empty() {
-        return Err("aligned stroke extrusion is below precision limit".into());
+        // Empty/move-only subpaths and butt-capped zero-length segments have
+        // genuinely no ink. The post-dash event contract also catches strokes
+        // lost BEFORE integer conversion, including all-degenerate f32 meshes.
+        if expects_ink {
+            return Err("aligned stroke extrusion is below precision limit".into());
+        }
+        return Ok(StrokeMesh::default());
     }
     let region_edges = region.iter().flatten().map(Vec::len).sum::<usize>();
     budget.charge(stroke.len() * 3 + region_edges)?;
     // All triangles have the same winding. NonZero unions overlap instead of
     // punching EvenOdd holes at joins, dash caps and self-intersections.
-    let result = Overlay::from_subj_and_clip(&stroke, &region).overlay(
+    let result = if region.is_empty() {
         match alignment {
-            StrokeAlignment::Inside => OverlayRule::Intersect,
-            StrokeAlignment::Outside => OverlayRule::Difference,
+            StrokeAlignment::Inside => return Ok(StrokeMesh::default()),
+            StrokeAlignment::Outside => {
+                Overlay::from_subj(&stroke).overlay(OverlayRule::Subject, OverlayFillRule::NonZero)
+            }
             StrokeAlignment::Center => {
                 unreachable!("only aligned meshes enter the Boolean adapter")
             }
-        },
-        OverlayFillRule::NonZero,
-    );
+        }
+    } else {
+        Overlay::from_subj_and_clip(&stroke, &region).overlay(
+            match alignment {
+                StrokeAlignment::Inside => OverlayRule::Intersect,
+                StrokeAlignment::Outside => OverlayRule::Difference,
+                StrokeAlignment::Center => {
+                    unreachable!("only aligned meshes enter the Boolean adapter")
+                }
+            },
+            OverlayFillRule::NonZero,
+        )
+    };
     output_budget(&result)?;
     let mut builder = Path::builder();
     for contour in result.iter().flatten() {
@@ -572,12 +631,18 @@ fn check_fill_precision(contours: &[Contour], quantized: &IntContours) -> Result
                 return Err("aligned stroke contour edge collapses below grid precision".into());
             }
         }
-        let a = ints[0];
-        if !ints.windows(2).any(|p| {
-            (p[0].x as i64 - a.x as i64) * (p[1].y as i64 - a.y as i64)
-                != (p[0].y as i64 - a.y as i64) * (p[1].x as i64 - a.x as i64)
-        }) {
-            return Err("aligned stroke contour collapses below grid precision".into());
+        if noncollinear(&source.points) {
+            let a = ints[0];
+            let b = *ints
+                .iter()
+                .find(|&&p| p != a)
+                .ok_or("aligned stroke contour collapses below grid precision")?;
+            if !ints.iter().any(|p| {
+                (b.x as i64 - a.x as i64) * (p.y as i64 - a.y as i64)
+                    != (b.y as i64 - a.y as i64) * (p.x as i64 - a.x as i64)
+            }) {
+                return Err("aligned stroke contour collapses below grid precision".into());
+            }
         }
     }
     let clearance = (4.0 / ALIGNED_STROKE_GRID_SCALE) as f32;
@@ -588,6 +653,16 @@ fn check_fill_precision(contours: &[Contour], quantized: &IntContours) -> Result
                 if p == a || p == b {
                     continue;
                 }
+                // Exact on-edge points are legal. Avoid a tiny residual from
+                // projection/division falsely rejecting a collinear centerline.
+                let (dx, dy) = (b.x as f64 - a.x as f64, b.y as f64 - a.y as f64);
+                let (px, py) = (p.x as f64 - a.x as f64, p.y as f64 - a.y as f64);
+                let dot = px * dx + py * dy;
+                let squared_length = dx * dx + dy * dy;
+                if squared_length > 0.0 && px * dy == py * dx && dot >= 0.0 && dot <= squared_length
+                {
+                    continue;
+                }
                 let distance = crate::geometry::distance_to_segment(p, a, b);
                 if distance > 0.0 && distance < clearance {
                     return Err("aligned stroke contour clearance is below grid precision".into());
@@ -596,4 +671,49 @@ fn check_fill_precision(contours: &[Contour], quantized: &IntContours) -> Result
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lost_ink_is_rejected_for_empty_and_all_degenerate_extrusion() {
+        let contours = [Contour {
+            points: vec![
+                Point::new(60000., 60000.),
+                Point::new(60_000.0 + 1.0 / 256.0, 60000.),
+            ],
+            closed: false,
+        }];
+        for triangles in [Vec::new(), vec![[Point::new(60000., 60000.); 3]]] {
+            for alignment in [StrokeAlignment::Inside, StrokeAlignment::Outside] {
+                assert!(
+                    align_mesh(
+                        triangles.clone(),
+                        &contours,
+                        alignment,
+                        FillRule::NonZero,
+                        true
+                    )
+                    .unwrap_err()
+                    .contains("precision")
+                );
+                // This flag comes from post-dash events; an all-gap path has
+                // no expected ink even when its original centerline is nonempty.
+                assert!(
+                    align_mesh(
+                        triangles.clone(),
+                        &contours,
+                        alignment,
+                        FillRule::NonZero,
+                        false
+                    )
+                    .unwrap()
+                    .triangles()
+                    .is_empty()
+                );
+            }
+        }
+    }
 }

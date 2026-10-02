@@ -1071,3 +1071,83 @@ fn svg_stroke_triangle_and_scene_node_budgets_remain_enforced() {
         Err(CompositeError::InputLimit)
     ));
 }
+
+#[test]
+fn svg_open_aligned_strokes_remain_vectors_without_implicit_closure_ink() {
+    for alignment in [StrokeAlignment::Inside, StrokeAlignment::Outside] {
+        let mut scene = Scene::new();
+        scene
+            .insert(
+                DisplayObject::new("open", display::Path::from_svg("M4 4H16V16H4").unwrap())
+                    .with_style(Style {
+                        fill: None,
+                        stroke: Some(
+                            Stroke::new(Color::rgba(255, 0, 0, 128), 2.)
+                                .with_alignment(alignment)
+                                .with_cap(StrokeCap::Butt)
+                                .with_join(StrokeJoin::Miter),
+                        ),
+                        ..Default::default()
+                    }),
+                None,
+                None,
+            )
+            .unwrap();
+        let output = svg(&scene);
+        let document = xml(&output);
+        assert!(!document.descendants().any(|n| n.has_tag_name("image")));
+        assert!(
+            document
+                .descendants()
+                .any(|n| n.has_tag_name("path") && n.attribute("fill-rule") == Some("nonzero"))
+        );
+        let out = render(&output);
+        let outside = alignment == StrokeAlignment::Outside;
+        assert_eq!(at(&out, 9, if outside { 2 } else { 5 }), [255, 0, 0, 128]);
+        assert_eq!(at(&out, 9, if outside { 5 } else { 2 }), [0; 4]);
+        for x in [3, 4, 5] {
+            assert_eq!(at(&out, x, 10), [0; 4]);
+        }
+        assert_eq!(
+            at(&out, if outside { 17 } else { 15 }, 10),
+            [255, 0, 0, 128]
+        );
+    }
+}
+
+#[test]
+fn svg_degenerate_open_alignment_uses_empty_inside_and_single_alpha_outside() {
+    for alignment in [StrokeAlignment::Inside, StrokeAlignment::Outside] {
+        for rule in [FillRule::NonZero, FillRule::EvenOdd] {
+            let mut scene = Scene::new();
+            scene
+                .insert(
+                    DisplayObject::new("line", display::Path::from_svg("M4 10H16H4H16").unwrap())
+                        .with_style(Style {
+                            fill: None,
+                            fill_rule: rule,
+                            stroke: Some(
+                                Stroke::new(Color::rgba(255, 0, 0, 128), 2.)
+                                    .with_alignment(alignment)
+                                    .with_cap(StrokeCap::Butt),
+                            ),
+                            ..Default::default()
+                        }),
+                    None,
+                    None,
+                )
+                .unwrap();
+            let output = svg(&scene);
+            assert!(!xml(&output).descendants().any(|n| n.has_tag_name("image")));
+            let out = render(&output);
+            let expected = if alignment == StrokeAlignment::Outside {
+                [255, 0, 0, 128]
+            } else {
+                [0; 4]
+            };
+            assert_eq!(at(&out, 10, 10), expected);
+            assert_eq!(at(&out, 10, 8), expected);
+            assert_eq!(at(&out, 10, 13), [0; 4]);
+        }
+    }
+}

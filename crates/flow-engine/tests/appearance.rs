@@ -258,3 +258,76 @@ fn aligned_fill_rule_updates_geometry_damage_and_picking_atomically() {
             .is_none()
     );
 }
+
+#[test]
+fn aligned_open_closed_path_edits_update_bounds_hits_and_old_plus_new_damage() {
+    use gpui_flow_scene::{Bounds, Size, StrokeAlignment, StrokeCap, StrokeJoin};
+    for alignment in [StrokeAlignment::Inside, StrokeAlignment::Outside] {
+        let mut e = engine();
+        e.transaction(|s| {
+            s.update_object(&"rect".into(), |o| {
+                o.shape = display::Path::from_svg("M0 0H40V40H0Z").unwrap().into();
+                o.style.stroke = Some(
+                    Stroke::new(Color::BLACK, 4.)
+                        .with_alignment(alignment)
+                        .with_cap(StrokeCap::Butt)
+                        .with_join(StrokeJoin::Miter),
+                );
+            })
+        })
+        .unwrap();
+        let h = e.handle(&"rect".into()).unwrap();
+        let outside = alignment == StrokeAlignment::Outside;
+        let closure = Point::new(if outside { -2. } else { 2. }, 20.);
+        assert!(
+            e.hit_test(closure, HitTestOptions::default())
+                .unwrap()
+                .is_some()
+        );
+        for (data, closed) in [("M0 0H40V40H0", false), ("M0 0H40V40H0Z", true)] {
+            let old = e.world_bounds(&"rect".into()).unwrap().unwrap();
+            let change = e
+                .set_path_data(h, display::Path::from_svg(data).unwrap())
+                .unwrap();
+            assert!(
+                change.dirty[&"rect".into()]
+                    .contains(DirtyFlags::GEOMETRY | DirtyFlags::PAINT | DirtyFlags::HIT)
+            );
+            assert_eq!(change.layout.bounds_recomputed, 2);
+            assert_eq!(change.layout.world_recomputed, 0);
+            let expected = if outside {
+                Bounds::new(
+                    Point::new(if closed { -4. } else { 0. }, -4.),
+                    Size::new(if closed { 48. } else { 44. }, 48.),
+                )
+            } else {
+                Bounds::new(Point::ZERO, Size::new(40., 40.))
+            };
+            assert_eq!(e.world_bounds(&"rect".into()).unwrap(), Some(expected));
+            assert_eq!(e.world_bounds(&"group".into()).unwrap(), Some(expected));
+            assert_eq!(
+                e.scene().world_bounds(&"group".into()).unwrap(),
+                Some(expected)
+            );
+            let damage = change.damage_bounds().unwrap();
+            for b in [old, expected] {
+                assert!(damage.contains(b.origin));
+                assert!(damage.contains(Point::new(b.max_x(), b.max_y())));
+            }
+            assert_eq!(
+                e.hit_test(closure, HitTestOptions::default())
+                    .unwrap()
+                    .is_some(),
+                closed
+            );
+            assert!(
+                e.hit_test(
+                    Point::new(20., if outside { -2. } else { 2. }),
+                    HitTestOptions::default()
+                )
+                .unwrap()
+                .is_some()
+            );
+        }
+    }
+}

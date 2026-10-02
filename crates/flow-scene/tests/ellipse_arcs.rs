@@ -147,17 +147,17 @@ fn worst_case_ellipse_contours_have_a_fixed_point_budget() {
     assert!(c.iter().map(|c| c.points.len()).sum::<usize>() <= 8192);
 }
 #[test]
-fn open_arc_rejects_inside_outside_stroke_while_closed_ring_supports_it() {
-    let mut stroke = Stroke::new(Color::BLACK, 2.);
-    stroke.alignment = StrokeAlignment::Inside;
-    assert!(
-        Shape::from(Ellipse::circle(20.).arc(0., 90.))
-            .stroke_mesh(&stroke)
-            .is_err()
-    );
-    assert!(
-        Shape::from(Ellipse::circle(20.).ring(0.5))
-            .stroke_mesh(&stroke)
-            .is_ok()
-    );
+fn open_arc_and_closed_ring_support_alignment_without_chord_stroke() {
+    let arc = Shape::from(Ellipse::circle(20.).arc(0., 90.));
+    let ring = Shape::from(Ellipse::circle(20.).ring(0.5));
+    for alignment in [StrokeAlignment::Inside, StrokeAlignment::Outside] {
+        let stroke = Stroke::new(Color::BLACK, 2.).with_alignment(alignment);
+        let mesh = arc.stroke_mesh(&stroke).unwrap();
+        assert!(!mesh.triangles().is_empty());
+        assert!(
+            !mesh.hit_test(Point::new(30., 30.), 0.),
+            "implicit chord has no ink"
+        );
+        assert!(ring.stroke_mesh(&stroke).is_ok());
+    }
 }

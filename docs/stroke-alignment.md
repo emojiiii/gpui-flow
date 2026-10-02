@@ -1,4 +1,4 @@
-# Closed-contour stroke alignment
+# Vector stroke alignment
 
 `StrokeAlignment::{Center, Inside, Outside}` is local-space geometry on each
 stroke layer. `Stroke::new` and old JSON without `alignment` keep `Center`.
@@ -26,7 +26,13 @@ under `Style::fill_rule`, independently of the presence, visibility or color of
 fill paints. Inside intersects the doubled stroke with that region; Outside
 subtracts it. The stroke's overlapping triangles are all oriented alike and
 combined with **NonZero**, never EvenOdd. Caps, joins and dash phase keep their
-existing semantics; each closed source contour restarts the dash pattern.
+existing semantics; each source contour restarts the dash pattern. Open source
+contours close **only for the fill mask**: the end-to-start edge never acquires
+stroke ink or an extra join. A straight or collinear open contour has no own fill
+region, so Inside is empty and Outside is the full doubled centered stroke. In
+a compound path that line is still clipped against the other contours’ combined
+fill region. Both rules apply across all open and closed contours together;
+winding reversal does not exchange Inside and Outside.
 
 Polygon intersection/difference uses pinned **i_overlay 9.0.0** (MIT OR
 Apache-2.0, Rust 1.88 minimum), with its checked i_float coordinate adapter.
@@ -62,18 +68,30 @@ rule and resulting layout remain within one atomic, undoable editor transaction.
 
 ## Bounded admission and numerical contract
 
-Inside/Outside require one or more explicitly closed, non-collinear vector
-contours. Rect, Ellipse, closed Polygon, Star, closed Path/Pen, Box, Frame and
-closed Custom fallback geometry can use them. Mixed open/closed paths, Line,
-Text, Image and Group are explicitly rejected at scene validation, even when
-an unsupported aligned paint is transparent or zero-width. Custom fallback
-native geometry is supported; Custom CPU producers remain unsupported by the
-existing compositing contract. Scale-fixed strokes remain separate and absent.
+Inside/Outside support Rect, Ellipse (including open arcs), Line, open or closed
+Polygon/Path/Pen, Star, Box, Frame and Custom fallback contours. Mixed open/closed
+compound geometry shares the same mask and fill rule. Text, Image and Group
+remain explicitly rejected at scene validation, even when an unsupported aligned
+paint is transparent or zero-width. Explicitly closed contours still require non-collinear points; too-short or
+collinear closed inputs retain their rejection boundary. Open non-collinear contours are checked by
+non-collinearity, not signed area: a self-intersecting bow tie remains meaningful.
+Custom fallback native geometry is supported; Custom CPU producers remain
+unsupported by the existing compositing contract. Scale-fixed strokes remain
+separate and absent, so APP-02 remains partial.
+
+Empty and move-only paths yield empty meshes. A zero-length open segment follows
+the shared Lyon cap contract: Butt has no ink; Round/Square Outside has its doubled
+cap geometry, while Inside has no ink when the combined fill mask is empty.
+A dashed path lying wholly in a gap also has no ink. The adapter records expected
+ink after dash splitting and before f32/Lyon conversion, so a real stroke erased
+by extrusion or grid collapse still returns a precision error. An empty painted
+mesh does not erase the object's intrinsic bounds.
 
 Existing source/dash/Lyon mesh budgets still apply. Visible aligned geometry
 additionally obeys these per-stroke limits:
 
-- At most 4,096 input edges before Boolean processing
+- At most 4,096 input edges before Boolean processing, including implicit
+  closing edges and open centerlines whose own fill region is empty
 - A combined 2,097,152 work allowance: source point/edge precision tests plus
   `n*(n-1)/2 + n` worst-case Boolean edge-pair/work estimates, charged before
   each of the fill-canonicalization and stroke/region operations
@@ -90,16 +108,15 @@ below 0.004 local units within the supported range. Flattened curves retain the
 existing 0.1-local-unit approximation, independent of viewport/DPR. This is an
 absolute-error contract, not exact analytic-curve topology at arbitrary scale.
 
-Distinct source edges that collapse on the grid, non-collinear contours that
-become collinear, positive point-to-edge clearances below 1/1024, and nonzero
+Distinct source edges (including implicit closing edges) that collapse on the
+grid, non-collinear contours that become collinear, positive point-to-edge clearances below 1/1024, and nonzero
 stroke triangles that collapse on the grid are rejected. Boolean result edges
 or complete contours that collapse during final f32 conversion are rejected
-as well. Exact coincident
-points/edges and genuine self-intersections remain legal and use the fill rule.
+as well. Exact coincident points/edges and genuine self-intersections remain legal and use the fill rule.
 Features below the curve-flattening tolerance have no analytic topology
 promise. Small-feature rejection is preferable to silently filling tiny holes
-or erasing narrow gaps. Degenerate/oversized/extreme-coordinate inputs return
-an error with no partial scene mutation or successful partial stroke output.
+or erasing narrow gaps. Unsupported closed-degenerate/oversized/extreme-coordinate
+inputs return an error with no partial scene mutation or successful partial stroke output.
 
 These limits bound intermediary work as well as final output. They intentionally
 reject some otherwise meaningful complex paths; this is a bounded first slice,
@@ -110,14 +127,19 @@ performance or cross-platform claim is made.
 
 - [Leafer stroke reference](https://www.leaferjs.com/ui/reference/UI/stroke.html)
 - [Pinned Leafer doubled-stroke paint stages](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/paint/src/Stroke.ts)
+- [Pinned Leafer Canvas clip adapter](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/canvas/canvas/src/LeaferCanvasBase.ts)
+- [Canvas implicit subpath closure for clipping](https://html.spec.whatwg.org/multipage/canvas.html#dom-context-2d-clip)
 - [i_overlay 9.0.0](https://docs.rs/i_overlay/9.0.0/i_overlay/)
 - [i_overlay integer coordinate contract](https://docs.rs/i_overlay/9.0.0/i_overlay/core/integer/index.html)
 
 Run `cargo run --locked -p flow-studio --bin stroke_alignment`. The top native
-and bottom CPU rows contain equivalent Center/Inside/Outside compound paths,
-transparent gradients and layered strokes without fill paint. Controls change
-fill rule, dash, reflection/nonuniform affine transform and rounded clipping;
-Undo restores one transaction. See the validation record below for checks
+and bottom CPU rows contain equivalent Center/Inside/Outside geometry,
+transparent gradients and layered strokes without fill paint. Scenario controls
+cycle open L, quadratic/cubic curve, Line, mixed contours, open arcs and the
+closed baseline. Caps, joins, odd dashes with negative phase, fill rule,
+reflection/nonuniform affine transform and rounded clipping are reversible
+scene edits. Undo/Redo restores one transaction. The diagonal/closing chord must
+remain blank in the open scenarios. See the validation record below for checks
 actually run; demo availability by itself is not a native execution claim.
 
 ## Local validation — 2026-10-01
@@ -151,3 +173,31 @@ with the affected CPU rows withheld, then displayed the updated output. This
 is verified recovery, not a smooth-frame-rate or pixel-identical backend claim.
 Cross-platform execution, broad performance and unrelated old native examples
 were not rerun for this slice.
+
+## Open-contour increment — 2026-10-02
+
+The open-contour extension keeps Canvas command strokes centered-only and adds
+no public fields, arrowheads, per-side widths or scale-fixed behavior. Existing
+closed tests are retained. Scene regressions cover open L and curves/arcs,
+implicit-mask-only closure, all caps/joins, empty/collinear/zero-length inputs,
+compound rules/winding, fill-paint independence, odd negative-phase dashes,
+source/implicit-edge precision and work budgets, and atomic rejection. Consumer
+regressions cover shared bounds/hits, damage, stroke-box layout and Undo/Redo,
+CPU union alpha and transformed clipping, shadows, SVG vectors, and native mesh
+reuse at DPR 1/1.5/2.
+
+Final-source Linux validation passed with one Cargo job and the existing shared
+native target, retaining the 3 GiB disk reserve:
+
+- Default-member tests and doctests: 1,566 passed, 0 failed, 10 existing ignored
+- UI library: 252 passed; seven-scenario fixture control tour: 1 passed
+- Strict workspace/all-targets Clippy and strict docs-example Clippy
+- Workspace and docs-example formatting, whitespace check, and native demo link
+
+All 475 build-input file hashes matched before and after the final test/link
+sequence. Exact commands, log hashes, scope and binary provenance are recorded
+in the [validation summary](validation/2026-10-02-open-stroke-alignment-summary.json).
+The fixture's bounded even/odd dash patterns are `36/24` and `36/24/12` at phase
+`-13`; the latter is exercised with all cap types without raising production
+budgets. Native open-contour window acceptance remains pending separately. The
+historical 2026-10-01 native result above applies only to its earlier source.
