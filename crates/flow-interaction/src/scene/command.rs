@@ -53,6 +53,13 @@ pub enum SceneCommand {
         target: gpui_flow_engine::ElementHandle,
         transform: Affine,
     },
+    /// Changes only a fixed Text box and anchoring translation. Linear terms,
+    /// target identity and command kind are preserved through middleware.
+    SetTextBoxResize {
+        target: gpui_flow_engine::ElementHandle,
+        size: Size,
+        transform: Affine,
+    },
     /// Exactly one immutable ordered membership set. Middleware may normalize
     /// matrices, but cannot drop, add, duplicate, reorder or retarget members.
     SetResizeTransforms {

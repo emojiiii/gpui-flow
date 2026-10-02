@@ -1,3 +1,4 @@
+mod text_resize;
 use super::{SceneCommand, object_editable, selection_bounds};
 use crate::*;
 use gpui_flow_core::{ConnectionDrag, Rect, Viewport};
@@ -518,6 +519,10 @@ impl ScenePluginHost {
             } => Some((*target, *endpoint)),
             _ => None,
         };
+        let text_box_identity = match &command {
+            SceneCommand::SetTextBoxResize { target, .. } => Some(*target),
+            _ => None,
+        };
         let resize_identity = match &command {
             SceneCommand::SetResizeTransform { target, .. } => Some(*target),
             _ => None,
@@ -587,6 +592,13 @@ impl ScenePluginHost {
         {
             return Err(InteractionError::InvalidInput(
                 "middleware cannot retarget a line endpoint command".into(),
+            ));
+        }
+        if let Some(target) = text_box_identity
+            && !matches!(&command, SceneCommand::SetTextBoxResize { target: actual, .. } if *actual == target)
+        {
+            return Err(InteractionError::InvalidInput(
+                "middleware cannot retarget a Text box command".into(),
             ));
         }
         if let Some(target) = resize_identity
@@ -843,6 +855,13 @@ impl ScenePluginHost {
                 editor.transaction(|scene| {
                     scene.update_object(&id, |object| object.transform = transform)
                 })?;
+            }
+            SceneCommand::SetTextBoxResize {
+                target,
+                size,
+                transform,
+            } => {
+                self.apply_text_box_resize(editor, target, size, transform)?;
             }
             SceneCommand::SetResizeTransform { target, transform } => {
                 if self.capture_target_stale(editor) {

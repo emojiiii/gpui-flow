@@ -6,3 +6,6 @@ pub use history::*;
 pub use selection::*;
 mod resize;
 pub use resize::*;
+
+mod text_resize;
+pub use text_resize::*;

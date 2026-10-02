@@ -4,7 +4,8 @@ use crate::scene::{
 use crate::*;
 use gpui_flow_core::{Point, Rect};
 use gpui_flow_editor::{
-    ResizeHandle, ResizeOptions, SceneEditor, resize_transform, resize_transform_with_options,
+    ResizeHandle, ResizeOptions, SceneEditor, TextBoxResizeGeometry, resize_transform,
+    resize_transform_with_options,
 };
 use gpui_flow_scene::{Affine, DisplayId, Shape};
 struct Resize {
@@ -17,16 +18,31 @@ struct Resize {
     uniform: bool,
     handle: Option<ResizeHandle>,
     minimum_scale: Point,
+    text_box: Option<TextBoxResizeGeometry>,
 }
 struct SelectionResize {
     geometry: SceneSelectionResizeGeometry,
     start_world: Point,
     handle: ResizeHandle,
 }
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum TextResizeMode {
+    #[default]
+    Transform,
+    /// Named single-selection plain Text only; other targets retain transforms.
+    Box,
+}
 #[derive(Default)]
 pub struct SceneResizePlugin {
+    text_mode: TextResizeMode,
     resize: Option<Resize>,
     selection_resize: Option<SelectionResize>,
+}
+impl SceneResizePlugin {
+    pub fn with_text_resize_mode(mut self, mode: TextResizeMode) -> Self {
+        self.text_mode = mode;
+        self
+    }
 }
 impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
     fn id(&self) -> &str {
@@ -147,9 +163,23 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
                 if !start_local.is_finite() {
                     return;
                 }
+                let text_box = if handle.is_some()
+                    && self.text_mode == TextResizeMode::Box
+                    && crate::scene::resize_handles::affine_text_supported(
+                        &node.object,
+                        TransformCapabilities { affine_text: true },
+                    ) {
+                    let Shape::Text(text) = &node.object.shape else {
+                        unreachable!()
+                    };
+                    TextBoxResizeGeometry::new(text).ok()
+                } else {
+                    None
+                };
                 self.resize = Some(Resize {
                     id,
                     target,
+                    text_box,
                     inverse,
                     original: node.object.transform,
                     bounds: geometry.map_or(bounds, |g| g.bounds),
@@ -207,6 +237,27 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
                     let current = resize
                         .inverse
                         .transform_point(cx.editor.viewport.screen_to_world(p.position));
+                    if let Some(geometry) = resize.text_box {
+                        let Some(result) = geometry.resize(
+                            resize.original,
+                            resize.start_local,
+                            current,
+                            ResizeOptions {
+                                handle: resize.handle.expect("named Text box handle"),
+                                uniform: p.modifiers.shift,
+                                minimum_scale: resize.minimum_scale,
+                            },
+                        ) else {
+                            out.command(SceneCommand::CancelGesture);
+                            return;
+                        };
+                        out.command(SceneCommand::SetTextBoxResize {
+                            target: resize.target,
+                            size: result.size,
+                            transform: result.transform,
+                        });
+                        return;
+                    }
                     let transform = if let Some(handle) = resize.handle {
                         let Some(transform) = resize_transform_with_options(
                             resize.original,

@@ -14,7 +14,7 @@ pub use drag::SceneDragPlugin;
 pub use keyboard::SceneKeyboardPlugin;
 pub use line::SceneLineEndpointPlugin;
 pub use pan::ScenePanPlugin;
-pub use resize::SceneResizePlugin;
+pub use resize::{SceneResizePlugin, TextResizeMode};
 pub use rotate::SceneRotatePlugin;
 pub use selection::SceneSelectionPlugin;
 pub use snapping::SceneSnappingPlugin;
