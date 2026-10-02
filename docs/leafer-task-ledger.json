@@ -2,8 +2,8 @@
   "schema_version": 1,
   "ledger_version": "v1-review",
   "review": "已锁定45个能力单元和有限验收集合；审阅版，所有扩展/技术依赖显式记录",
-  "as_of": "2026-10-02T21:59:00Z",
-  "source_snapshot": "a6639014ceb276d2b33c64e04ad3e73adc770b30",
+  "as_of": "2026-10-02T23:34:00Z",
+  "source_snapshot": "6e6af03495a67b78d18be604c9389b3cb1e18b0c",
   "upstream": {
     "leafer_ui": "1e11641d3ea6b0211c83447268a90b8d58feec25",
     "leafer_core": "1d703303ff0759ce4973d54c87eeb8192dddc570",
@@ -770,11 +770,11 @@
       "status": "partial",
       "acceptance": "必选fillText、measureText、strokeText；beginPath/moveTo/lineTo/quadraticCurveTo/bezierCurveTo/closePath；createPattern的repeat/no-repeat与transform",
       "boundary": "不包含DOM focus控件、CSS字体parser、arc/ellipse/arcTo及rect/roundRect便利构造或全部浏览器context状态；这些排除项不是新增收口条件",
-      "reference_doc": "docs/canvas-current-path.md",
-      "implementation_snapshot": "39fcf56a2e91f59d5da7a04ee519cade66f8cb69",
+      "reference_doc": "docs/canvas-patterns.md",
+      "implementation_snapshot": "6e6af03495a67b78d18be604c9389b3cb1e18b0c",
       "evidence_commit": null,
-      "automatic": "保留FillTextBox/同源measure原8新回归及119不同受影响检查；current-path新增15 composite+7 UI，全库309/252、focused88/29（重叠），strict Clippy/格式/链接通过；必选current-path构造集合已覆盖，strokeText和createPattern repeat/no-repeat+transform仍缺",
-      "native": "current-path 21:12:30–21:18:56退出0，55物理按钮/84 JSON/63 JPEG截图，27/27审计，20对decoded-JPEG双300×210区域零差；原footer裁切和Compositing过渡保留。21:26:06–21:27:04仅footer复验，两按钮/11 JSON/8 JPEG截图，1090×670双行可见；共享树含open-stroke WIP，不替代功能验收",
+      "automatic": "此前FillTextBox/同源measure与current-path证据独立保留；pattern repeat/no-repeat+transform新增36 composite/6 UI及1夹具测试，全默认1602通过/10既有忽略、UI258通过，strict Clippy/format/link通过；rustdoc仅在明确豁免既有bare_urls警告时通过。必选路径及pattern集合已覆盖，strokeText仍缺",
+      "native": "Pattern 22:45:50–22:51:04退出0，41物理按钮/44 JSON/34原始JPEG及6派生PNG，23/23独立trace，48/50解码截图检查；24完整Canvas ROI零差仅为有损截图一致性。两处外缘5×5差异保留，原因未定；479冻结构建输入逐项匹配已发布6e6af034。此前current-path及footer单独证据保留",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/interface/src/canvas/ICanvas.ts",
         "symbols_or_contract": "CanvasText / CanvasPath / createPattern / CanvasPattern.setTransform"
@@ -782,11 +782,11 @@
       "technical_dependencies": [
         "同App字体bridge和字形预算；strokeText需要真实描边语义，不能以bbox替代"
       ],
-      "evidence_summary": "docs/validation/2026-10-02-canvas-current-path-native-summary.json",
-      "native_report": "docs/canvas-current-path-native.md",
-      "automated_summary": "docs/validation/2026-10-02-canvas-current-path-summary.json",
-      "source_tree": "565b687a9392635ac9adfead5260a070358fbd78",
-      "source_publication_url": "https://github.com/emojiiii/gpui-flow/commit/39fcf56a2e91f59d5da7a04ee519cade66f8cb69",
+      "evidence_summary": "docs/validation/2026-10-02-canvas-pattern-native-summary.json",
+      "native_report": "docs/canvas-pattern-native.md",
+      "automated_summary": "docs/validation/2026-10-02-canvas-patterns-summary.json",
+      "source_tree": "d3d157491bc857570afb7bd7ee2954eadc9f30c4",
+      "source_publication_url": "https://github.com/emojiiii/gpui-flow/commit/6e6af03495a67b78d18be604c9389b3cb1e18b0c",
       "prior_fill_text_measure_text_evidence": {
         "reference_doc": "docs/canvas-text-commands.md",
         "implementation_snapshot": "99392f7c35f956f8765ed5730423df19e3d474cd",
@@ -803,8 +803,7 @@
         "closePath"
       ],
       "remaining_frozen_scope": [
-        "strokeText",
-        "createPattern repeat/no-repeat and pattern transform"
+        "strokeText"
       ],
       "footer_layout_follow_up": {
         "footer_only_source_commit": "8dd6f1104d2e134b8b15f83e64c8fdb336ee4044",
@@ -820,8 +819,31 @@
         "Device display DPR was not separately queried; Canvas resource DPR comes from configuration receipts.",
         "No browser/cross-platform pixel equivalence or new workspace-wide/CI result."
       ],
-      "evidence_publication_note": "This documentation revision adds the report and native summary after the separately verified source publications; neither source commit is claimed to contain these new evidence documents.",
-      "screenshot_format_erratum": "docs/screenshot-evidence-formats.md"
+      "evidence_publication_note": "Pattern implementation was published and independently verified at 6e6af034 before this native evidence documentation revision. Original sealed native report predates publication; a separate 479-input match receipt supplies the later source link.",
+      "screenshot_format_erratum": "docs/screenshot-evidence-formats.md",
+      "prior_current_path_evidence": {
+        "reference_doc": "docs/canvas-current-path.md",
+        "implementation_snapshot": "39fcf56a2e91f59d5da7a04ee519cade66f8cb69",
+        "evidence_commit": null,
+        "automatic": "保留FillTextBox/同源measure原8新回归及119不同受影响检查；current-path新增15 composite+7 UI，全库309/252、focused88/29（重叠），strict Clippy/格式/链接通过；必选current-path构造集合已覆盖，strokeText和createPattern repeat/no-repeat+transform仍缺",
+        "native": "current-path 21:12:30–21:18:56退出0，55物理按钮/84 JSON/63 JPEG截图，27/27审计，20对decoded-JPEG双300×210区域零差；原footer裁切和Compositing过渡保留。21:26:06–21:27:04仅footer复验，两按钮/11 JSON/8 JPEG截图，1090×670双行可见；共享树含open-stroke WIP，不替代功能验收",
+        "evidence_summary": "docs/validation/2026-10-02-canvas-current-path-native-summary.json",
+        "native_report": "docs/canvas-current-path-native.md",
+        "automated_summary": "docs/validation/2026-10-02-canvas-current-path-summary.json",
+        "source_tree": "565b687a9392635ac9adfead5260a070358fbd78",
+        "source_publication_url": "https://github.com/emojiiii/gpui-flow/commit/39fcf56a2e91f59d5da7a04ee519cade66f8cb69"
+      },
+      "required_pattern_scope_covered": [
+        "repeat",
+        "no-repeat",
+        "setTransform"
+      ],
+      "pattern_verification_limits": [
+        "Native tour covers one Linux fixture at Canvas DPR 1/2, not hardware-display DPR or a Cartesian repeat-mode/path-target/operation matrix.",
+        "Two strict exterior screenshot patches remain unresolved; JPEG compression is a possible explanation, not a proven cause, and renderer leakage is not established.",
+        "Tiny/singular affine transforms, resource and work budgets and missing resources have automated coverage, not physical controls in this run.",
+        "Actual outline strokeText remains unimplemented; bitmap dilation and bounding boxes are not substitutes."
+      ]
     },
     {
       "id": "ELM-11",
@@ -961,8 +983,8 @@
     }
   },
   "publication_note": "Integrator verified remote main at the recorded source snapshot/tree. Native archives and original linked-build provenance remain separately qualified; this documentation update runs no new build or full-workspace suite.",
-  "source_publication_url": "https://github.com/emojiiii/gpui-flow/commit/93ee7f7cabfb7979aeca93ec137ccf81644baeb5",
-  "published_source_tree": "a8f08d035dde97d13eecc932630e8fdda65dfb42",
+  "source_publication_url": "https://github.com/emojiiii/gpui-flow/commit/6e6af03495a67b78d18be604c9389b3cb1e18b0c",
+  "published_source_tree": "d3d157491bc857570afb7bd7ee2954eadc9f30c4",
   "screenshot_evidence_format": {
     "erratum": "docs/screenshot-evidence-formats.md",
     "historical_desktop_captures": 327,

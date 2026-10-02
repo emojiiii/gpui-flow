@@ -1,6 +1,9 @@
 # Canvas runtime image patterns
 
-Status: runtime implementation with automated validation; native acceptance pending.
+Status: runtime implementation with automated validation and a completed bounded
+[Linux native control tour](canvas-pattern-native.md): 23/23 trace checks and
+48/50 decoded-JPEG screenshot checks, with two exterior samples unresolved.
+ELM-10 remains partial for actual outline `strokeText`.
 
 ## Fixed API and coordinate contract
 
@@ -126,8 +129,13 @@ The linked binary SHA-256 is
 `9925d8b90c5bcd7afe0666597439721988ca6468e994922b28093abb34113fd4`.
 Exact commands, log hashes, evidence provenance and the source allowlist are in
 the [automated validation summary](validation/2026-10-02-canvas-patterns-summary.json).
-Native window/pixel acceptance is pending. No Actions, deployment or
-cross-platform tests were run for this validation pass.
+That automated summary retains its pre-native, acceptance-pending status. The
+subsequent [native report](canvas-pattern-native.md) and
+[native summary](validation/2026-10-02-canvas-pattern-native-summary.json) record
+the completed physical tour and its two unresolved screenshot checks. The
+[capture-format erratum](screenshot-evidence-formats.md) explains the lossy JPEG
+evidence limits. No Actions, deployment or cross-platform tests were run for
+this validation pass.
 
 ## Standalone fixture
 
