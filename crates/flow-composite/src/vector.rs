@@ -42,6 +42,7 @@ pub(crate) struct Preparation {
     pub triangles: usize,
     pub has_shadows: bool,
     pub has_inner_shadows: bool,
+    pub has_image_clips: bool,
     nodes: usize,
     masks: usize,
     source_points: usize,
@@ -319,6 +320,7 @@ impl Preparation {
                 });
             }
         } else if let Shape::Image(image) = &object.shape {
+            self.has_image_clips |= image.is_rounded();
             let pixels = images.get(&object.id)?;
             // Native GPUI object-fit uses decoded dimensions, not optional
             // document metadata. Reuse the scene fit geometry with those facts.

@@ -33,6 +33,15 @@ fn native_fit(fit: ImageFit) -> ObjectFit {
         ImageFit::Fill => ObjectFit::Fill,
     }
 }
+fn image_corners(image: &Image, transform: gpui_flow_scene::Affine) -> Corners<Pixels> {
+    let [tl, tr, br, bl] = image.effective_corners().0.map(|r| px(r * transform.a));
+    Corners {
+        top_left: tl,
+        top_right: tr,
+        bottom_right: br,
+        bottom_left: bl,
+    }
+}
 pub(super) fn image_element(
     image: &Image,
     object: &RenderObject,
@@ -43,16 +52,13 @@ pub(super) fn image_element(
         return div().into_any_element();
     };
     let fit = native_fit(image.fit);
-    let [tl, tr, br, bl] = image
-        .effective_corners()
-        .0
-        .map(|r| px(r * object.screen_transform.a));
-    let corners = Corners {
+    let corners = image_corners(image, object.screen_transform);
+    let Corners {
         top_left: tl,
         top_right: tr,
         bottom_right: br,
         bottom_left: bl,
-    };
+    } = corners;
     let content = div()
         .absolute()
         .left(px(plan.offset.x))
@@ -211,5 +217,28 @@ mod tests {
             }],
         };
         assert!(image_box(&image, &object).is_none());
+    }
+    #[test]
+    fn native_image_corners_are_clamped_scaled_and_fit_eligibility_is_exact() {
+        let mut image =
+            Image::new("local.png", SceneSize::new(40., 20.)).with_corners([50., 0., 5., 0.]);
+        let corners = image_corners(
+            &image,
+            Affine::translation(10., 20.) * Affine::scale(2., 2.),
+        );
+        assert_eq!(corners.top_left, px(20.));
+        assert_eq!(corners.top_right, px(0.));
+        assert_eq!(corners.bottom_right, px(10.));
+        for fit in [ImageFit::Contain, ImageFit::Cover, ImageFit::Fill] {
+            image.fit = fit;
+            let object = RenderObject {
+                object: DisplayObject::new("i", image.clone()),
+                screen_transform: Affine::IDENTITY,
+                viewport_transform: Affine::IDENTITY,
+                opacity: 1.,
+                clips: vec![],
+            };
+            assert_eq!(object.native_renderable(), fit != ImageFit::Contain);
+        }
     }
 }

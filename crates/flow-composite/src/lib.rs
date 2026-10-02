@@ -155,3 +155,6 @@ mod container_corner_tests;
 
 #[cfg(test)]
 mod canvas_component_tests;
+
+#[cfg(test)]
+mod image_corner_tests;

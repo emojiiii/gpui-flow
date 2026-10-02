@@ -2556,4 +2556,52 @@ mod tests {
         assert_eq!(top.screen_bounds, bottom.screen_bounds);
         assert_eq!(top.premul_rgba, bottom.premul_rgba);
     }
+    #[test]
+    fn animated_image_corner_edits_reject_late_frames_and_repaint_actual_geometry() {
+        use gpui_flow_scene::{Shape, Size, display};
+        let mut e = engine();
+        let mut image =
+            display::Image::new("animated.gif", Size::new(20., 20.)).with_corners([8., 0., 0., 0.]);
+        image.fit = display::ImageFit::Fill;
+        e.transaction(|s| s.update_object(&"r".into(), |o| o.shape = image.clone().into()))
+            .unwrap();
+        let mut first = (*key(&e)).clone();
+        first.domains[0].images = animated_key().domains[0].images.clone();
+        let first = Arc::new(first);
+        let mut c = CompositeController::default();
+        let frame = ready(&mut c, first.clone());
+        c.accepted(&first, &"g".into(), &frame.image);
+        let next = next_frame(&first, 1);
+        assert!(next.animation_only(&first));
+        c.request(next.clone());
+        let work = c.take_work().unwrap();
+        let late = work.run();
+        assert!(matches!(late.as_slice(), [(_, Ok(Some(_)))]));
+        image.corner_radii = Some([0., 8., 0., 0.].into());
+        let h = e.handle(&"r".into()).unwrap();
+        e.set_property(
+            h,
+            gpui_flow_engine::PropertyKey::Shape,
+            serde_json::to_value(Shape::from(image)).unwrap(),
+        )
+        .unwrap();
+        let mut fresh = (*key(&e)).clone();
+        fresh.domains[0].images = next.domains[0].images.clone();
+        let fresh = Arc::new(fresh);
+        assert!(!fresh.compatible(&next, &"g".into()));
+        assert_eq!(c.request(fresh.clone()).len(), 1);
+        assert!(work.cancel.load(Ordering::Relaxed));
+        c.finish(next, late);
+        assert!(c.frame(&"g".into()).is_none());
+        let work = c.take_work().unwrap();
+        let result = work.run();
+        let [(_, Ok(Some(pixels)))] = result.as_slice() else {
+            panic!("image frame expected")
+        };
+        assert_eq!(&pixels.premul_rgba[..4], &[0, 255, 0, 255]);
+        let top_right = ((19) * 4) as usize;
+        assert_eq!(&pixels.premul_rgba[top_right..top_right + 4], &[0, 0, 0, 0]);
+        c.finish(fresh, result);
+        assert!(c.frame(&"g".into()).is_some());
+    }
 }

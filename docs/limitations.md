@@ -98,3 +98,9 @@ Current [bounded container inner shadows](container-inner-shadows.md) extend the
 leaf slice to Group/Box/Frame, preserving explicit paint phases, actual subtree
 alpha, independent own effects and existing budgets. See that contract for the
 current validation scope; older slice receipts above remain historical.
+
+Image now supports [own scalar/four-corner clipping and automatic geometry CPU
+domains](image-corners.md) for complex transforms/ancestor masks. Its direct native
+fast path remains bounded to exact supported geometry. Pure picking is not
+decoded-alpha sampling, and Image rotation/nonuniform editor handles remain
+restricted pending their own interaction/lifecycle validation.

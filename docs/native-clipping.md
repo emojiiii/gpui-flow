@@ -89,3 +89,12 @@ sets hidden overflow;
 saves the canvas, clips content, draws descendants, and restores it. This Rust
 slice supplies the corresponding rectangular native adapter contract and retains
 explicit diagnostics for the broader upstream clip shapes.
+
+## Image geometry-domain extension
+
+The later [Image corner slice](image-corners.md) adds exact own corners and
+automatically routes Images with complex transforms/ancestor clips to the
+existing bounded CPU renderer. Direct native Image clipping retains the
+rectangular-chain limits described above, while SceneView now renders those
+additional Image cases without an axis-aligned approximation. Text's limits
+remain unchanged; this extension does not enable Image transform editor tools.

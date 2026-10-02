@@ -33,6 +33,7 @@ Status: historical source research plus a separately labelled current source map
 - Box/Frame组件增量：[独立四角与真实子级裁切](container-corners.md)贯通组件曲线、ClipRegion、缓存/命中/撤销、CPU mask和原生矢量/渐变裁切；12项新增headless及4项原生适配器回归通过。八crate共838项和原生UI 102项测试通过；Text/Image遇圆角祖先仍明确拒绝native路径，未声称真实窗口或Canvas元素完成
 - Canvas组件增量：[独立保留配置与运行时拥有像素](canvas-component.md)含原子clear/fill/image/subtree draw、DPR/smooth/safe-resize、真实CPU合成及代际资源释放；24项新增回归，受影响356项测试通过，Linux真实窗口Draw/Clear/安全与重置resize/Undo复验退出0。像素不进入文档/Undo，任意浏览器2D context、自动URL载入和导出仍缺；整视图OwnedCanvas是另一功能
 - Text组件增量：[四边padding与垂直对齐](text-box.md)复用同源GPUI shaping/行高，native与CPU共享inner box、wrap宽度及溢出顶对齐；测量auto-size/响应布局/资源/Undo贯通。13项新回归，受影响667项通过（1项原有忽略），真实窗口双路径对照/连续Undo退出0；富文本/ellipsis/italic/字词间距仍缺
+- Image组件增量：[独立角半径与几何驱动合成](image-corners.md)复用Rect/Kurbo、GPUI Cover/Fill角半径和CPU实际fit-mask；Contain圆角及复杂变换/祖先clip自动进入有界CPU域。16项新回归，受影响664项通过（1项原有忽略），真实静态/动画/旋转/clip/Undo窗口退出0。没有alpha hit、原生圆角Text或Image编辑工具扩展
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
 ## 九类能力当前边界（含待验证源码增量）

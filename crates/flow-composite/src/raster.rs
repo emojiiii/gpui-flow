@@ -901,7 +901,7 @@ fn rasterize_inner(
         budget,
         cancelled,
     };
-    if prep.has_shadows || prep.has_inner_shadows {
+    if prep.has_shadows || prep.has_inner_shadows || prep.has_image_clips {
         // No domain RGBA, mask, or filter scratch has been allocated yet.
         admission::admit(&raster, &root, source)?;
     }
