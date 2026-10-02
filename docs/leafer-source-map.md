@@ -31,7 +31,7 @@ Status: historical source research plus a separately labelled current source map
 - Ellipse组件增量：[弧线/扇形/圆环及环形扇区](ellipse-arcs.md)在独立文件复用Kurbo生成曲线，贯通实际bounds/hit、共享多轮廓、CPU像素与撤销；25项新回归及八crate共806项测试通过。默认整椭圆保持；角度规范化差异与Rust flatten迁移已明确，原生窗口未验
 - Rect组件增量：[独立四角半径](rect-corners.md)复用Kurbo并保留旧scalar/default JSON；曲线/CPU像素/命中/描边/历史及工厂schema已接入（同时补齐Ellipse工厂字段）。20项新增回归，八crate共826项测试通过；后续容器裁切见下一条
 - Box/Frame组件增量：[独立四角与真实子级裁切](container-corners.md)贯通组件曲线、ClipRegion、缓存/命中/撤销、CPU mask和原生矢量/渐变裁切；12项新增headless及4项原生适配器回归通过。八crate共838项和原生UI 102项测试通过；Text/Image遇圆角祖先仍明确拒绝native路径，未声称真实窗口或Canvas元素完成
-- Canvas组件增量：[独立保留配置与运行时拥有像素](canvas-component.md)含原子clear/fill/image/subtree draw、DPR/smooth/safe-resize、真实CPU合成及代际资源释放；24项新增回归，受影响356项测试通过。像素不进入文档/Undo，任意浏览器2D context、自动URL载入和导出仍缺；整视图OwnedCanvas是另一功能
+- Canvas组件增量：[独立保留配置与运行时拥有像素](canvas-component.md)含原子clear/fill/image/subtree draw、DPR/smooth/safe-resize、真实CPU合成及代际资源释放；24项新增回归，受影响356项测试通过，Linux真实窗口Draw/Clear/安全与重置resize/Undo复验退出0。像素不进入文档/Undo，任意浏览器2D context、自动URL载入和导出仍缺；整视图OwnedCanvas是另一功能
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
 ## 九类能力当前边界（含待验证源码增量）

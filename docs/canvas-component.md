@@ -75,6 +75,23 @@ Fresh Linux/Rust 1.98.1 local validation on 2026-10-02:
   `canvas_element` Studio example compiles and links with the real locked GPUI.
   Workspace rustfmt and `git diff --check` pass.
 
-The native example is prepared for a bounded interactive check; live-window
-results are still pending. No Actions, deployment, merge or cross-platform run is
-launched.
+## Native window receipt
+
+The `canvas_element` example was run on the Linux cloud desktop on 2026-10-02,
+07:46–07:51 UTC. Window-scoped screenshots were inspected after each meaningful
+action. The source tree was `5855ba47f71a8a0e694c34e005eb8160108eb98c`, published as
+[`a5c615e`](https://github.com/emojiiii/gpui-flow/commit/a5c615e62c3ddccc7c43420270f81a018eb3940b).
+The unchanged executable SHA-256 was
+`be64eccc40f61d8d07b2eeeaf93df50ec847737dc7b698a3243d35390c98a53b`.
+
+Observed: the source star remains independent; the Canvas shows two copied stars
+with its own background and independent rounded corners. Clear removes owned
+pixels but preserves the component background/border. Repeated Draw restores
+both copies. Safe shrink crops without scaling; safe grow does not resurrect
+cropped pixels. Reset resize clears. Undo restores only configuration, and a
+subsequent Draw works again. Normal window close recorded exit code 0 and an
+empty runtime error log.
+
+This validates those seven bounded interaction flows on one Linux desktop,
+not arbitrary drawing contexts, GPU/driver combinations or cross-platform parity.
+No Actions, deployment or merge was launched.
