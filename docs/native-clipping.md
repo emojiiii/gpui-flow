@@ -98,3 +98,8 @@ existing bounded CPU renderer. Direct native Image clipping retains the
 rectangular-chain limits described above, while SceneView now renders those
 additional Image cases without an axis-aligned approximation. Text's limits
 remain unchanged; this extension does not enable Image transform editor tools.
+
+The later [Text ancestor clipping slice](text-ancestor-clips.md) selects a CPU
+glyph domain automatically for nonrectangular/affine ancestor masks, when the
+host supplies the existing font bridge. Direct standalone DisplayElement
+clipping diagnostics and native-only exclusions remain unchanged.

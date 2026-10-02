@@ -203,3 +203,21 @@ fn ancestor_corner_edit_and_undo_discard_late_text_clip_jobs() {
     c.finish(restored, fresh.run());
     assert!(c.frame(&"text".into()).is_some());
 }
+
+#[test]
+fn upright_glyphs_under_affine_ancestor_clips_keep_real_mask_geometry() {
+    let (_app, bridge) =
+        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let mut s = scene();
+    // Binary-exact shear cancellation keeps Text strictly axis aligned.
+    let parent = Affine::new(1., 0.25, 0., 1., 0., 0.);
+    s.update_object(&"frame".into(), |o| {
+        o.transform = Affine::translation(5., 5.) * parent
+    })
+    .unwrap();
+    s.update_object(&"text".into(), |o| o.transform = parent.inverse().unwrap())
+        .unwrap();
+    let e = SceneEngine::new(s).unwrap();
+    let f = render(&e, Some(&bridge)).unwrap().unwrap();
+    assert!(f.premul_rgba.as_chunks::<4>().0.iter().any(|p| p[3] > 0));
+}

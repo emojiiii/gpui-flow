@@ -24,7 +24,7 @@ fn document() -> Scene {
         )
         .unwrap();
         let local = if i == 2 {
-            Affine::rotation(10.) * Affine::scale(1.05, 0.9)
+            Affine::new(1., 0.25, 0., 1., 0., 0.)
         } else {
             Affine::IDENTITY
         };

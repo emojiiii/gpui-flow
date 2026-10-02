@@ -104,3 +104,8 @@ domains](image-corners.md) for complex transforms/ancestor masks. Its direct nat
 fast path remains bounded to exact supported geometry. Pure picking is not
 decoded-alpha sampling. Image rotation/nonuniform outer handles now have their
 separate [interaction/lifecycle contract](image-transform-tools.md).
+
+Text beneath rounded or affine ancestors now uses [automatic bounded glyph
+domains](text-ancestor-clips.md), with an explicitly supplied same-App font
+bridge. Rectangular native masks stay fast; transformed glyphs and arbitrary
+Text paint styles remain unsupported.
