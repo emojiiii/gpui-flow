@@ -114,7 +114,66 @@ pub fn owned_canvas(
         canvas: Some(backdrop),
     })
 }
+/// Capture a complete subtree for an imperative Canvas draw. Ancestors' clips,
+/// opacity and background are intentionally not included. No scene is mutated.
+pub fn capture_subtree(
+    scene: &Scene,
+    id: &DisplayId,
+    limits: CompositeLimits,
+) -> Result<DomainSource, CompositeError> {
+    scene
+        .validate()
+        .map_err(|e| CompositeError::InvalidGeometry(e.to_string()))?;
+    let node = scene
+        .get(id)
+        .ok_or_else(|| CompositeError::InvalidGeometry("missing Canvas draw source".into()))?;
+    let world = scene
+        .world_transform(id)
+        .map_err(|e| CompositeError::InvalidGeometry(e.to_string()))?;
+    let parent = world
+        * node
+            .object
+            .transform
+            .inverse()
+            .ok_or(CompositeError::UnsupportedTransform)?;
+    let root = capture(
+        scene,
+        id,
+        parent,
+        &limits.bounded(),
+        &mut Counts::default(),
+        0,
+    )?;
+    Ok(DomainSource {
+        root,
+        clips: vec![],
+        canvas: None,
+    })
+}
 impl DomainSource {
+    pub fn root_transform(&self) -> Affine {
+        self.root.world_transform
+    }
+    pub fn canvases(&self) -> Vec<(&DisplayId, &gpui_flow_scene::display::Canvas)> {
+        fn visit<'a>(
+            node: &'a DomainNode,
+            out: &mut Vec<(&'a DisplayId, &'a gpui_flow_scene::display::Canvas)>,
+        ) {
+            if !node.object.visible || node.object.style.opacity == 0. {
+                return;
+            }
+            if let Shape::Canvas(canvas) = &node.object.shape {
+                out.push((&node.object.id, canvas));
+            }
+            for child in &node.children {
+                visit(child, out);
+            }
+        }
+        let mut out = Vec::new();
+        visit(&self.root, &mut out);
+        out
+    }
+
     /// The empty ID denotes the runtime owned canvas, never a canonical node.
     pub fn root_id(&self) -> &DisplayId {
         &self.root.object.id
@@ -233,7 +292,8 @@ fn boundary(scene: &Scene, id: &DisplayId) -> bool {
         return false;
     };
     let o = &node.object;
-    o.style.has_shadows()
+    matches!(o.shape, Shape::Canvas(_))
+        || o.style.has_shadows()
         || o.style.has_inner_shadows()
         || o.style.blend_mode != BlendMode::PassThrough
         || (o.style.opacity < 1.0
@@ -368,6 +428,7 @@ fn capture(
         | Shape::Line(_)
         | Shape::Group(_)
         | Shape::Image(_)
+        | Shape::Canvas(_)
         | Shape::Text(_)
         | Shape::Box(_)
         | Shape::Frame(_) => 0,

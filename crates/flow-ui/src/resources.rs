@@ -1,6 +1,7 @@
 //! GPUI producer for the engine's runtime resource lifecycle. This adapter uses
 //! GPUI's public asset subscription/cache and the existing shared text shaper.
 //! It does not fetch, decode, or poll private cache state itself.
+mod canvas;
 use gpui::{AnyImageCache, App, ImgResourceLoader, RenderImage, Resource, Window};
 use gpui_flow_engine::{
     ElementHandle, ResourceCancellation, ResourceCompletion, ResourceError, ResourceEvent,
@@ -46,7 +47,23 @@ impl CompositeImageObservation {
     }
 }
 /// Runtime-only state; no decoded image or authorization enters Scene JSON.
+#[derive(Debug)]
+pub enum CanvasEditError {
+    Resource(ResourceError),
+    Pixels(gpui_flow_composite::CompositeError),
+}
+impl std::fmt::Display for CanvasEditError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Resource(e) => e.fmt(f),
+            Self::Pixels(e) => e.fmt(f),
+        }
+    }
+}
+impl std::error::Error for CanvasEditError {}
+
 pub struct SceneResourceAdapter {
+    canvases: canvas::CanvasResources,
     tracker: SceneResources,
     resolver: SceneImageResolver,
     cache: Option<AnyImageCache>,
@@ -60,8 +77,17 @@ pub struct SceneResourceAdapter {
 }
 impl SceneResourceAdapter {
     pub fn new(engine: &mut SceneEngine) -> Result<Self, ResourceError> {
+        let mut tracker = SceneResources::new(engine)?;
+        let canvases = match canvas::CanvasResources::new(engine) {
+            Ok(canvases) => canvases,
+            Err(error) => {
+                let _ = tracker.dispose(engine);
+                return Err(error);
+            }
+        };
         Ok(Self {
-            tracker: SceneResources::new(engine)?,
+            tracker,
+            canvases,
             resolver: Rc::new(local_image_resource),
             cache: None,
             resolved: BTreeMap::new(),
@@ -69,6 +95,104 @@ impl SceneResourceAdapter {
             playbacks: BTreeMap::new(),
             timelines: BTreeMap::new(),
         })
+    }
+    /// Synchronize resource identity and allocate/resize Canvas surfaces without
+    /// requiring a native Window. URL images and text remain pending here.
+    pub fn prepare_canvases(
+        &mut self,
+        engine: &mut SceneEngine,
+    ) -> Result<Vec<ResourceEvent>, ResourceError> {
+        let mut events = self.tracker.synchronize(engine)?;
+        self.canvases.retain_live(engine);
+        let requests = engine
+            .scene()
+            .nodes()
+            .filter_map(|node| {
+                let Shape::Canvas(config) = &node.object.shape else {
+                    return None;
+                };
+                let handle = engine.handle(&node.object.id)?;
+                let ticket = self.tracker.ticket(engine, handle)?;
+                (self.tracker.state(engine, ticket) == Some(ResourceState::Pending))
+                    .then(|| (ticket, node.object.id.clone(), config.clone()))
+            })
+            .collect::<Vec<_>>();
+        for (ticket, id, config) in requests {
+            if self.tracker.ticket(engine, ticket.handle) != Some(ticket) {
+                continue;
+            }
+            let outcome = match self.canvases.ensure(ticket, id, &config) {
+                Ok(()) => ResourceOutcome::Loaded,
+                Err(error) => ResourceOutcome::Failed(error.to_string()),
+            };
+            self.settle(engine, ticket, outcome, None, &mut events)?;
+        }
+        Ok(events)
+    }
+    /// Atomic imperative drawing. Scene/Undo contains only the Canvas config;
+    /// pixel edits are runtime-only and must be followed by a host repaint.
+    pub fn edit_canvas(
+        &mut self,
+        engine: &mut SceneEngine,
+        handle: ElementHandle,
+        edit: impl FnOnce(
+            &mut gpui_flow_composite::CanvasSurface,
+        ) -> Result<(), gpui_flow_composite::CompositeError>,
+    ) -> Result<Vec<ResourceEvent>, CanvasEditError> {
+        let events = self
+            .prepare_canvases(engine)
+            .map_err(CanvasEditError::Resource)?;
+        let ticket = self
+            .tracker
+            .ticket(engine, handle)
+            .filter(|t| t.kind == ResourceKind::Canvas)
+            .ok_or(CanvasEditError::Pixels(
+                gpui_flow_composite::CompositeError::Superseded,
+            ))?;
+        self.canvases
+            .edit(ticket, edit)
+            .map_err(CanvasEditError::Pixels)?;
+        Ok(events)
+    }
+    pub fn canvas_snapshot(
+        &self,
+        engine: &SceneEngine,
+        handle: ElementHandle,
+    ) -> Option<Arc<gpui_flow_composite::StaticImage>> {
+        self.canvases.snapshot(self.tracker.ticket(engine, handle)?)
+    }
+    pub(crate) fn composite_canvas(
+        &self,
+        engine: &SceneEngine,
+        id: &gpui_flow_scene::DisplayId,
+        expected: &gpui_flow_scene::display::Canvas,
+    ) -> CompositeImageObservation {
+        let ticket = engine
+            .handle(id)
+            .and_then(|h| self.tracker.ticket(engine, h));
+        let canonical = engine
+            .scene()
+            .get(id)
+            .is_some_and(|n| matches!(&n.object.shape, Shape::Canvas(c) if c == expected));
+        let input = canonical
+            .then(|| ticket.and_then(|t| self.canvases.image(t)))
+            .flatten();
+        let (image, generation) = match input {
+            Some((image, generation)) => (Ok(image), generation),
+            None => (
+                Err(gpui_flow_composite::CompositeError::ImageUnavailable {
+                    image: id.clone(),
+                    reason: "Canvas has no current owned surface".into(),
+                }),
+                0,
+            ),
+        };
+        CompositeImageObservation {
+            ticket,
+            image,
+            frame_index: 0,
+            playback_generation: generation,
+        }
     }
     pub fn tracker(&self) -> &SceneResources {
         &self.tracker
@@ -113,7 +237,7 @@ impl SceneResourceAdapter {
         window: &mut Window,
         cx: &mut App,
     ) -> Result<Vec<ResourceEvent>, ResourceError> {
-        let mut events = self.tracker.synchronize(engine)?;
+        let mut events = self.prepare_canvases(engine)?;
         self.resolved
             .retain(|ticket, _| self.tracker.state(engine, *ticket).is_some());
         self.images
@@ -447,6 +571,7 @@ impl SceneResourceAdapter {
         &mut self,
         engine: &mut SceneEngine,
     ) -> Result<Vec<ResourceEvent>, ResourceError> {
+        self.canvases.dispose(engine);
         self.resolved.clear();
         self.images.clear();
         self.playbacks.clear();

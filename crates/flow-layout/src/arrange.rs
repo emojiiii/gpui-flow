@@ -356,6 +356,7 @@ fn resize(
         Shape::Ellipse(shape) => &mut shape.size,
         Shape::Text(shape) => &mut shape.size,
         Shape::Image(shape) => &mut shape.size,
+        Shape::Canvas(shape) => &mut shape.size,
         Shape::Box(shape) => &mut shape.size,
         Shape::Frame(shape) => &mut shape.size,
         _ => {

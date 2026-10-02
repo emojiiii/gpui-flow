@@ -163,7 +163,7 @@ impl ElementRegistry {
         let mut registry = Self::empty();
         for kind in [
             "rect", "ellipse", "line", "polygon", "star", "path", "pen", "text", "image", "group",
-            "box", "frame",
+            "box", "frame", "canvas",
         ] {
             registry
                 .definitions
@@ -322,6 +322,9 @@ impl ElementDefinition for BuiltinDefinition {
             }
             "image" => {
                 json!({"source":"","size":{"width":100.,"height":100.},"natural_size":null,"fit":"contain"})
+            }
+            "canvas" => {
+                json!({"size":{"width":100.,"height":100.},"pixel_ratio":1.,"smooth":true,"safe_resize":false,"corner_radius":0.,"corner_radii":null})
             }
             "group" => json!({}),
             "box" | "frame" => {

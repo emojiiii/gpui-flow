@@ -70,6 +70,7 @@ fn validate_scope(before: &Scene, after: &Scene) -> Result<(), EngineError> {
             (Shape::Ellipse(a), Shape::Ellipse(b)) => a.size = b.size,
             (Shape::Text(a), Shape::Text(b)) => a.size = b.size,
             (Shape::Image(a), Shape::Image(b)) => a.size = b.size,
+            (Shape::Canvas(a), Shape::Canvas(b)) => a.size = b.size,
             (Shape::Box(a), Shape::Box(b)) => a.size = b.size,
             (Shape::Frame(a), Shape::Frame(b)) => a.size = b.size,
             _ => {}

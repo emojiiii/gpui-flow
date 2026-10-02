@@ -9,12 +9,14 @@ use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 pub enum ResourceKind {
     Image,
     Text,
+    Canvas,
 }
 impl ResourceKind {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Image => "image",
             Self::Text => "text",
+            Self::Canvas => "canvas",
         }
     }
 }
@@ -167,12 +169,14 @@ pub struct ResourceFrame {
 enum Source {
     Image(String),
     Text(Text),
+    Canvas(gpui_flow_scene::display::Canvas),
 }
 impl Source {
     fn from_shape(shape: &Shape) -> Option<Self> {
         match shape {
             Shape::Image(image) => Some(Self::Image(image.source.clone())),
             Shape::Text(text) => Some(Self::Text(text.clone())),
+            Shape::Canvas(canvas) => Some(Self::Canvas(canvas.clone())),
             _ => None,
         }
     }
@@ -180,6 +184,7 @@ impl Source {
         match (self, shape) {
             (Self::Image(source), Shape::Image(image)) => *source == image.source,
             (Self::Text(source), Shape::Text(text)) => source == text,
+            (Self::Canvas(source), Shape::Canvas(canvas)) => source == canvas,
             _ => false,
         }
     }
@@ -187,6 +192,7 @@ impl Source {
         match self {
             Self::Image(_) => ResourceKind::Image,
             Self::Text(_) => ResourceKind::Text,
+            Self::Canvas(_) => ResourceKind::Canvas,
         }
     }
 }
@@ -263,7 +269,7 @@ impl SceneResources {
                                     || property.old["geometry"]["source"]
                                         != property.new["geometry"]["source"]
                             }
-                            Source::Text(_) => property.old != property.new,
+                            Source::Text(_) | Source::Canvas(_) => property.old != property.new,
                         }
                     } else {
                         // Conservative support for future granular shape deltas.
@@ -298,7 +304,7 @@ impl SceneResources {
         }
         Ok(())
     }
-    /// Reconcile all attached built-in text/images, including invisible nodes.
+    /// Reconcile all attached built-in text/images/Canvas surfaces, including invisible nodes.
     /// Discovery is inert: it never loads bytes, launches work or grants access.
     /// Capacity/generation failures occur before mutating the tracked set.
     pub fn synchronize(
@@ -309,7 +315,12 @@ impl SceneResources {
         let requested = engine
             .scene()
             .nodes()
-            .filter(|node| matches!(node.object.shape, Shape::Image(_) | Shape::Text(_)))
+            .filter(|node| {
+                matches!(
+                    node.object.shape,
+                    Shape::Image(_) | Shape::Text(_) | Shape::Canvas(_)
+                )
+            })
             .count();
         if requested > self.limit {
             return Err(ResourceError::Capacity {
@@ -481,7 +492,12 @@ impl SceneResources {
         let required = engine
             .scene()
             .nodes()
-            .filter(|node| matches!(node.object.shape, Shape::Image(_) | Shape::Text(_)))
+            .filter(|node| {
+                matches!(
+                    node.object.shape,
+                    Shape::Image(_) | Shape::Text(_) | Shape::Canvas(_)
+                )
+            })
             .count();
         if entries.len() != required || entries.values().any(|entry| !entry.matches(engine)) {
             return None;

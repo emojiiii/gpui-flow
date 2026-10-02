@@ -32,7 +32,12 @@ pub(super) fn validate(
     }
     if !matches!(
         object.shape,
-        Shape::Rect(_) | Shape::Ellipse(_) | Shape::Image(_) | Shape::Box(_) | Shape::Frame(_)
+        Shape::Rect(_)
+            | Shape::Ellipse(_)
+            | Shape::Image(_)
+            | Shape::Canvas(_)
+            | Shape::Box(_)
+            | Shape::Frame(_)
     ) {
         return Err(invalid(
             id,
@@ -154,6 +159,7 @@ pub(super) fn resize(
         Shape::Rect(shape) => &mut shape.size,
         Shape::Ellipse(shape) => &mut shape.size,
         Shape::Image(shape) => &mut shape.size,
+        Shape::Canvas(shape) => &mut shape.size,
         Shape::Box(shape) => &mut shape.size,
         Shape::Frame(shape) => &mut shape.size,
         _ => unreachable!("validated lock_ratio shape"),

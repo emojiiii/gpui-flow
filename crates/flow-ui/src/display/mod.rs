@@ -52,7 +52,8 @@ impl RenderObject {
                 feature,
             })
         };
-        if self.object.style.blend_mode != scene::BlendMode::PassThrough
+        if matches!(self.object.shape, Shape::Canvas(_))
+            || self.object.style.blend_mode != scene::BlendMode::PassThrough
             || self.object.mask != scene::MaskMode::None
             || (self.object.style.opacity < 1.0
                 && (self.object.shape.allows_children()

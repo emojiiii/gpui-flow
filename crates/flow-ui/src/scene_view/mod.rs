@@ -122,6 +122,28 @@ impl SceneView {
             text_input: None,
         }
     }
+    /// Mutate owned Canvas pixels and request a repaint; configuration continues
+    /// to use ordinary editor transactions and Undo. Pixel bytes are not history.
+    pub fn edit_canvas(
+        &mut self,
+        handle: gpui_flow_engine::ElementHandle,
+        edit: impl FnOnce(
+            &mut gpui_flow_composite::CanvasSurface,
+        ) -> Result<(), gpui_flow_composite::CompositeError>,
+        cx: &mut Context<Self>,
+    ) -> Result<(), crate::resources::CanvasEditError> {
+        let resources =
+            self.resources
+                .as_mut()
+                .ok_or(crate::resources::CanvasEditError::Resource(
+                    gpui_flow_engine::ResourceError::Disposed,
+                ))?;
+        for event in resources.edit_canvas(&mut self.editor.engine, handle, edit)? {
+            cx.emit(SceneViewEvent::Resource(event));
+        }
+        cx.notify();
+        Ok(())
+    }
     pub fn resources(&self) -> Option<&crate::resources::SceneResourceAdapter> {
         self.resources.as_ref()
     }

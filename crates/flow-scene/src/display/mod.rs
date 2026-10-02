@@ -1,6 +1,7 @@
 //! Local geometry primitives. Each primitive is implemented independently;
 //! [`Shape`] provides dispatch for retained scene storage and serialization.
 mod box_shape;
+mod canvas;
 mod custom;
 mod ellipse;
 mod frame;
@@ -17,6 +18,7 @@ mod star;
 mod text;
 use crate::{Bounds, Contour, Point, Style};
 pub use box_shape::Box;
+pub use canvas::Canvas;
 pub use custom::Custom;
 pub use ellipse::Ellipse;
 pub use frame::Frame;
@@ -44,6 +46,7 @@ pub enum Shape {
     Pen(Pen),
     Text(Text),
     Image(Image),
+    Canvas(Canvas),
     Group(Group),
     Box(Box),
     Frame(Frame),
@@ -51,7 +54,7 @@ pub enum Shape {
 }
 macro_rules! conversions {($($name:ident),*)=>{$(impl From<$name> for Shape{fn from(value:$name)->Self{Self::$name(value)}})*};}
 conversions!(
-    Rect, Ellipse, Line, Polygon, Star, Path, Pen, Text, Image, Group, Box, Frame, Custom
+    Rect, Ellipse, Line, Polygon, Star, Path, Pen, Text, Image, Canvas, Group, Box, Frame, Custom
 );
 impl Shape {
     /// The renderer's own-paint entry/exit phases; structural object order and
@@ -74,6 +77,7 @@ impl Shape {
             Self::Pen(_) => "pen",
             Self::Text(_) => "text",
             Self::Image(_) => "image",
+            Self::Canvas(_) => "canvas",
             Self::Group(_) => "group",
             Self::Box(_) => "box",
             Self::Frame(_) => "frame",
@@ -94,6 +98,7 @@ impl Shape {
             Self::Pen(s) => s.bounds(),
             Self::Text(s) => Some(s.bounds()),
             Self::Image(s) => Some(s.bounds()),
+            Self::Canvas(s) => Some(s.bounds()),
             Self::Group(_) => None,
             Self::Box(s) => Some(s.bounds()),
             Self::Frame(s) => Some(s.bounds()),
@@ -113,6 +118,7 @@ impl Shape {
             Self::Pen(s) => s.flatten(tolerance),
             Self::Text(s) => vec![crate::geometry::rectangle(s.size, 0.0, tolerance)],
             Self::Image(s) => vec![crate::geometry::rectangle(s.size, 0.0, tolerance)],
+            Self::Canvas(s) => vec![s.flatten(tolerance)],
             Self::Group(_) => vec![],
             Self::Box(s) => vec![s.flatten(tolerance)],
             Self::Frame(s) => vec![s.flatten(tolerance)],
@@ -136,6 +142,7 @@ impl Shape {
             Self::Frame(s) => s.contains(point),
             Self::Text(s) => s.bounds().contains(point),
             Self::Image(s) => s.bounds().contains(point),
+            Self::Canvas(s) => s.contains(point),
             Self::Line(_) | Self::Group(_) => false,
             _ => crate::geometry::fill_hit(&self.flatten(0.1), point, rule),
         }
@@ -149,6 +156,12 @@ impl Shape {
         }
         if let Self::Image(image) = self {
             return image.bounds().contains(point) && image.content_bounds().contains(point);
+        }
+        if let Self::Canvas(canvas) = self
+            && canvas.contains(point)
+        {
+            // Runtime pixels are not available to pure document picking.
+            return true;
         }
         let fill = style.fills().any(|paint| paint.is_visible());
         if fill && self.contains_geometry(point, style.fill_rule) {
@@ -182,6 +195,7 @@ impl Shape {
         }
         match self {
             Self::Rect(s) => s.validate()?,
+            Self::Canvas(s) => s.validate()?,
             Self::Ellipse(s) => s.validate()?,
             Self::Line(s) => {
                 if !s.start.is_finite() || !s.end.is_finite() {

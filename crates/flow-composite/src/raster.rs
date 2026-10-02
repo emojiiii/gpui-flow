@@ -347,7 +347,7 @@ impl Raster<'_> {
                 shader: tiny_skia::Pattern::new(
                     p.image.pixmap.as_ref(),
                     tiny_skia::SpreadMode::Pad,
-                    tiny_skia::FilterQuality::Bilinear,
+                    crate::canvas_surface::quality(p.smooth),
                     1.,
                     transform(p.texture_to_local),
                 ),

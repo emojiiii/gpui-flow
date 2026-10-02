@@ -24,6 +24,7 @@ pub(crate) struct PreparedNode {
     pub child_clip: Option<ClipRegion>,
 }
 pub(crate) struct ImagePaint {
+    pub smooth: bool,
     pub image: Arc<StaticImage>,
     pub path: Path,
     pub texture_to_local: Affine,
@@ -109,6 +110,11 @@ pub(crate) fn path(shape: &Shape) -> Result<Option<Path>, CompositeError> {
         _ => None,
     };
     let commands = match shape {
+        Shape::Canvas(c) => {
+            return path(&Shape::Path(
+                c.to_path().map_err(CompositeError::InvalidGeometry)?,
+            ));
+        }
         Shape::Path(p) => Some(&p.commands),
         Shape::Pen(p) => Some(&p.path.commands),
         Shape::Ellipse(_) | Shape::Rect(_) | Shape::Box(_) | Shape::Frame(_) => {
@@ -299,6 +305,7 @@ impl Preparation {
                 let path = PathBuilder::from_rect(rect);
                 self.add_path(&path, source.world_transform, limits)?;
                 image_paint = Some(ImagePaint {
+                    smooth: true,
                     texture_to_local: Affine::translation(b.origin.x, b.origin.y)
                         * Affine::scale(
                             b.size.width / text.image.width() as f32,
@@ -333,6 +340,7 @@ impl Preparation {
                 let path = PathBuilder::from_rect(rect);
                 self.add_path(&path, source.world_transform, limits)?;
                 image_paint = Some(ImagePaint {
+                    smooth: true,
                     texture_to_local: Affine::translation(content.origin.x, content.origin.y)
                         * Affine::scale(
                             content.size.width / pixels.width() as f32,
@@ -357,6 +365,22 @@ impl Preparation {
                             FillRule::EvenOdd => tiny_skia::FillRule::EvenOdd,
                             FillRule::NonZero => tiny_skia::FillRule::Winding,
                         },
+                        world: source.world_transform,
+                    });
+                }
+            }
+            if let Shape::Canvas(canvas) = &object.shape {
+                let pixels = images.get(&object.id)?;
+                if let Some(path) = path(&object.shape)? {
+                    self.add_path(&path, source.world_transform, limits)?;
+                    image_paint = Some(ImagePaint {
+                        smooth: canvas.smooth,
+                        texture_to_local: Affine::scale(
+                            canvas.size.width / pixels.width() as f32,
+                            canvas.size.height / pixels.height() as f32,
+                        ),
+                        image: pixels,
+                        path,
                         world: source.world_transform,
                     });
                 }

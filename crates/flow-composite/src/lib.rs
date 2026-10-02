@@ -4,6 +4,7 @@
 //! exhausted budgets return an error before an output can be published. Native
 //! custom renderers must remain outside these domains. Image and text ink pixels
 //! are supplied by the host, never fetched, decoded or shaped by this crate.
+mod canvas_surface;
 mod image;
 mod nonseparable;
 mod plan;
@@ -11,6 +12,7 @@ mod raster;
 mod shadow;
 mod text;
 mod vector;
+pub use canvas_surface::*;
 pub use image::*;
 pub use plan::*;
 pub use raster::*;

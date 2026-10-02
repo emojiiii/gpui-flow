@@ -90,6 +90,17 @@ impl RequestKey {
                         .and_then(|h| resources?.tracker().ticket(engine, h))
                 })
                 .collect();
+            for (id, canvas) in domain.source.canvases() {
+                let observation = resources
+                    .map(|r| r.composite_canvas(engine, id, canvas))
+                    .unwrap_or_else(|| crate::resources::CompositeImageObservation {
+                        ticket: None,
+                        image: Err(CompositeError::ImagePending(id.clone())),
+                        frame_index: 0,
+                        playback_generation: 0,
+                    });
+                domain.images.insert(id.clone(), observation);
+            }
             for (id, image) in domain.source.images() {
                 let observation = resources
                     .map(|r| r.composite_image(engine, id, &image.source))
