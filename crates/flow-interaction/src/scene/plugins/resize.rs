@@ -154,9 +154,18 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
                     minimum_scale: geometry.map_or(Point::new(0.05, 0.05), |g| g.minimum_scale),
                 });
                 out.command(SceneCommand::BeginGesture);
-                out.command(SceneCommand::CapturePointerForTarget {
-                    pointer_id: p.pointer_id,
-                    target,
+                out.command(if handle.is_some() {
+                    // Named single handles share the revision/selection guard
+                    // already used by shared resize and rotation capture.
+                    SceneCommand::CapturePointerForSelection {
+                        pointer_id: p.pointer_id,
+                        targets: vec![target],
+                    }
+                } else {
+                    SceneCommand::CapturePointerForTarget {
+                        pointer_id: p.pointer_id,
+                        target,
+                    }
                 });
                 let cursor = geometry
                     .and_then(|g| g.screen_handles(cx.editor))

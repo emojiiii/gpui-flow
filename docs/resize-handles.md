@@ -4,6 +4,10 @@ Status: bounded implementation with focused Linux regression and native-window
 validation on 2026-10-01. Exact coverage and remaining limits are below; this
 is not a full editor or cross-platform acceptance claim.
 
+The later [Image transform slice](image-transform-tools.md) enables affine Image
+resize/rotation and strengthens named single-handle capture and derived-scene
+validation. The original dated validation receipt below is historical.
+
 ## Contract
 
 SceneView now draws eight named transform handles for one eligible selected
@@ -34,13 +38,13 @@ added.
   `1 + (dx*u + dy*v)/(u*u + v*v)`. This supports single-axis inward drags on
   non-square objects. It deliberately differs from Leafer's geometric-mean
   corner ratio locking
-- Text/Image targets and any subtree containing either always scale uniformly.
+- Text targets and any subtree containing Text always scale uniformly.
   Their current and proposed world matrices must be supported by the existing
   native renderer: finite, axis-aligned, positive uniform scale plus translation.
   The post-middleware candidate is checked too, so a normalization cannot make
   a previously working native descendant rotated, skewed or nonuniform
 - Positive incremental factors preserve the initial orientation. Dragging across
-  the anchor clamps rather than silently flipping. Existing reflected vectors
+  the anchor clamps rather than silently flipping. Existing reflected vectors and Images
   stay reflected; no new flip operation is introduced
 
 ## Exact limits
@@ -105,7 +109,7 @@ The later [shared-selection resize slice](selection-resize.md) adds a world-axis
 box for multiple selections. This original slice adds no path/line control-point editor, rotation
 handle, skew handle, pivot/Alt-center editing, flip UI, intrinsic-size rewrite,
 custom resize callback or arbitrary tool view factory is added. The existing R
-rotation shortcut is unchanged and does not expand native Text/Image transform
+rotation shortcut is unchanged and does not expand native Text transform
 support. Custom subtrees, empty/zero-area targets, singular subtree matrices and
 currently unsupported native matrices have no named handles. Layout-owned
 transforms can still reject edits through their existing provider contract.

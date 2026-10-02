@@ -181,11 +181,9 @@ fn tiny_existing_target_never_jumps_or_shrinks_and_can_grow() {
 }
 
 #[test]
-fn native_text_and_image_corner_shrink_and_side_resize_are_uniform() {
-    for shape in [
-        Shape::from(d::Text::new("hello", Size::new(100., 50.))),
-        d::Image::new("asset://image", Size::new(100., 50.)).into(),
-    ] {
+fn native_text_corner_shrink_and_side_resize_are_uniform() {
+    for content in ["hello", ""] {
+        let shape = Shape::from(d::Text::new(content, Size::new(100., 50.)));
         for handle in [ResizeHandle::BottomRight, ResizeHandle::Left] {
             let mut lab = Lab::new(shape.clone(), Affine::translation(50., 80.));
             let g = lab.geometry();
@@ -618,4 +616,159 @@ fn typed_handles_obey_prevented_down_and_up_and_inherited_locks() {
         })
         .unwrap();
     assert!(SceneResizeGeometry::for_target(&lab.editor, &"target".into()).is_none());
+}
+
+#[test]
+fn image_handles_allow_nonuniform_resize_and_shift_retains_uniform_scaling() {
+    for shift in [false, true] {
+        let mut lab = Lab::new(
+            d::Image::new("fixture", Size::new(100., 50.)).with_corners([15., 0., 8., 0.]),
+            Affine::translation(50., 80.),
+        );
+        let before = lab.editor.scene().clone();
+        let shape = lab
+            .editor
+            .scene()
+            .get(&"target".into())
+            .unwrap()
+            .object
+            .shape
+            .clone();
+        let h = lab.editor.engine.handle(&"target".into()).unwrap();
+        assert!(!lab.geometry().uniform);
+        let start = lab.down(ResizeHandle::Right, shift);
+        lab.movement(start + Point::new(50., 0.), shift);
+        lab.up(start + Point::new(50., 0.));
+        assert_eq!(lab.transform().a, 1.5);
+        assert_eq!(lab.transform().d, if shift { 1.5 } else { 1. });
+        assert_eq!(
+            lab.editor
+                .scene()
+                .get(&"target".into())
+                .unwrap()
+                .object
+                .shape,
+            shape
+        );
+        let after = lab.editor.scene().clone();
+        assert!(lab.editor.undo());
+        assert_eq!(lab.editor.scene(), &before);
+        assert!(lab.editor.redo());
+        assert_eq!(lab.editor.scene(), &after);
+        assert_eq!(lab.editor.engine.handle(&"target".into()), Some(h));
+    }
+}
+#[test]
+fn image_resize_uses_affine_local_axes_and_keeps_opposite_anchor() {
+    let mut lab = Lab::new(
+        d::Image::new("fixture", Size::new(100., 50.)),
+        Affine::translation(150., 120.) * Affine::rotation(27.) * Affine::scale(-1.5, 0.7),
+    );
+    let g = lab.geometry();
+    assert!(!g.uniform);
+    let start = lab.down(ResizeHandle::Right, false);
+    let delta = g.world.transform_vector(Point::new(50., 0.));
+    lab.movement(start + delta, false);
+    lab.up(start + delta);
+    close(
+        lab.transform()
+            .transform_point(ResizeHandle::Right.anchor(g.bounds)),
+        g.original
+            .transform_point(ResizeHandle::Right.anchor(g.bounds)),
+    );
+    close(
+        lab.transform().transform_vector(Point::new(1., 0.)),
+        g.original.transform_vector(Point::new(1.5, 0.)),
+    );
+    assert!(lab.transform().determinant() < 0.);
+}
+#[test]
+fn image_resize_cancellation_and_external_source_changes_do_not_replay_stale_baselines() {
+    for external in [false, true] {
+        let mut lab = Lab::new(
+            d::Image::new("fixture", Size::new(100., 50.)),
+            Affine::translation(50., 80.),
+        );
+        let before = lab.editor.scene().clone();
+        let start = lab.down(ResizeHandle::Right, false);
+        lab.movement(start + Point::new(25., 0.), false);
+        if external {
+            lab.editor
+                .transaction(|s| {
+                    s.update_object(&"target".into(), |o| {
+                        if let Shape::Image(i) = &mut o.shape {
+                            i.source = "replacement".into();
+                        }
+                    })
+                })
+                .unwrap();
+            let changed = lab.editor.scene().clone();
+            lab.movement(start + Point::new(60., 0.), false);
+            assert_eq!(lab.editor.scene(), &changed);
+        } else {
+            lab.host.cancel(&mut lab.editor);
+            assert_eq!(lab.editor.scene(), &before);
+        }
+        assert!(!lab.host.has_capture());
+        assert!(!lab.editor.editing());
+    }
+}
+
+#[test]
+fn named_single_resize_rejects_locked_descendants_before_capture() {
+    let mut lab = Lab::new(d::Group::new(), Affine::IDENTITY);
+    lab.editor
+        .transaction(|scene| {
+            let mut image =
+                DisplayObject::new("image", d::Image::new("fixture", Size::new(100., 50.)));
+            image.locked = true;
+            scene.insert(image, Some("target".into()), None)
+        })
+        .unwrap();
+    assert!(SceneResizeGeometry::for_target(&lab.editor, &"target".into()).is_none());
+}
+
+struct InvalidSingleDerived;
+impl gpui_flow_engine::LayoutProvider for InvalidSingleDerived {
+    fn derive(
+        &self,
+        _: &gpui_flow_engine::SceneEngine,
+        scene: &Scene,
+    ) -> Result<Scene, gpui_flow_engine::EngineError> {
+        let mut next = scene.clone();
+        if scene.get(&"target".into()).unwrap().object.transform.a != 1. {
+            next.update_object(&"target".into(), |o| {
+                o.shape = d::Text::new("derived", Size::new(100., 50.)).into();
+                o.transform = Affine::scale(2., 3.);
+            })?;
+        }
+        Ok(next)
+    }
+}
+#[test]
+fn named_image_resize_rechecks_derived_subtree_before_commit() {
+    let mut lab = Lab::new(
+        d::Image::new("fixture", Size::new(100., 50.)),
+        Affine::IDENTITY,
+    );
+    lab.editor
+        .engine
+        .install_layout_provider(InvalidSingleDerived)
+        .unwrap();
+    let before = lab.editor.scene().clone();
+    let revision = lab.editor.engine.revision();
+    let start = lab.down(ResizeHandle::Right, false);
+    let report = lab.router.dispatch(
+        &mut lab.editor,
+        &mut lab.host,
+        CanvasEvent::PointerMove(PointerInput::left(
+            start + Point::new(20., 0.),
+            HitTarget::Background,
+        )),
+    );
+    assert!(!report.default.errors.is_empty());
+    assert_eq!(lab.editor.scene(), &before);
+    assert_eq!(lab.editor.engine.revision(), revision);
+    assert!(!lab.host.has_capture());
+    assert!(!lab.editor.editing());
 }

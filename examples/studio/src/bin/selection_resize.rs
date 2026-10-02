@@ -186,7 +186,7 @@ impl Render for Lab {
                     this.command(SceneCommand::Zoom { position: ScenePoint::new(350., 220.), zoom }, window, cx);
                 })))
                 .child(ControlButton::new("reset", "Reset").on_click(cx.listener(|this, _, window, cx| this.command(SceneCommand::LoadScene(scene()), window, cx)))))
-            .child(div().px_3().text_sm().child("Circle: rotate · Shift: 45° snap / uniform resize · Native: uniform resize only · Escape: roll back · Space: pan"))
+            .child(div().px_3().text_sm().child("Circle: rotate · Shift: 45° snap / uniform resize · Text: uniform resize only · Escape: roll back · Space: pan"))
             .child(div().flex_1().min_h_0().child(self.view.clone()))
             .child(div().p_3().text_sm().text_color(rgb(theme.muted)).child(format!("{} selected · zoom {:.2} · {}", view.editor.selection.ids.len(), view.editor.viewport.zoom, status)))
     }

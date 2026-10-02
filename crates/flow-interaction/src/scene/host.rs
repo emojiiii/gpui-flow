@@ -823,6 +823,9 @@ impl ScenePluginHost {
                 })?;
             }
             SceneCommand::SetResizeTransform { target, transform } => {
+                if self.capture_target_stale(editor) {
+                    return Err(InteractionError::InvalidInput("stale resize target".into()));
+                }
                 let instance = editor
                     .engine
                     .instance(target)
@@ -830,6 +833,16 @@ impl ScenePluginHost {
                 if instance.state != InstanceState::Attached {
                     return Err(InteractionError::InvalidInput(
                         "resize target is detached".into(),
+                    ));
+                }
+                if let Some(guard) = self
+                    .capture
+                    .as_ref()
+                    .and_then(|c| c.selection_guard.as_ref())
+                    && guard.targets.as_slice() != [(target, instance.attachment_epoch)]
+                {
+                    return Err(InteractionError::InvalidInput(
+                        "resize capture membership changed".into(),
                     ));
                 }
                 let id = instance.id.clone();
@@ -841,9 +854,33 @@ impl ScenePluginHost {
                         "unsupported resize transform or subtree".into(),
                     ));
                 }
-                editor.transaction(|scene| {
-                    scene.update_object(&id, |object| object.transform = transform)
-                })?;
+                editor.transaction_validated(
+                    |scene| scene.update_object(&id, |object| object.transform = transform),
+                    |scene| {
+                        let node = scene
+                            .get(&id)
+                            .ok_or_else(|| SceneError::MissingNode(id.clone()))?;
+                        if !object_editable(scene, &id)
+                            || !super::SceneResizeGeometry::accepts_scene_transform(
+                                scene,
+                                &id,
+                                node.object.transform,
+                            )
+                        {
+                            return Err(SceneError::InvalidGeometry(
+                                "unsupported derived resize subtree".into(),
+                            ));
+                        }
+                        Ok(())
+                    },
+                )?;
+                if let Some(guard) = self
+                    .capture
+                    .as_mut()
+                    .and_then(|c| c.selection_guard.as_mut())
+                {
+                    guard.accepted_revision = editor.engine.revision();
+                }
             }
             SceneCommand::SetResizeTransforms { transforms }
             | SceneCommand::SetRotationTransforms { transforms } => {

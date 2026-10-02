@@ -1,5 +1,9 @@
 # Bounded shared-selection resize
 
+The later [Image transform slice](image-transform-tools.md) removes Image-only
+uniform restrictions and supports affine Image roots; Text remains restricted.
+Original dated validation receipts below retain their historical scope.
+
 Status: bounded implementation revalidated on Linux on 2026-10-01 after a cloud
 workspace interruption and source reconstruction. Fresh automated checks and
 native-window coverage are recorded below with their limits. No full Leafer or
@@ -23,13 +27,13 @@ Pointer-down freezes the union, actual world pointer position, each root's
 local matrix `M` and parent world matrix `P`. The existing eight-handle helper
 calculates one world delta `D`; every root receives
 `M' = inverse(P) * D * P * M`. The opposite shared anchor, spacing and world axes
-are preserved. Existing rotated, skewed and reflected vectors are supported;
+are preserved. Existing rotated, skewed and reflected vectors/Images are supported;
 new flips are not introduced. Identity delta returns the exact initial matrices,
 avoiding inverse-rounding drift and preserving Redo for no-op gestures.
 
 - Ordinary sides change one shared world axis; corners change both
 - Shift scales the complete selection uniformly around the opposite anchor
-- Any Text/Image descendant in any selected subtree forces the entire selection
+- Any Text descendant in any selected subtree forces the entire selection
   to scale uniformly, including vectors and spacing
 - Uniform corners use the existing signed-diagonal projection; uniform sides
   use their active axis and keep the opposite edge midpoint fixed
@@ -40,7 +44,7 @@ avoiding inverse-rounding drift and preserving Redo for no-op gestures.
 - Custom subtrees, locked roots/descendants, singular or non-finite matrices,
   zero-area geometric roots, or overflowing unions/candidates reject the whole
   shared operation
-- Native Text/Image world transforms must remain finite, axis-aligned, positive
+- Native Text world transforms must remain finite, axis-aligned, positive
   and uniform. Existing platform/style constraints are unchanged
 
 Paint and picking share the existing 8-screen-pixel squares, 10-pixel

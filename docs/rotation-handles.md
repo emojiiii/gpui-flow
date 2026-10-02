@@ -6,6 +6,10 @@ selection capture, atomic batch validation and gesture history. No persisted
 simulated object, second selection framework, geometry dependency or document
 format change is added.
 
+The later [Image transform slice](image-transform-tools.md) extends eligibility
+to Images and Image/vector subtrees using exact geometry-driven rendering.
+Text and Custom exclusions remain; original dated receipts below are historical.
+
 ## Geometry and input
 
 - One selected object uses its cached local geometric bounds center transformed
@@ -20,7 +24,7 @@ format change is added.
 - Pointer-down freezes the pivot, actual pointer angle, local matrices `M` and
   parent world matrices `P`. Off-center presses do not jump. Each move applies
   the same world rotation `D` to every root as `M' = inverse(P) * D * P * M`
-- Existing vector rotations, skews and positive/negative nonuniform parent scales
+- Existing vector/Image rotations, skews and positive/negative nonuniform parent scales
   are supported. Rotation preserves their scale/reflection and shared spacing;
   it never rewrites intrinsic shape dimensions
 - Successive pointer angles accumulate the shortest signed interval in
@@ -38,7 +42,7 @@ format change is added.
 
 ## Admission, atomicity and lifecycle
 
-Any Text or Image anywhere in a selected subtree suppresses and rejects rotation
+Any Text anywhere in a selected subtree suppresses and rejects rotation
 for the entire selection, including otherwise-supported vectors. Their native
 renderer currently cannot rotate. Hidden native descendants are also excluded.
 Custom subtrees, locked roots/ancestors/descendants, singular/nonfinite matrices,
@@ -79,7 +83,7 @@ This bounded UI uses one top-center handle, free rotation and Shift delta
 snapping. Leafer has configurable gap attraction and diagonal rotation/pivot
 behavior; those semantics are not claimed identical. No corner rotation zones,
 Ctrl/Meta resize-to-rotate switching, Alt/custom pivot editing, skew controls,
-intrinsic resizing, native Text/Image rotation, custom tool widget factory or
+intrinsic resizing, native Text rotation, custom tool widget factory or
 full Leafer API compatibility is implied. Multi-selection retains its existing
 world-axis box after updates. New enum variants affect exhaustive downstream
 Rust matches; persisted scene data is unchanged.

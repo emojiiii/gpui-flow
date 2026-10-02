@@ -47,8 +47,9 @@ impl SceneRotationGeometry {
             stem,
         })
     }
-    /// Native text/image painting cannot rotate. Reject the complete subtree,
-    /// including hidden/native descendants, rather than show a misleading UI.
+    /// Text and custom producers still have no arbitrary-transform contract.
+    /// Images use exact geometry-driven CPU domains when native painting cannot
+    /// represent the pose. Reject the complete unsupported subtree.
     pub(crate) fn accepts_subtree(scene: &Scene, id: &DisplayId) -> bool {
         if !scene
             .local_bounds(id)
@@ -63,10 +64,7 @@ impl SceneRotationGeometry {
             let Some(node) = scene.get(id) else {
                 return false;
             };
-            if matches!(
-                node.object.shape,
-                Shape::Text(_) | Shape::Image(_) | Shape::Custom(_)
-            ) {
+            if matches!(node.object.shape, Shape::Text(_) | Shape::Custom(_)) {
                 return false;
             }
             pending.extend(&node.children);

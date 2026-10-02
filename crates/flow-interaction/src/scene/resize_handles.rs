@@ -19,7 +19,7 @@ pub struct SceneResizeGeometry {
     pub uniform: bool,
 }
 impl SceneResizeGeometry {
-    /// One live target with positive-area paint bounds. Native descendants
+    /// One live target with positive-area paint bounds. Native Text descendants
     /// require a currently supported positive uniform world transform and
     /// force uniform resizing of the complete subtree. Custom renderers have
     /// no transform contract here, so Custom subtrees are explicitly excluded.
@@ -38,7 +38,7 @@ impl SceneResizeGeometry {
         }
         let world = editor.engine.world_transform(id).ok()?;
         let inverse = world.inverse()?;
-        if !Self::accepts_transform(editor, id, node.object.transform) {
+        if !Self::accepts_scene_transform(editor.scene(), id, node.object.transform) {
             return None;
         }
         let mut pending = vec![id];
@@ -47,7 +47,7 @@ impl SceneResizeGeometry {
             let node = editor.scene().get(next)?;
             match node.object.shape {
                 Shape::Custom(_) => return None,
-                Shape::Text(_) | Shape::Image(_) => {
+                Shape::Text(_) => {
                     let matrix = editor.engine.world_transform(next).ok()?;
                     if !native_transform_supported(matrix) {
                         return None;
@@ -99,7 +99,7 @@ impl SceneResizeGeometry {
             .then_some(handles)
     }
     /// Check the actual proposed matrices as well, including floating-point
-    /// composition through ancestors. Never turn a working native descendant
+    /// composition through ancestors. Never turn a working native Text descendant
     /// into an unsupported rotated/skewed/nonuniform presentation.
     pub fn accepts_transform(editor: &SceneEditor, id: &DisplayId, transform: Affine) -> bool {
         Self::validate_subtree(editor.scene(), id, transform, false)
@@ -130,7 +130,7 @@ impl SceneResizeGeometry {
             if (selection && (node.object.locked || matches!(node.object.shape, Shape::Custom(_))))
                 || !world.is_finite()
                 || world.inverse().is_none()
-                || (matches!(node.object.shape, Shape::Text(_) | Shape::Image(_))
+                || (matches!(node.object.shape, Shape::Text(_))
                     && !native_transform_supported(world))
             {
                 return false;
@@ -146,7 +146,7 @@ impl SceneResizeGeometry {
     }
 }
 fn native_transform_supported(m: Affine) -> bool {
-    m.is_finite() && m.b == 0. && m.c == 0. && m.a > 0. && m.a == m.d
+    m.is_positive_uniform_scale_translation()
 }
 
 #[derive(Debug, Clone, Copy)]

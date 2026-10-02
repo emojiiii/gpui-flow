@@ -269,12 +269,12 @@ fn shift_and_native_descendants_uniformly_scale_the_complete_selection() {
                 .unwrap();
         }
         let g = lab.geometry();
-        assert_eq!(g.geometry.uniform, native > 0);
+        assert_eq!(g.geometry.uniform, native == 1);
         let bounds = g.geometry.bounds;
         let old = [lab.world("a"), lab.world("b")];
         let selection = lab.editor.selection.clone();
-        let start = lab.down(ResizeHandle::Left, native == 0);
-        lab.movement(start + Point::new(bounds.size.width * 0.5, 0.), native == 0);
+        let start = lab.down(ResizeHandle::Left, native != 1);
+        lab.movement(start + Point::new(bounds.size.width * 0.5, 0.), native != 1);
         assert_eq!(lab.editor.selection, selection);
         let d = Affine::scale(0.5, 0.5).around(ResizeHandle::Left.anchor(bounds));
         matrix_close(lab.world("a"), d * old[0]);
@@ -482,7 +482,7 @@ fn second_locked_singular_custom_or_unsupported_native_hides_shared_handles() {
                         o.transform = Affine::rotation(10.);
                     }
                     _ => {
-                        o.shape = d::Image::new("fixture", Size::new(60., 30.)).into();
+                        o.shape = d::Text::new("reflected native", Size::new(60., 30.)).into();
                         o.transform = Affine::scale(-1., 1.);
                     }
                 })
@@ -787,4 +787,70 @@ fn later_second_member_failure_restores_entire_owned_gesture_and_redo() {
     assert!(!lab.host.has_capture());
     assert!(lab.editor.redo());
     assert_eq!(*lab.editor.scene(), redo);
+}
+
+#[test]
+fn image_and_vector_selection_resizes_nonuniformly_without_rewriting_intrinsics() {
+    let mut lab = Lab::pair();
+    lab.editor
+        .transaction(|s| {
+            s.update_object(&"b".into(), |o| {
+                o.shape = d::Image::new("fixture", Size::new(60., 30.))
+                    .rounded(8.)
+                    .into()
+            })
+        })
+        .unwrap();
+    let before = lab.editor.scene().clone();
+    let shape = lab
+        .editor
+        .scene()
+        .get(&"b".into())
+        .unwrap()
+        .object
+        .shape
+        .clone();
+    let g = lab.geometry();
+    assert!(!g.geometry.uniform);
+    let bounds = g.geometry.bounds;
+    let old = [lab.world("a"), lab.world("b")];
+    let start = lab.down(ResizeHandle::Right, false);
+    lab.movement(start + Point::new(bounds.size.width * 0.5, 0.), false);
+    lab.up(start);
+    let delta = Affine::scale(1.5, 1.).around(ResizeHandle::Right.anchor(bounds));
+    matrix_close(lab.world("a"), delta * old[0]);
+    matrix_close(lab.world("b"), delta * old[1]);
+    assert_eq!(
+        lab.editor.scene().get(&"b".into()).unwrap().object.shape,
+        shape
+    );
+    let after = lab.editor.scene().clone();
+    assert!(lab.editor.undo());
+    assert_eq!(lab.editor.scene(), &before);
+    assert!(lab.editor.redo());
+    assert_eq!(lab.editor.scene(), &after);
+}
+#[test]
+fn image_with_text_remains_uniform_and_reflected_image_alone_is_supported() {
+    let mut lab = Lab::pair();
+    lab.editor
+        .transaction(|s| {
+            s.update_object(&"a".into(), |o| {
+                o.shape = d::Text::new("text", Size::new(80., 40.)).into()
+            })?;
+            s.update_object(&"b".into(), |o| {
+                o.shape = d::Image::new("fixture", Size::new(60., 30.)).into();
+                o.transform = Affine::translation(160., 100.) * Affine::scale(-1., 1.);
+            })
+        })
+        .unwrap();
+    assert!(lab.geometry().geometry.uniform);
+    assert!(SceneRotationGeometry::for_selection(&lab.editor).is_none());
+    lab.editor.selection.select("b".into(), false);
+    assert!(
+        !SceneResizeGeometry::for_target(&lab.editor, &"b".into())
+            .unwrap()
+            .uniform
+    );
+    assert!(SceneRotationGeometry::for_selection(&lab.editor).is_some());
 }

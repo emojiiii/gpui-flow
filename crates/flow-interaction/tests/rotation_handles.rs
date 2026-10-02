@@ -400,7 +400,10 @@ fn native_custom_locked_singular_and_zero_area_members_suppress_entire_rotation(
                 .transaction(|scene| {
                     scene.update_object(&"b".into(), |o| match mode {
                         0 => o.shape = d::Text::new("native", Size::new(60., 30.)).into(),
-                        1 => o.shape = d::Image::new("fixture", Size::new(60., 30.)).into(),
+                        1 => {
+                            o.shape = d::Text::new("hidden native", Size::new(60., 30.)).into();
+                            o.visible = false;
+                        }
                         2 => o.locked = true,
                         3 => o.transform = Affine::scale(0., 1.),
                         4 => {
@@ -832,4 +835,125 @@ fn rejected_later_move_rolls_back_all_roots_and_preserves_existing_redo() {
     assert!(!lab.host.has_capture());
     assert!(lab.editor.redo());
     assert_eq!(*lab.editor.scene(), redo);
+}
+
+#[test]
+fn image_rotation_under_affine_parent_preserves_geometry_identity_and_one_undo() {
+    let mut s = Scene::new();
+    add(
+        &mut s,
+        "p",
+        d::Group::new(),
+        Affine::translation(180., 130.) * Affine::rotation(20.) * Affine::scale(-1.4, 0.8),
+        None,
+    );
+    add(
+        &mut s,
+        "i",
+        d::Image::new("fixture", Size::new(80., 40.)).with_corners([10., 0., 5., 0.]),
+        Affine::translation(20., 10.),
+        Some("p"),
+    );
+    let mut lab = Lab::new(s, &["i"]);
+    lab.editor.viewport.zoom = 1.5;
+    let before = lab.editor.scene().clone();
+    let h = lab.editor.engine.handle(&"i".into()).unwrap();
+    let shape = lab.editor.engine.object(h).unwrap().shape.clone();
+    let old = lab.world("i");
+    let pivot = lab.geometry().pivot;
+    let start = lab.down();
+    lab.movement(lab.rotated_pointer(start, pivot, 37.), false);
+    let after = lab.editor.scene().clone();
+    lab.up(start);
+    matrix_close(lab.world("i"), Affine::rotation(37.).around(pivot) * old);
+    assert_eq!(lab.editor.engine.object(h).unwrap().shape, shape);
+    assert!(lab.editor.undo());
+    assert_eq!(lab.editor.scene(), &before);
+    assert!(lab.editor.redo());
+    assert_eq!(lab.editor.scene(), &after);
+    assert_eq!(lab.editor.engine.handle(&"i".into()), Some(h));
+}
+#[test]
+fn image_and_vector_shared_rotation_deduplicates_selected_image_ancestor() {
+    let mut s = Scene::new();
+    add(
+        &mut s,
+        "p",
+        d::Group::new(),
+        Affine::translation(30., 50.),
+        None,
+    );
+    add(
+        &mut s,
+        "i",
+        d::Image::new("fixture", Size::new(80., 40.)),
+        Affine::translation(10., 5.),
+        Some("p"),
+    );
+    add(
+        &mut s,
+        "v",
+        d::Rect::new(40., 40.),
+        Affine::translation(180., 100.),
+        None,
+    );
+    let mut lab = Lab::new(s, &["p", "i", "v"]);
+    let child = lab
+        .editor
+        .scene()
+        .get(&"i".into())
+        .unwrap()
+        .object
+        .transform;
+    let roots = [lab.world("p"), lab.world("v")];
+    let pivot = lab.geometry().pivot;
+    let start = lab.down();
+    lab.movement(lab.rotated_pointer(start, pivot, 45.), false);
+    lab.up(start);
+    let delta = Affine::rotation(45.).around(pivot);
+    matrix_close(lab.world("p"), delta * roots[0]);
+    matrix_close(lab.world("v"), delta * roots[1]);
+    assert_eq!(
+        lab.editor
+            .scene()
+            .get(&"i".into())
+            .unwrap()
+            .object
+            .transform,
+        child
+    );
+}
+#[test]
+fn image_rotation_cancellation_and_retyped_native_descendant_keep_capture_safe() {
+    for external in [false, true] {
+        let mut lab = Lab::pair();
+        lab.editor
+            .transaction(|s| {
+                s.update_object(&"b".into(), |o| {
+                    o.shape = d::Image::new("fixture", Size::new(60., 30.)).into()
+                })
+            })
+            .unwrap();
+        let before = lab.editor.scene().clone();
+        let pivot = lab.geometry().pivot;
+        let start = lab.down();
+        lab.movement(lab.rotated_pointer(start, pivot, 30.), false);
+        if external {
+            lab.editor
+                .transaction(|s| {
+                    s.update_object(&"b".into(), |o| {
+                        o.shape = d::Text::new("native", Size::new(60., 30.)).into()
+                    })
+                })
+                .unwrap();
+            let changed = lab.editor.scene().clone();
+            lab.movement(start, false);
+            assert_eq!(lab.editor.scene(), &changed);
+        } else {
+            lab.host.cancel(&mut lab.editor);
+            assert_eq!(lab.editor.scene(), &before);
+        }
+        assert!(!lab.host.has_capture());
+        assert!(!lab.editor.editing());
+    }
 }
