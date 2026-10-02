@@ -153,6 +153,11 @@ result is implied by the checklist.
 
 ## Verified native window
 
+The [capture-format erratum](screenshot-evidence-formats.md) identifies these original desktop captures as lossy JPEG bytes
+saved with `.png` filenames. Original files, raw reports and hashes remain
+unchanged. Screenshot measurements describe decoded captures, not lossless
+renderer pixels; trace-backed results retain their separate scope.
+
 The exact source checkpoint [`1b79a3bb`](https://github.com/emojiiii/gpui-flow/commit/1b79a3bb9d895ac9be29fff5dd58ee151dc229da)
 ran on dot-cloud Linux from 19:08:24 to 19:12:30 UTC on 2026-10-02 and closed
 normally with exit 0. Its full 560-blob archive matches the source tree. The

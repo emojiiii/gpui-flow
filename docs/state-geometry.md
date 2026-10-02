@@ -180,6 +180,11 @@ window acceptance; the integration owner records native results separately.
 
 ## Historical native functional result and transition defect
 
+The [capture-format erratum](screenshot-evidence-formats.md) identifies these original desktop captures as lossy JPEG bytes
+saved with `.png` filenames. Original files, raw reports and hashes remain
+unchanged. Screenshot measurements describe decoded captures, not lossless
+renderer pixels; trace-backed results retain their separate scope.
+
 The exact source checkpoint [`1b79a3bb`](https://github.com/emojiiii/gpui-flow/commit/1b79a3bb9d895ac9be29fff5dd58ee151dc229da)
 ran on the dot-cloud Linux desktop from 19:01:57 to 19:05:14 UTC on 2026-10-02,
 with normal exit 0 and empty stderr. All 51 raw records and 18 saved screenshots

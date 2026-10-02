@@ -13,7 +13,9 @@ The Linux run **2026-10-02 19:59:44–20:03:57 UTC** exited normally with **0**.
 **13 physical button-triggered exports** produced **8 SVG + 2 PNG files** and
 **3 expected atomic rejections**. Stderr contains 14 intended JSON records
 (the attempts plus one Undo witness), with empty stdout and no unrelated error.
-Twenty-five original screenshot PNGs record source and decoded preview states.
+Twenty-five original JPEG desktop captures record source and decoded preview states.
+They retain their historical `.png` filenames; see the [capture-format erratum](screenshot-evidence-formats.md).
+The two exported PNGs and 24 embedded PNG payloads are genuine PNG and unaffected.
 
 Together with the earlier [PNG/JPEG/lossless-WebP native acceptance](scene-raster-export.md#native-acceptance-and-independent-file-audit),
 this closes ELM-11's fixed four-format, fixed-region contract. ELM-11 is
@@ -33,7 +35,8 @@ remains [scene-svg-export.md](scene-svg-export.md).
   at full DPR1, 504×208 at full DPR2 and 504×120 for the DPR2 crop. Independent
   PNG decoding finds actual transparent glyph gaps, not a solid text rectangle
 - Font bridge off, pending Image and failed Image reject attempts 7/8/9 without
-  SVG files. Original preview pixels stay byte-identical in the audited region
+  SVG files. Decoded JPEG screenshot preview regions stay byte-identical in
+  the audit; this does not establish lossless preview-buffer identity
 - Resource recovery restores baseline SVG bytes. Canonical color edit changes
   bytes and preview; Undo restores exact canonical JSON while preserving the
   previous preview until export. Re-export restores baseline bytes
@@ -53,10 +56,12 @@ computed bytes; SHA-256 was also recorded.
 Native `resvg 0.46.0` parses and renders the complete exported SVG and displays
 its decoded pixels in a separate preview. Only embedded PNG data URLs are
 allowed; external file/URL resolution is disabled. The independent audit parses
-XML and embedded PNGs, decodes PNG references, and checks preview preservation;
+XML and embedded PNGs, decodes PNG references, and separately checks preview
+preservation in decoded JPEG screenshots;
 it does not perform a second independent whole-SVG render.
 
-Observed SVG-versus-PNG differences are preserved:
+Observed SVG-versus-PNG differences from native decoded-export receipts are
+preserved independently of desktop JPEG capture:
 
 - Full DPR1: 23,833 changed pixels; mean absolute channel delta 0.14247/255, max 50
 - Full DPR2: 96,293 changed pixels; mean 0.15237/255, max 60

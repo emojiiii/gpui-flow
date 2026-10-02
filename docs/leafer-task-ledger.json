@@ -122,14 +122,15 @@
       "implementation_snapshot": "1b79a3bb9d895ac9be29fff5dd58ee151dc229da",
       "evidence_commit": null,
       "automatic": "21 production layer-routing+3 bridge tests；55 wheel/router/focus、UI230、mirror3与strict通过，计数重叠不相加",
-      "native": "19:08:24–19:12:30 UTC正常退出0；1140原始记录/38PNG独立核验，重叠目标/坐标/独立Undo/外部释放/重挂与销毁通过；持鼠生命周期及wrong-button仅headless覆盖",
+      "native": "19:08:24–19:12:30 UTC正常退出0；1140原始记录/38 JPEG截图独立核验，重叠目标/坐标/独立Undo/外部释放/重挂与销毁通过；持鼠生命周期及wrong-button仅headless覆盖",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/app/src/App.ts",
         "symbols_or_contract": "App 多层Leafer组合"
       },
       "technical_dependencies": [
         "先确定多surface坐标/输入转发与所有权；避免GPUI窗口默认事件路由冲突"
-      ]
+      ],
+      "screenshot_format_erratum": "docs/screenshot-evidence-formats.md"
     },
     {
       "id": "LIF-01",
@@ -362,7 +363,7 @@
       "implementation_snapshot": "93ee7f7cabfb7979aeca93ec137ccf81644baeb5",
       "evidence_commit": null,
       "automatic": "28约束+7 picked-wheel、2原生夹具、2导航适配focused及strict通过；较早334 interaction在最终加固之前，不冒充新全套",
-      "native": "20:12–20:19退出0；9224真实trace/58PNG/33项审计通过；world/parent-local、独立吸附、边界、19帧衰减及6种中断、只读导航/Undo通过",
+      "native": "20:12–20:19退出0；9224真实trace/58 JPEG截图/33项审计通过；world/parent-local、独立吸附、边界、19帧衰减及6种中断、只读导航/Undo通过",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/scroller/src/Scroller.ts",
         "symbols_or_contract": "Scroller/config；UI Dragger约束为固定扩展契约"
@@ -375,7 +376,8 @@
         "29个toolbar/reset后的PointerCancel trace与订阅viewport不同步；未把订阅几何当逐输入快照",
         "原生未覆盖持鼠Escape/focus/reset、拖动中guide像素、硬件DPR及跨平台；实际AltTab为release后tail"
       ],
-      "evidence_publication_note": "This documentation revision adds the native report/ledger evidence after source 93ee7f7cabfb7979aeca93ec137ccf81644baeb5; no self-referential evidence commit is claimed."
+      "evidence_publication_note": "This documentation revision adds the native report/ledger evidence after source 93ee7f7cabfb7979aeca93ec137ccf81644baeb5; no self-referential evidence commit is claimed.",
+      "screenshot_format_erratum": "docs/screenshot-evidence-formats.md"
     },
     {
       "id": "APP-01",
@@ -407,7 +409,7 @@
       "implementation_snapshot": "a6639014ceb276d2b33c64e04ad3e73adc770b30",
       "evidence_commit": null,
       "automatic": "最终default1566通过/10既有ignored，UI252及七场景fixture tour通过；strict workspace/docs、格式和链接通过；shared mesh与数值拒绝覆盖",
-      "native": "21:40:50–21:47:54退出0；38按钮/39JSON/60PNG，23 trace及41 focused pixel断言通过；五history ROI零差、Line12/0/24px。辅助bbox20/21，孤立低对比像素保留",
+      "native": "21:40:50–21:47:54退出0；38按钮/39JSON/60 JPEG截图，23 trace及41 decoded-JPEG pixel断言通过；五decoded-JPEG history ROI零差、Line12/0/24px。辅助bbox20/21，孤立低对比像素保留",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/interface/src/ICommonAttr.ts",
         "symbols_or_contract": "IStrokeAttrData / IStrokeInputData；strokeAlign、cap/join/dash/scale-fixed语义"
@@ -419,12 +421,13 @@
         "scale-fixed stroke"
       ],
       "verification_limits": [
-        "Auxiliary native/CPU boxes are20/21 within one pixel, not all-pixel agreement; isolated CPU pixel cause is unknown.",
+        "Auxiliary native/CPU-panel decoded-JPEG boxes are20/21 within one pixel; JPEG may affect the isolated sample, whose cause is unknown.",
         "Physical controls do not cover every Cartesian combination, memory/precision rejection, zero-length/empty geometry or every supported shape type.",
         "No device-level DPR measurement, browser/cross-platform equivalence or performance claim.",
         "Scale-fixed remains absent. Canvas command strokes remain centered-only."
       ],
-      "evidence_publication_note": "本次文档修订新增native报告；实现源码a6639014不被描述为已包含后续报告。"
+      "evidence_publication_note": "本次文档修订新增native报告；实现源码a6639014不被描述为已包含后续报告。",
+      "screenshot_format_erratum": "docs/screenshot-evidence-formats.md"
     },
     {
       "id": "APP-03",
@@ -475,7 +478,7 @@
       "implementation_snapshot": "93ee7f7cabfb7979aeca93ec137ccf81644baeb5",
       "evidence_commit": null,
       "automatic": "历史74 property/state；修订UI245含13 coherent和2导航回归；最终hook后2导航+4镜像focused复验，strict/链接通过（重叠非全套）",
-      "native": "旧51记录/18PNG失败证据保留；19:43–19:48新72记录/57PNG、33状态样本card/text完整，7点击匹配accepted geometry；硬失效12样本仍loading，退出0",
+      "native": "旧51记录/18 JPEG截图失败证据保留；19:43–19:48新72记录/57 JPEG截图、33状态样本card/text完整，7点击匹配accepted geometry；硬失效12样本仍loading，退出0",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/state/src/index.ts",
         "symbols_or_contract": "state样式安装/切换；transition集成"
@@ -496,7 +499,8 @@
         "Native snapshots do not inspect every vsync; hard canonical/resource/view invalidations still intentionally withdraw old content.",
         "SceneEvent.local_position remains canonical; state-aware picking uses accepted display geometry.",
         "Button inheritance, all six shape sizes, reactive-layout projection, animated-alpha source hits, late ABA completion, fractional guard, empty-domain recovery, upload failure and retirement saturation are automated coverage, not this fixture’s physical acceptance."
-      ]
+      ],
+      "screenshot_format_erratum": "docs/screenshot-evidence-formats.md"
     },
     {
       "id": "APP-06",
@@ -770,7 +774,7 @@
       "implementation_snapshot": "39fcf56a2e91f59d5da7a04ee519cade66f8cb69",
       "evidence_commit": null,
       "automatic": "保留FillTextBox/同源measure原8新回归及119不同受影响检查；current-path新增15 composite+7 UI，全库309/252、focused88/29（重叠），strict Clippy/格式/链接通过；必选current-path构造集合已覆盖，strokeText和createPattern repeat/no-repeat+transform仍缺",
-      "native": "current-path 21:12:30–21:18:56退出0，55物理按钮/84 JSON/63 PNG，27/27审计，20对双300×210区域零差；原footer裁切和Compositing过渡保留。21:26:06–21:27:04仅footer复验，两按钮/11 JSON/8 PNG，1090×670双行可见；共享树含open-stroke WIP，不替代功能验收",
+      "native": "current-path 21:12:30–21:18:56退出0，55物理按钮/84 JSON/63 JPEG截图，27/27审计，20对decoded-JPEG双300×210区域零差；原footer裁切和Compositing过渡保留。21:26:06–21:27:04仅footer复验，两按钮/11 JSON/8 JPEG截图，1090×670双行可见；共享树含open-stroke WIP，不替代功能验收",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/interface/src/canvas/ICanvas.ts",
         "symbols_or_contract": "CanvasText / CanvasPath / createPattern / CanvasPattern.setTransform"
@@ -816,7 +820,8 @@
         "Device display DPR was not separately queried; Canvas resource DPR comes from configuration receipts.",
         "No browser/cross-platform pixel equivalence or new workspace-wide/CI result."
       ],
-      "evidence_publication_note": "This documentation revision adds the report and native summary after the separately verified source publications; neither source commit is claimed to contain these new evidence documents."
+      "evidence_publication_note": "This documentation revision adds the report and native summary after the separately verified source publications; neither source commit is claimed to contain these new evidence documents.",
+      "screenshot_format_erratum": "docs/screenshot-evidence-formats.md"
     },
     {
       "id": "ELM-11",
@@ -829,7 +834,7 @@
       "implementation_snapshot": "93ee7f7cabfb7979aeca93ec137ccf81644baeb5",
       "evidence_commit": null,
       "automatic": "先前栅格21核心+7 UI；SVG28 focused、294 composite、5夹具及strict/check/链接通过；各阶段重叠非新workspace全套",
-      "native": "先前PNG/JPEG/WebP14尝试10文件4拒绝；19:59–20:03 SVG13尝试8SVG+2PNG/3拒绝、25PNG截图、真实resvg+独立文件审计，退出0",
+      "native": "先前PNG/JPEG/WebP14尝试10文件4拒绝；19:59–20:03 SVG13尝试8SVG+2PNG/3拒绝、25 JPEG截图、真实resvg+独立文件审计，退出0",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/export/src/export.ts",
         "symbols_or_contract": "ExportModule.export / syncExport；JSON和SVG分支，栅格编码"
@@ -843,7 +848,8 @@
         "SVG保持真实vector加独立Image/Canvas/Text ink；unsupported effects原子拒绝",
         "完整SVG native resvg回读与独立XML/embedded-PNG审计分列；不声称第二次独立full-SVG渲染或pixel equality"
       ],
-      "evidence_publication_note": "This documentation revision adds the native report/ledger evidence after source 93ee7f7cabfb7979aeca93ec137ccf81644baeb5; no self-referential evidence commit is claimed."
+      "evidence_publication_note": "This documentation revision adds the native report/ledger evidence after source 93ee7f7cabfb7979aeca93ec137ccf81644baeb5; no self-referential evidence commit is claimed.",
+      "screenshot_format_erratum": "docs/screenshot-evidence-formats.md"
     },
     {
       "id": "CUS-01",
@@ -956,5 +962,15 @@
   },
   "publication_note": "Integrator verified remote main at the recorded source snapshot/tree. Native archives and original linked-build provenance remain separately qualified; this documentation update runs no new build or full-workspace suite.",
   "source_publication_url": "https://github.com/emojiiii/gpui-flow/commit/93ee7f7cabfb7979aeca93ec137ccf81644baeb5",
-  "published_source_tree": "a8f08d035dde97d13eecc932630e8fdda65dfb42"
+  "published_source_tree": "a8f08d035dde97d13eecc932630e8fdda65dfb42",
+  "screenshot_evidence_format": {
+    "erratum": "docs/screenshot-evidence-formats.md",
+    "historical_desktop_captures": 327,
+    "actual_encoding": "JPEG",
+    "historical_filename_suffix": ".png",
+    "interpretation": "Screenshot comparisons are decoded lossy JPEG observations, not lossless Canvas/GPU buffer identity. Trace/runtime/source/export evidence remains separately scoped; original raw reports/files/hashes remain unchanged.",
+    "unaffected_actual_png_exports": 2,
+    "unaffected_embedded_png_payloads": 24,
+    "status_and_acceptance_unchanged": true
+  }
 }

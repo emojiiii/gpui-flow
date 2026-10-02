@@ -281,5 +281,14 @@
       }
     ],
     "scope_decision": "Arbitrary attributes/rotation/scale/skew were not in the frozen required set; their unsupported status is an explicit boundary, not an added failure criterion."
+  },
+  "screenshot_evidence_format": {
+    "erratum": "docs/screenshot-evidence-formats.md",
+    "actual_encoding": "JPEG",
+    "historical_filename_suffix": ".png",
+    "affected_desktop_captures": 57,
+    "interpretation": "Pixel values, threshold bounds and zero-difference regions describe decoded lossy JPEG desktop captures, not lossless renderer/Canvas/GPU buffer identity.",
+    "preservation": "Original capture bytes/filenames, raw QA reports, historical measurements and recorded hashes are unchanged; retained raw reports predate this format correction.",
+    "independent_evidence": "Runtime traces, generation/snapshot/path-replay checks, source/binary hashes, native exits and qualitative window observations retain their separate scope."
   }
 }

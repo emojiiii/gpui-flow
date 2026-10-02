@@ -10,7 +10,7 @@
   "evidence_publication_note": "This later documentation revision adds native evidence; the implementation commit is not claimed to contain this report.",
   "report": "docs/open-stroke-native.md",
   "evidence_root": "/workspace/shared/open-stroke-native-validation-20261002T2138Z",
-  "evidence_delivery": "Compact report/checksums in the repository; original PNGs, raw diagnostics, binary and archive remain in the retained evidence directory.",
+  "evidence_delivery": "Compact report/checksums in the repository; original JPEG desktop captures with historical .png filenames, raw diagnostics, binary and archive remain in the retained evidence directory.",
   "native": {
     "start_utc": "2026-10-02T21:40:50Z",
     "end_utc": "2026-10-02T21:47:54Z",
@@ -138,13 +138,14 @@
           15,
           24
         ],
-        "note": "One isolated low-contrast pixel extends threshold bbox four pixels. Continuous main ink ends at native y423 / CPU y658. No pixel-exact backend equivalence is claimed."
+        "note": "One isolated low-contrast decoded-JPEG sample in the CPU panel extends the threshold bbox four pixels. Continuous main ink ends at native y423 / CPU y658. JPEG encoding may affect the sample; cause is unestablished and no renderer defect or lossless backend equivalence is inferred."
       }
     },
     "initial_auxiliary_record": "native-pixel-audit-initial.json preserves the initial42-check record with one auxiliary check unsatisfied; it was not removed or relabeled as a pass.",
     "physical_selection": "Visible selection feedback on ink/blank space only; the fixture does not log exact hit IDs or viewport values.",
     "window_layout": "Configured1060x720 content; all six panels and complete status/footer rows visible.",
-    "transition_limit": "Immediate Compositing/preceding-state captures are retained separately from settled captures; not an every-frame or smoothness guarantee."
+    "transition_limit": "Immediate Compositing/preceding-state captures are retained separately from settled captures; not an every-frame or smoothness guarantee.",
+    "decoded_capture_measurement_scope": "The 41 focused pixel checks, five zero-difference history regions, sampled widths/background values and auxiliary 20/21 bounds are decoded-JPEG observations; original failed auxiliary record remains unchanged."
   },
   "source": {
     "binary_sha256": "db27b77721da84594aeb244beb11a17ab389d516671da2cab623db500afa7b8f",
@@ -173,7 +174,7 @@
     "scope": "Does not rerun all23 trace/41 feature assertions or establish backend equivalence."
   },
   "limits": [
-    "Auxiliary native/CPU boxes are20/21 within one pixel, not all-pixel agreement; isolated CPU pixel cause is unknown.",
+    "Auxiliary native/CPU-panel decoded-JPEG boxes are20/21 within one pixel, not all-pixel agreement; JPEG may affect the isolated sample, whose cause remains unknown.",
     "Physical controls do not cover every Cartesian combination, memory/precision rejection, zero-length/empty geometry or every supported shape type.",
     "No device-level DPR measurement, browser/cross-platform equivalence or performance claim.",
     "Scale-fixed remains absent. Canvas command strokes remain centered-only."
@@ -190,5 +191,14 @@
     "native-evidence.sha256": "68e75d78d630449d1eb89d14e14ece54323f3c2c646f9a06945c6fa3b78bc344",
     "published-source-match.json": "636e8e278dd4db6e0ccf5f6c6838eb14e79b308faeebac10817fb936345b9eb4",
     "integration-verification.json": "4e2320315cfeb35ef084e448e2d4a1e77977f9eb4ded07a2543a6df5989f0ffc"
+  },
+  "screenshot_evidence_format": {
+    "erratum": "docs/screenshot-evidence-formats.md",
+    "actual_encoding": "JPEG",
+    "historical_filename_suffix": ".png",
+    "affected_desktop_captures": 60,
+    "interpretation": "Pixel values, threshold bounds and zero-difference regions describe decoded lossy JPEG desktop captures, not lossless renderer/Canvas/GPU buffer identity.",
+    "preservation": "Original capture bytes/filenames, raw QA reports, historical measurements and recorded hashes are unchanged; retained raw reports predate this format correction.",
+    "independent_evidence": "Runtime traces, generation/snapshot/path-replay checks, source/binary hashes, native exits and qualitative window observations retain their separate scope."
   }
 }

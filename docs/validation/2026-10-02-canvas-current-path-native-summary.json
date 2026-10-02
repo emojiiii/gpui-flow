@@ -138,7 +138,7 @@
           61
         ]
       ],
-      "scope": "Original PNG RGB bytes, stable displayed regions within this run; not DPR1-versus-DPR2 or browser/cross-platform equality."
+      "scope": "Decoded RGB from original JPEG desktop captures, historically named .png; stable displayed regions within this run only, not lossless Canvas/GPU buffer identity, DPR1-versus-DPR2 or browser/cross-platform equality."
     },
     "coverage": [
       "Cross-call Q/C outline and evenodd hole construction; Save/Restore path independence",
@@ -148,7 +148,7 @@
       "Four late-invalid rollback attempts, each with intact pixels/generation and path replay on both surfaces",
       "Safe/reset shrink-grow, DPR swap, configuration Undo and regeneration"
     ],
-    "original_footer_defect": "Fixed 156px footer clips the Right final result row at expanded and restored sizes; original PNG59 and PNG61 and complete JSON receipts retained.",
+    "original_footer_defect": "Fixed 156px footer clips the Right final result row at expanded and restored sizes; original captures 59 and 61 and complete JSON receipts retained.",
     "transition_observations": "Expected immediate Compositing... or preceding-state captures are retained alongside settled witnesses; screenshot and subsequent trace-count observation are not asserted simultaneous.",
     "raw_evidence_directory": "/workspace/shared/canvas-current-path-native-validation-20261002T2109Z",
     "evidence_sha256": {
@@ -273,5 +273,20 @@
     "raw_evidence": "/workspace/shared/canvas-current-path-native-validation-20261002T2109Z/integration-verification.json",
     "sha256": "9e39305d763b18987973db5e8b037dcb7fcac0de69e1d492b2350b0e39d5219d",
     "scope": "Narrow independent review of original records and selected image regions, plus follow-up footer visual inspection; not all 27 audit assertions, every frame, or a new native run."
+  },
+  "screenshot_evidence_format": {
+    "erratum": "docs/screenshot-evidence-formats.md",
+    "actual_encoding": "JPEG",
+    "historical_filename_suffix": ".png",
+    "affected_desktop_captures": 71,
+    "interpretation": "Pixel values, threshold bounds and zero-difference regions describe decoded lossy JPEG desktop captures, not lossless renderer/Canvas/GPU buffer identity.",
+    "preservation": "Original capture bytes/filenames, raw QA reports, historical measurements and recorded hashes are unchanged; retained raw reports predate this format correction.",
+    "independent_evidence": "Runtime traces, generation/snapshot/path-replay checks, source/binary hashes, native exits and qualitative window observations retain their separate scope.",
+    "capture_counts_by_run": {
+      "functional": 63,
+      "footer_layout_only": 8
+    },
+    "legacy_field_note": "original_pngs and png keys are retained historical labels/counts or filenames; the corresponding desktop files are JPEG, not PNG.",
+    "roi_scope": "20 pairs x 2 displayed regions have zero differing decoded-JPEG pixels; no lossless buffer identity is established by the captures."
   }
 }

@@ -268,5 +268,14 @@
     "required_followup": "Preserve a coherent accepted presentation and matching hit geometry until next CPU presentation is ready, without retaining stale canonical/resource/viewport state; repeat physical transition tests."
   },
   "coordinate_boundary": "Hit testing uses displayed state geometry; routed SceneEvent.local_position, edit handles, mutations and exported/saved content retain canonical scene coordinates. Hosts can convert event.world_position using geometry_engine for presentation-local coordinates.",
-  "automatic_scope": "74 property/state focused tests; 55 picked-wheel/router/focus tests;230 UI lib;3 mirror fixture tests;final21layered+3layer-host rerun aftercursor;strict UI/interaction all-targets+3demo bins;final builds. Counts overlap and are not one additive suite."
+  "automatic_scope": "74 property/state focused tests; 55 picked-wheel/router/focus tests;230 UI lib;3 mirror fixture tests;final21layered+3layer-host rerun aftercursor;strict UI/interaction all-targets+3demo bins;final builds. Counts overlap and are not one additive suite.",
+  "screenshot_evidence_format": {
+    "erratum": "docs/screenshot-evidence-formats.md",
+    "actual_encoding": "JPEG",
+    "historical_filename_suffix": ".png",
+    "affected_desktop_captures": 18,
+    "interpretation": "Pixel values, threshold bounds and zero-difference regions describe decoded lossy JPEG desktop captures, not lossless renderer/Canvas/GPU buffer identity.",
+    "preservation": "Original capture bytes/filenames, raw QA reports, historical measurements and recorded hashes are unchanged; retained raw reports predate this format correction.",
+    "independent_evidence": "Runtime traces, generation/snapshot/path-replay checks, source/binary hashes, native exits and qualitative window observations retain their separate scope."
+  }
 }

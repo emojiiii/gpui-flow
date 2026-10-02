@@ -136,5 +136,14 @@
   "automated_record_state_at_source_publication": "implementation and automated validation complete; native acceptance pending; APP-02 remains partial because scale-fixed is absent",
   "native_evidence_summary": "docs/validation/2026-10-02-open-stroke-native-summary.json",
   "native_report": "docs/open-stroke-native.md",
-  "implementation_snapshot": "a6639014ceb276d2b33c64e04ad3e73adc770b30"
+  "implementation_snapshot": "a6639014ceb276d2b33c64e04ad3e73adc770b30",
+  "screenshot_evidence_format": {
+    "erratum": "docs/screenshot-evidence-formats.md",
+    "actual_encoding": "JPEG",
+    "historical_filename_suffix": ".png",
+    "affected_desktop_captures": 60,
+    "interpretation": "Pixel values, threshold bounds and zero-difference regions describe decoded lossy JPEG desktop captures, not lossless renderer/Canvas/GPU buffer identity.",
+    "preservation": "Original capture bytes/filenames, raw QA reports, historical measurements and recorded hashes are unchanged; retained raw reports predate this format correction.",
+    "independent_evidence": "Runtime traces, generation/snapshot/path-replay checks, source/binary hashes, native exits and qualitative window observations retain their separate scope."
+  }
 }

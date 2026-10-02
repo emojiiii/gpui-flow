@@ -3901,5 +3901,14 @@
     "cross-window capture, multitouch, IME/inner tools, nested apps and cross-layer blend/backdrop are not claimed",
     "incoming hit:Background in top-level trace is pre-routing placeholder; target serial and resulting selection/geometry show actual layer routing"
   ],
-  "automated": "21 production layer-routing tests;3 bridge restriction/retained-key/mode tests;2 geometry-alpha tests;7 explicit wheel tests+48 event/focus suites;full UI230 and mirror3;strictUI/interaction all-targets and3fixtures pass. Counts overlap."
+  "automated": "21 production layer-routing tests;3 bridge restriction/retained-key/mode tests;2 geometry-alpha tests;7 explicit wheel tests+48 event/focus suites;full UI230 and mirror3;strictUI/interaction all-targets and3fixtures pass. Counts overlap.",
+  "screenshot_evidence_format": {
+    "erratum": "docs/screenshot-evidence-formats.md",
+    "actual_encoding": "JPEG",
+    "historical_filename_suffix": ".png",
+    "affected_desktop_captures": 38,
+    "interpretation": "Pixel values, threshold bounds and zero-difference regions describe decoded lossy JPEG desktop captures, not lossless renderer/Canvas/GPU buffer identity.",
+    "preservation": "Original capture bytes/filenames, raw QA reports, historical measurements and recorded hashes are unchanged; retained raw reports predate this format correction.",
+    "independent_evidence": "Runtime traces, generation/snapshot/path-replay checks, source/binary hashes, native exits and qualitative window observations retain their separate scope."
+  }
 }

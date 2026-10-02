@@ -180,14 +180,17 @@ injected. No cross-platform, browser-equivalence or GitHub Actions run is claime
 ## Native validation (2026-10-02)
 
 The original Linux native run, **21:12:30–21:18:56 UTC**, exited normally with
-code 0: **55 physical button actions, 84 JSON records, 63 original PNGs**.
+code 0: **55 physical button actions, 84 JSON records, 63 original JPEG desktop captures**.
 The recorded trace audit passed **27/27 assertions**. Twenty screenshot pairs
-have zero differing pixels in both 300 × 210 displayed Canvas regions.
+have zero differing decoded-JPEG pixels in both 300 × 210 displayed Canvas
+regions. The [capture-format erratum](screenshot-evidence-formats.md) documents the original `.png` suffix mismatch.
 Cross-call Q/C construction, Clear versus BeginPath, reusable geometry, evenodd
 holes, paint/pen transform timing, frozen clips, four late-invalid rollbacks,
 safe/reset resize, DPR swap, configuration Undo, and regeneration were exercised.
-The comparisons are within-run stable-region checks, not DPR 1 versus DPR 2
-pixel equivalence or proof of every renderer frame.
+The comparisons are within-run decoded-capture checks, not lossless Canvas/GPU
+buffer identity, DPR 1 versus DPR 2 pixel equivalence or proof of every renderer
+frame. Runtime generation, snapshot identity and path-replay receipts are
+independent of screenshot encoding.
 
 All 475 frozen repository build inputs match the archive, pre/post-link
 manifests, and published functional source `39fcf56a`. External dependencies,
@@ -198,7 +201,7 @@ preceding-state captures remain in the original screenshot set, followed by
 settled witnesses.
 
 A separate **21:26:06–21:27:04 UTC** layout-only run exited 0 after two physical
-button actions, with 11 JSON records and eight PNGs. At restored **1090 × 670**
+button actions, with 11 JSON records and eight JPEG desktop captures. At restored **1090 × 670**
 content size, both result rows were fully visible after Regenerate and Reject
 late. The footer-only source fix is published as
 [`8dd6f110`](https://github.com/emojiiii/gpui-flow/commit/8dd6f1104d2e134b8b15f83e64c8fdb336ee4044).

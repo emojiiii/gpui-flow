@@ -1,7 +1,7 @@
 # Open-contour stroke native acceptance — 2026-10-02
 
 The exercised Linux open-contour geometry, history and navigation matrix passed.
-The auxiliary native/CPU pixel-bound comparison is **20/21 within one pixel**;
+The auxiliary native/CPU-panel decoded-capture bound comparison is **20/21 within one pixel**;
 one isolated low-contrast pixel is retained below. This is not an all-pixel-checks
 pass or backend pixel-equivalence claim. **APP-02 remains partial for scale-fixed.**
 
@@ -16,7 +16,7 @@ hashes are in the [native summary](validation/2026-10-02-open-stroke-native-summ
 This report is added in a later documentation revision than the source commit.
 
 The real window ran **21:40:50–21:47:54 UTC**, closed normally with **exit0**,
-and produced **38 toolbar actions,39 JSON records and60 original PNGs**.
+and produced **38 toolbar actions,39 JSON records and60 original JPEG desktop captures**.
 Stdout is empty; stderr contains the intended JSON stream without unrelated errors.
 Original screenshots/trace/binary/archive remain in the retained evidence directory,
 not in this repository. The configured **1060×720** window exposes all six panels
@@ -48,8 +48,11 @@ selected physical matrix, not every combination of all controls.
 
 ## Pixel evidence and retained outlier
 
-The original audit records **23/23 trace/source assertions** and **41 focused pixel
-assertions**:
+The original audit records **23/23 trace/source assertions** and **41 focused
+decoded-JPEG pixel assertions**. The [capture-format erratum](screenshot-evidence-formats.md) records the
+historical `.png` filename mismatch; raw reports and hashes predate this
+correction and remain unchanged. These measurements do not establish lossless
+Canvas/GPU buffer or native/CPU renderer equality:
 
 - Five history region comparisons have **zero changed pixels**:08→12,10→14,
   28→32,30→34 and52→56; region `[125,292,1060,740)` excludes toolbar/status text
@@ -58,17 +61,19 @@ assertions**:
 - Thirty sampled5×5 patches on implicit closing edges are exactly the background
   RGB(11,15,24). This supplements observation rather than proving every edge pixel
 
-The separate threshold-bounding-box comparison is **20/21 within one pixel**.
+The separate decoded-capture threshold-bounding-box comparison is **20/21 within one pixel**.
 In `01-open-L-initial.png`, the Outside native box is `[13,7,206,129]` and CPU box
-`[13,6,206,133]`, relative to origins(758,295) and(758,530). The original CPU pixel
+`[13,6,206,133]`, relative to origins(758,295) and(758,530). The decoded screenshot sample in the CPU panel
 at **(948,662)** is **RGB(20,39,56)** versus background(11,15,24). It extends the
 threshold box by four pixels; the continuous main ink ends at native y423 and
-corresponding CPU y658. **Its cause is unestablished.** It is neither filtered out
-nor labeled a proven renderer defect. The original42-check record with this
+corresponding CPU y658. **Its cause is unestablished.** Lossy JPEG encoding may affect this low-contrast
+sample and its four-pixel threshold-box extension; the capture alone cannot
+distinguish compression from renderer output. It is neither filtered out nor
+labeled a proven renderer defect. The original42-check record with this
 auxiliary condition unsatisfied is preserved as `native-pixel-audit-initial.json`.
 
 An additional read-only recheck independently parsed all39 receipts, recomputed
-all five selected history comparisons and verified the outlier's original RGB.
+all five selected history comparisons and verified the outlier's decoded-capture RGB.
 It did not repeat the full23/41 audit or create another native run.
 
 ## Coverage boundaries

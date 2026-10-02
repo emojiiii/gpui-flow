@@ -14,6 +14,10 @@
 
 ID与有限验收集合由本表定义，状态随证据更新。扩大范围须留下变更记录，新增行为另增ID并明确变更总数，不拆小方法美化进度。表内标出的Flow扩展不是固定OSS源码已有实现。跨平台验收、闭源插件、浏览器DOM控件和真实Agent供应商不计本轮Linux画布对齐范围。
 
+## 截图格式勘误
+
+[2026-10-02格式勘误](screenshot-evidence-formats.md)：327张历史桌面截图实际为JPEG，保留原`.png`文件名、原始QA报告与哈希。零差ROI、颜色及阈值边界只描述解码后的有损截图，不证明Canvas/GPU无损像素一致。APP-02辅助20/21及失败原始记录保留，低对比样本成因未定，JPEG可能影响。SVG实际导出2张PNG及24张内嵌PNG独立有效；trace、源码/二进制、退出与窗口观察证据分别保留。状态、冻结验收及31/11/3计数不变。
+
 ## 固定参考
 
 UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87eeb8192dddc570`；plugins `3eb445bf34debb638766615282224b77108bf610`。每项具体来源见下表，接口和实现不一致时以后者为准，stub不构成已实现行为。字词段间距等Text集合来自固定ITextStyleInputData，未把未证实的rich runs作为Leafer必选项。
@@ -79,7 +83,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | DAT-03 | Scene v1与12tag严格Leafer映射；24 focused+scene strict通过，未知字段/预算/原子拒绝 | 纯数据；不承诺浏览器/native像素等价 | 本批有限子集，input/computed等更广边界未闭环，仍部分 |
 | DAT-04 | 154项engine通过/2 benchmark常规忽略；两个benchmark均显式运行通过。300步query与480步cache参考对照；等工作量索引维护中位开销+1.25/+2.23/+3.40%，无整体提速声明 | 纯数据项，不要求窗口 | `4049da69ddd159972093df5aed04649c24fb4e3d` |
 | INS-01 | engine实例、clone/reparent和资源迟到结果测试通过 | 纯引擎项，不要求窗口 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
-| INS-02 | 21production层路由+3bridge；UI230、55wheel/event/focus及mirror3、strict通过（重叠） | 19:08–19:12退出0，1140原始记录/38PNG；持鼠lifecycle/wrong-button保留自动覆盖 | 源码[`1b79a3bb`](https://github.com/emojiiii/gpui-flow/commit/1b79a3bb9d895ac9be29fff5dd58ee151dc229da)，[实际记录](validation/2026-10-02-layered-app-summary.json) |
+| INS-02 | 21production层路由+3bridge；UI230、55wheel/event/focus及mirror3、strict通过（重叠） | 19:08–19:12退出0，1140原始记录/38 JPEG截图；持鼠lifecycle/wrong-button保留自动覆盖 | 源码[`1b79a3bb`](https://github.com/emojiiii/gpui-flow/commit/1b79a3bb9d895ac9be29fff5dd58ee151dc229da)，[实际记录](validation/2026-10-02-layered-app-summary.json) |
 | LIF-01 | engine生命周期与resources对应测试已通过 | 纯归属逻辑；原生资源回执另列LIF-02 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | LIF-02 | 18项engine resource与37项UI资源通过，含7项新增；实际Flow Arc释放独立测试 | 16:24–16:29完整16步、62条真实记录零违规；2 Ready/2 ViewReady/6 Complete；旧source/attachment/generation、失败取消和重挂载通过；退出0 | `f5ab200c6f6bfaf786742b9b0ace8a530de0d6cf` |
 | LIF-03 | 部分代际/容量测试已过；硬取消/媒体桥未实现 | 未完整验收 | 尚无独立完整验收提交 |
@@ -92,12 +96,12 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | INT-03 | editor text_tools/UI会话测试通过 | text-editing.md历史窗口验收；066b91fe对应12:55聚焦输入Escape关闭复验；不扩展为IME验证 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | INT-04 | 工具生命周期测试有；任意自定义UI端到端未完成 | 仅现有Text工具窗口 | 尚无独立完整验收提交 |
 | INT-05 | Line已验证；本项三类工具未开始 | 未实现/未验收 | 尚无独立完整验收提交 |
-| INT-06 | 28约束+7 wheel、2夹具+2导航focused及strict通过；较早334 interaction非最终全套 | 9224trace/58PNG/33审计通过；19实际衰减帧、6种tail中断、约束/吸附/只读/Undo，退出0 | `93ee7f7cabfb7979aeca93ec137ccf81644baeb5`；[原生证据与来源限制](validation/2026-10-02-drag-viewport-native-summary.json) |
+| INT-06 | 28约束+7 wheel、2夹具+2导航focused及strict通过；较早334 interaction非最终全套 | 9224trace/58 JPEG截图/33审计通过；19实际衰减帧、6种tail中断、约束/吸附/只读/Undo，退出0 | `93ee7f7cabfb7979aeca93ec137ccf81644baeb5`；[原生证据与来源限制](validation/2026-10-02-drag-viewport-native-summary.json) |
 | APP-01 | appearance/gradient和CPU对应回归通过 | 历史渐变/多paint窗口及Canvas矢量窗口通过 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
-| APP-02 | 最终default1566/10既有ignored、UI252、fixture tour及strict通过 | 38按钮/39JSON/60PNG；23 trace+41 focused pixel通过，辅助bbox20/21及原始outlier保留 | 源码`a6639014ceb276d2b33c64e04ad3e73adc770b30`；[native证据](open-stroke-native.md)，scale-fixed仍缺 |
+| APP-02 | 最终default1566/10既有ignored、UI252、fixture tour及strict通过 | 38按钮/39JSON/60 JPEG截图；23 trace+41 decoded-JPEG pixel通过，辅助bbox20/21及原始outlier保留 | 源码`a6639014ceb276d2b33c64e04ad3e73adc770b30`；[native证据](open-stroke-native.md)，scale-fixed仍缺 |
 | APP-03 | 现有多种blend/alpha mask CPU与UI通过 | 已有真实合成窗口；全固定源码契约未齐 | 尚无独立完整验收提交 |
 | APP-04 | 现有shadow/inner/group回归通过 | 历史受限视觉检查；缺失模式未验 | 尚无独立完整验收提交 |
-| APP-05 | 历史74 state；修订UI245含13coherent，最终hook后2导航/4镜像focused复验，strict/链接通过（重叠） | 新72记录/57PNG，33状态样本完整，7点击符合accepted geometry；12硬失效样本loading保留，退出0 | `93ee7f7cabfb7979aeca93ec137ccf81644baeb5`；[coherent复验](validation/2026-10-02-state-coherent-native-summary.json)，[原始失败证据](validation/2026-10-02-state-geometry-summary.json)保留 |
+| APP-05 | 历史74 state；修订UI245含13coherent，最终hook后2导航/4镜像focused复验，strict/链接通过（重叠） | 新72记录/57 JPEG截图，33状态样本完整，7点击符合accepted geometry；12硬失效样本loading保留，退出0 | `93ee7f7cabfb7979aeca93ec137ccf81644baeb5`；[coherent复验](validation/2026-10-02-state-coherent-native-summary.json)，[原始失败证据](validation/2026-10-02-state-geometry-summary.json)保留 |
 | APP-06 | 无GPU damage消费测试 | 未实现/未验收 | 尚无独立完整验收提交 |
 | LAY-01 | flow/auto_size/reverse/item_boxes/gap/taffy对应全套通过 | 核心是纯measure/arrange契约；窗口专门矩阵仍未宣称 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | LAY-02 | engine derivation及layout reactive/ratio/text测试通过 | 纯提交契约；Text盒子窗口验证其普通编辑路径 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
@@ -112,7 +116,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | ELM-07 | 24新回归及356受影响通过 | Canvas实际Draw/Clear/resize/Undo窗口通过 | `d365f5a9e533e823e43e09db5154935e01b68c49` |
 | ELM-08 | 11矢量+7clip新回归、360/367受影响记录通过 | 11:41和11:57窗口、DPR/回滚/重绘像素对照通过 | `e4f7d9455f7aaaf38d160951c330ae03249435d1` |
 | ELM-09 | 12新回归；63 composite+18 UI=81聚焦通过，strict Clippy/link通过 | 14:00:18–14:03:12 Linux窗口退出0；DPR1/2、crop/透明源/反射/clip/晚失败/resize/Undo/Clear；三组像素区域一致 | `0ab6ffbf8bdbdb837a30f6cbf193e5506cb0124d` |
-| ELM-10 | 保留文字8新回归/119不同检查；current-path新增15 composite+7 UI，全库309/252、focused88/29（重叠），strict/格式/链接通过；必选路径构造已覆盖，strokeText及pattern仍缺 | 21:12:30–21:18:56退出0，55按钮/84 JSON/63 PNG，27/27审计，20对双区域零差；原footer裁切/Compositing过渡保留。21:26–21:27仅footer复验通过，非完整矩阵 | 功能源码[`39fcf56a`](https://github.com/emojiiii/gpui-flow/commit/39fcf56a2e91f59d5da7a04ee519cade66f8cb69)；[原生报告](canvas-current-path-native.md)/[摘要](validation/2026-10-02-canvas-current-path-native-summary.json)随本次文档修订新增；footer源码`8dd6f110`与含open-stroke WIP的布局测试树分列；原文字证据`003288b3a9b4178890c162a4f1271f3b8dd41f4f`独立保留 |
+| ELM-10 | 保留文字8新回归/119不同检查；current-path新增15 composite+7 UI，全库309/252、focused88/29（重叠），strict/格式/链接通过；必选路径构造已覆盖，strokeText及pattern仍缺 | 21:12:30–21:18:56退出0，55按钮/84 JSON/63 JPEG截图，27/27审计，20对decoded-JPEG双区域零差；原footer裁切/Compositing过渡保留。21:26–21:27仅footer复验通过，非完整矩阵 | 功能源码[`39fcf56a`](https://github.com/emojiiii/gpui-flow/commit/39fcf56a2e91f59d5da7a04ee519cade66f8cb69)；[原生报告](canvas-current-path-native.md)/[摘要](validation/2026-10-02-canvas-current-path-native-summary.json)随本次文档修订新增；footer源码`8dd6f110`与含open-stroke WIP的布局测试树分列；原文字证据`003288b3a9b4178890c162a4f1271f3b8dd41f4f`独立保留 |
 | ELM-11 | 先前栅格21核心+7 UI；SVG28 focused/294 composite/5夹具及strict通过（重叠） | 先前PNG/JPEG/WebP10文件4拒绝；新SVG13尝试8SVG+2PNG/3拒绝、真实resvg及独立审计，退出0 | `93ee7f7cabfb7979aeca93ec137ccf81644baeb5`；[SVG证据](validation/2026-10-02-scene-svg-native-summary.json)，[先前栅格](validation/2026-10-02-scene-export-summary.json) |
 | CUS-01 | 9项新回归、12既有registry与184 UI库检查通过；strict Clippy及链接通过 | 16:32–16:36八步真实点击/UndoRedo/双实例/renderer fallback/整域拒绝与恢复；49状态检查0失败、13 renderer输入；退出0 | `09bc537a551da09d4cb7c407e22ee10d49d3c667` |
 | CUS-02 | 无完整协议验收 | 未实现/未验收 | 尚无独立完整验收提交 |

@@ -190,6 +190,10 @@ or deploy.
 
 ## Subsequent native acceptance
 
+The [capture-format erratum](screenshot-evidence-formats.md) applies to the 25 desktop captures below,
+which are JPEG bytes under historical `.png` names. Actual exported/embedded PNG
+files and their independent decode/FNV/alpha checks are unaffected.
+
 The frozen Linux SceneView/font/file-delivery run passed its exercised matrix:
 13 physical exports, eight SVG plus two PNG files, three expected atomic
 rejections, 25 screenshots, normal exit 0. Actual resvg readback and an independent

@@ -10,15 +10,20 @@ they are not included in this repository.
 
 ## Result and fixed scope
 
+The [capture-format erratum](screenshot-evidence-formats.md) identifies these original desktop captures as lossy JPEG bytes
+saved with `.png` filenames. Original files, raw reports and hashes remain
+unchanged. Screenshot measurements describe decoded captures, not lossless
+renderer pixels; trace-backed results retain their separate scope.
+
 The Linux native run, **2026-10-02 19:43:57–19:48:37 UTC**, exited normally with
 **0**, empty stderr and no reported state/composite/input errors. It produced
-**72 trace records and 57 original PNGs**. All **33 classified state-only captured
+**72 trace records and 57 original JPEG desktop captures**. All **33 classified state-only captured
 frames** retain the card and its child text together, including intermediate
 widths, positions, colors and the orange 340-wide press frame. This verifies the
 exercised coherent paint/hit repair. It does not inspect every GPU frame or prove
 continuous smoothness/FPS.
 
-The earlier failed [51-record/18-PNG run](validation/2026-10-02-state-geometry-summary.json)
+The earlier failed [51-record/18-capture run](validation/2026-10-02-state-geometry-summary.json)
 is retained unchanged. Its observed transition disappearance was real and must
 not be retroactively relabeled a pass. This later frozen binary supplies the
 repair evidence.
@@ -45,7 +50,7 @@ requirement/test mapping. No new build or test run is implied by this review.
   and explicit Focus/Blur overlap retain complete card/text samples
 - Seven real clicks match the exact input-time accepted horizontal geometry,
   including misses at a future expanded/moved position and hits in the accepted
-  displayed card. These checks do not infer input-time geometry from later PNGs
+  displayed card. These checks do not infer input-time geometry from later captures
 - Future-position wheel misses before arrival; a relocated accepted card receives
   actual click/wheel input. A wheel can invalidate the viewport after dispatch,
   so a post-dispatch `accepted_x=None` is not evidence of a picking failure
@@ -56,7 +61,7 @@ requirement/test mapping. No new build or test run is implied by this review.
   CPU-worker busy state at close was not independently observed
 
 State-only sample IDs: **03–12, 16–28, 40–43, 50–55**. All were visually reviewed;
-pixel component/label counts corroborate intact content. The press screenshot is
+decoded-JPEG component/label counts corroborate intact content. The press screenshot is
 immediately after an atomic physical drag released, while the accepted press
 frame remained visible; it is not a screenshot captured with the API holding the
 button.

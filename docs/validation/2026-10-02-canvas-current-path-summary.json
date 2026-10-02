@@ -127,5 +127,20 @@
     "details": "docs/validation/2026-10-02-canvas-current-path-native-summary.json"
   },
   "evidence_commit": null,
-  "evidence_publication_note": "This documentation revision adds the report and native summary after the separately verified source publications; neither source commit is claimed to contain these new evidence documents."
+  "evidence_publication_note": "This documentation revision adds the report and native summary after the separately verified source publications; neither source commit is claimed to contain these new evidence documents.",
+  "screenshot_evidence_format": {
+    "erratum": "docs/screenshot-evidence-formats.md",
+    "actual_encoding": "JPEG",
+    "historical_filename_suffix": ".png",
+    "affected_desktop_captures": 71,
+    "interpretation": "Pixel values, threshold bounds and zero-difference regions describe decoded lossy JPEG desktop captures, not lossless renderer/Canvas/GPU buffer identity.",
+    "preservation": "Original capture bytes/filenames, raw QA reports, historical measurements and recorded hashes are unchanged; retained raw reports predate this format correction.",
+    "independent_evidence": "Runtime traces, generation/snapshot/path-replay checks, source/binary hashes, native exits and qualitative window observations retain their separate scope.",
+    "capture_counts_by_run": {
+      "functional": 63,
+      "footer_layout_only": 8
+    },
+    "legacy_field_note": "original_pngs and png keys are retained historical labels/counts or filenames; the corresponding desktop files are JPEG, not PNG.",
+    "roi_scope": "20 pairs x 2 displayed regions have zero differing decoded-JPEG pixels; no lossless buffer identity is established by the captures."
+  }
 }

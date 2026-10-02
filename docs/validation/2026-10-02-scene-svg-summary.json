@@ -85,5 +85,17 @@
     "report": "docs/scene-svg-native.md",
     "summary": "docs/validation/2026-10-02-scene-svg-native-summary.json",
     "scope_note": "The original core-only run above opened no window. Later independent physical acceptance adds eight SVG/two PNG files and three expected rejections; no SVG/PNG bit-exact or editable-text claim."
+  },
+  "screenshot_evidence_format": {
+    "erratum": "docs/screenshot-evidence-formats.md",
+    "actual_encoding": "JPEG",
+    "historical_filename_suffix": ".png",
+    "affected_desktop_captures": 25,
+    "interpretation": "Pixel values, threshold bounds and zero-difference regions describe decoded lossy JPEG desktop captures, not lossless renderer/Canvas/GPU buffer identity.",
+    "preservation": "Original capture bytes/filenames, raw QA reports, historical measurements and recorded hashes are unchanged; retained raw reports predate this format correction.",
+    "independent_evidence": "Runtime traces, generation/snapshot/path-replay checks, source/binary hashes, native exits and qualitative window observations retain their separate scope.",
+    "actual_png_exports": 2,
+    "actual_embedded_png_payloads": 24,
+    "export_checks_unaffected": "Actual PNG file/decode/FNV/alpha checks, SVG structure/bytes and native decoded-export difference receipts are separate from desktop captures."
   }
 }

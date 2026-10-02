@@ -132,11 +132,15 @@ contains source, binary, audit and trace hashes; originals remain in the retaine
 local directory identified there. No screenshots or 16.9 MB raw trace are included
 in this repository.
 
-**9,224 valid trace records, 58 original PNGs and 33/33 evidence assertions**
+**9,224 valid trace records, 58 original JPEG desktop captures and 33/33 evidence assertions**
 establish the exercised fixed INT-06 contract. An independent read-only audit
 confirms the real release/tail/interruption witnesses. The ledger promotes
 INT-06 to **bounded verified**, preserving the physical and provenance limits.
 No build or native run was performed by this documentation audit.
+
+See the [capture-format erratum](screenshot-evidence-formats.md) for the historical
+`.png` suffix mismatch. Capture-derived colors/bounds are decoded-JPEG
+observations; trace and input-time geometry checks remain separate evidence.
 
 ### Fixed-contract witnesses
 
