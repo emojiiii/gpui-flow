@@ -1,7 +1,7 @@
 # Canvas vector command batches
 
-Status: source checkpoint; nine focused CPU pixel tests and two adapter tests
-pass. Broader checks and native acceptance are pending. This is a bounded vector context subset.
+Status: implemented and validated on Linux. This is a bounded vector context
+subset, not a complete browser Canvas API.
 
 `CanvasSurface::draw_commands` accepts owned `CanvasCommand` values: Save,
 Restore, Transform (postmultiply), SetTransform, SetOpacity, FillPath and
@@ -42,3 +42,35 @@ inside/outside strokes, hit testing, persistent context state or browser API
 compatibility. Existing explicit clear/image/subtree/pixel APIs remain available.
 Stroke defaults are Flow's documented Round/Round, not browser Butt/Miter; callers
 can explicitly select the latter through the existing Stroke type.
+
+## Validation
+
+Eleven new regressions cover actual curve/hole pixels, postmultiply order,
+save/restore and state isolation, DPR/gradient placement, per-draw alpha, shared
+stroke union/dashes/caps, immutable snapshots, invalid late commands, input/stack/
+work/memory limits, resize behavior and resource generation/lifecycle. A no-op
+adapter edit now preserves its existing upload rather than replacing it.
+
+Affected tests: **360 passed, zero failed or ignored** (142 UI + 218 composite).
+Strict affected all-targets Clippy, example Clippy and the actual native example
+build passed. The exact production source stayed unchanged through these checks.
+
+The native `canvas_commands` example ran 2026-10-02 11:41:04–11:43:20 UTC and
+closed normally with exit 0 and empty stdout/stderr. Actual DPR 1/2 surfaces
+showed matching logical placement for curves, gradient, rotated evenodd holes,
+dashed curves and per-draw alpha. Checks covered repeated origin overlays, late
+invalid restore rollback, safe crop/regrow, reset resize, configuration Undo,
+Clear and regeneration. Saved artwork-region pixel comparisons were identical
+before/after rejection and between the initial and final settled redraw.
+
+Exact source commit `6361740e476d714c5722a8efc124f2f2d5d82f18`, tree
+`14de502a0cfa67fdc79ddf33611ffbe5771c5e90`; archive SHA-256
+`2ec7088e6b130ab499e4b526fa8e0c87490a455222beb442582ec742f92fbaa8`;
+binary SHA-256
+`3c6090d6a9218573f0a9af88fcd0e163182f651ac9487e6b09a366c14564fed0`.
+Screenshots and close receipts were retained with the validation artifacts.
+No browser/cross-platform pixel-equivalence claim is made.
+
+Reproduce with `cargo run --locked -p flow-studio --bin canvas_commands` on a
+native GPUI desktop. The example's two Canvas edits are separate transactions;
+the atomic guarantee applies to each surface batch, not to multiple surfaces.

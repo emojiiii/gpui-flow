@@ -40,6 +40,7 @@ Status: historical source research plus a separately labelled current source map
 - Canvas像素增量：[物理RGBA读写与PNG字节导出](canvas-pixels.md)独立模块区分straight/premultiplied及DPR坐标，支持透明越界读取、裁切replace原子写、不可变快照和有界stream编码。新增11项回归，受影响338项通过；真实窗口PNG预览/拒绝批次/Clear/重复恢复退出0，四份480×320文件已独立解码核验alpha与hash。完整2D context/多格式和整场景导出仍缺
 - Text字体增量：[真实italic face与font_weight工厂补齐](text-italic.md)贯通独立测量request/cache、响应式尺寸、资源、ellipsis和native/CPU字形；fixed box不加猜测宽度，原生字体fallback归宿主。新增9项回归，157项受影响检查通过；真实斜体/粗斜体/Unicode/换行/Undo对照窗口退出0。装饰线/字词与段间距/富文本仍缺
 - Text装饰增量：[共享实际行宽的下划线与删除线](text-decoration.md)贯通独立组件配置、工厂、资源、历史及native/CPU共同几何；非透明装饰自动合成以确保字形/线条重叠后整体opacity只应用一次。新增12项回归，373项受影响检查通过；真实四种装饰/对齐/换行/ellipsis/italic/opacity及十次Undo窗口退出0。自定义装饰色/offset、字词段间距及富文本仍缺
+- Canvas绘图增量：[原子矢量命令批次](canvas-commands.md)用独立模块复用现有domain/渐变/曲线及Kurbo-Lyon描边，支持批次内变换/opacity/save/restore与一次像素代际发布。新增11项回归，360项受影响测试通过；真实DPR 1/2、无效末命令回滚、resize/Undo/重绘窗口退出0，拒绝及重绘前后画面区域逐像素相同。完整context、clip stack及文字/图像命令仍缺
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
 ## 九类能力当前边界（含待验证源码增量）

@@ -129,3 +129,9 @@ object/fill alpha requires an explicit font bridge and an automatic CPU domain.
 Custom decoration color/offset, wavy/dashed styles, skip-ink, letter/word/paragraph
 spacing and rich runs remain unsupported. Plain decoration does not alter
 measurement or permit outside-box paint.
+
+Canvas [vector command batches](canvas-commands.md) now support owned Path
+fill/stroke, gradients and batch-local transform/alpha/save/restore through the
+existing compositor. They do not provide a persistent browser context, current
+path builder, arbitrary clip stack, clearRect, image/text commands or additional
+composite operations. Atomicity is per surface batch.
