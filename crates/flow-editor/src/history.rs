@@ -356,6 +356,26 @@ impl SceneEditor {
         }
         Ok(())
     }
+    /// One-shot path placement shares normal history, grouped edits and failure
+    /// rollback. This does not install a follower binding or start playback.
+    pub fn place_on_path(
+        &mut self,
+        target: ElementHandle,
+        path: ElementHandle,
+        options: gpui_flow_engine::PathPlacement,
+    ) -> Result<(), SceneError> {
+        self.reconcile_external();
+        let before = self.snapshot();
+        self.engine.place_on_path(target, path, options)?;
+        self.finish_playback_before_edit(&before);
+        self.finish_edit_session_before_edit(&before);
+        self.observed_revision = self.engine.revision();
+        self.selection.retain_existing(self.engine.scene());
+        if self.pending.is_none() {
+            self.record(before);
+        }
+        Ok(())
+    }
     /// Replace local Path/Pen data as one undoable edit, or join the current
     /// generic edit transaction. Parse SVG separately with `Path::from_svg`.
     pub fn set_path_data(

@@ -53,6 +53,7 @@ geometry. Imported arcs retain the SVG adapter's existing cubic approximation.
 
 ## Deliberate remaining scope
 
+[Explicit undoable placement](path-placement.md) now consumes these queries.
 There is no automatic follower binding, motion tween, path reveal/growth,
 normal/anchor offset, sibling path discovery, text-on-path, world-distance
 parameterization or render-loop scheduling in this query slice. Other shapes

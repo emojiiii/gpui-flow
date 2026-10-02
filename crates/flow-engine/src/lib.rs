@@ -8,6 +8,7 @@ mod derive;
 mod engine;
 mod instance;
 mod layout;
+mod motion;
 mod query;
 mod registry;
 mod resource;
@@ -18,6 +19,7 @@ pub use derive::{LayoutProvider, LayoutProviderId, MAX_LAYOUT_DERIVATION_PASSES}
 pub use engine::*;
 pub use instance::*;
 pub use layout::*;
+pub use motion::PathPlacement;
 pub use registry::*;
 pub use resource::*;
 

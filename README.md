@@ -34,6 +34,8 @@ Group/Box/Frame外阴影使用完整子树alpha，包含子阴影、mask结果�
 
 新增[有界 motion-path 查询](docs/motion-path-queries.md)：复用已锁定Kurbo测量真实曲线弧长、反解距离及切线，Path/Pen可查询局部距离对应的世界点和方向，支持父级仿射变换与修改后的新查询。17项新回归、四个headless crate共328项测试及严格Clippy通过；未实现自动跟随、路径生长或文字沿路径，也没有新增原生UI。
 
+新增[显式可撤销路径定位](docs/path-placement.md)：按源Path/Pen局部弧长把目标局部锚点放到世界路径点，选择性按切线旋转并保持世界尺度/剪切/手性；拒绝自身/祖先依赖、失效handle、奇异父变换及布局覆盖，沿用一次原子提交与Undo/取消。17项新回归、四个headless crate共345项测试及严格Clippy通过；没有安装自动跟随或动画绑定。
+
 ## 架构层次
 
 1. **display / scene**：Rect、Ellipse、Line、Polygon、Star、Path、Pen、Text、Image、Group、Box、Frame 独立文件；统一 identity、style、affine transform、层级、命中、事件、JSON
