@@ -122,3 +122,10 @@ provide browser contexts, multi-format export or document pixel persistence.
 Text [italic face selection and factory font weight](text-italic.md) now flow
 through the real measurement/native/CPU pipeline. Font matching belongs to the
 host, explicit boxes still clip overhang, and richer typography remains separate.
+
+Text now supports [bounded underline/strikethrough decoration](text-decoration.md)
+with shared native/CPU row geometry. Opaque text remains native; nonopaque
+object/fill alpha requires an explicit font bridge and an automatic CPU domain.
+Custom decoration color/offset, wavy/dashed styles, skip-ink, letter/word/paragraph
+spacing and rich runs remain unsupported. Plain decoration does not alter
+measurement or permit outside-box paint.

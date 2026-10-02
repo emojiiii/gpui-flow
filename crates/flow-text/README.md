@@ -75,3 +75,10 @@ Unicode segmentation crate. See [limits and native evidence](../../docs/text-ove
 measurement cache keys. Set `false` in existing Rust literals to preserve upright
 behavior. Explicit-box clipping/advances stay unchanged; see the
 [font-face contract and native receipt](../../docs/text-italic.md).
+
+`TextRasterRequest::decoration` selects `None` (existing behavior), `Underline`,
+`Strikethrough`, or `UnderlineStrikethrough`. The optional `gpui_decoration`
+module uses the same shaped rows, actual font metrics and bounded allocation for
+native/CPU geometry. Existing Rust request literals must add `decoration`;
+measurement requests deliberately remain decoration-independent. See the
+[decoration contract and native receipt](../../docs/text-decoration.md).

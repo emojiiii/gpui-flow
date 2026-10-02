@@ -1,8 +1,7 @@
 # Text underline and strikethrough
 
-Status: recoverable source checkpoint. Focused and affected checks pass; native
-side-by-side acceptance is pending. This is plain solid Text decoration, not rich
-text or a replacement text layout engine.
+Status: implemented and validated on Linux. This is plain solid Text decoration,
+not rich text or a replacement text layout engine.
 
 ## Contract and shared geometry
 
@@ -58,4 +57,23 @@ Twelve new regressions cover enum/default/budget/schema/resource rules, unchange
 intrinsics, row widths/offsets/DPR/alignment/ellipsis, real line pixels, empty and
 whitespace rows, plan/work/cancellation limits, alpha domain selection, actual
 once-only object opacity after glyph/line overlap, stale completion and Undo.
-Affected library and targeted model tests pass; final native evidence follows.
+Affected checks: **373 passed, zero failed or ignored** (140 UI, 209 composite,
+10 text and 14 targeted model/layout checks). Strict affected all-targets Clippy,
+example/probe Clippy and the actual native example build also passed.
+
+The `text_decoration` example ran from 2026-10-02 11:22:56 to 11:24:32 UTC,
+closed normally with exit 0 and empty stdout/stderr. Actual native and CPU pixels
+were compared for underline, strikethrough, both and none; left/center/right;
+wrap/nowrap; ellipsis/clip; italic; and object opacity 1/0.5. Ten Undo operations
+restored the original underlined image. No source changed during that run.
+
+Exact source checkpoint: `e6518186fe2d138c04acebde86c47bb4c74a850f`, tree
+`c1101dab4f12483a4f6d0becb58f36bdcf2da884`. Source archive SHA-256:
+`7823ac731881986ad74663f348c29da8789025e604d2f72e72d6fd9673a9ab76`.
+Binary SHA-256:
+`8b786b9f46d4570d5c2067c785661d0b01bb7aaa6870716b0d603e6b82d986b0`.
+Window screenshots and the close receipt were preserved with the validation
+artifacts. This is a Linux native acceptance result, not cross-platform coverage.
+
+Run with `cargo run --locked -p flow-studio --bin text_decoration` using a native
+GPUI-capable desktop.
