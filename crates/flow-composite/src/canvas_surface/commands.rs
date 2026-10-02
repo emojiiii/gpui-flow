@@ -3,6 +3,8 @@ mod clip;
 mod current_path;
 pub(crate) use current_path::CurrentPath;
 mod image;
+mod pattern;
+pub use pattern::{CanvasPathTarget, CanvasPattern, CanvasPatternRepeat, CanvasStrokeOptions};
 mod text;
 use super::CanvasSurface;
 use crate::{CompositeError, CompositeLimits, DomainNode, DomainSource, ImageInputs, TextInputs};
@@ -75,6 +77,17 @@ pub enum CanvasCommand {
     StrokePath {
         path: Path,
         stroke: Stroke,
+    },
+    /// Runtime image pattern using the current path or an explicit local path.
+    FillPattern {
+        path: CanvasPathTarget,
+        pattern: CanvasPattern,
+        rule: FillRule,
+    },
+    StrokePattern {
+        path: CanvasPathTarget,
+        pattern: CanvasPattern,
+        options: CanvasStrokeOptions,
     },
     /// Immutable decoded input, never a URL. Source is in physical image pixels;
     /// destination is in logical Canvas units before the current transform.
@@ -164,6 +177,34 @@ fn source(
     for command in commands {
         if current_path.command(command, state.transform, reserve, &mut budget, limits)? {
             changed_path = true;
+            continue;
+        }
+        if let CanvasCommand::FillPattern { path, pattern, .. }
+        | CanvasCommand::StrokePattern { path, pattern, .. } = command
+        {
+            let (rule, stroke) = match command {
+                CanvasCommand::FillPattern { rule, .. } => (*rule, None),
+                CanvasCommand::StrokePattern { options, .. } => (FillRule::NonZero, Some(options)),
+                _ => unreachable!(),
+            };
+            draws += 1;
+            children.push(
+                pattern::Compiler {
+                    images: &mut images,
+                    budget: &mut budget,
+                    smooth,
+                    limits,
+                }
+                .compile(
+                    path,
+                    pattern,
+                    rule,
+                    stroke,
+                    &current_path,
+                    &state,
+                    draws,
+                )?,
+            );
             continue;
         }
         let mut path_input_admitted = false;
@@ -293,6 +334,9 @@ fn source(
                     },
                 )
             }
+            CanvasCommand::FillPattern { .. } | CanvasCommand::StrokePattern { .. } => {
+                unreachable!("patterns handled above")
+            }
             CanvasCommand::BeginPath
             | CanvasCommand::MoveTo { .. }
             | CanvasCommand::LineTo { .. }
@@ -401,7 +445,7 @@ fn source(
     })
 }
 impl CanvasSurface {
-    /// Render an ordered vector batch and publish at most one immutable generation.
+    /// Render an ordered drawing batch and publish at most one immutable generation.
     /// Any invalid command, stack, geometry or budget leaves all pixels untouched.
     /// Returns whether a generation was published (a clipped transparent result
     /// can still publish). Coordinates are logical;
@@ -411,7 +455,7 @@ impl CanvasSurface {
     pub fn draw_commands(&mut self, commands: &[CanvasCommand]) -> Result<bool, CompositeError> {
         self.draw_commands_with_images(commands, &ImageInputs::default())
     }
-    /// Atomic vector/image batch using host-supplied immutable decoded inputs.
+    /// Atomic vector/pattern/image batch using host-supplied immutable decoded inputs.
     /// Input keys are scoped to this call; only referenced buffers are retained
     /// and charged, with shared buffers counted once by the compositor.
     pub fn draw_commands_with_images(

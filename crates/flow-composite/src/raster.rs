@@ -1,7 +1,7 @@
 mod admission;
 use crate::{
     CanvasBackdrop, CompositeError, CompositeLimits, DomainSource, ImageInputs, TextInputs,
-    vector::{Preparation, PreparedNode, VectorPaint, transform},
+    vector::{Preparation, PreparedNode, VectorPaint, VectorSource, transform},
 };
 use gpui_flow_scene::{Affine, BlendMode, Bounds, ClipRegion, MaskMode, Point, Shape, Size};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -427,7 +427,67 @@ impl Raster<'_> {
                 }
             }
             self.budget.write(self.pixels)?;
-            target.fill_path(&p.path, &p.paint, p.rule, transform(a), clip);
+            let pattern_paint;
+            let paint = match &p.paint {
+                VectorSource::Scene(paint) => paint,
+                VectorSource::Pattern {
+                    image,
+                    texture_to_local,
+                    smooth,
+                } => {
+                    let texture = a * *texture_to_local;
+                    // Check the exact composition tiny-skia will use too: its
+                    // scale/translation fast path rounds in f32, unlike Affine.
+                    let shader_transform = transform(*texture_to_local).post_concat(transform(a));
+                    let inverse = shader_transform
+                        .invert()
+                        .filter(|t| t.is_finite())
+                        .ok_or(CompositeError::UnsupportedTransform)?;
+                    if texture.inverse().is_none()
+                        || [
+                            texture.a, texture.b, texture.c, texture.d, texture.tx, texture.ty,
+                        ]
+                        .iter()
+                        .any(|v| !v.is_finite() || v.abs() > 1_000_000.)
+                    {
+                        return Err(CompositeError::UnsupportedTransform);
+                    }
+                    // Bound source coordinates as well as inverse coefficients:
+                    // f32 stops representing every integer texel above 2^24,
+                    // and tiny-skia's bilinear floor/fract uses i32 conversion.
+                    // Merely finite extreme scales can silently paint transparent
+                    // even from an opaque tile. The padded domain also covers
+                    // SIMD/filter work; this is not a fractional-precision promise.
+                    for (x, y) in [
+                        (-16., -16.),
+                        (self.width as f32 + 16., -16.),
+                        (-16., self.height as f32 + 16.),
+                        (self.width as f32 + 16., self.height as f32 + 16.),
+                    ] {
+                        let mut sample = tiny_skia::Point::from_xy(x, y);
+                        inverse.map_point(&mut sample);
+                        if !sample.x.is_finite()
+                            || !sample.y.is_finite()
+                            || sample.x.abs() > 16_777_216.
+                            || sample.y.abs() > 16_777_216.
+                        {
+                            return Err(CompositeError::UnsupportedTransform);
+                        }
+                    }
+                    pattern_paint = tiny_skia::Paint {
+                        shader: tiny_skia::Pattern::new(
+                            image.pixmap.as_ref(),
+                            tiny_skia::SpreadMode::Repeat,
+                            crate::canvas_surface::quality(*smooth),
+                            1.,
+                            transform(*texture_to_local),
+                        ),
+                        ..Default::default()
+                    };
+                    &pattern_paint
+                }
+            };
+            target.fill_path(&p.path, paint, p.rule, transform(a), clip);
         }
         Ok(())
     }

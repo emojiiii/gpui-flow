@@ -1,6 +1,6 @@
 //! Immutable, owned CPU input. The host owns loading and animation policy.
 use crate::{CompositeError, CompositeLimits};
-use gpui_flow_scene::DisplayId;
+use gpui_flow_scene::{Affine, DisplayId};
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
@@ -108,10 +108,31 @@ impl StaticImage {
 #[derive(Default)]
 pub struct ImageInputs {
     entries: BTreeMap<DisplayId, Result<Arc<StaticImage>, CompositeError>>,
+    // Generated Canvas draw IDs only; never part of serialized scene paint.
+    patterns: BTreeMap<DisplayId, PatternInput>,
+}
+#[derive(Clone, Copy)]
+pub(crate) struct PatternInput {
+    pub transform: Affine,
+    pub smooth: bool,
 }
 impl ImageInputs {
     pub fn insert(&mut self, id: DisplayId, input: Result<Arc<StaticImage>, CompositeError>) {
+        self.patterns.remove(&id);
         self.entries.insert(id, input);
+    }
+    pub(crate) fn insert_pattern(
+        &mut self,
+        id: DisplayId,
+        image: Arc<StaticImage>,
+        transform: Affine,
+        smooth: bool,
+    ) {
+        self.entries.insert(id.clone(), Ok(image));
+        self.patterns.insert(id, PatternInput { transform, smooth });
+    }
+    pub(crate) fn pattern(&self, id: &DisplayId) -> Option<PatternInput> {
+        self.patterns.get(id).copied()
     }
     pub(crate) fn get(&self, id: &DisplayId) -> Result<Arc<StaticImage>, CompositeError> {
         self.entries

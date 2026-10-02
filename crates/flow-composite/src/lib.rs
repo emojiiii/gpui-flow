@@ -193,3 +193,6 @@ mod scene_svg_tests;
 
 #[cfg(test)]
 mod canvas_current_path_tests;
+
+#[cfg(test)]
+mod canvas_pattern_command_tests;

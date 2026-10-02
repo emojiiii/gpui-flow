@@ -2,7 +2,8 @@
 //! failed admission/rendering leaves both pixels and generation unchanged.
 mod commands;
 pub use commands::{
-    CanvasCommand, CanvasTextOutput, CanvasTextRequest, MAX_CANVAS_COMMANDS, MAX_CANVAS_STATE_DEPTH,
+    CanvasCommand, CanvasPathTarget, CanvasPattern, CanvasPatternRepeat, CanvasStrokeOptions,
+    CanvasTextOutput, CanvasTextRequest, MAX_CANVAS_COMMANDS, MAX_CANVAS_STATE_DEPTH,
 };
 mod pixels;
 pub use pixels::CanvasPixels;

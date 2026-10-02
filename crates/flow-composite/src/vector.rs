@@ -33,9 +33,38 @@ pub(crate) struct ImagePaint {
 }
 pub(crate) struct VectorPaint {
     pub path: Path,
-    pub paint: tiny_skia::Paint<'static>,
+    pub paint: VectorSource,
     pub rule: tiny_skia::FillRule,
     pub world: Affine,
+}
+/// Keep image ownership separate from tiny-skia's borrowed shader lifetime.
+pub(crate) enum VectorSource {
+    Scene(tiny_skia::Paint<'static>),
+    Pattern {
+        image: Arc<StaticImage>,
+        texture_to_local: Affine,
+        smooth: bool,
+    },
+}
+impl VectorSource {
+    fn new(
+        paint: &Paint,
+        id: &gpui_flow_scene::DisplayId,
+        images: &ImageInputs,
+    ) -> Result<Self, CompositeError> {
+        if let Some(pattern) = images.pattern(id) {
+            Ok(Self::Pattern {
+                image: images.get(id)?,
+                texture_to_local: pattern.transform,
+                smooth: pattern.smooth,
+            })
+        } else {
+            Ok(Self::Scene(tiny_skia::Paint {
+                shader: shader(paint)?,
+                ..Default::default()
+            }))
+        }
+    }
 }
 #[derive(Default)]
 pub(crate) struct Preparation {
@@ -377,10 +406,7 @@ impl Preparation {
                     self.add_path(&path, source.world_transform, limits)?;
                     paints.push(VectorPaint {
                         path: path.clone(),
-                        paint: tiny_skia::Paint {
-                            shader: shader(fill)?,
-                            ..Default::default()
-                        },
+                        paint: VectorSource::new(fill, &object.id, images)?,
                         rule: match object.style.fill_rule {
                             FillRule::EvenOdd => tiny_skia::FillRule::EvenOdd,
                             FillRule::NonZero => tiny_skia::FillRule::Winding,
@@ -441,10 +467,7 @@ impl Preparation {
                     // each triangle source-over would double-alpha shared edges.
                     paints.push(VectorPaint {
                         path,
-                        paint: tiny_skia::Paint {
-                            shader: shader(&stroke.paint)?,
-                            ..Default::default()
-                        },
+                        paint: VectorSource::new(&stroke.paint, &object.id, images)?,
                         rule: tiny_skia::FillRule::Winding,
                         world: source.world_transform,
                     });

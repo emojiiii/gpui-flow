@@ -1,0 +1,187 @@
+{
+  "recorded_utc": "2026-10-02T22:40:05.226889+00:00",
+  "feature": "Bounded runtime Canvas image patterns",
+  "state": "Automated tests, strict Clippy and native link passed; native acceptance pending; rustdoc requires the disclosed legacy lint allowance",
+  "repository_head_at_recording": "4e59506688cecc92fa782059075332b6c6cdd20a",
+  "environment": "Linux x86_64; Rust/Cargo 1.98.1; source /workspace/shared/gpui-flow-native-env.sh; existing /workspace/shared/rust-target-native; CARGO_BUILD_JOBS=1; CARGO_INCREMENTAL=0; CARGO_PROFILE_DEV_DEBUG=0",
+  "validation_directory": "/workspace/shared/canvas-pattern-validation-20261002T2226Z",
+  "checks": [
+    {
+      "command": "cargo test --locked --offline -p gpui-flow-composite --lib canvas_pattern_",
+      "exit_code": 0,
+      "log": "/workspace/shared/canvas-pattern-validation-20261002T2226Z/final/pattern-tests.log",
+      "log_sha256": "893dd2b4d8cf4d5867b21298f4d5c5d80485a9a71124333952060d5097cd41a7",
+      "result": "passed",
+      "passed": 36,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "command": "cargo test --locked --offline",
+      "exit_code": 0,
+      "log": "/workspace/shared/canvas-pattern-validation-20261002T2226Z/final/default-tests.log",
+      "log_sha256": "343be7c465233562c73609980f179713b20b1aa9a4e3f04c73abe1fa848e5b7a",
+      "result": "passed",
+      "passed": 1602,
+      "failed": 0,
+      "ignored": 10
+    },
+    {
+      "command": "cargo test --locked --offline -p gpui-flow --lib",
+      "exit_code": 0,
+      "log": "/workspace/shared/canvas-pattern-validation-20261002T2226Z/final/ui-tests.log",
+      "log_sha256": "f413ae951f867e10f69bc3b0917fd1150cad70f22fdc4f84b53fca7b9c28d04a",
+      "result": "passed",
+      "passed": 258,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "command": "cargo test --locked --offline -p gpui-flow --lib canvas_pattern_",
+      "exit_code": 0,
+      "log": "/workspace/shared/canvas-pattern-validation-20261002T2226Z/final/ui-pattern-tests.log",
+      "log_sha256": "cdb776c19c1d5d26af7ec285cf8264fa6f3abffa343ca9081ce0840aad095c53",
+      "result": "passed",
+      "passed": 6,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "command": "cargo test --locked --offline -p flow-studio --bin canvas_patterns",
+      "exit_code": 0,
+      "log": "/workspace/shared/canvas-pattern-validation-20261002T2226Z/final/fixture-test.log",
+      "log_sha256": "893b791eab088f29610ab445af939e0897c87ba233f16c412d7ec353e9206e05",
+      "result": "passed",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "command": "cargo clippy --workspace --all-targets --locked --offline -- -D warnings",
+      "exit_code": 0,
+      "log": "/workspace/shared/canvas-pattern-validation-20261002T2226Z/final/clippy.log",
+      "log_sha256": "608abf4b1b164389d925ac2c967d78da2526ac50429dbae42707fed1ca2f552d",
+      "result": "passed"
+    },
+    {
+      "command": "cargo fmt --all -- --check",
+      "exit_code": 0,
+      "log": "/workspace/shared/canvas-pattern-validation-20261002T2226Z/final/format.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0,
+      "log": "/workspace/shared/canvas-pattern-validation-20261002T2226Z/final/diff-check.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result": "passed"
+    },
+    {
+      "command": "RUSTDOCFLAGS=\"-D warnings\" cargo doc --locked --offline --no-deps -p gpui-flow-composite -p gpui-flow",
+      "exit_code": 101,
+      "log": "/workspace/shared/canvas-pattern-validation-20261002T2226Z/final/rustdoc-strict.log",
+      "log_sha256": "0e97789146e785147c207095cb4e20e8b06ba4346bc3038149ddcb3bba1483a4",
+      "result": "known pre-existing rustdoc failure"
+    },
+    {
+      "command": "RUSTDOCFLAGS=\"-D warnings -A rustdoc::bare_urls\" cargo doc --locked --offline --no-deps -p gpui-flow-composite -p gpui-flow",
+      "exit_code": 0,
+      "log": "/workspace/shared/canvas-pattern-validation-20261002T2226Z/final/rustdoc-legacy-url-exception.log",
+      "log_sha256": "534e5e31465d0594dbd2e4b724e9a67cbfcb045c24d5834e02ee62b5b37935f5",
+      "result": "passed"
+    },
+    {
+      "command": "cargo build --locked --offline -p flow-studio --bin canvas_patterns",
+      "exit_code": 0,
+      "log": "/workspace/shared/canvas-pattern-validation-20261002T2226Z/final/native-link.log",
+      "log_sha256": "564ae0635b5dbd0b6eadce77f1cc00a38e868a9ede84d2d7e855f7502c3a851b",
+      "result": "passed"
+    }
+  ],
+  "counts_note": "Final default-members suite includes doctests and 10 existing ignored tests. Focused 36 composite pattern tests overlap the 1,602 default passes; focused six resource pattern tests overlap the 258 UI passes. The one fixture control-tour test is automated and is not native-window acceptance.",
+  "contract": [
+    "Runtime-only immutable decoded image capture; Repeat/NoRepeat, replacement transform, explicit/current fill and centered stroke, DPR mapping, wrapped nearest/bilinear sampling, nested frozen clips and ordered composition.",
+    "Retained resources, source deduplication, capture after source disposal, current geometry, late failures, geometry/mask/triangle/image/output/work budgets and adapter publication remain bounded and atomic.",
+    "Inverse-mapped padded render-target coordinates must be finite and within absolute 2^24 source texels, for both filters. The target is padded by 16 device pixels per side for SIMD/filter work. This is an integer-texel admission boundary, not a fractional-precision, browser-equality or cross-platform guarantee.",
+    "Exact scale(1e-30,1e-30) is nonsingular in the existing f64 Affine determinant but rejects atomically for visible Repeat draws; actual rank-deficient pattern transforms remain transparent. Supported tiny-tile shader stress still passes."
+  ],
+  "regressions_added_during_final_review": [
+    "Exact two-axis 1e-30 rejection and unchanged pixels/snapshot/generation/current path across nearest/bilinear, DPR 1/2, explicit/current and fill/stroke.",
+    "Uniform opaque tile paints at the 2^24 padded-domain boundary; the next smaller representable scale rejects atomically across both filters and DPRs.",
+    "Expanded genuine singular transparency and strict CTM rejection to both filters and DPR 1/2; existing invalid-geometry/late-command tests remain passing."
+  ],
+  "pre_fix_evidence": {
+    "previous_final_build_inputs_sha256": "39ffc05b4c6d8b360efecabced0534c6f820e8c4702693ffd4126cb3fe37ac17",
+    "previous_final_pattern_test_source_sha256": "db5740578e046e4be9c72d3a4617914e0d8d56989ba7a8a5bda5b50af6d432c7",
+    "previous_final_binary_sha256": "813efdb4b763bbc701f17fd61c260f1a06300b56bdb5c15fad88a85d2669937f",
+    "scope": "The previous final 479-input snapshot exactly matched the resumed repository, but its 34 pattern tests and 1,600 default passes did not include the exact two-axis regression or the new bounded sampling guard.",
+    "observed_failure": "For a uniform opaque [37,149,223,255] tile at scale(1e-30,1e-30), nearest painted correctly at DPR 1/2, while bilinear returned only [0,0,0,0] at both DPRs. A direct tiny-skia wrapped sampler reproduced that bilinear result. Finite coordinates alone were therefore insufficient.",
+    "diagnostic_log": "/workspace/shared/canvas-pattern-validation-20261002T2226Z/tiny-two-axis-upstream-diagnostic.log",
+    "diagnostic_log_sha256": "7fdb7a169dcbdeb0158687061202bc9072689afe6d19087abf72c89a5887e61f",
+    "diagnostic_source": "/workspace/shared/canvas-pattern-validation-20261002T2226Z/tiny-two-axis-diagnostic-test.rs",
+    "diagnostic_source_sha256": "7cbbc1bca91a35e2e7d5c0391947e27c72b75fc4fa2bc9f57e60a45644ca2ae8",
+    "note": "The retained diagnostic experiment prints observed pixels and intentionally skips the failing smooth assertion; its successful exit is not a product-correctness pass. Final regression tests enforce rejection and rollback instead."
+  },
+  "rustdoc_allowance": {
+    "exact_flags": "-D warnings -A rustdoc::bare_urls",
+    "scope": "Only the rustdoc::bare_urls lint category is allowed for documentation of gpui-flow-composite and gpui-flow; all other warnings remain errors. Strict rustdoc without that allowance fails solely at the existing W3C URL in crates/flow-composite/src/nonseparable.rs:2. The file was not changed.",
+    "unchanged_source_sha256": "d37dd7e1f6089df5650a2276d7ac44cb5174d1f76ee130022d777a35445f6fda"
+  },
+  "build_inputs": {
+    "before_validation": "/workspace/shared/canvas-pattern-validation-20261002T2226Z/final/pre-validation-inputs.json",
+    "after_validation": "/workspace/shared/canvas-pattern-validation-20261002T2226Z/final/post-validation-inputs.json",
+    "before_link": "/workspace/shared/canvas-pattern-validation-20261002T2226Z/final/pre-link-inputs.json",
+    "after_link": "/workspace/shared/canvas-pattern-validation-20261002T2226Z/final/post-link-inputs.json",
+    "identical": true,
+    "files": 479,
+    "manifest_sha256": "861ddb300d4b516ec1d46dc4b884b407bb3f48bf6187d5c23030787bb00212eb",
+    "scope": "Every file below crates/, examples/, .cargo/; all repository Rust sources, Cargo manifests/locks, toolchain files and build scripts. Includes compile-time READMEs/GIF assets. Excludes .git."
+  },
+  "binary": {
+    "path": "/workspace/shared/rust-target-native/debug/canvas_patterns",
+    "bytes": 178294832,
+    "sha256": "9925d8b90c5bcd7afe0666597439721988ca6468e994922b28093abb34113fd4"
+  },
+  "fixture": {
+    "source": "examples/studio/src/bin/canvas_patterns.rs",
+    "source_sha256": "91272a8618651cd157226ecc3f7489ceb49bdc919cad0b0f7ed10bfb26634018",
+    "native_acceptance": "pending; binary not launched during this validation pass"
+  },
+  "source_allowlist": [
+    "crates/flow-composite/src/canvas_pattern_command_tests.rs",
+    "crates/flow-composite/src/canvas_surface.rs",
+    "crates/flow-composite/src/canvas_surface/commands.rs",
+    "crates/flow-composite/src/canvas_surface/commands/pattern.rs",
+    "crates/flow-composite/src/image.rs",
+    "crates/flow-composite/src/lib.rs",
+    "crates/flow-composite/src/raster.rs",
+    "crates/flow-composite/src/vector.rs",
+    "crates/flow-ui/src/resources.rs",
+    "crates/flow-ui/src/resources/canvas_pattern_tests.rs",
+    "docs/canvas-patterns.md",
+    "docs/validation/2026-10-02-canvas-patterns-summary.json",
+    "examples/studio/src/bin/canvas_patterns.rs"
+  ],
+  "repository_integrity": {
+    "index_unchanged": true,
+    "index_sha256": "7eb50d20ebc876b5aa648070b0590e7c3c264dc646c2f8518f07c23dfada330e",
+    "index_matches_tree": "1755f98f1eacb04e1328bfde4b7da039c81fa207",
+    "build_input_changes_since_resume": [
+      "crates/flow-composite/src/canvas_pattern_command_tests.rs",
+      "crates/flow-composite/src/raster.rs"
+    ],
+    "index_preservation": "Index remained byte-identical to the initial tree containing the six pre-existing open-stroke evidence/ledger changes; those files were not edited. Canvas pattern changes remain unstaged."
+  },
+  "disk": {
+    "hard_reserve_bytes": 3221225472,
+    "guard_buffer_bytes": 134217728,
+    "minimum_observed_free_bytes": 3956191232,
+    "note": "Free space checked before every validation/build phase and monitored during commands; no deletion, duplicate target, binary/archive copies or reserve breach."
+  },
+  "limits": [
+    "ELM-10 remains partial for true outline strokeText; the GPUI backend supplies glyph bitmaps/metrics without outlines or a stroke operation.",
+    "RepeatX/Y, pattern text, persistent browser styles, arc/rect conveniences and serializable scene patterns are outside this slice.",
+    "Native window/pixel acceptance pending. No browser pixel equivalence, macOS/Windows tests, Git staging/commit/push, ledger edits, Actions or deployment were performed in this pass."
+  ]
+}
