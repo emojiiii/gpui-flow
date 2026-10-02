@@ -2277,6 +2277,7 @@ mod tests {
                 font_family: "DejaVu Sans".into(),
                 font_size: 25.,
                 font_weight: 400,
+                italic: false,
                 line_height: 35.,
                 wrap_width: Some(75.),
             },

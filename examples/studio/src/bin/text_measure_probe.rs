@@ -13,6 +13,7 @@ fn request(content: &str, width: Option<f32>) -> TextMeasureRequest {
         font_family: "DejaVu Sans".into(),
         font_size: 16.,
         font_weight: 400,
+        italic: false,
         line_height: 19.2,
         wrap_width: width,
     }

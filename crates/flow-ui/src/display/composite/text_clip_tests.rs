@@ -259,3 +259,32 @@ fn ellipsis_edit_invalidates_glyph_jobs_without_mutating_source_text() {
     };
     assert_eq!(t.content, content);
 }
+
+#[test]
+fn italic_edit_rejects_late_glyph_domain_completion() {
+    let (_app, bridge) =
+        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let mut e = SceneEngine::new(scene()).unwrap();
+    let first = request(&e, Some(&bridge));
+    let mut c = CompositeController::default();
+    c.request(first.clone());
+    let work = c.take_work().unwrap();
+    let late = work.run();
+    e.transaction(|s| {
+        s.update_object(&"text".into(), |o| {
+            if let Shape::Text(t) = &mut o.shape {
+                t.italic = true;
+            }
+        })
+    })
+    .unwrap();
+    let next = request(&e, Some(&bridge));
+    assert!(!next.compatible(&first, &"text".into()));
+    c.request(next.clone());
+    assert!(work.cancel.load(Ordering::Relaxed));
+    c.finish(first, late);
+    assert!(c.frame(&"text".into()).is_none());
+    let fresh = c.take_work().unwrap();
+    c.finish(next, fresh.run());
+    assert!(c.frame(&"text".into()).is_some());
+}

@@ -106,6 +106,7 @@ impl TextPreparation<'_> {
                         font_family: text.font_family.clone(),
                         font_size: text.font_size * m.d,
                         font_weight: text.font_weight,
+                        italic: text.italic,
                         line_height: text.font_size * text.line_height * m.d,
                         wrap_width: text.wrap.then_some(content.size.width * m.a),
                     },

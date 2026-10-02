@@ -23,6 +23,9 @@ pub enum TextOverflow {
     Clip,
     Ellipsis,
 }
+fn upright(value: &bool) -> bool {
+    !*value
+}
 fn is_clip(value: &TextOverflow) -> bool {
     *value == TextOverflow::Clip
 }
@@ -42,6 +45,8 @@ pub struct Text {
     pub font_size: f32,
     #[serde(default = "default_font_weight")]
     pub font_weight: u16,
+    #[serde(default, skip_serializing_if = "upright")]
+    pub italic: bool,
     pub line_height: f32,
     pub align: TextAlign,
     pub wrap: bool,
@@ -61,6 +66,7 @@ impl Text {
             font_family: "sans-serif".into(),
             font_size: 14.0,
             font_weight: default_font_weight(),
+            italic: false,
             line_height: 1.2,
             align: TextAlign::Start,
             wrap: true,

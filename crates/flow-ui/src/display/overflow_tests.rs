@@ -10,6 +10,7 @@ fn request(text: &str, wrap: Option<f32>) -> TextMeasureRequest {
         font_family: "DejaVu Sans".into(),
         font_size: 18.,
         font_weight: 400,
+        italic: false,
         line_height: 24.,
         wrap_width: wrap,
     }
@@ -173,4 +174,65 @@ fn ellipsis_cpu_raster_uses_real_marker_glyphs_and_shared_box_rows() {
             .iter()
             .any(|p| p[3] > 0)
     );
+}
+
+#[test]
+fn real_italic_faces_feed_native_shaping_measurement_and_cpu_raster() {
+    use gpui_flow_text::TextMeasurer;
+    use std::sync::atomic::AtomicBool;
+    let (app, bridge) =
+        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let system = WindowTextSystem::new(app.text_system());
+    let regular = request("ffi / actual italic face café", None);
+    let mut italic = regular.clone();
+    italic.italic = true;
+    let upright = shape_text(&system, &regular, Hsla::default()).unwrap();
+    let slanted = shape_text(&system, &italic, Hsla::default()).unwrap();
+    assert_ne!(
+        upright[0].unwrapped_layout.runs[0].font_id,
+        slanted[0].unwrapped_layout.runs[0].font_id
+    );
+    let measurer = gpui_flow_text::GpuiTextMeasurer::new(app.text_system());
+    for (r, line) in [(&regular, &upright[0]), (&italic, &slanted[0])] {
+        let m = measurer.measure(r).unwrap();
+        assert_eq!(m.width, f32::from(line.size(px(r.line_height)).width));
+    }
+    let mut r = gpui_flow_text::TextRasterRequest {
+        text: regular,
+        align: gpui::TextAlign::Left,
+        vertical_align: gpui_flow_text::VerticalAlign::Top,
+        overflow: TextOverflow::Ellipsis,
+        bounds: [0., 0., 140., 48.],
+        clip: [0., 0., 140., 48.],
+        device_scale: 1.,
+        color: [255; 4],
+    };
+    let render = |r: &gpui_flow_text::TextRasterRequest| {
+        bridge
+            .rasterize(
+                r,
+                bridge.epoch(),
+                &AtomicBool::new(false),
+                1_000_000,
+                &mut 1_000_000,
+            )
+            .unwrap()
+            .unwrap()
+    };
+    let normal = render(&r);
+    r.text = italic;
+    let italic = render(&r);
+    assert_ne!(normal.premul_rgba, italic.premul_rgba);
+    assert!(italic.glyphs > 0);
+}
+#[test]
+fn italic_ellipsis_width_uses_selected_face_and_preserves_original_text() {
+    let mut r = request("ffi tilted typography with a longer ending", None);
+    r.italic = true;
+    r.font_weight = 700;
+    let before = r.clone();
+    let s = shaped(&r, 110., 24.);
+    assert!(s.lines[0].text.ends_with("..."));
+    assert!(f32::from(s.lines[0].size(px(24.)).width) <= 110.);
+    assert_eq!(r, before);
 }

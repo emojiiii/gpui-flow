@@ -72,6 +72,7 @@ pub(super) fn measure(
             font_family: text.font_family.clone(),
             font_size: text.font_size,
             font_weight: text.font_weight,
+            italic: text.italic,
             line_height: text.font_size * text.line_height,
             wrap_width: if *sizing == TextSizing::AutoHeight && text.wrap {
                 Some(text.content_bounds().size.width)

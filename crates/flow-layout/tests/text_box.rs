@@ -12,7 +12,7 @@ impl TextMeasurer for Metrics {
             1
         };
         Ok(TextMetrics {
-            width: 80.,
+            width: if r.italic { 88. } else { 80. },
             height: r.line_height * lines as f32,
             line_height: r.line_height,
             lines,
@@ -113,4 +113,28 @@ fn ellipsis_never_truncates_intrinsic_measurement_or_changes_measured_size() {
         assert_eq!(size(&clipped), size(&ellipsis));
         assert!(m.0.lock().unwrap().iter().all(|r| r.content == "fixture"));
     }
+}
+
+#[test]
+fn italic_request_participates_in_reactive_intrinsic_sizing_and_undo() {
+    let (mut scene, layout, backend) = fixture(TextSizing::Natural);
+    let measured = layout.with_text_measurer(backend.clone());
+    measured.apply_to_scene(&mut scene).unwrap();
+    let mut e = SceneEditor::new(scene).unwrap();
+    measured.install_reactive(&mut e.engine).unwrap();
+    let before = e.scene().clone();
+    e.transaction(|s| {
+        s.update_object(&"t".into(), |o| {
+            if let Shape::Text(t) = &mut o.shape {
+                t.italic = true;
+            }
+        })
+    })
+    .unwrap();
+    assert_eq!(size(e.scene()), Size::new(118., 32.));
+    assert!(backend.0.lock().unwrap().iter().any(|r| r.italic));
+    assert!(e.undo());
+    assert_eq!(e.scene(), &before);
+    assert!(e.redo());
+    assert_eq!(size(e.scene()).width, 118.);
 }

@@ -18,6 +18,8 @@ pub struct TextMeasureRequest {
     pub font_family: String,
     pub font_size: f32,
     pub font_weight: u16,
+    /// Request the native italic face; no synthetic geometry skew.
+    pub italic: bool,
     /// Absolute logical line-box height, not a glyph's ink bounds.
     pub line_height: f32,
     pub wrap_width: Option<f32>,

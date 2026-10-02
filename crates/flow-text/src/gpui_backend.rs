@@ -9,9 +9,14 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-fn scene_font(family: &str, weight: u16) -> Font {
+fn scene_font(family: &str, weight: u16, italic: bool) -> Font {
     let mut value = font(SharedString::from(family.to_owned()));
     value.weight = FontWeight(weight as f32);
+    value.style = if italic {
+        gpui::FontStyle::Italic
+    } else {
+        gpui::FontStyle::Normal
+    };
     // Explicitly suppress inherited custom fallback/style/features. Platform
     // fallback and missing-glyph selection remain GPUI's responsibility.
     value.fallbacks = Some(FontFallbacks::default());
@@ -20,7 +25,7 @@ fn scene_font(family: &str, weight: u16) -> Font {
 
 /// Shape plain text with GPUI for both measurement and painting.
 ///
-/// Uses explicit family/weight and the platform's fallback/shaping implementation.
+/// Uses explicit family/weight/italic face and the platform's fallback/shaping implementation.
 /// The returned lines can be passed directly to `WrappedLine::paint`; use the
 /// request's absolute line height. Like GPUI, font resolution may panic when the
 /// platform cannot resolve any font. `GpuiTextMeasurer` catches that failure;
@@ -43,7 +48,7 @@ pub fn shape_text(
     {
         return Err("invalid native text dimensions".into());
     }
-    let descriptor = scene_font(&request.font_family, request.font_weight);
+    let descriptor = scene_font(&request.font_family, request.font_weight, request.italic);
     // Empty strings also fail explicitly when no usable primary/fallback exists.
     system.resolve_font(&descriptor);
     system
@@ -183,9 +188,46 @@ mod tests {
             font_family: "sans-serif".into(),
             font_size: 16.,
             font_weight: 400,
+            italic: false,
             line_height: 20.,
             wrap_width: None,
         }
+    }
+    #[test]
+    fn italic_is_part_of_the_measurement_cache_key() {
+        let mut cache = Cache::default();
+        let regular = request("face".into());
+        let mut italic = regular.clone();
+        italic.italic = true;
+        cache.insert(
+            regular,
+            TextMetrics {
+                width: 10.,
+                height: 20.,
+                line_height: 20.,
+                lines: 1,
+            },
+        );
+        cache.insert(
+            italic.clone(),
+            TextMetrics {
+                width: 11.,
+                height: 20.,
+                line_height: 20.,
+                lines: 1,
+            },
+        );
+        assert_eq!(cache.entries.len(), 2);
+        assert_eq!(
+            cache
+                .entries
+                .iter()
+                .find(|(key, _)| key == &italic)
+                .unwrap()
+                .1
+                .width,
+            11.
+        );
     }
     #[test]
     fn cache_is_bounded_by_entries_and_content_bytes() {
