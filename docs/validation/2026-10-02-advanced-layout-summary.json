@@ -1,0 +1,1194 @@
+{
+  "contract": "LAY-03",
+  "date": "2026-10-02",
+  "recommendation": "Close the frozen bounded LAY-03 contract: model/adapter checks plus real Linux native-frame receipts and independently audited screenshots passed. This is not a general CSS, cross-platform, paint-fence or complete-build-tree claim.",
+  "source": {
+    "core_remote_checkpoint": "d9a3921525a1989cb332963900ff84d648ac51ba",
+    "bridge_remote_checkpoint_prefix": "ca44fa43",
+    "local_checkpoint_at_link": "81a405783b127ab08fa4793b694506971d0309de",
+    "local_checkpoint_tree": "e7073665c7db2aee5dbd8ad51d678178dc0b3e77",
+    "provenance_boundary": "The executable was linked from this local checkpoint plus uncommitted fixture, crop and Leafer JSON work. It is NOT an executable of the exact ca44fa43 tree. Local checkpoints are reconstructed snapshots; no remote ancestry or publication is independently asserted here.",
+    "captured_link_time_hashes": {
+      "crates/flow-text/src/gpui_backend.rs": {
+        "sha256_at_link": "31e15cb4297134fe39e1e3bf44434e71d8789696f79e6a8165bbc24c473d09ec",
+        "sha256_at_audit": "31e15cb4297134fe39e1e3bf44434e71d8789696f79e6a8165bbc24c473d09ec",
+        "matches_at_audit": true
+      },
+      "examples/studio/src/bin/advanced_flow_layout.rs": {
+        "sha256_at_link": "1050702fad75e5f231e46714ca4245deb3bd0c024bbc52853c8e289548b42b64",
+        "sha256_at_audit": "1050702fad75e5f231e46714ca4245deb3bd0c024bbc52853c8e289548b42b64",
+        "matches_at_audit": true
+      },
+      "docs/advanced-flow-layout.md": {
+        "sha256_at_link": "5cc9db07b5c90401838d9b8394fe5c520f18d0ea95fd365f949fd13f85f76ae4",
+        "sha256_at_audit": "5cc9db07b5c90401838d9b8394fe5c520f18d0ea95fd365f949fd13f85f76ae4",
+        "matches_at_audit": true,
+        "comparison_scope": "The original document matched at the start of audit; this audit subsequently appended completed acceptance. Frozen original remains in fixture-source.tar.gz and contract-before-native.md.",
+        "later_changed_by_this_audit": true
+      },
+      "Cargo.lock": {
+        "sha256_at_link": "10698fc0469bf9e03b947e58c55c56738b621dbbafaba246f94cb203859bc708",
+        "sha256_at_audit": "10698fc0469bf9e03b947e58c55c56738b621dbbafaba246f94cb203859bc708",
+        "matches_at_audit": true
+      },
+      "crates/flow-ui/src/scene_view/flow_layout.rs": {
+        "sha256_at_link": "cf9921199840f6645e272f707c881429168fc941f7719831d17566f7f1811c33",
+        "sha256_at_audit": "cf9921199840f6645e272f707c881429168fc941f7719831d17566f7f1811c33",
+        "matches_at_audit": true
+      },
+      "crates/flow-ui/src/scene_view/mod.rs": {
+        "sha256_at_link": "0aad8508d81800c262b8721b182d39d35a8cd5643eb4a65ff20298b8f2652b29",
+        "sha256_at_audit": "0aad8508d81800c262b8721b182d39d35a8cd5643eb4a65ff20298b8f2652b29",
+        "matches_at_audit": true
+      }
+    },
+    "fixture_source_archive_sha256": "c87022e7f9964b06f3e37564525f9fb5d812d7e36c7b7f6d488a5dfbd1112a0a",
+    "checkout_at_link_text": "81a405783b127ab08fa4793b694506971d0309de\n M crates/flow-composite/src/image_corner_tests.rs\n M crates/flow-composite/src/vector.rs\n M crates/flow-editor/src/lib.rs\n M crates/flow-engine/src/change.rs\n M crates/flow-engine/src/query.rs\n M crates/flow-engine/src/registry.rs\n M crates/flow-interaction/src/event.rs\n M crates/flow-interaction/src/scene/command.rs\n M crates/flow-interaction/src/scene/host.rs\n M crates/flow-interaction/src/scene/mod.rs\n M crates/flow-interaction/src/scene/router.rs\n M crates/flow-scene/src/display/image.rs\n M crates/flow-scene/src/display/mod.rs\n M crates/flow-scene/src/lib.rs\n M crates/flow-text/src/gpui_backend.rs\n M crates/flow-ui/src/display/image.rs\n M crates/flow-ui/src/image_hit.rs\n M crates/flow-ui/src/resources/image_hit_tests.rs\n M crates/flow-ui/src/scene_view/image_hit.rs\n M crates/flow-ui/src/scene_view/interaction.rs\n M crates/flow-ui/src/scene_view/mod.rs\n M crates/flow-ui/src/scene_view/render.rs\n M crates/flow-ui/src/scene_view/text_edit.rs\n M docs/advanced-flow-layout.md\n M docs/image-alpha-hit.md\n?? crates/flow-editor/src/image_crop.rs\n?? crates/flow-editor/tests/image_crop.rs\n?? crates/flow-engine/tests/image_crop.rs\n?? crates/flow-interaction/src/scene/host/image_crop.rs\n?? crates/flow-interaction/src/scene/image_crop.rs\n?? crates/flow-interaction/tests/image_crop.rs\n?? crates/flow-scene/src/leafer_json.rs\n?? crates/flow-scene/tests/image_crop.rs\n?? crates/flow-scene/tests/leafer_json.rs\n?? crates/flow-ui/src/scene_view/image_crop.rs\n?? docs/image-crop.md\n?? docs/leafer-json.md\n?? examples/studio/src/bin/advanced_flow_layout.rs\n?? examples/studio/src/bin/image_crop_trace.rs\n",
+    "checkout_at_link_sha256": "890517e8732e8d775648890f34e8e98219639de411d17509942a8cef20997087",
+    "workspace_input_audit": {
+      "file": "workspace-inputs-audit.json",
+      "sha256": "4cd80d6e39d806bd601b5c440d0fc8f1f27f41a1944bb97f72c4af0fe73b2c52",
+      "workspace_dependency_count": 210,
+      "changed_after_link_depfile": [
+        "crates/flow-composite/src/plan.rs",
+        "crates/flow-scene/src/display/image.rs",
+        "crates/flow-ui/src/display/image.rs",
+        "crates/flow-ui/src/display/mod.rs"
+      ],
+      "boundary": "This additional inventory records source observed at audit time. Uncaptured WIP input bytes at link time cannot be retroactively certified; unchanged mtimes are not a cryptographic proof. The captured fixture/backend/bridge/mod/lock hashes do match their link-time receipts.",
+      "manifest_includes": "Only workspace paths listed by the executable Cargo depfile; excludes external dependency source/toolchain attestation and non-depfile build configuration."
+    },
+    "captured_hash_comparison_scope": "Captured Rust source and lock hashes match link-time receipts. Document comparison was performed before this audit appended acceptance."
+  },
+  "receipt": {
+    "artifact_directory": "advanced-layout-validation",
+    "binary": "advanced_flow_layout",
+    "binary_sha256": "7f8da361691d6fd14a1093ddd3b6a0b720de6c4e198ba9696a7818e8d52059ae",
+    "binary_bytes": 182076608,
+    "start_utc": "2026-10-02T18:19:04Z",
+    "end_utc": "2026-10-02T18:21:16Z",
+    "exit": 0,
+    "receipt_text": "START=2026-10-02T18:19:04Z\n7f8da361691d6fd14a1093ddd3b6a0b720de6c4e198ba9696a7818e8d52059ae  advanced_flow_layout\nEND=2026-10-02T18:21:16Z\nEXIT=0\n",
+    "receipt_sha256": "24da138617a19e1ca538b1843eef0a99e5d17c3e569b29774a800ba0496f3fdb",
+    "raw_jsonl_sha256": "3d0ac7d296c5a766526fa2e610a3d9948a0e1171591446829a4cda1905254cdb",
+    "raw_jsonl_bytes": 4600,
+    "stdout_bytes": 0
+  },
+  "counts": {
+    "records": 19,
+    "frame_receipts": 8,
+    "successful_batches": 5,
+    "failed_batches": 3,
+    "twenty_edit_batches": 3,
+    "exact_undo_actions": 2,
+    "cancel_guards": 1,
+    "replacement_guards": 1,
+    "screenshots": 12,
+    "final_revision": 8,
+    "final_pending": 0
+  },
+  "independent_payload_audit": {
+    "exact_action_callback_revision_pending_geometry_sequence": true,
+    "receipt_numbers_contiguous_1_to_8": true,
+    "all_half_widths_recomputed_from_fixed_content": true,
+    "batch20_staging": "Lines 2,6,18 retain earlier committed width/half/revision with pending=20; lines 3,7,19 each add exactly one callback and one revision, pending=0. Targets are 500,620,620.",
+    "local_dirty": "Line 4 reports containers=1/items=3/passes=2 and 12 measurements: four each for Large Ag, Medium Ag, Small edited Ag; no Untouched Ag. Only large/medium/small appear in changed geometry.",
+    "undo": "Lines 5 and 8 each advance the revision once without a frame receipt; fixed scalar geometry and screenshots recover expected state. Whole-scene exact equality was asserted by the frozen fixture, not serialized in the JSONL.",
+    "atomic_failures": "Lines 10,12,14 have expected owner-conflict, stale and outage errors, preserve width/half/revision of their preceding staged lines, and retain pending=1. Document reset intentionally advances revision 5 to 6 before the stale callback; the stale callback itself does not advance it.",
+    "stale_target": "Frozen fixture explicitly invalidates the old half element handle after reset; normal exit proves that assertion ran. Handle bytes are not in the JSONL.",
+    "retry": "Line 15 consumes the retained single pending edit, width500 to520, half230 to240, revision6 to7, callback6 to7.",
+    "cancel_replace": "Lines16/17 retain callback7/revision7/pending0 and width520/half240; late real-frame verifier assertions reject unwanted receipt/commit.",
+    "measurement_cost": "Full receipts have 16 backend measure calls; local has12. Container dependency selection is proven, not a one-shaping-call or performance guarantee.",
+    "full_snapshot_assertion_boundary": "Exact whole-scene rollback, stable-branch equality and Undo are checked inside frozen source with assertions; raw receipts only serialize scalar geometry, selected work and call inputs. The independent audit also compared image-region bytes."
+  },
+  "independent_pixel_audit": {
+    "all_12_images_visually_inspected": true,
+    "method": "Read original 1180x812 PNGs. Recompute colored spans at row215 for percentage rectangles and row242 for shrink child; RGB tolerance15 accommodates captured color rounding. Compare unmodified decoded RGB bytes for scene [20,120,1175,700], independent branch [930,385,1170,535], baseline row [30,385,870,535]. Vertical samples at columns100/380/875 independently verify heights45/45/15 in every screenshot.",
+    "percentage_spans": "Measured half/quarter pixel widths are 290/145,230/115 or240/120 exactly as each committed content allocation requires.",
+    "shrink": "All screenshots independently measure the same30x15 child at x860..890,y235..250 inside unchanged220-wide panel; native probe and frozen fixture assertions establish content(120,60,60,30) and child width30.",
+    "baseline": "All three native font sizes visibly rest on the yellow first-baseline guide, with descenders extending below it. Only Local text changes the baseline-row image; all other baseline-row RGB bytes match initial.",
+    "independent_branch": "Exact decoded stable-region RGB hash is identical in all12 screenshots.",
+    "undo_and_atomic_pixels": "02,04,05,06,07,08 have identical scene-region RGB bytes.09,10,11 likewise match.12 exactly matches01 scene-region RGB bytes.",
+    "static_caption": "The fixed-content caption retains initial outer width620 even after resizing; dynamic geometry, receipt and footer are authoritative."
+  },
+  "automated_checks": {
+    "direct_baseline_tests": {
+      "passed": 2,
+      "filtered_out": 13,
+      "log_sha256": "9cf414b377e112cab53d7d1c81bca6c7df9c864a475b928a8cbed2816a61f9ac"
+    },
+    "strict_text_all_targets_clippy": {
+      "passed": true,
+      "log_sha256": "7448d4d077e569b2189d1854c8f386c63d9130b33807578dda48852cbc8d9e52"
+    },
+    "strict_fixture_clippy": {
+      "passed": true,
+      "log_sha256": "16cc9634bf45182abb06d08f449efae1ba7ed0c3c1b1a02cce79d339b8be5555"
+    },
+    "native_link": {
+      "passed": true,
+      "log_sha256": "21c3a73ee4b4cd5e15274307ef535f6f29e4e583d00d3c2a3d3428ed73230640"
+    },
+    "native_headless_probe": {
+      "record": {
+        "fixture": "advanced-flow-layout",
+        "action": "native-probe",
+        "containers": 4,
+        "passes": 2,
+        "half": 290.0,
+        "quarter": 145.0,
+        "native_baselines_equal": true,
+        "window_opened": false
+      },
+      "log_sha256": "ed6e8dc0d9bb3a9c062e2c04e09bf80e73b3166d92131b4650131eb08bd622ce"
+    },
+    "prior_model_checkpoint": "238 layout/text tests and doctests including28 advanced cases, as previously reported; not rerun for this native audit",
+    "prior_bridge_checkpoint": "Five pure bridge tests previously reported by integrator; not rerun for this audit",
+    "format_and_diff": "Passed at preparation; final documentation diff checked separately"
+  },
+  "screenshots": {
+    "01-initial.png": {
+      "sha256": "c441e982a2fb08a38ef8e5e5caba132fe6ef134c5f1a607a32f9dc5ab8f7bceb",
+      "bytes": 98114,
+      "dimensions": [
+        1180,
+        812
+      ],
+      "observed": "Initial 620-wide fixed parent, 290/145 percentage children, 30x15 shrink child, mixed-size text visibly shares yellow alphabetic baseline, independent text visible",
+      "pixel_spans": {
+        "half": {
+          "row_y": 215,
+          "start_x": 50,
+          "end_x_exclusive": 340,
+          "width": 290,
+          "vertical_sample": {
+            "column_x": 100,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "quarter": {
+          "row_y": 215,
+          "start_x": 356,
+          "end_x_exclusive": 501,
+          "width": 145,
+          "vertical_sample": {
+            "column_x": 380,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "shrink": {
+          "row_y": 242,
+          "start_x": 860,
+          "end_x_exclusive": 890,
+          "width": 30,
+          "vertical_sample": {
+            "column_x": 875,
+            "start_y": 235,
+            "end_y_exclusive": 250,
+            "height": 15
+          }
+        }
+      },
+      "scene_region_rgb_sha256": "00ba1985832864f410d791d2ebacd01a49f169d2f8d6b6fce58af333295bc04b",
+      "stable_region_rgb_sha256": "8a57c8c348cc071c0fe21dd1129810ca55eeb50adacb2961ada8b5541d0e210a",
+      "baseline_region_rgb_sha256": "de4b8b8d2a16d48f9fa6a0879c2ce43fea623354624529196dd13d2fb289a2b8"
+    },
+    "02-batch.png": {
+      "sha256": "6066b5c34f81218f72b349501abd44ef917674dba45793b1ded0f3a7e1168ed1",
+      "bytes": 98374,
+      "dimensions": [
+        1180,
+        812
+      ],
+      "observed": "Batch receipt 1; parent narrowed to 500, children 230/115, baseline and stable branch unchanged",
+      "pixel_spans": {
+        "half": {
+          "row_y": 215,
+          "start_x": 50,
+          "end_x_exclusive": 280,
+          "width": 230,
+          "vertical_sample": {
+            "column_x": 100,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "quarter": {
+          "row_y": 215,
+          "start_x": 296,
+          "end_x_exclusive": 411,
+          "width": 115,
+          "vertical_sample": {
+            "column_x": 380,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "shrink": {
+          "row_y": 242,
+          "start_x": 860,
+          "end_x_exclusive": 890,
+          "width": 30,
+          "vertical_sample": {
+            "column_x": 875,
+            "start_y": 235,
+            "end_y_exclusive": 250,
+            "height": 15
+          }
+        }
+      },
+      "scene_region_rgb_sha256": "eb0100d521e0e9f57872b51757c673d3834add12f41346f05e143ad7f410f9bc",
+      "stable_region_rgb_sha256": "8a57c8c348cc071c0fe21dd1129810ca55eeb50adacb2961ada8b5541d0e210a",
+      "baseline_region_rgb_sha256": "de4b8b8d2a16d48f9fa6a0879c2ce43fea623354624529196dd13d2fb289a2b8"
+    },
+    "03-local.png": {
+      "sha256": "1996e3c632dec7233446c4860d56af13a998fd779f610e1b598293173290d4b5",
+      "bytes": 98851,
+      "dimensions": [
+        1180,
+        812
+      ],
+      "observed": "Local receipt 2; Small edited Ag shifts later baseline siblings, all first baselines still align; independent branch unchanged",
+      "pixel_spans": {
+        "half": {
+          "row_y": 215,
+          "start_x": 50,
+          "end_x_exclusive": 280,
+          "width": 230,
+          "vertical_sample": {
+            "column_x": 100,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "quarter": {
+          "row_y": 215,
+          "start_x": 296,
+          "end_x_exclusive": 411,
+          "width": 115,
+          "vertical_sample": {
+            "column_x": 380,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "shrink": {
+          "row_y": 242,
+          "start_x": 860,
+          "end_x_exclusive": 890,
+          "width": 30,
+          "vertical_sample": {
+            "column_x": 875,
+            "start_y": 235,
+            "end_y_exclusive": 250,
+            "height": 15
+          }
+        }
+      },
+      "scene_region_rgb_sha256": "65e09830cd7cfc73d051431077a5da1282cc4de32c2d1ec2a23827f11c3dddca",
+      "stable_region_rgb_sha256": "8a57c8c348cc071c0fe21dd1129810ca55eeb50adacb2961ada8b5541d0e210a",
+      "baseline_region_rgb_sha256": "d610907cd6955432907abf6608d95445e9412e45e81ee86fd551f7f4da0e5ade"
+    },
+    "04-local-undo.png": {
+      "sha256": "d09291f67f18b6d7cf57f5cb283b380f139bcac42aef031a115029bc0bca3f24",
+      "bytes": 97003,
+      "dimensions": [
+        1180,
+        812
+      ],
+      "observed": "Local Undo restores Small Ag and earlier positions; callback count stays 2",
+      "pixel_spans": {
+        "half": {
+          "row_y": 215,
+          "start_x": 50,
+          "end_x_exclusive": 280,
+          "width": 230,
+          "vertical_sample": {
+            "column_x": 100,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "quarter": {
+          "row_y": 215,
+          "start_x": 296,
+          "end_x_exclusive": 411,
+          "width": 115,
+          "vertical_sample": {
+            "column_x": 380,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "shrink": {
+          "row_y": 242,
+          "start_x": 860,
+          "end_x_exclusive": 890,
+          "width": 30,
+          "vertical_sample": {
+            "column_x": 875,
+            "start_y": 235,
+            "end_y_exclusive": 250,
+            "height": 15
+          }
+        }
+      },
+      "scene_region_rgb_sha256": "eb0100d521e0e9f57872b51757c673d3834add12f41346f05e143ad7f410f9bc",
+      "stable_region_rgb_sha256": "8a57c8c348cc071c0fe21dd1129810ca55eeb50adacb2961ada8b5541d0e210a",
+      "baseline_region_rgb_sha256": "de4b8b8d2a16d48f9fa6a0879c2ce43fea623354624529196dd13d2fb289a2b8"
+    },
+    "05-batch-undo.png": {
+      "sha256": "cb293289db67c61cba859029303f1d8a55effc5caae85ab28fe828a0dafbc0ec",
+      "bytes": 96991,
+      "dimensions": [
+        1180,
+        812
+      ],
+      "observed": "Batch Undo returns 500-wide state; callback count stays 3",
+      "pixel_spans": {
+        "half": {
+          "row_y": 215,
+          "start_x": 50,
+          "end_x_exclusive": 280,
+          "width": 230,
+          "vertical_sample": {
+            "column_x": 100,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "quarter": {
+          "row_y": 215,
+          "start_x": 296,
+          "end_x_exclusive": 411,
+          "width": 115,
+          "vertical_sample": {
+            "column_x": 380,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "shrink": {
+          "row_y": 242,
+          "start_x": 860,
+          "end_x_exclusive": 890,
+          "width": 30,
+          "vertical_sample": {
+            "column_x": 875,
+            "start_y": 235,
+            "end_y_exclusive": 250,
+            "height": 15
+          }
+        }
+      },
+      "scene_region_rgb_sha256": "eb0100d521e0e9f57872b51757c673d3834add12f41346f05e143ad7f410f9bc",
+      "stable_region_rgb_sha256": "8a57c8c348cc071c0fe21dd1129810ca55eeb50adacb2961ada8b5541d0e210a",
+      "baseline_region_rgb_sha256": "de4b8b8d2a16d48f9fa6a0879c2ce43fea623354624529196dd13d2fb289a2b8"
+    },
+    "06-conflict.png": {
+      "sha256": "ed617d67e392b1b428a938491d1486aea06b0f1ac461f622d9ddfef7508c864b",
+      "bytes": 98837,
+      "dimensions": [
+        1180,
+        812
+      ],
+      "observed": "Owner conflict footer, callback 4, pending 1; canvas unchanged",
+      "pixel_spans": {
+        "half": {
+          "row_y": 215,
+          "start_x": 50,
+          "end_x_exclusive": 280,
+          "width": 230,
+          "vertical_sample": {
+            "column_x": 100,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "quarter": {
+          "row_y": 215,
+          "start_x": 296,
+          "end_x_exclusive": 411,
+          "width": 115,
+          "vertical_sample": {
+            "column_x": 380,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "shrink": {
+          "row_y": 242,
+          "start_x": 860,
+          "end_x_exclusive": 890,
+          "width": 30,
+          "vertical_sample": {
+            "column_x": 875,
+            "start_y": 235,
+            "end_y_exclusive": 250,
+            "height": 15
+          }
+        }
+      },
+      "scene_region_rgb_sha256": "eb0100d521e0e9f57872b51757c673d3834add12f41346f05e143ad7f410f9bc",
+      "stable_region_rgb_sha256": "8a57c8c348cc071c0fe21dd1129810ca55eeb50adacb2961ada8b5541d0e210a",
+      "baseline_region_rgb_sha256": "de4b8b8d2a16d48f9fa6a0879c2ce43fea623354624529196dd13d2fb289a2b8"
+    },
+    "07-stale.png": {
+      "sha256": "d088c109ae25aa49d296c47070391fc6562c2b1514ae398cac66c63faa21d259",
+      "bytes": 98837,
+      "dimensions": [
+        1180,
+        812
+      ],
+      "observed": "Stale-reset footer, callback 5, pending 1; canvas unchanged",
+      "pixel_spans": {
+        "half": {
+          "row_y": 215,
+          "start_x": 50,
+          "end_x_exclusive": 280,
+          "width": 230,
+          "vertical_sample": {
+            "column_x": 100,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "quarter": {
+          "row_y": 215,
+          "start_x": 296,
+          "end_x_exclusive": 411,
+          "width": 115,
+          "vertical_sample": {
+            "column_x": 380,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "shrink": {
+          "row_y": 242,
+          "start_x": 860,
+          "end_x_exclusive": 890,
+          "width": 30,
+          "vertical_sample": {
+            "column_x": 875,
+            "start_y": 235,
+            "end_y_exclusive": 250,
+            "height": 15
+          }
+        }
+      },
+      "scene_region_rgb_sha256": "eb0100d521e0e9f57872b51757c673d3834add12f41346f05e143ad7f410f9bc",
+      "stable_region_rgb_sha256": "8a57c8c348cc071c0fe21dd1129810ca55eeb50adacb2961ada8b5541d0e210a",
+      "baseline_region_rgb_sha256": "de4b8b8d2a16d48f9fa6a0879c2ce43fea623354624529196dd13d2fb289a2b8"
+    },
+    "08-backend-failed.png": {
+      "sha256": "393c1f7b7cccf1e3efe2ec06e5ddfc56076e2028268a608b549f6b87800cf539",
+      "bytes": 99606,
+      "dimensions": [
+        1180,
+        812
+      ],
+      "observed": "Backend-outage footer, callback 6, pending 1; canvas unchanged",
+      "pixel_spans": {
+        "half": {
+          "row_y": 215,
+          "start_x": 50,
+          "end_x_exclusive": 280,
+          "width": 230,
+          "vertical_sample": {
+            "column_x": 100,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "quarter": {
+          "row_y": 215,
+          "start_x": 296,
+          "end_x_exclusive": 411,
+          "width": 115,
+          "vertical_sample": {
+            "column_x": 380,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "shrink": {
+          "row_y": 242,
+          "start_x": 860,
+          "end_x_exclusive": 890,
+          "width": 30,
+          "vertical_sample": {
+            "column_x": 875,
+            "start_y": 235,
+            "end_y_exclusive": 250,
+            "height": 15
+          }
+        }
+      },
+      "scene_region_rgb_sha256": "eb0100d521e0e9f57872b51757c673d3834add12f41346f05e143ad7f410f9bc",
+      "stable_region_rgb_sha256": "8a57c8c348cc071c0fe21dd1129810ca55eeb50adacb2961ada8b5541d0e210a",
+      "baseline_region_rgb_sha256": "de4b8b8d2a16d48f9fa6a0879c2ce43fea623354624529196dd13d2fb289a2b8"
+    },
+    "09-retry.png": {
+      "sha256": "27c544325ad52a9776de5cea8368b3e729063bc8ca248e7650ff366930af8dce",
+      "bytes": 99110,
+      "dimensions": [
+        1180,
+        812
+      ],
+      "observed": "Retry footer, callback 7, pending 0; parent 520, children 240/120",
+      "pixel_spans": {
+        "half": {
+          "row_y": 215,
+          "start_x": 50,
+          "end_x_exclusive": 290,
+          "width": 240,
+          "vertical_sample": {
+            "column_x": 100,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "quarter": {
+          "row_y": 215,
+          "start_x": 306,
+          "end_x_exclusive": 426,
+          "width": 120,
+          "vertical_sample": {
+            "column_x": 380,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "shrink": {
+          "row_y": 242,
+          "start_x": 860,
+          "end_x_exclusive": 890,
+          "width": 30,
+          "vertical_sample": {
+            "column_x": 875,
+            "start_y": 235,
+            "end_y_exclusive": 250,
+            "height": 15
+          }
+        }
+      },
+      "scene_region_rgb_sha256": "aa8db9c0c39841232ea5abe3321035895c395aa393e3fc9db5fff8f58f0f594d",
+      "stable_region_rgb_sha256": "8a57c8c348cc071c0fe21dd1129810ca55eeb50adacb2961ada8b5541d0e210a",
+      "baseline_region_rgb_sha256": "de4b8b8d2a16d48f9fa6a0879c2ce43fea623354624529196dd13d2fb289a2b8"
+    },
+    "10-cancel.png": {
+      "sha256": "4134175a5a7b9d8bedfffba80f2bf4592ef07e3185ffc8141d409d113185212b",
+      "bytes": 97058,
+      "dimensions": [
+        1180,
+        812
+      ],
+      "observed": "Cancel footer, callback still 7, pending 0; canvas equals retry",
+      "pixel_spans": {
+        "half": {
+          "row_y": 215,
+          "start_x": 50,
+          "end_x_exclusive": 290,
+          "width": 240,
+          "vertical_sample": {
+            "column_x": 100,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "quarter": {
+          "row_y": 215,
+          "start_x": 306,
+          "end_x_exclusive": 426,
+          "width": 120,
+          "vertical_sample": {
+            "column_x": 380,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "shrink": {
+          "row_y": 242,
+          "start_x": 860,
+          "end_x_exclusive": 890,
+          "width": 30,
+          "vertical_sample": {
+            "column_x": 875,
+            "start_y": 235,
+            "end_y_exclusive": 250,
+            "height": 15
+          }
+        }
+      },
+      "scene_region_rgb_sha256": "aa8db9c0c39841232ea5abe3321035895c395aa393e3fc9db5fff8f58f0f594d",
+      "stable_region_rgb_sha256": "8a57c8c348cc071c0fe21dd1129810ca55eeb50adacb2961ada8b5541d0e210a",
+      "baseline_region_rgb_sha256": "de4b8b8d2a16d48f9fa6a0879c2ce43fea623354624529196dd13d2fb289a2b8"
+    },
+    "11-replace.png": {
+      "sha256": "f46ce6e52a83455b27f9ba33106906c4d5161b54ea1627a5bf14408275613dc8",
+      "bytes": 97035,
+      "dimensions": [
+        1180,
+        812
+      ],
+      "observed": "Replace footer, callback still 7, pending 0; canvas equals retry",
+      "pixel_spans": {
+        "half": {
+          "row_y": 215,
+          "start_x": 50,
+          "end_x_exclusive": 290,
+          "width": 240,
+          "vertical_sample": {
+            "column_x": 100,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "quarter": {
+          "row_y": 215,
+          "start_x": 306,
+          "end_x_exclusive": 426,
+          "width": 120,
+          "vertical_sample": {
+            "column_x": 380,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "shrink": {
+          "row_y": 242,
+          "start_x": 860,
+          "end_x_exclusive": 890,
+          "width": 30,
+          "vertical_sample": {
+            "column_x": 875,
+            "start_y": 235,
+            "end_y_exclusive": 250,
+            "height": 15
+          }
+        }
+      },
+      "scene_region_rgb_sha256": "aa8db9c0c39841232ea5abe3321035895c395aa393e3fc9db5fff8f58f0f594d",
+      "stable_region_rgb_sha256": "8a57c8c348cc071c0fe21dd1129810ca55eeb50adacb2961ada8b5541d0e210a",
+      "baseline_region_rgb_sha256": "de4b8b8d2a16d48f9fa6a0879c2ce43fea623354624529196dd13d2fb289a2b8"
+    },
+    "12-recovered.png": {
+      "sha256": "9954ce3e5c3e6f012c7a02cc522b41e1703003246689323d8cf705d64f23f108",
+      "bytes": 99286,
+      "dimensions": [
+        1180,
+        812
+      ],
+      "observed": "Recovered batch footer, callback 8, pending 0; canvas equals initial 620-wide scene",
+      "pixel_spans": {
+        "half": {
+          "row_y": 215,
+          "start_x": 50,
+          "end_x_exclusive": 340,
+          "width": 290,
+          "vertical_sample": {
+            "column_x": 100,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "quarter": {
+          "row_y": 215,
+          "start_x": 356,
+          "end_x_exclusive": 501,
+          "width": 145,
+          "vertical_sample": {
+            "column_x": 380,
+            "start_y": 195,
+            "end_y_exclusive": 240,
+            "height": 45
+          }
+        },
+        "shrink": {
+          "row_y": 242,
+          "start_x": 860,
+          "end_x_exclusive": 890,
+          "width": 30,
+          "vertical_sample": {
+            "column_x": 875,
+            "start_y": 235,
+            "end_y_exclusive": 250,
+            "height": 15
+          }
+        }
+      },
+      "scene_region_rgb_sha256": "00ba1985832864f410d791d2ebacd01a49f169d2f8d6b6fce58af333295bc04b",
+      "stable_region_rgb_sha256": "8a57c8c348cc071c0fe21dd1129810ca55eeb50adacb2961ada8b5541d0e210a",
+      "baseline_region_rgb_sha256": "de4b8b8d2a16d48f9fa6a0879c2ce43fea623354624529196dd13d2fb289a2b8"
+    }
+  },
+  "boundaries": [
+    "One Linux native host using its actual installed fonts; no macOS/Windows or arbitrary fallback-font pixel parity claim.",
+    "Window::on_next_frame callback receipts certify atomic document/layout commits. They are not GPU fences or latency/performance benchmarks; screenshots separately establish observed output.",
+    "Ordinary editor APIs remain immediate. Coalescing requires opting into SceneView frame queue; no global scheduling change is claimed.",
+    "Only declared fixed-parent percentages, bounded Leafer shrinkContent semantics and measured text row first-baseline subset are covered; no complete CSS baseline/flex-shrink/cycle-solving claim.",
+    "Native physical sequence tests engine reset staleness, cancel/replacement and recoverable backend retry. Provider-change/cross-window/unmount edge guarantees rely on model/bridge contracts and focused tests, not additional native scenarios here.",
+    "Maximum256 edits, malformed metrics, bounded cycles, wrap/reverse and other declared advanced cases retain model-test evidence rather than additional native screenshot coverage.",
+    "No production source, Cargo invocation, UI action, commit, push, deployment or GitHub Actions was performed during this independent audit."
+  ],
+  "physical_operator_sequence": [
+    "Batch 20",
+    "Local text",
+    "Undo",
+    "Batch 20",
+    "Undo",
+    "Owner conflict",
+    "Stale reset",
+    "Backend fail",
+    "Retry",
+    "Cancel staged",
+    "Replace staged",
+    "Batch 20"
+  ],
+  "physical_operator_boundary": "Integrator supplied actual mouse sequence and twelve native screenshots; JSONL records fixture actions/receipts rather than raw mouse events.",
+  "raw_jsonl_payload": "{\"fixture\":\"advanced-flow-layout\",\"action\":\"initial\",\"callbacks\":0,\"revision\":0,\"pending\":0,\"width\":620.0,\"half\":290.0,\"details\":{}}\n{\"fixture\":\"advanced-flow-layout\",\"action\":\"batch20-staged-uncommitted\",\"callbacks\":0,\"revision\":0,\"pending\":20,\"width\":620.0,\"half\":290.0,\"details\":{\"edits\":20}}\n{\"fixture\":\"advanced-flow-layout\",\"action\":\"batch20\",\"callbacks\":1,\"revision\":1,\"pending\":0,\"width\":500.0,\"half\":230.0,\"details\":{\"edits\":20,\"containers\":4,\"items\":7,\"passes\":2,\"changed\":[\"half\",\"quarter\"],\"measure_calls\":[\"Large Ag\",\"Medium Ag\",\"Small Ag\",\"Untouched Ag\",\"Large Ag\",\"Medium Ag\",\"Small Ag\",\"Untouched Ag\",\"Large Ag\",\"Medium Ag\",\"Small Ag\",\"Untouched Ag\",\"Large Ag\",\"Medium Ag\",\"Small Ag\",\"Untouched Ag\"],\"local\":false}}\n{\"fixture\":\"advanced-flow-layout\",\"action\":\"local-text\",\"callbacks\":2,\"revision\":2,\"pending\":0,\"width\":500.0,\"half\":230.0,\"details\":{\"edits\":1,\"containers\":1,\"items\":3,\"passes\":2,\"changed\":[\"large\",\"medium\",\"small\"],\"measure_calls\":[\"Large Ag\",\"Medium Ag\",\"Small edited Ag\",\"Large Ag\",\"Medium Ag\",\"Small edited Ag\",\"Large Ag\",\"Medium Ag\",\"Small edited Ag\",\"Large Ag\",\"Medium Ag\",\"Small edited Ag\"],\"local\":true}}\n{\"fixture\":\"advanced-flow-layout\",\"action\":\"undo-exact\",\"callbacks\":2,\"revision\":3,\"pending\":0,\"width\":500.0,\"half\":230.0,\"details\":{\"exact\":true}}\n{\"fixture\":\"advanced-flow-layout\",\"action\":\"batch20-staged-uncommitted\",\"callbacks\":2,\"revision\":3,\"pending\":20,\"width\":500.0,\"half\":230.0,\"details\":{\"edits\":20}}\n{\"fixture\":\"advanced-flow-layout\",\"action\":\"batch20\",\"callbacks\":3,\"revision\":4,\"pending\":0,\"width\":620.0,\"half\":290.0,\"details\":{\"edits\":20,\"containers\":4,\"items\":7,\"passes\":2,\"changed\":[\"half\",\"quarter\"],\"measure_calls\":[\"Large Ag\",\"Medium Ag\",\"Small Ag\",\"Untouched Ag\",\"Large Ag\",\"Medium Ag\",\"Small Ag\",\"Untouched Ag\",\"Large Ag\",\"Medium Ag\",\"Small Ag\",\"Untouched Ag\",\"Large Ag\",\"Medium Ag\",\"Small Ag\",\"Untouched Ag\"],\"local\":false}}\n{\"fixture\":\"advanced-flow-layout\",\"action\":\"undo-exact\",\"callbacks\":3,\"revision\":5,\"pending\":0,\"width\":500.0,\"half\":230.0,\"details\":{\"exact\":true}}\n{\"fixture\":\"advanced-flow-layout\",\"action\":\"failure-staged\",\"callbacks\":3,\"revision\":5,\"pending\":1,\"width\":500.0,\"half\":230.0,\"details\":{\"mode\":0}}\n{\"fixture\":\"advanced-flow-layout\",\"action\":\"ownership\",\"callbacks\":4,\"revision\":5,\"pending\":1,\"width\":500.0,\"half\":230.0,\"details\":{\"error\":\"invalid scene geometry: queued Flow output conflicts with another derived geometry owner\",\"atomic\":true,\"edits\":1}}\n{\"fixture\":\"advanced-flow-layout\",\"action\":\"failure-staged\",\"callbacks\":4,\"revision\":6,\"pending\":1,\"width\":500.0,\"half\":230.0,\"details\":{\"mode\":1}}\n{\"fixture\":\"advanced-flow-layout\",\"action\":\"stale-reset\",\"callbacks\":5,\"revision\":6,\"pending\":1,\"width\":500.0,\"half\":230.0,\"details\":{\"error\":\"flow scheduling: queued layout is stale after another commit/provider change; cancel and enqueue again\",\"atomic\":true,\"edits\":1}}\n{\"fixture\":\"advanced-flow-layout\",\"action\":\"failure-staged\",\"callbacks\":5,\"revision\":6,\"pending\":1,\"width\":500.0,\"half\":230.0,\"details\":{\"mode\":2}}\n{\"fixture\":\"advanced-flow-layout\",\"action\":\"backend-outage\",\"callbacks\":6,\"revision\":6,\"pending\":1,\"width\":500.0,\"half\":230.0,\"details\":{\"error\":\"flow layout large: deliberate recoverable native backend outage\",\"atomic\":true,\"edits\":1}}\n{\"fixture\":\"advanced-flow-layout\",\"action\":\"backend-retry\",\"callbacks\":7,\"revision\":7,\"pending\":0,\"width\":520.0,\"half\":240.0,\"details\":{\"edits\":1,\"containers\":4,\"items\":7,\"passes\":2,\"changed\":[\"half\",\"quarter\"],\"measure_calls\":[\"Large Ag\",\"Medium Ag\",\"Small Ag\",\"Untouched Ag\",\"Large Ag\",\"Medium Ag\",\"Small Ag\",\"Untouched Ag\",\"Large Ag\",\"Medium Ag\",\"Small Ag\",\"Untouched Ag\",\"Large Ag\",\"Medium Ag\",\"Small Ag\",\"Untouched Ag\"],\"local\":false}}\n{\"fixture\":\"advanced-flow-layout\",\"action\":\"cancel-guard\",\"callbacks\":7,\"revision\":7,\"pending\":0,\"width\":520.0,\"half\":240.0,\"details\":{\"unchanged\":true}}\n{\"fixture\":\"advanced-flow-layout\",\"action\":\"replace-guard\",\"callbacks\":7,\"revision\":7,\"pending\":0,\"width\":520.0,\"half\":240.0,\"details\":{\"unchanged\":true}}\n{\"fixture\":\"advanced-flow-layout\",\"action\":\"batch20-staged-uncommitted\",\"callbacks\":7,\"revision\":7,\"pending\":20,\"width\":520.0,\"half\":240.0,\"details\":{\"edits\":20}}\n{\"fixture\":\"advanced-flow-layout\",\"action\":\"batch20\",\"callbacks\":8,\"revision\":8,\"pending\":0,\"width\":620.0,\"half\":290.0,\"details\":{\"edits\":20,\"containers\":4,\"items\":7,\"passes\":2,\"changed\":[\"half\",\"quarter\"],\"measure_calls\":[\"Large Ag\",\"Medium Ag\",\"Small Ag\",\"Untouched Ag\",\"Large Ag\",\"Medium Ag\",\"Small Ag\",\"Untouched Ag\",\"Large Ag\",\"Medium Ag\",\"Small Ag\",\"Untouched Ag\",\"Large Ag\",\"Medium Ag\",\"Small Ag\",\"Untouched Ag\"],\"local\":false}}\n",
+  "exact_records": [
+    {
+      "line": 1,
+      "record": {
+        "fixture": "advanced-flow-layout",
+        "action": "initial",
+        "callbacks": 0,
+        "revision": 0,
+        "pending": 0,
+        "width": 620.0,
+        "half": 290.0,
+        "details": {}
+      }
+    },
+    {
+      "line": 2,
+      "record": {
+        "fixture": "advanced-flow-layout",
+        "action": "batch20-staged-uncommitted",
+        "callbacks": 0,
+        "revision": 0,
+        "pending": 20,
+        "width": 620.0,
+        "half": 290.0,
+        "details": {
+          "edits": 20
+        }
+      }
+    },
+    {
+      "line": 3,
+      "record": {
+        "fixture": "advanced-flow-layout",
+        "action": "batch20",
+        "callbacks": 1,
+        "revision": 1,
+        "pending": 0,
+        "width": 500.0,
+        "half": 230.0,
+        "details": {
+          "edits": 20,
+          "containers": 4,
+          "items": 7,
+          "passes": 2,
+          "changed": [
+            "half",
+            "quarter"
+          ],
+          "measure_calls": [
+            "Large Ag",
+            "Medium Ag",
+            "Small Ag",
+            "Untouched Ag",
+            "Large Ag",
+            "Medium Ag",
+            "Small Ag",
+            "Untouched Ag",
+            "Large Ag",
+            "Medium Ag",
+            "Small Ag",
+            "Untouched Ag",
+            "Large Ag",
+            "Medium Ag",
+            "Small Ag",
+            "Untouched Ag"
+          ],
+          "local": false
+        }
+      }
+    },
+    {
+      "line": 4,
+      "record": {
+        "fixture": "advanced-flow-layout",
+        "action": "local-text",
+        "callbacks": 2,
+        "revision": 2,
+        "pending": 0,
+        "width": 500.0,
+        "half": 230.0,
+        "details": {
+          "edits": 1,
+          "containers": 1,
+          "items": 3,
+          "passes": 2,
+          "changed": [
+            "large",
+            "medium",
+            "small"
+          ],
+          "measure_calls": [
+            "Large Ag",
+            "Medium Ag",
+            "Small edited Ag",
+            "Large Ag",
+            "Medium Ag",
+            "Small edited Ag",
+            "Large Ag",
+            "Medium Ag",
+            "Small edited Ag",
+            "Large Ag",
+            "Medium Ag",
+            "Small edited Ag"
+          ],
+          "local": true
+        }
+      }
+    },
+    {
+      "line": 5,
+      "record": {
+        "fixture": "advanced-flow-layout",
+        "action": "undo-exact",
+        "callbacks": 2,
+        "revision": 3,
+        "pending": 0,
+        "width": 500.0,
+        "half": 230.0,
+        "details": {
+          "exact": true
+        }
+      }
+    },
+    {
+      "line": 6,
+      "record": {
+        "fixture": "advanced-flow-layout",
+        "action": "batch20-staged-uncommitted",
+        "callbacks": 2,
+        "revision": 3,
+        "pending": 20,
+        "width": 500.0,
+        "half": 230.0,
+        "details": {
+          "edits": 20
+        }
+      }
+    },
+    {
+      "line": 7,
+      "record": {
+        "fixture": "advanced-flow-layout",
+        "action": "batch20",
+        "callbacks": 3,
+        "revision": 4,
+        "pending": 0,
+        "width": 620.0,
+        "half": 290.0,
+        "details": {
+          "edits": 20,
+          "containers": 4,
+          "items": 7,
+          "passes": 2,
+          "changed": [
+            "half",
+            "quarter"
+          ],
+          "measure_calls": [
+            "Large Ag",
+            "Medium Ag",
+            "Small Ag",
+            "Untouched Ag",
+            "Large Ag",
+            "Medium Ag",
+            "Small Ag",
+            "Untouched Ag",
+            "Large Ag",
+            "Medium Ag",
+            "Small Ag",
+            "Untouched Ag",
+            "Large Ag",
+            "Medium Ag",
+            "Small Ag",
+            "Untouched Ag"
+          ],
+          "local": false
+        }
+      }
+    },
+    {
+      "line": 8,
+      "record": {
+        "fixture": "advanced-flow-layout",
+        "action": "undo-exact",
+        "callbacks": 3,
+        "revision": 5,
+        "pending": 0,
+        "width": 500.0,
+        "half": 230.0,
+        "details": {
+          "exact": true
+        }
+      }
+    },
+    {
+      "line": 9,
+      "record": {
+        "fixture": "advanced-flow-layout",
+        "action": "failure-staged",
+        "callbacks": 3,
+        "revision": 5,
+        "pending": 1,
+        "width": 500.0,
+        "half": 230.0,
+        "details": {
+          "mode": 0
+        }
+      }
+    },
+    {
+      "line": 10,
+      "record": {
+        "fixture": "advanced-flow-layout",
+        "action": "ownership",
+        "callbacks": 4,
+        "revision": 5,
+        "pending": 1,
+        "width": 500.0,
+        "half": 230.0,
+        "details": {
+          "error": "invalid scene geometry: queued Flow output conflicts with another derived geometry owner",
+          "atomic": true,
+          "edits": 1
+        }
+      }
+    },
+    {
+      "line": 11,
+      "record": {
+        "fixture": "advanced-flow-layout",
+        "action": "failure-staged",
+        "callbacks": 4,
+        "revision": 6,
+        "pending": 1,
+        "width": 500.0,
+        "half": 230.0,
+        "details": {
+          "mode": 1
+        }
+      }
+    },
+    {
+      "line": 12,
+      "record": {
+        "fixture": "advanced-flow-layout",
+        "action": "stale-reset",
+        "callbacks": 5,
+        "revision": 6,
+        "pending": 1,
+        "width": 500.0,
+        "half": 230.0,
+        "details": {
+          "error": "flow scheduling: queued layout is stale after another commit/provider change; cancel and enqueue again",
+          "atomic": true,
+          "edits": 1
+        }
+      }
+    },
+    {
+      "line": 13,
+      "record": {
+        "fixture": "advanced-flow-layout",
+        "action": "failure-staged",
+        "callbacks": 5,
+        "revision": 6,
+        "pending": 1,
+        "width": 500.0,
+        "half": 230.0,
+        "details": {
+          "mode": 2
+        }
+      }
+    },
+    {
+      "line": 14,
+      "record": {
+        "fixture": "advanced-flow-layout",
+        "action": "backend-outage",
+        "callbacks": 6,
+        "revision": 6,
+        "pending": 1,
+        "width": 500.0,
+        "half": 230.0,
+        "details": {
+          "error": "flow layout large: deliberate recoverable native backend outage",
+          "atomic": true,
+          "edits": 1
+        }
+      }
+    },
+    {
+      "line": 15,
+      "record": {
+        "fixture": "advanced-flow-layout",
+        "action": "backend-retry",
+        "callbacks": 7,
+        "revision": 7,
+        "pending": 0,
+        "width": 520.0,
+        "half": 240.0,
+        "details": {
+          "edits": 1,
+          "containers": 4,
+          "items": 7,
+          "passes": 2,
+          "changed": [
+            "half",
+            "quarter"
+          ],
+          "measure_calls": [
+            "Large Ag",
+            "Medium Ag",
+            "Small Ag",
+            "Untouched Ag",
+            "Large Ag",
+            "Medium Ag",
+            "Small Ag",
+            "Untouched Ag",
+            "Large Ag",
+            "Medium Ag",
+            "Small Ag",
+            "Untouched Ag",
+            "Large Ag",
+            "Medium Ag",
+            "Small Ag",
+            "Untouched Ag"
+          ],
+          "local": false
+        }
+      }
+    },
+    {
+      "line": 16,
+      "record": {
+        "fixture": "advanced-flow-layout",
+        "action": "cancel-guard",
+        "callbacks": 7,
+        "revision": 7,
+        "pending": 0,
+        "width": 520.0,
+        "half": 240.0,
+        "details": {
+          "unchanged": true
+        }
+      }
+    },
+    {
+      "line": 17,
+      "record": {
+        "fixture": "advanced-flow-layout",
+        "action": "replace-guard",
+        "callbacks": 7,
+        "revision": 7,
+        "pending": 0,
+        "width": 520.0,
+        "half": 240.0,
+        "details": {
+          "unchanged": true
+        }
+      }
+    },
+    {
+      "line": 18,
+      "record": {
+        "fixture": "advanced-flow-layout",
+        "action": "batch20-staged-uncommitted",
+        "callbacks": 7,
+        "revision": 7,
+        "pending": 20,
+        "width": 520.0,
+        "half": 240.0,
+        "details": {
+          "edits": 20
+        }
+      }
+    },
+    {
+      "line": 19,
+      "record": {
+        "fixture": "advanced-flow-layout",
+        "action": "batch20",
+        "callbacks": 8,
+        "revision": 8,
+        "pending": 0,
+        "width": 620.0,
+        "half": 290.0,
+        "details": {
+          "edits": 20,
+          "containers": 4,
+          "items": 7,
+          "passes": 2,
+          "changed": [
+            "half",
+            "quarter"
+          ],
+          "measure_calls": [
+            "Large Ag",
+            "Medium Ag",
+            "Small Ag",
+            "Untouched Ag",
+            "Large Ag",
+            "Medium Ag",
+            "Small Ag",
+            "Untouched Ag",
+            "Large Ag",
+            "Medium Ag",
+            "Small Ag",
+            "Untouched Ag",
+            "Large Ag",
+            "Medium Ag",
+            "Small Ag",
+            "Untouched Ag"
+          ],
+          "local": false
+        }
+      }
+    }
+  ]
+}

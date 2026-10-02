@@ -240,6 +240,113 @@ mod tests {
             wrap_width: None,
         }
     }
+    // Deterministic platform plumbing exercises the actual GPUI override rather
+    // than a fixture implementation of TextMeasurer. Native font pixels are
+    // separately covered by the advanced_flow_layout Studio fixture.
+    struct BaselinePlatform {
+        panic_on_shape: bool,
+    }
+    impl gpui::PlatformTextSystem for BaselinePlatform {
+        fn add_fonts(&self, _: Vec<std::borrow::Cow<'static, [u8]>>) -> gpui::Result<()> {
+            Ok(())
+        }
+        fn all_font_names(&self) -> Vec<String> {
+            vec!["baseline-fixture".into()]
+        }
+        fn font_id(&self, font: &Font) -> gpui::Result<gpui::FontId> {
+            gpui::NoopTextSystem.font_id(font)
+        }
+        fn font_metrics(&self, id: gpui::FontId) -> gpui::FontMetrics {
+            gpui::NoopTextSystem.font_metrics(id)
+        }
+        fn typographic_bounds(
+            &self,
+            f: gpui::FontId,
+            g: gpui::GlyphId,
+        ) -> gpui::Result<gpui::Bounds<f32>> {
+            gpui::NoopTextSystem.typographic_bounds(f, g)
+        }
+        fn advance(&self, f: gpui::FontId, g: gpui::GlyphId) -> gpui::Result<gpui::Size<f32>> {
+            gpui::NoopTextSystem.advance(f, g)
+        }
+        fn glyph_for_char(&self, f: gpui::FontId, c: char) -> Option<gpui::GlyphId> {
+            gpui::NoopTextSystem.glyph_for_char(f, c)
+        }
+        fn glyph_raster_bounds(
+            &self,
+            p: &gpui::RenderGlyphParams,
+        ) -> gpui::Result<gpui::Bounds<gpui::DevicePixels>> {
+            gpui::NoopTextSystem.glyph_raster_bounds(p)
+        }
+        fn rasterize_glyph(
+            &self,
+            p: &gpui::RenderGlyphParams,
+            b: gpui::Bounds<gpui::DevicePixels>,
+        ) -> gpui::Result<(gpui::Size<gpui::DevicePixels>, Vec<u8>)> {
+            gpui::NoopTextSystem.rasterize_glyph(p, b)
+        }
+        fn layout_line(
+            &self,
+            text: &str,
+            size: gpui::Pixels,
+            runs: &[gpui::FontRun],
+        ) -> gpui::LineLayout {
+            assert!(!self.panic_on_shape, "deliberate platform shaping panic");
+            let mut line = gpui::NoopTextSystem.layout_line(text, size, runs);
+            line.ascent = size * 0.75;
+            line.descent = size * 0.25;
+            line
+        }
+        fn recommended_rendering_mode(
+            &self,
+            _: gpui::FontId,
+            _: gpui::Pixels,
+        ) -> gpui::TextRenderingMode {
+            gpui::TextRenderingMode::Grayscale
+        }
+    }
+    #[test]
+    fn first_baseline_direct_gpui_override_uses_shaped_ascent_descent_and_line_height() {
+        let backend =
+            GpuiTextMeasurer::new(Arc::new(TextSystem::new(Arc::new(BaselinePlatform {
+                panic_on_shape: false,
+            }))));
+        for content in ["Baseline", "Baseline\nsecond line", ""] {
+            let mut input = request(content.into());
+            input.font_family = "baseline-fixture".into();
+            input.line_height = 24.;
+            // Shaped ascent=12, descent=4; centered leading adds 4.
+            assert_eq!(backend.first_baseline(&input).unwrap(), 16.);
+            input.line_height = 32.;
+            assert_eq!(backend.first_baseline(&input).unwrap(), 20.);
+            backend.invalidate();
+            assert_eq!(backend.first_baseline(&input).unwrap(), 20.);
+        }
+    }
+    #[test]
+    fn first_baseline_direct_gpui_override_rejects_invalid_missing_fonts_and_panics() {
+        let empty =
+            GpuiTextMeasurer::new(Arc::new(TextSystem::new(Arc::new(gpui::NoopTextSystem))));
+        let input = request("Baseline".into());
+        assert!(
+            empty
+                .first_baseline(&input)
+                .unwrap_err()
+                .contains("no available fonts")
+        );
+        let mut invalid = input.clone();
+        invalid.line_height = f32::NAN;
+        assert!(empty.first_baseline(&invalid).is_err());
+        let panics = GpuiTextMeasurer::new(Arc::new(TextSystem::new(Arc::new(BaselinePlatform {
+            panic_on_shape: true,
+        }))));
+        assert!(
+            panics
+                .first_baseline(&input)
+                .unwrap_err()
+                .contains("platform panic")
+        );
+    }
     #[test]
     fn italic_is_part_of_the_measurement_cache_key() {
         let mut cache = Cache::default();

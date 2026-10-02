@@ -2,19 +2,19 @@
   "schema_version": 1,
   "ledger_version": "v1-review",
   "review": "已锁定45个能力单元和有限验收集合；审阅版，所有扩展/技术依赖显式记录",
-  "as_of": "2026-10-02T17:07:56Z",
-  "source_snapshot": "99392f7c35f956f8765ed5730423df19e3d474cd",
+  "as_of": "2026-10-02T18:21:16Z",
+  "source_snapshot": "ca44fa4372128d3d1b11e6148e337cb3404d78a5",
   "upstream": {
     "leafer_ui": "1e11641d3ea6b0211c83447268a90b8d58feec25",
     "leafer_core": "1d703303ff0759ce4973d54c87eeb8192dddc570",
     "leafer_in": "3eb445bf34debb638766615282224b77108bf610"
   },
   "counts": {
-    "bounded_verified": 25,
+    "bounded_verified": 26,
     "partial": 15,
     "not_started": 4,
     "needs_verification": 0,
-    "in_progress": 1
+    "in_progress": 0
   },
   "tasks": [
     {
@@ -523,19 +523,20 @@
       "id": "LAY-03",
       "category": "布局",
       "title": "高级尺寸与局部调度",
-      "status": "in_progress",
+      "status": "bounded_verified",
       "acceptance": "固定父尺寸百分比、shrinkContent、文字baseline行对齐、依赖dirty子树与单帧合并；循环/所有权冲突原子拒绝",
       "boundary": "受父尺寸确定性约束；不实现全CSS布局或无界observer网络",
-      "reference_doc": "docs/flow-layout.md",
-      "implementation_snapshot": "99392f7c35f956f8765ed5730423df19e3d474cd",
+      "reference_doc": "docs/advanced-flow-layout.md",
+      "implementation_snapshot": "ca44fa4372128d3d1b11e6148e337cb3404d78a5",
       "evidence_commit": null,
-      "automatic": "高级布局/百分比/baseline/dirty队列源码与受影响回归进行中；真实宿主帧桥另验，不以手动flush冒称完成",
-      "native": "未实现/未验收",
+      "automatic": "238 layout/text回归含28新增；13 GPUI文字单元+1文档、2直接baseline、5帧桥状态测试通过；严格Clippy通过",
+      "native": "2026-10-02 18:19:04–18:21:16 UTC正常退出0；19原始记录/8真实callback，5成功3原子拒绝，20编辑单revision/Undo，局部1容器，12截图像素核验；见validation/2026-10-02-advanced-layout-summary.json",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/flow/src/layout/common/data.ts",
         "symbols_or_contract": "flow layout data；未映射的百分比/baseline为Flow显式扩展"
       },
-      "technical_dependencies": []
+      "technical_dependencies": [],
+      "provenance": "核心d9a39215与桥ca44fa43；原生binary含当时crop/JSON工作区，冻结manifest与depfile审计明确记录，非ca44整树二进制声明"
     },
     {
       "id": "LAY-04",

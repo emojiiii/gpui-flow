@@ -1,14 +1,14 @@
 # Leafer 对齐任务总表 v1（审阅版）
 
-固定45个去重能力单元，源码包含版本 `99392f7c35f956f8765ed5730423df19e3d474cd`。这是具体范围的开发台账，不是全部Leafer API兼容证明，不用任务数计算工时或百分比。旧39条A–E验收契约仅为交叉索引，不与本表相加；此前31/8快速审计不作为本表完成数。
+固定45个去重能力单元，最近框架源码版本 `ca44fa4372128d3d1b11e6148e337cb3404d78a5`，原生夹具工作区来源逐项单列。这是具体范围的开发台账，不是全部Leafer API兼容证明，不用任务数计算工时或百分比。旧39条A–E验收契约仅为交叉索引，不与本表相加；此前31/8快速审计不作为本表完成数。
 
 ## 状态计数
 
-- 有界契约已验证：25
+- 有界契约已验证：26
 - 部分实现：15
 - 未开始该能力：4
 - 待核实验收：0
-- 开发/验收中：1
+- 开发/验收中：0
 
 有界已验证仅表示本行支持集合有实际证据，不表示整个上游模块完全对齐。源码、自动检查、真实窗口分别记录。未开始指本项新增能力，不以已有依赖代码冒充实现。目标是继续完成表内未闭环行为；技术依赖不因此被删除，也不能以“今晚”为由虚报通过。
 
@@ -49,7 +49,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | APP-06 | 外观 / [GPU局部绘制后端](engine.md) | 未开始该能力 | 后端真正消费persistent damage并有像素等价/工作量对照 | CPU dirty和damage记录已归DAT-04；GPUI当前full-frame |
 | LAY-01 | 布局 / [固定与内容流式布局](flow-layout.md) | 有界契约已验证 | row/column、wrap/reverse、padding/gap/grow/minmax、auto-size/嵌套固定点/hidden排除 | 百分比/baseline/shrinkContent归LAY-03；不是CSS完整实现 |
 | LAY-02 | 布局 / [响应派生与事务所有权](reactive-layout.md) | 有界契约已验证 | 安装binding后普通编辑提交前派生、白名单/有界固定点/冲突拒绝、一次Undo | 不是全局observer/帧合并局部依赖调度 |
-| LAY-03 | 布局 / [高级尺寸与局部调度](flow-layout.md) | 开发/验收中 | 固定父尺寸百分比、shrinkContent、文字baseline行对齐、依赖dirty子树与单帧合并；循环/所有权冲突原子拒绝 | 受父尺寸确定性约束；不实现全CSS布局或无界observer网络 |
+| LAY-03 | 布局 / [高级尺寸与局部调度](advanced-flow-layout.md) | 有界契约已验证 | 固定父尺寸百分比、shrinkContent、文字baseline行对齐、依赖dirty子树与单帧合并；循环/所有权冲突原子拒绝 | 受父尺寸确定性约束；不实现全CSS布局或无界observer网络 |
 | LAY-04 | 布局 / [同源文字测量与重排](text-measurement.md) | 有界契约已验证 | 同GPUI shaping的Natural/AutoHeight、字体metrics失效、真实测量推动布局 | 富排版的字词段间距归ELM-04 |
 | ELM-01 | 元素 / [矢量原语与实际几何](ellipse-arcs.md) | 有界契约已验证 | Rect/Ellipse/Line/Polygon/Star/Path/Pen各独立模块；四角/弧环/数据API贯通bounds/hit/CPU | 不包含通用点编辑器或完整SVG文档 |
 | ELM-02 | 元素 / [Path距离查询与显式定位](path-placement.md) | 有界契约已验证 | Kurbo局部弧长/切线、世界点、显式目标定位；自依赖/祖先/奇异/陈旧拒绝 | 持续动画绑定归ANI-02 |
@@ -101,7 +101,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | APP-06 | 无GPU damage消费测试 | 未实现/未验收 | 尚无独立完整验收提交 |
 | LAY-01 | flow/auto_size/reverse/item_boxes/gap/taffy对应全套通过 | 核心是纯measure/arrange契约；窗口专门矩阵仍未宣称 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | LAY-02 | engine derivation及layout reactive/ratio/text测试通过 | 纯提交契约；Text盒子窗口验证其普通编辑路径 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
-| LAY-03 | 高级布局/百分比/baseline/dirty队列源码与受影响回归进行中；真实宿主帧桥另验，不以手动flush冒称完成 | 未实现/未验收 | 尚无独立完整验收提交 |
+| LAY-03 | 238布局/文字回归含28新增、13+1 GPUI文字、2直接baseline、5帧桥状态测试通过；严格Clippy通过 | 真实8个callback，20编辑一次revision/Undo；局部1容器、失败原子保留/重试、取消/替换；12截图像素核验，退出0 | [核心d9a39215](https://github.com/emojiiii/gpui-flow/commit/d9a3921525a1989cb332963900ff84d648ac51ba)、[帧桥ca44fa43](https://github.com/emojiiii/gpui-flow/commit/ca44fa4372128d3d1b11e6148e337cb3404d78a5)；[精确原生工作区证据](validation/2026-10-02-advanced-layout-summary.json)，非ca44整树二进制声明 |
 | LAY-04 | text measurement与layout text回归通过 | Text padding/italic/overflow多次同源对照窗口通过 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | ELM-01 | Ellipse25、Rect20、Path23新回归及headless批次通过 | 模型几何和CPU为主；Ellipse/Rect专项窗口未声称通过 | `6796dc885cecbb155fb00d2eb4736c64bb51afb0` |
 | ELM-02 | 查询17及定位17新回归通过 | 只读/显式引擎API，不要求新增窗口 | `d914a1ef0fec79b25fb67cb7f76f2c7f774ec55d` |
@@ -187,3 +187,5 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 - 2026-10-02 16:36：以真实trace/paint/renderer回执闭环EVT-01、EVT-02、LIF-02、CUS-01；固定总数45不变，24已验证、21未闭环。ANI-03进入开发；所有原生与纯测试覆盖差异逐项保留。
 
 - 2026-10-02 17:07：ANI-03按冻结有限集合闭环，25项已验证/20项未闭环；Scene PNG/JPEG/WebP原生与独立文件解码验收通过，ELM-11因SVG缺项仍部分。LAY-03进入开发，固定总数45不变。
+
+- 2026-10-02 18:21：LAY-03真实GPUI下一帧队列与像素验收闭环，26项有界已验证/19项未闭环；固定45项不变。原生夹具含当时工作区的来源边界已记录。
