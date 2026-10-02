@@ -2,17 +2,17 @@
   "schema_version": 1,
   "ledger_version": "v1-review",
   "review": "已锁定45个能力单元和有限验收集合；审阅版，所有扩展/技术依赖显式记录",
-  "as_of": "2026-10-02T18:32:37Z",
-  "source_snapshot": "5f3af69b6f33f4ca01220a6f3f9256dcb3447310",
+  "as_of": "2026-10-02T19:12:30Z",
+  "source_snapshot": "1b79a3bb9d895ac9be29fff5dd58ee151dc229da",
   "upstream": {
     "leafer_ui": "1e11641d3ea6b0211c83447268a90b8d58feec25",
     "leafer_core": "1d703303ff0759ce4973d54c87eeb8192dddc570",
     "leafer_in": "3eb445bf34debb638766615282224b77108bf610"
   },
   "counts": {
-    "bounded_verified": 27,
+    "bounded_verified": 28,
     "partial": 14,
-    "not_started": 4,
+    "not_started": 3,
     "needs_verification": 0,
     "in_progress": 0
   },
@@ -63,7 +63,7 @@
       "acceptance": "必选现有Scene JSON v1读写/未知版本拒绝；固定原语tag、transform、基础paint的Leafer JSON映射，未知属性明确拒绝并往返",
       "boundary": "不含JS回调、任意computed缓存或完整上游JSON兼容；迁移仅在存在正式v2时定义",
       "reference_doc": "docs/leafer-json.md",
-      "implementation_snapshot": null,
+      "implementation_snapshot": "40e3782a8fda941f4156f65d9cd85c3e59e96efb",
       "evidence_commit": null,
       "automatic": "24严格映射/往返/预算/原子拒绝测试与scene all-target strictClippy通过；12tag有限集合，不视为全项签收",
       "native": "纯数据映射，无浏览器/GPUI视觉等价声明",
@@ -115,14 +115,14 @@
       "id": "INS-02",
       "category": "实例",
       "title": "多层App实例组合",
-      "status": "not_started",
+      "status": "bounded_verified",
       "acceptance": "多层画布树、跨层事件/坐标转发、独立生命周期与销毁",
       "boundary": "多个普通SceneView并排不等于App分层",
-      "reference_doc": "docs/leafer-source-map.md",
-      "implementation_snapshot": "99392f7c35f956f8765ed5730423df19e3d474cd",
+      "reference_doc": "docs/layered-app.md",
+      "implementation_snapshot": "1b79a3bb9d895ac9be29fff5dd58ee151dc229da",
       "evidence_commit": null,
-      "automatic": "无该项验收证据",
-      "native": "未实现/未验收",
+      "automatic": "21 production layer-routing+3 bridge tests；55 wheel/router/focus、UI230、mirror3与strict通过，计数重叠不相加",
+      "native": "19:08:24–19:12:30 UTC正常退出0；1140原始记录/38PNG独立核验，重叠目标/坐标/独立Undo/外部释放/重挂与销毁通过；持鼠生命周期及wrong-button仅headless覆盖",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/app/src/App.ts",
         "symbols_or_contract": "App 多层Leafer组合"
@@ -451,16 +451,17 @@
       "status": "partial",
       "acceptance": "hover/press/focus/selected/disabled、命名状态/继承、每态transition及geometry变化",
       "boundary": "现有paint-only实色/opacity和placeholder；每态/geometry/更多插值缺",
-      "reference_doc": "docs/state-styles.md",
-      "implementation_snapshot": "99392f7c35f956f8765ed5730423df19e3d474cd",
+      "reference_doc": "docs/state-geometry.md",
+      "implementation_snapshot": "1b79a3bb9d895ac9be29fff5dd58ee151dc229da",
       "evidence_commit": null,
-      "automatic": "state_styles/transitions/named测试通过",
-      "native": "旧状态原生说明不完整，需补验",
+      "automatic": "74 property/state focused；共享UI230、显式wheel7与mirror3通过，strict通过；新coherent修复另验",
+      "native": "19:01:57–19:05:14退出0；51记录/18PNG实际expanded与relocated点击/wheel、禁用、编辑Undo/Redo通过，但过渡期间CPU域闪失，仍部分",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/state/src/index.ts",
         "symbols_or_contract": "state样式安装/切换；transition集成"
       },
-      "technical_dependencies": []
+      "technical_dependencies": [],
+      "open_issue": "Changing state geometry cancels incompatible CPU work; accepted paint and matching hit must be retained coherently before APP05 closes."
     },
     {
       "id": "APP-06",
@@ -660,7 +661,7 @@
       "boundary": "OSS未找到Image专属crop inner editor；属于框架明确扩展，不虚称上游已有",
       "reference_doc": "docs/image-crop.md",
       "implementation_snapshot": "e88d78af5a235d4921414a9789d65be3c0ecb531",
-      "evidence_commit": null,
+      "evidence_commit": "40e3782a8fda941f4156f65d9cd85c3e59e96efb",
       "automatic": "原alpha18新增/UI171；crop17模型+UI204基线；最终精度9composite、9UIcrop、4UIimage（有重叠）和strictClippy通过，精确范围见image-crop文档",
       "native": "原alpha14:55–15:00窗口；crop18:26:32–18:32:37退出0，1434记录/28截图独立核验，Undo/外部release rollback像素一致；heldEscape/heldFocusLost及末次圆角probe未原生覆盖；显式crop均CPU",
       "upstream_reference": {

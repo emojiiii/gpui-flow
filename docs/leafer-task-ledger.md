@@ -4,9 +4,9 @@
 
 ## 状态计数
 
-- 有界契约已验证：27
+- 有界契约已验证：28
 - 部分实现：14
-- 未开始该能力：4
+- 未开始该能力：3
 - 待核实验收：0
 - 开发/验收中：0
 
@@ -27,7 +27,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | DAT-03 | 数据 / [版本化文档与有限Leafer映射](display-scenes.md) | 部分实现 | 必选现有Scene JSON v1读写/未知版本拒绝；固定原语tag、transform、基础paint的Leafer JSON映射，未知属性明确拒绝并往返 | 不含JS回调、任意computed缓存或完整上游JSON兼容；迁移仅在存在正式v2时定义 |
 | DAT-04 | 数据 / [查询与增量缓存性能](query-indexes.md) | 有界契约已验证 | 固定id/name/tag/class/子树条件与顺序；随机仿射+重挂载对照、固定fixture重算计数及CPU benchmark | 无通用CSS选择器语言；不声称GPU局部绘制 |
 | INS-01 | 实例 / [代际身份与树操作](engine.md) | 有界契约已验证 | create/clone/detach/reattach/reparent/destroy保留或更换身份有明确定义；奇异/循环原子拒绝 | 不是多App分层组合 |
-| INS-02 | 实例 / [多层App实例组合](leafer-source-map.md) | 未开始该能力 | 多层画布树、跨层事件/坐标转发、独立生命周期与销毁 | 多个普通SceneView并排不等于App分层 |
+| INS-02 | 实例 / [多层App实例组合](layered-app.md) | 有界契约已验证 | 多层画布树、跨层事件/坐标转发、独立生命周期与销毁 | 多个普通SceneView并排不等于App分层 |
 | LIF-01 | 生命周期 / [订阅与拥有资源销毁](resource-lifecycle.md) | 有界契约已验证 | once/off/scoped disposal、destroy exactly once、旧token和迟到job不重定向 | 不包含后台加载器硬取消 |
 | LIF-02 | 生命周期 / [资源就绪与呈现回执](resource-lifecycle-validation.md) | 有界契约已验证 | Ready/ViewReady/Complete含失败取消，真实加载/替换/销毁/paint事件顺序 | ViewReady是paint回执，不是GPU fence |
 | LIF-03 | 生命周期 / [加载取消与媒体资源桥](resource-lifecycle.md) | 部分实现 | 共享加载字节预算、无引用任务硬取消、媒体统一代际票据和错误传播 | 现有GPUI image及有界本地媒体路径不是完整资源服务 |
@@ -79,7 +79,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | DAT-03 | Scene v1与12tag严格Leafer映射；24 focused+scene strict通过，未知字段/预算/原子拒绝 | 纯数据；不承诺浏览器/native像素等价 | 本批有限子集，input/computed等更广边界未闭环，仍部分 |
 | DAT-04 | 154项engine通过/2 benchmark常规忽略；两个benchmark均显式运行通过。300步query与480步cache参考对照；等工作量索引维护中位开销+1.25/+2.23/+3.40%，无整体提速声明 | 纯数据项，不要求窗口 | `4049da69ddd159972093df5aed04649c24fb4e3d` |
 | INS-01 | engine实例、clone/reparent和资源迟到结果测试通过 | 纯引擎项，不要求窗口 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
-| INS-02 | 无该项验收证据 | 未实现/未验收 | 尚无独立完整验收提交 |
+| INS-02 | 21production层路由+3bridge；UI230、55wheel/event/focus及mirror3、strict通过（重叠） | 19:08–19:12退出0，1140原始记录/38PNG；持鼠lifecycle/wrong-button保留自动覆盖 | 源码[`1b79a3bb`](https://github.com/emojiiii/gpui-flow/commit/1b79a3bb9d895ac9be29fff5dd58ee151dc229da)，[实际记录](validation/2026-10-02-layered-app-summary.json) |
 | LIF-01 | engine生命周期与resources对应测试已通过 | 纯归属逻辑；原生资源回执另列LIF-02 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | LIF-02 | 18项engine resource与37项UI资源通过，含7项新增；实际Flow Arc释放独立测试 | 16:24–16:29完整16步、62条真实记录零违规；2 Ready/2 ViewReady/6 Complete；旧source/attachment/generation、失败取消和重挂载通过；退出0 | `f5ab200c6f6bfaf786742b9b0ace8a530de0d6cf` |
 | LIF-03 | 部分代际/容量测试已过；硬取消/媒体桥未实现 | 未完整验收 | 尚无独立完整验收提交 |
@@ -97,7 +97,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | APP-02 | Kurbo/Lyon/i_overlay已有回归；缺失行为未测 | 已实现子集有原生像素；全项未验 | 尚无独立完整验收提交 |
 | APP-03 | 现有多种blend/alpha mask CPU与UI通过 | 已有真实合成窗口；全固定源码契约未齐 | 尚无独立完整验收提交 |
 | APP-04 | 现有shadow/inner/group回归通过 | 历史受限视觉检查；缺失模式未验 | 尚无独立完整验收提交 |
-| APP-05 | state_styles/transitions/named测试通过 | 旧状态原生说明不完整，需补验 | 尚无独立完整验收提交 |
+| APP-05 | 74 property/state focused与共享UI/wheel/mirror、strict通过 | 51记录/18PNG证实实际geometry hit与Undo，但过渡CPU域闪失，仍部分待coherent修复 | 源码[`1b79a3bb`](https://github.com/emojiiii/gpui-flow/commit/1b79a3bb9d895ac9be29fff5dd58ee151dc229da)，[缺陷与功能证据](validation/2026-10-02-state-geometry-summary.json) |
 | APP-06 | 无GPU damage消费测试 | 未实现/未验收 | 尚无独立完整验收提交 |
 | LAY-01 | flow/auto_size/reverse/item_boxes/gap/taffy对应全套通过 | 核心是纯measure/arrange契约；窗口专门矩阵仍未宣称 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | LAY-02 | engine derivation及layout reactive/ratio/text测试通过 | 纯提交契约；Text盒子窗口验证其普通编辑路径 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
@@ -191,3 +191,5 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 - 2026-10-02 18:21：LAY-03真实GPUI下一帧队列与像素验收闭环，26项有界已验证/19项未闭环；固定45项不变。原生夹具含当时工作区的来源边界已记录。
 
 - 2026-10-02 18:32：ELM-06按固定alpha+crop合同闭环，27项有界已验证/18项未闭环；DAT-03发布严格12tag子集但保留部分，不缩减冻结验收范围。
+
+- 2026-10-02 19:12：INS-02真实重叠层/输入/坐标/生命周期闭环，28项有界已验证/17项未闭环。APP-05已增加geometry/每态transition但真实过渡出现CPU域闪失，保留部分并修复，不能以settle正确充当通过。

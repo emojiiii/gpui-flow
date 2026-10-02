@@ -149,3 +149,33 @@ retained-key tests, 2 APP05 geometry/image-alpha UI regressions, native fixture
 `cargo check`, and targeted strict Clippy. Later shared bridge/wheel guards require
 final integrator revalidation. Native physical acceptance remains pending; no OS
 result is implied by the checklist.
+
+
+## Verified native window
+
+The exact source checkpoint [`1b79a3bb`](https://github.com/emojiiii/gpui-flow/commit/1b79a3bb9d895ac9be29fff5dd58ee151dc229da)
+ran on dot-cloud Linux from 19:08:24 to 19:12:30 UTC on 2026-10-02 and closed
+normally with exit 0. Its full 560-blob archive matches the source tree. The
+[validation summary](validation/2026-10-02-layered-app-summary.json) retains raw
+trace hashes, 67 selected original payloads and all 38 saved screenshot hashes.
+All 1,140 records were independently checked for sequence and layer errors.
+
+Both overlapping layers painted together. Real click/wheel, cross-layer drag,
+post-window-resize coordinate mapping, focus/Delete/Undo isolation, outside-release
+rollback, hide/reorder, detach/reattach with retained independent history, Space
+pan and repeated destroy/recreate passed. Fresh recreated owners were 3, 4 and 5;
+blue remained usable after each gold removal. Final pointer ownership was empty.
+
+The held-mouse lifecycle-control and wrong-button cases were not physically driven
+because the desktop API's atomic drag does not expose a separate held button
+across control clicks. Those remain automated routing checks. The first resize
+attempt touched the underlying Chromium edge and was restored; later actual
+fixture titlebar resize and coordinate checks are separately documented. No
+native leak instrumentation or cross-window capture guarantee is claimed.
+
+Final shared verification passed full UI 230, mirror fixture 3, and 55 focused
+wheel/event/focus tests; after the final cursor change, 21 layer tests and 3 bridge
+tests were rerun. Strict UI/interaction all-targets and the three demo bins passed.
+These checks overlap the earlier feature counts. APP-05's independent CPU state
+transition visual defect remains open and does not change this layered routing
+receipt.

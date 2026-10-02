@@ -1,0 +1,3905 @@
+{
+  "task": "INS-02 overlapping LayeredApp",
+  "status": "bounded_verified",
+  "source_commit": "1b79a3bb9d895ac9be29fff5dd58ee151dc229da",
+  "source_tree": "365162c249e55f4975be3498cfee9cea94c29151",
+  "archive_sha256": "c3b642b8d8f9ea0f70e49912be2fe4743391bcf5122d84043b28271a170bf463",
+  "archive_blobs_verified": 560,
+  "build_inputs_verified": 450,
+  "binary_sha256": "e9fac6c7a215889b9bf8755a1cf395f2ebdfb64acbaf04a2e60dc427bacc7fe5",
+  "receipt": "START=2026-10-02T19:08:24Z\ne9fac6c7a215889b9bf8755a1cf395f2ebdfb64acbaf04a2e60dc427bacc7fe5  layered_app\nEND=2026-10-02T19:12:30Z\nEXIT=0\n",
+  "raw_sha256": "5ce81bac0c2206002781dee877a63ccfab5c42aeddc1f7f610a77a2f4d2fb5af",
+  "raw_records": 1140,
+  "non_json_diagnostics": 0,
+  "layer_errors": 0,
+  "records": [
+    {
+      "fixture": "layered-app",
+      "seq": 1,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 2,
+      "pointer_owner": 2,
+      "last": "target=Some(2) input=PointerDown(PointerInput { position: Point { x: 358.00546, y: 252.00534 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 2,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 2,
+      "pointer_owner": null,
+      "last": "target=Some(2) input=PointerUp(PointerInput { position: Point { x: 358.00546, y: 252.00534 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 3,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": 1,
+      "last": "target=Some(1) input=PointerDown(PointerInput { position: Point { x: 183.00279, y: 197.00452 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 4,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=Some(1) input=PointerUp(PointerInput { position: Point { x: 183.00279, y: 197.00452 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 5,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": -72.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=Some(1) input=Wheel { position: Point { x: 183.00279, y: 197.00452 }, delta: Point { x: 0.0, y: -72.0 }, modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false } }"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 6,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=Some(1) input=Wheel { position: Point { x: 183.00279, y: 197.00452 }, delta: Point { x: 0.0, y: 72.0 }, modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false } }"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 7,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": -47.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=Some(2) input=Wheel { position: Point { x: 508.00775, y: 302.0061 }, delta: Point { x: 0.0, y: -72.0 }, modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false } }"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 8,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=Some(2) input=Wheel { position: Point { x: 508.00775, y: 302.0061 }, delta: Point { x: 0.0, y: 72.0 }, modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false } }"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 9,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 2,
+      "pointer_owner": 2,
+      "last": "target=Some(2) input=PointerDown(PointerInput { position: Point { x: 518.00793, y: 327.0065 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 385,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": -65.65670776367188,
+            "ty": 28.911102294921875
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 2,
+      "pointer_owner": 2,
+      "last": "target=Some(2) input=PointerMove(PointerInput { position: Point { x: 178.00272, y: 182.00427 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 386,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": -65.65670776367188,
+            "ty": 28.911102294921875
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 2,
+      "pointer_owner": null,
+      "last": "target=Some(2) input=PointerUp(PointerInput { position: Point { x: 178.00272, y: 182.00427 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 388,
+      "action": "control-8",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 2,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 390,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": null,
+      "pointer_owner": null,
+      "last": "target=None input=FocusLost"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 391,
+      "action": "control-2",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": null,
+      "pointer_owner": null,
+      "last": "target=None input=FocusLost"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 392,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 2,
+      "pointer_owner": 2,
+      "last": "target=Some(2) input=PointerDown(PointerInput { position: Point { x: 478.0073, y: 262.0055 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 489,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 310.0012512207031,
+            "ty": 205.00076293945312
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 2,
+      "pointer_owner": 2,
+      "last": "target=Some(2) input=PointerMove(PointerInput { position: Point { x: 558.00854, y: 312.00626 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 490,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 310.0012512207031,
+            "ty": 205.00076293945312
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 2,
+      "pointer_owner": null,
+      "last": "target=Some(2) input=PointerUp(PointerInput { position: Point { x: 558.00854, y: 312.00626 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 492,
+      "action": "control-8",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 2,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 493,
+      "action": "control-2",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": null,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 494,
+      "action": "control-5",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 495,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": null,
+          "selected": [],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=Some(1) input=KeyDown { key: Delete, modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false } }"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 496,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": null,
+          "selected": [],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=Some(1) input=KeyUp { key: Delete, modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false } }"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 497,
+      "action": "control-7",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=Some(1) input=KeyUp { key: Delete, modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false } }"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 498,
+      "action": "control-6",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 2,
+      "pointer_owner": null,
+      "last": "target=Some(1) input=KeyUp { key: Delete, modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false } }"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 499,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": null,
+          "selected": [],
+          "error": null
+        }
+      ],
+      "focus": 2,
+      "pointer_owner": null,
+      "last": "target=Some(2) input=KeyDown { key: Delete, modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false } }"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 500,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": null,
+          "selected": [],
+          "error": null
+        }
+      ],
+      "focus": 2,
+      "pointer_owner": null,
+      "last": "target=Some(2) input=KeyUp { key: Delete, modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false } }"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 501,
+      "action": "control-8",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 2,
+      "pointer_owner": null,
+      "last": "target=Some(2) input=KeyUp { key: Delete, modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false } }"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 502,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 2,
+      "pointer_owner": 2,
+      "last": "target=Some(2) input=PointerDown(PointerInput { position: Point { x: 508.00775, y: 322.0064 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 866,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 316.9578552246094,
+            "ty": 454.1349792480469
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 2,
+      "pointer_owner": 2,
+      "last": "target=Some(2) input=PointerMove(PointerInput { position: Point { x: 608.0093, y: 666.01166 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 867,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 2,
+      "pointer_owner": null,
+      "last": "target=Some(2) input=PointerCancel"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 868,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": 1,
+      "last": "target=Some(1) input=PointerDown(PointerInput { position: Point { x: 183.00279, y: 197.00452 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 869,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=Some(1) input=PointerUp(PointerInput { position: Point { x: 183.00279, y: 197.00452 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 871,
+      "action": "control-0",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": false,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 872,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": false,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": 1,
+      "last": "target=Some(1) input=PointerDown(PointerInput { position: Point { x: 358.00546, y: 252.00534 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 873,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": false,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=Some(1) input=PointerUp(PointerInput { position: Point { x: 358.00546, y: 252.00534 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 875,
+      "action": "control-0",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 876,
+      "action": "control-1",
+      "stack": [
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 877,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": 1,
+      "last": "target=Some(1) input=PointerDown(PointerInput { position: Point { x: 358.00546, y: 252.00534 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 878,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=Some(1) input=PointerUp(PointerInput { position: Point { x: 358.00546, y: 252.00534 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 880,
+      "action": "control-1",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 881,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 2,
+      "pointer_owner": 2,
+      "last": "target=Some(2) input=PointerDown(PointerInput { position: Point { x: 358.00546, y: 252.00534 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 882,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 2,
+      "pointer_owner": null,
+      "last": "target=Some(2) input=PointerUp(PointerInput { position: Point { x: 358.00546, y: 252.00534 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 883,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 2,
+      "pointer_owner": 2,
+      "last": "target=Some(2) input=PointerDown(PointerInput { position: Point { x: 508.00775, y: 322.0064 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 957,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 2,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 273.4789123535156,
+            "ty": 198.47891235351562
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 2,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 958,
+      "action": "control-3",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": null,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1013,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 59.9993896484375,
+            "ty": 150.00045776367188
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1014,
+      "action": "control-3",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 59.9993896484375,
+            "ty": 150.00045776367188
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 3,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 273.4789123535156,
+            "ty": 198.47891235351562
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1015,
+      "action": "control-8",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 59.9993896484375,
+            "ty": 150.00045776367188
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 3,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1016,
+      "action": "control-7",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 3,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1017,
+      "action": "control-6",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 3,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 3,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1018,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 3,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 3,
+      "pointer_owner": null,
+      "last": "target=Some(3) input=KeyDown { key: Space, modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false } }"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1080,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 3,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 95.00079345703125,
+              "y": 55.000457763671875
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 3,
+      "pointer_owner": 3,
+      "last": "target=Some(3) input=PointerMove(PointerInput { position: Point { x: 558.00854, y: 352.00687 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1081,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 3,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 95.00079345703125,
+              "y": 55.000457763671875
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 3,
+      "pointer_owner": null,
+      "last": "target=Some(3) input=PointerUp(PointerInput { position: Point { x: 558.00854, y: 352.00687 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1082,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 3,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 95.00079345703125,
+              "y": 55.000457763671875
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 3,
+      "pointer_owner": null,
+      "last": "target=Some(3) input=KeyUp { key: Space, modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false } }"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1084,
+      "action": "control-2",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 3,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": null,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1085,
+      "action": "control-2",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 3,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": null,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1086,
+      "action": "control-4",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": null,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1127,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 130.00045776367188,
+            "ty": 140.00030517578125
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1128,
+      "action": "control-4",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 130.00045776367188,
+            "ty": 140.00030517578125
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 4,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1129,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 130.00045776367188,
+            "ty": 140.00030517578125
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 4,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 4,
+      "pointer_owner": 4,
+      "last": "target=Some(4) input=PointerDown(PointerInput { position: Point { x: 508.00775, y: 322.0064 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1130,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 130.00045776367188,
+            "ty": 140.00030517578125
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 4,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 4,
+      "pointer_owner": null,
+      "last": "target=Some(4) input=PointerUp(PointerInput { position: Point { x: 508.00775, y: 322.0064 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1132,
+      "action": "control-4",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 130.00045776367188,
+            "ty": 140.00030517578125
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": null,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1135,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 130.00045776367188,
+            "ty": 140.00030517578125
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1136,
+      "action": "control-4",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 130.00045776367188,
+            "ty": 140.00030517578125
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 5,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [],
+          "error": null
+        }
+      ],
+      "focus": 1,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1137,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 130.00045776367188,
+            "ty": 140.00030517578125
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 5,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 5,
+      "pointer_owner": 5,
+      "last": "target=Some(5) input=PointerDown(PointerInput { position: Point { x: 508.00775, y: 322.0064 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1138,
+      "action": "input",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 130.00045776367188,
+            "ty": 140.00030517578125
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 5,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 5,
+      "pointer_owner": null,
+      "last": "target=Some(5) input=PointerUp(PointerInput { position: Point { x: 508.00775, y: 322.0064 }, button: Some(Left), modifiers: Modifiers { shift: false, control: false, alt: false, meta: false, space: false }, hit: Background, pointer_id: 0 })"
+    },
+    {
+      "fixture": "layered-app",
+      "seq": 1140,
+      "action": "control-7",
+      "stack": [
+        {
+          "layer": 1,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "zoom": 1.0,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 100.0,
+            "ty": 120.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        },
+        {
+          "layer": 5,
+          "visible": true,
+          "viewport": {
+            "pan": {
+              "x": 45.0,
+              "y": 25.0
+            },
+            "zoom": 1.149999976158142,
+            "min_zoom": 0.10000000149011612,
+            "max_zoom": 3.0
+          },
+          "card": {
+            "a": 1.0,
+            "b": 0.0,
+            "c": 0.0,
+            "d": 1.0,
+            "tx": 230.0,
+            "ty": 155.0
+          },
+          "selected": [
+            "card"
+          ],
+          "error": null
+        }
+      ],
+      "focus": 5,
+      "pointer_owner": null,
+      "last": "target=None input=PointerLeave"
+    }
+  ],
+  "selected_records": 67,
+  "screenshot_sha256": {
+    "00-desktop-0.png": "689cb88ef138d49523e9d813f706633716b1390438cafb3de0a0b84fff7e4967",
+    "01-launcher-0.png": "a62e384ed7f0407b3247126b6ac5ea05b9210eb1ea09352ad32a5711793df460",
+    "02-initial-0.png": "062d5aae9f14c8cf5ab22ab172a424ec8d734cdb98b97b8896a70a4b112310a6",
+    "03-overlap-gold-0.png": "5b770d28d70b6f46ee4aa65cffd7775da921e44cacd67f77f03e19ed3a66ea86",
+    "04-exposed-blue-0.png": "19a352968783352013d2868b329bfa90264c8b8e0f964b016b0a94cb95bd96af",
+    "05-wheel-through-gold-to-blue-0.png": "b970ad9bfa68d3ba53235c78ebd6b99c02ecd6ffb89a444eae0e198c1f596c2c",
+    "06-wheel-gold-0.png": "b3279e6f8bbd2f38d5346234a01afe20c1c1c14eba2880ffc522a27c6df97673",
+    "07-cross-blue-drag-0.png": "e9260e322b1032dc4a311ec296425766202298641d776789e204b3657d1859dd",
+    "08-gold-undo-0.png": "40ade291298e5005afac41db58efd4146f463df28c8378ad84e768e2c0a949f9",
+    "09-resized-window-0.png": "038d2b3f07c8b8c2cef841d71f289b6fc2a712a2d874af3fe50640518b6aa9b6",
+    "10-reactivated-layered-0.png": "ea3f80327d0f20bbcb5a530d0e9ac7408a91ed1a30d23fd528d9e21239533f4d",
+    "11-maximized-layered-0.png": "2dfbe86a8fe20ac35af0079031bd7a6b451594f160a96d79b8b5100b6154b450",
+    "12-layered-focused-0.png": "c4def03bd5bc569233308bb6472b3a2b2cd3290193bee441a4b29771ae8a2314",
+    "13-actual-maximized-0.png": "a549c19e841647fc64ce94cf52f1a1c0d59d597846c8f434ca826d5dbf209928",
+    "14-maximized-control-0.png": "0d49d0fc0d9fe6b9ac6eda1e205b44eff77f6f106e0a730da8154309920374c4",
+    "15-gold-default-viewport-0.png": "8f13d9e80952e86b4538b00a8562917437c1e4b80e5f6b5247bc6269d72f2d68",
+    "16-mapped-drag-default-0.png": "8cf435329ad39594f0430718d7c993511abd38f07e1e55f9e2fcd4ee532d33ef",
+    "17-restored-viewport-0.png": "601ae2d781be3125fafb3591edb0831eb2a785ac912cdc6c643e158af1160f7f",
+    "18-focus-blue-delete-0.png": "843e581953a52af032cb598d1dabaf7fa145f237946cf8100be920d23f59fa5c",
+    "19-focus-gold-delete-0.png": "df32c813003b1057487dc804044dc2b7d42bb99d45de87f537fb48cfa4f145c6",
+    "20-independent-undo-restored-0.png": "0ab9e9196f8bbaa8534a79645dbc29d914b71c6bc532c45ce94e0c9d2e68bc13",
+    "21-drag-release-outside-app-0.png": "dfccb78a3bb4e0e6de96ce565ac1259e8476964796ddd85e1ec80ca00345baf6",
+    "22-fresh-blue-after-outside-release-0.png": "19a352968783352013d2868b329bfa90264c8b8e0f964b016b0a94cb95bd96af",
+    "23-hidden-gold-blue-target-0.png": "a5b451b07c4c2afeb6ee0e94e85ccf2918d16c49ffd59c3643e2457847661ae6",
+    "24-reordered-blue-wins-0.png": "6e25f81bc2c549fc9e13707441b0c1c77836f2c7395ef1a331c364d8a5925009",
+    "25-reordered-back-gold-wins-0.png": "dac3d469076e2de4ece603187762aa126b24f171983075efedf79266f697499e",
+    "26-detached-gold-0.png": "71088e61bcf9e2244780d1164f0eafeb4fb259fe80818b98d139b886fdc65c8e",
+    "27-blue-usable-detached-0.png": "6486f64cf4c1bd946f26c2cfe62b02ce8dc5c4ab829221dec8827e369e474429",
+    "28-reattached-gold-0.png": "136401273c25449ed5d263915be94e411e4de608f0652cad61b67f060bb29ac8",
+    "29-reattached-history-undo-0.png": "b2daf6819fb58bb794e9ea2a4d5f94e2b29cdb7b7706436a41073868645a7010",
+    "30-gold-space-pan-0.png": "5ac209de920798c73846224c667b224afccf9c86905925d3da96962d797ee2b0",
+    "31-destroyed-gold-0.png": "19f371c0f82634fbbdfd3d2a7b37e3a8819c9bd7e83e871961f82efcd59f2fb1",
+    "32-blue-usable-destroyed-0.png": "982f5fb5573b45cb9ef9bac9476f8c0f499f59564475481e46353de3488bff26",
+    "33-recreated-gold-fresh-input-0.png": "3852b245b2f6dc7e6ff756cdd361e30b02c2a3862538c6c888f29bc157246e59",
+    "34-second-recreation-0.png": "ba2227fa3242ef3cdceb35f72e91bc598ef5e97ba3d026fec030d32a38555443",
+    "35-final-restored-0.png": "4bf43ebf1ce77417ea88f8e4aad13b1e9d4c62afb79c715e5b40c92bf18a0df7",
+    "36-before-close-0.png": "4bf43ebf1ce77417ea88f8e4aad13b1e9d4c62afb79c715e5b40c92bf18a0df7",
+    "37-normal-close-0.png": "159693da1c9931992c03758fe5154821ce6558f5844ce375030477b525411829"
+  },
+  "verified_cases": [
+    "topmost overlap and transparent upper surface route to correct layer despite duplicate object IDs",
+    "wheel changes only recipient viewport",
+    "gold drag retains ownership across blue, independent Undo restores it",
+    "post actual native resize, viewport reset and drag map correctly",
+    "programmatic focus and physical Delete/Undo stay on chosen layer",
+    "release outside app content cancels and restores owned drag, next blue stream is fresh",
+    "hide/reorder choose newly visible topmost eligible layer",
+    "detach preserves geometry/history and remount allocates fresh layer3",
+    "Space drag changes only focused gold viewport, not canonical transforms",
+    "terminal destroy/recreate layers4 and5 preserves independent blue usability",
+    "normal exit0 and final ownerNone"
+  ],
+  "limits": [
+    "mid-held-mouse hide/reorder/detach/destroy and wrong-button mismatch were not physically exercised; separately covered by headless tests",
+    "no native resource leak instrument; resource-key release/disposer tests are automated",
+    "initial resize attempt touched underlying Chromium edge and was restored; later titlebar restore/maximize and post-resize mapping are actual fixture evidence",
+    "cross-window capture, multitouch, IME/inner tools, nested apps and cross-layer blend/backdrop are not claimed",
+    "incoming hit:Background in top-level trace is pre-routing placeholder; target serial and resulting selection/geometry show actual layer routing"
+  ],
+  "automated": "21 production layer-routing tests;3 bridge restriction/retained-key/mode tests;2 geometry-alpha tests;7 explicit wheel tests+48 event/focus suites;full UI230 and mirror3;strictUI/interaction all-targets and3fixtures pass. Counts overlap."
+}

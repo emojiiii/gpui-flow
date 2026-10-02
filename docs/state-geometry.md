@@ -176,3 +176,34 @@ and the moved card, rapid enter/leave/press, disabling mid-motion, editing base
 while active and clearing states. Runtime toggles print canonical revisions;
 only base edits/Undo/Redo should change them. Building the example is not native
 window acceptance; the integration owner records native results separately.
+
+
+## Native functional result and open transition defect
+
+The exact source checkpoint [`1b79a3bb`](https://github.com/emojiiii/gpui-flow/commit/1b79a3bb9d895ac9be29fff5dd58ee151dc229da)
+ran on the dot-cloud Linux desktop from 19:01:57 to 19:05:14 UTC on 2026-10-02,
+with normal exit 0 and empty stderr. All 51 raw records and 18 saved screenshots
+are indexed in the [evidence summary](validation/2026-10-02-state-geometry-summary.json).
+The complete 560-blob source archive matches tree `365162c249e55f4975be3498cfee9cea94c29151`.
+
+Real wheel and click input hit the expanded-only area and a named relocated card.
+Disabled styling suppressed pointer geometry; clearing an active override revealed
+a newer canonical edit, and one Undo/Redo restored the correct canonical poses.
+State-only input kept revision zero. Focus/Blur and interrupted retargeting were
+also observed. The final shared checks passed 230 UI library tests, 55 focused
+wheel/router/focus tests, 3 mirror tests, and strict UI/interaction and fixture
+Clippy; these overlap separately reported feature checks and are not additive.
+
+APP-05 remains **partial** because an actual rendering defect was observed:
+CPU-composited child text or a whole composited domain can disappear during a
+transition while changing geometry keys cancel/replace pending work. Settled
+pixels recover, but that does not establish correct continuous presentation.
+A coherent previous presentation must retain its matching hit geometry until the
+replacement is ready; simply drawing old pixels with new hit coordinates is not
+an acceptable fix. The frozen receipt remains valid evidence of the defect.
+
+`SceneEvent.local_position` is intentionally calculated by canonical event
+routing, like edit handles and commands. State-aware picking uses presentation
+geometry. For visual local coordinates, convert `event.world_position` through
+`state_styles.geometry_engine(&editor.engine)`. This is an explicit coordinate
+boundary, not a claim of arbitrary upstream state/event equivalence.
