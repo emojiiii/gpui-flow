@@ -74,3 +74,6 @@ binary SHA-256
 `13104691820dd2a29ce1029368f8ae2857bc79f718deb7c6494528077b9b606a`.
 This is Linux native evidence, not cross-platform typography or browser parity.
 Run `cargo run --locked -p flow-studio --bin text_affine` to reproduce.
+
+A later [capability-aware Text handle slice](text-transform-tools.md) adds opt-in
+outer resize/rotation gestures. The rendering receipt above predates that slice.

@@ -6,7 +6,7 @@
 
 ## UI 与交互
 
-- [八方向单选transform手柄](resize-handles.md)已通过聚焦模型/UI与Linux原生拖动验收，未验范围见契约。Text及其父子树限定uniform；Custom、退化/奇异或native不支持的变换不提供手柄。另有[多选共享缩放框](selection-resize.md)与[中心旋转手柄](rotation-handles.md)；旋转支持vector/Image子树，详见[Image编辑手柄](image-transform-tools.md)，仍无路径控制点、倾斜/中心点编辑或intrinsic-size改写
+- [八方向单选transform手柄](resize-handles.md)已通过聚焦模型/UI与Linux原生拖动验收，未验范围见契约。未声明字体bridge时Text及其父子树仍限定uniform；[有界Text变换能力](text-transform-tools.md)增加可选非均匀/旋转手柄。Custom、退化/奇异或未支持的呈现不提供手柄。另有[多选共享缩放框](selection-resize.md)与[中心旋转手柄](rotation-handles.md)；旋转支持vector/Image子树，详见[Image编辑手柄](image-transform-tools.md)，仍无路径控制点、倾斜/中心点编辑或intrinsic-size改写
 
 - Studio 默认显示左侧组件、画布和 Inspector；FlowOptions 可隐藏六类辅助 UI，但尚未提供任意插槽化工作台布局 API
 - Graph 内容输入按节点 kind 编辑一个 `text` / `prompt` / `source` 字段；retained Scene Text 新增可选内容编辑面板与单次Undo会话，见 [text-editing.md](text-editing.md)。不是排版所见即所得编辑器，几何、标题、端口等属性仍没有通用编辑表单
@@ -143,3 +143,9 @@ bounded local glyph pixels plus the existing CPU image transform. A same-App
 font bridge is required; exact local content masks and ancestor geometry remain
 enforced. Native standalone Text, transform handles, transformed content editing
 and existing effect-specific restrictions are unchanged.
+
+[Text outer transform tools](text-transform-tools.md) now follow a default-off
+interaction capability, enabled by a validated SceneView font bridge. The plain
+solid/effect-free subset supports nonuniform resize and rotation, including
+shared roots. Capability changes cancel active captures; intrinsic box/font-size
+rewriting, skew/pivot tools and WYSIWYG editing remain outside this slice.

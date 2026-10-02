@@ -1,8 +1,7 @@
 # Capability-aware Text transform handles
 
-Status: recoverable source checkpoint. Nine new interaction regressions and
-strict affected/example Clippy pass; broad regression and native acceptance are
-pending.
+Status: implemented and validated on Linux, with capability-gated plain Text
+transform gestures.
 
 The existing named single-selection resize, shared-root resize and center-pivot
 rotation tools can now operate on supported Text when the host explicitly enables
@@ -46,3 +45,41 @@ font-size resizing. This slice is Flow's transform-only mode. It does not add
 intrinsic Text width/font-size rewriting, reflow drag tools, custom pivots, skew
 handles or WYSIWYG text editing. Existing content-panel sessions still suspend
 outer tools. [Affine glyph rendering](text-affine.md) is the separate prerequisite.
+
+## Validation
+
+Nine new interaction regressions cover default/opt-in behavior, all eight handles
+under rotation/reflection/shear with Shift, intrinsic preservation and one-step
+Undo/Redo, snapped rotation, mixed Text/Image selection, per-host isolation,
+read-only/forged-command rejection, unsupported Text styles, post-layout rollback
+and capability revocation during resize/rotation (including intervening external
+edits and retained Redo).
+
+Affected checks: **401 passed, zero failed or ignored** (251 interaction + 150 UI).
+Strict affected all-targets Clippy, example Clippy and actual native linking passed.
+Production source was unchanged throughout the native runs.
+
+The main `text_transforms --trace` window ran 2026-10-02 12:46:41–12:53:57 UTC
+and exited 0. Real pointer checks covered nonuniform single Text resize, 45°
+Shift-snapped rotation, affine-parent resize/rotation, Text/Image shared resize
+and rotation, selected parent/child shared-root de-duplication, Undo/Redo, bridge
+withdrawal/restoration, default uniform resize without the bridge, read-only
+movement rejection, zoom and Space-pan. The trace contained only expected matrix
+updates; the selected child's local transform stayed unchanged when its parent
+root was resized. Affine rotation/Redo artwork regions were pixel-identical.
+
+Double-click opened the content panel and hid outer handles. A focused-input
+close recheck ran 12:55:59–12:57:22 UTC with the same binary, exited 0 with empty
+stdout/stderr, and confirmed that clicking the textarea then Escape closes the
+panel and restores handles. The first Escape sent without textarea focus was
+not a verified close. Mid-capture bridge revocation and derived-layout rollback
+have focused automated coverage; they were not injected during a held native
+pointer drag. No IME or cross-platform input coverage is claimed.
+
+Exact source checkpoint `938f67e38bd61cf1d54bf4b275e13c017928bd99`, tree
+`07a0d2ff0640c0776264e079cc0aa86a4417ff49`; archive SHA-256
+`65f110b291af80e1a7745d7f139e54872b46b8fa0182fe0e683214718f522084`;
+binary SHA-256
+`c74bcec5e310aeb914fb03c5cb837030690cb181541895651519f5af07b9b0e2`.
+Screenshots, trace and both close receipts were retained with the validation
+artifacts. Reproduce with `cargo run --locked -p flow-studio --bin text_transforms`.

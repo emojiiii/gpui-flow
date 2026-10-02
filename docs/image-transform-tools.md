@@ -91,3 +91,7 @@ Run `cargo run -p flow-studio --bin image_transforms -- --trace` for the real
 SceneView demo. Presets cover Image, Image/vector, affine-parent Image,
 parent/child deduplication and mixed Text; Undo/Redo, read-only and reset reuse the
 public scene commands. The optional trace prints accepted transforms only.
+
+Later [Text transform capabilities](text-transform-tools.md) allow the supported
+plain Text subset in mixed resize/rotation selections when a matching glyph
+bridge is enabled. Default bridge-free Text constraints remain unchanged.
