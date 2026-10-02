@@ -6,6 +6,8 @@ mod sequence;
 pub use sequence::*;
 mod tween;
 pub use tween::*;
+mod timeline;
+pub use timeline::*;
 mod timing;
 pub use timing::*;
 
@@ -646,30 +648,12 @@ fn sample(
     timing: TimingSample,
     updates: &mut PropertyUpdates,
 ) -> Result<(), AnimationError> {
-    let elapsed = timing.cycle_position;
-    let index = animation
-        .segments
-        .iter()
-        .position(|segment| elapsed <= segment.end)
-        .unwrap_or(animation.segments.len() - 1);
-    let segment = &animation.segments[index];
-    let progress = elapsed.saturating_sub(segment.start).as_secs_f64()
-        / (segment.end - segment.start).as_secs_f64();
-    for track in &mut animation.tracks {
-        let value = if timing.reversed {
-            track.values[index + 1].interpolate(
-                &track.values[index],
-                1. - progress,
-                segment.easing,
-            )?
-        } else {
-            track.values[index].interpolate(&track.values[index + 1], progress, segment.easing)?
-        };
-        if value != tween::read(engine, animation.info.target, &track.property)? {
-            let (key, data) =
-                tween::update(engine, animation.info.target, &track.property, &value)?;
+    for (property, value) in
+        sequence::sample_tracks(&animation.segments, &animation.tracks, timing)?
+    {
+        if value != tween::read(engine, animation.info.target, &property)? {
+            let (key, data) = tween::update(engine, animation.info.target, &property, &value)?;
             updates.push((animation.info.target, key, data));
-            track.last = value;
         }
     }
     animation.info.elapsed = timing.elapsed;

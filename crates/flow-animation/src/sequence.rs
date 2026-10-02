@@ -1,7 +1,13 @@
-use crate::{AnimationError, AnimationSpec, Easing, MAX_TWEENS_PER_ANIMATION, Track, tween};
+use crate::{
+    AnimationError, AnimationSpec, Easing, MAX_TWEENS_PER_ANIMATION, TimingSample, Track,
+    TweenProperty, TweenValue, tween,
+};
 use gpui_flow_engine::{ChangeOrigin, ElementHandle, SceneEngine};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeSet, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    time::Duration,
+};
 
 pub const MAX_SEQUENCE_KEYFRAMES: usize = 64;
 
@@ -32,6 +38,15 @@ pub(crate) fn prepare(
     engine: &SceneEngine,
     target: ElementHandle,
     sequence: AnimationSequence,
+) -> Result<(Vec<Segment>, Vec<Track>, Duration), AnimationError> {
+    prepare_with_initial(engine, target, &sequence, &BTreeMap::new())
+}
+
+pub(crate) fn prepare_with_initial(
+    engine: &SceneEngine,
+    target: ElementHandle,
+    sequence: &AnimationSequence,
+    initial: &BTreeMap<TweenProperty, TweenValue>,
 ) -> Result<(Vec<Segment>, Vec<Track>, Duration), AnimationError> {
     let invalid = |s: &str| AnimationError::InvalidInput(s.into());
     if sequence.keyframes.is_empty() || sequence.keyframes.len() > MAX_SEQUENCE_KEYFRAMES {
@@ -71,14 +86,17 @@ pub(crate) fn prepare(
     }
     let mut tracks = Vec::with_capacity(properties.len());
     for property in properties {
-        let from = tween::read(engine, target, &property)?;
+        let from = initial
+            .get(&property)
+            .cloned()
+            .map_or_else(|| tween::read(engine, target, &property), Ok)?;
         tracks.push(Track {
             property,
             values: vec![from.clone()],
             last: from,
         });
     }
-    for frame in sequence.keyframes {
+    for frame in &sequence.keyframes {
         let mut endpoint = Vec::with_capacity(tracks.len());
         for track in &mut tracks {
             let from = track.values.last().expect("initial pose exists");
@@ -95,4 +113,39 @@ pub(crate) fn prepare(
         engine.validate_properties_batch_with_origin(ChangeOrigin::Animation, endpoint)?;
     }
     Ok((segments, tracks, Duration::from_millis(total_ms)))
+}
+
+/// Shared keyframe sampler. All callers stage values before any engine commit.
+pub(crate) fn sample_tracks(
+    segments: &[Segment],
+    tracks: &[Track],
+    timing: TimingSample,
+) -> Result<Vec<(TweenProperty, TweenValue)>, AnimationError> {
+    let elapsed = timing.cycle_position;
+    let index = segments
+        .iter()
+        .position(|segment| elapsed <= segment.end)
+        .unwrap_or(segments.len() - 1);
+    let segment = &segments[index];
+    let progress = elapsed.saturating_sub(segment.start).as_secs_f64()
+        / (segment.end - segment.start).as_secs_f64();
+    tracks
+        .iter()
+        .map(|track| {
+            let value = if timing.reversed {
+                track.values[index + 1].interpolate(
+                    &track.values[index],
+                    1. - progress,
+                    segment.easing,
+                )?
+            } else {
+                track.values[index].interpolate(
+                    &track.values[index + 1],
+                    progress,
+                    segment.easing,
+                )?
+            };
+            Ok((track.property.clone(), value))
+        })
+        .collect()
 }
