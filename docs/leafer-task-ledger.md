@@ -4,8 +4,8 @@
 
 ## 状态计数
 
-- 有界契约已验证：26
-- 部分实现：15
+- 有界契约已验证：27
+- 部分实现：14
 - 未开始该能力：4
 - 待核实验收：0
 - 开发/验收中：0
@@ -56,7 +56,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | ELM-03 | 元素 / [Group Box Frame容器裁切](container-corners.md) | 有界契约已验证 | 分离组件/paint phases/四角、嵌套真实clip，bounds/hit/CPU/native一致受能力限制 | 不扩大Custom/特殊effect能力 |
 | ELM-04 | 元素 / [Text固定排版属性](text-case-paragraph-spacing.md) | 部分实现 | 已有font/wrap/align/padding/ellipsis/italic/decoration/affine；必补letterSpacing、wordSpacing、paraIndent、paraSpacing、textCase、writingMode和autoSizeAlign | 富runs/WYSIWYG不是此次固定ITextStyleInputData属性集，作为额外范围另立项 |
 | ELM-05 | 元素 / [Image真实帧与几何呈现](image-corners.md) | 有界契约已验证 | 静态/动画帧、fit、四角及仿射/复杂clip，真实CPU像素和资源代际 | alpha hit/crop内编辑归ELM-06；解码与URL权限归宿主 |
-| ELM-06 | 元素 / [Image像素命中与内编辑](image-alpha-hit.md) | 部分实现 | decoded-alpha hit阈值/缩放/当前帧和crop内工具必须一致且可撤销 | OSS未找到Image专属crop inner editor；属于框架明确扩展，不虚称上游已有 |
+| ELM-06 | 元素 / [Image像素命中与内编辑](image-crop.md) | 有界契约已验证 | decoded-alpha hit阈值/缩放/当前帧和crop内工具必须一致且可撤销 | OSS未找到Image专属crop inner editor；属于框架明确扩展，不虚称上游已有 |
 | ELM-07 | 元素 / [Canvas拥有像素与生命周期](canvas-component.md) | 有界契约已验证 | 独立配置、运行时surface、DPR/smooth/safe-resize/clear/draw/snapshot、代际释放 | 像素不进文档/Undo；非整视图OwnedCanvas |
 | ELM-08 | 元素 / [Canvas矢量上下文批次](canvas-clips.md) | 有界契约已验证 | Path填充/描边、transform/alpha/save/restore/冻结clip栈；晚失败原子回滚 | 无持久current path/context；图文分别归ELM-09/10 |
 | ELM-09 | 元素 / [Canvas图像批次](canvas-image-commands.md) | 有界契约已验证 | immutable image输入、source crop/destination/DPR、仿射/clip/alpha和单代际原子提交 | 不取URL；负尺寸拒绝；不保证浏览器精确filter边缘 |
@@ -76,7 +76,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 |---|---|---|---|
 | DAT-01 | engine/registry、engine及metadata测试已在10月2日全套记录通过 | 纯引擎项，不要求窗口 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | DAT-02 | engine/engine及editor历史测试在全套记录通过 | 纯引擎项，不要求窗口 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
-| DAT-03 | 当前serde roundtrip通过；跨格式/迁移未实现 | 未验收 | 尚无独立完整验收提交 |
+| DAT-03 | Scene v1与12tag严格Leafer映射；24 focused+scene strict通过，未知字段/预算/原子拒绝 | 纯数据；不承诺浏览器/native像素等价 | 本批有限子集，input/computed等更广边界未闭环，仍部分 |
 | DAT-04 | 154项engine通过/2 benchmark常规忽略；两个benchmark均显式运行通过。300步query与480步cache参考对照；等工作量索引维护中位开销+1.25/+2.23/+3.40%，无整体提速声明 | 纯数据项，不要求窗口 | `4049da69ddd159972093df5aed04649c24fb4e3d` |
 | INS-01 | engine实例、clone/reparent和资源迟到结果测试通过 | 纯引擎项，不要求窗口 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | INS-02 | 无该项验收证据 | 未实现/未验收 | 尚无独立完整验收提交 |
@@ -108,7 +108,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | ELM-03 | 容器16新回归；全套1215及后续Text/Image clip回归通过 | 后续Text/Image真实复杂祖先窗口通过；早期角切片原生仅adapter | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | ELM-04 | 新增None/Upper/Lower和非负paraSpacing：22项新回归、1001项受影响通过；Title/small-caps及其他固定属性仍缺 | 15:51–16:01真实双路径7态区域像素一致，Undo恢复一致，退出0；不表示完整Text排版已完成 | `4b47d2597030de8a49fb08d9e2b62587604c37ab` |
 | ELM-05 | 16新回归、664受影响通过（1原有忽略） | 08:45–08:49真实静态/动画/旋转/clip/Undo通过 | `cfe28b01e81c8bfba2cdc0e277bdbdb0a0375dc9` |
-| ELM-06 | alpha-hit18新回归、UI171与strict Clippy通过；crop内工具未开始 | 14:55–15:00实际透明/阈值/当前帧/pending/failed/affine clips/remount点击验收退出0 | `17f92d2fec9b136027eceb3c8d8a063fc84cb013` |
+| ELM-06 | 原alpha18新增/UI171；crop17模型/UI204基线；最终precision9composite+9UIcrop+4UIimage（重叠）及strict通过 | 原alpha窗口加18:26–18:32crop窗口退出0；1434记录/28截图；Undo/外部release rollback像素一致，明确未原生覆盖项见[证据](validation/2026-10-02-image-crop-summary.json) | crop源码[`e88d78af`](https://github.com/emojiiii/gpui-flow/commit/e88d78af5a235d4921414a9789d65be3c0ecb531)；显式crop均CPU |
 | ELM-07 | 24新回归及356受影响通过 | Canvas实际Draw/Clear/resize/Undo窗口通过 | `d365f5a9e533e823e43e09db5154935e01b68c49` |
 | ELM-08 | 11矢量+7clip新回归、360/367受影响记录通过 | 11:41和11:57窗口、DPR/回滚/重绘像素对照通过 | `e4f7d9455f7aaaf38d160951c330ae03249435d1` |
 | ELM-09 | 12新回归；63 composite+18 UI=81聚焦通过，strict Clippy/link通过 | 14:00:18–14:03:12 Linux窗口退出0；DPR1/2、crop/透明源/反射/clip/晚失败/resize/Undo/Clear；三组像素区域一致 | `0ab6ffbf8bdbdb837a30f6cbf193e5506cb0124d` |
@@ -189,3 +189,5 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 - 2026-10-02 17:07：ANI-03按冻结有限集合闭环，25项已验证/20项未闭环；Scene PNG/JPEG/WebP原生与独立文件解码验收通过，ELM-11因SVG缺项仍部分。LAY-03进入开发，固定总数45不变。
 
 - 2026-10-02 18:21：LAY-03真实GPUI下一帧队列与像素验收闭环，26项有界已验证/19项未闭环；固定45项不变。原生夹具含当时工作区的来源边界已记录。
+
+- 2026-10-02 18:32：ELM-06按固定alpha+crop合同闭环，27项有界已验证/18项未闭环；DAT-03发布严格12tag子集但保留部分，不缩减冻结验收范围。

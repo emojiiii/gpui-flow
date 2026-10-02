@@ -130,3 +130,81 @@ uses an intentionally stretched full-source view, not a separate photo editor.
 There is no native atlas fast path for explicit source crops. Cross-platform
 native acceptance, animation crop gestures and high-DPR physical input require
 their own receipts; pure mapping tests do not claim those windows.
+
+## Verified Linux window: 2026-10-02
+
+The frozen `image_crop_trace` executable ran **18:26:32–18:32:37 UTC** and
+closed normally with exit 0. Independent audit parsed all **1,434 contiguous
+JSON trace records**, checked the frozen build-input manifest, and inspected
+screenshots 01–28. No routed input event reported an error. The deliberately
+requested read-only open produced `canvas capability denied: Edit`; its status
+message remained visible until remount. Pending/failed source badges were also
+intentional fixture states, not unexpected failures.
+
+Physically verified in this window:
+
+- Left-edge drag by approximately 80 pixels produced source x≈0.250004 and
+  width≈0.749996. Done restored cropped presentation; one Undo restored None,
+  and Redo restored the identical crop. The cropped and Redo canvas screenshot
+  regions are byte-identical. Both Image-local matrices and 320×240 boxes were
+  unchanged throughout all 1,434 records
+- Reopening and an off-center Shift body drag moved only the normalized x axis
+  to ≈0.056251. Corner crossing clamped both axes to exactly 1/4096, without
+  flipping; one Undo restored the preceding frame. Escape closed the idle mode
+- Right-half and asymmetric fractional presets displayed all three fit modes.
+  Both explicit crops used CPU compositing; the uncropped left editor preview
+  remained native eligible. Screenshots show corresponding settled colors,
+  letterboxes and transparent underlays. They are visual fit checks, not a claim
+  of byte-identical GPU outputs: complete left/right screenshot interior regions
+  contain edge-adjacent channel differences, recorded in the audit summary.
+  The precise unsnapped fractional source mapping is separately established by
+  the automated independent CPU pixel-reference regression
+- Real pointer traces accepted opaque Contain pixels as `native` and `cpu`,
+  including positions rejected by the deliberately incorrect natural-size
+  metadata. Transparent pixels reached `under-native` / `under-cpu`, and the
+  left Contain letterbox reached `under-native`
+- Affine/rounded clipping on the right and viewport zoom 1.2 were inspected in
+  settled screenshots. Pending and failed left-source states showed no old
+  Image pixels and both clicks passed through to `under-native`; ready recovered
+- Read-only closed the mode and rejected reopening. After re-enabling, a source
+  body drag left the canvas with capture held; returning after outside release
+  produced PointerCancel, cleared capture/editing, and restored the exact
+  baseline crop. Before/after-cancel canvas screenshot regions are byte-identical
+- Remount reset the crop mode, both crops, zoom and error status. Reinstalling
+  alpha opt-in then produced transparent clickthrough again
+
+### Explicit limits of this receipt
+
+The last purported rounded-hole click hit the selected underlay's TopLeft resize
+handle (trace 1432), so it **does not verify rounded alpha rejection**. Native
+Escape-during-drag and focus-loss-with-button-held were not exercised: the logged
+Escape closed an idle mode, and every FocusLost event had no capture. Those
+cancellation/rounded-clip cases retain automated regression coverage only.
+The right affine parent is intentionally changed by the fixture; the invariant
+above concerns each Image's local matrix, not that parent matrix.
+
+This is one Linux native window, not Windows/macOS or physical high-DPR
+acceptance. It does not claim bit-exact native-versus-CPU crop rendering; explicit
+source crops have no native atlas fast path. The crop implementation was subsequently published as
+[`e88d78af`](https://github.com/emojiiii/gpui-flow/commit/e88d78af5a235d4921414a9789d65be3c0ecb531), with zero Actions runs for that commit. The full binary also contains contemporaneous JSON/layout fixture WIP; it is not asserted to match that entire remote tree. Later source changes require their
+own checks; these results are anchored to the archive below.
+
+### Provenance and automated scope
+
+- Frozen complete source archive `source-before-native.tar.gz` SHA-256:
+  `7555e4e9f0e05f933ce045f623b81de67886455fead3642e6fc7fe99066c44d8`
+- Frozen binary SHA-256:
+  `99a33daf5f2d41bad255fa174af94464e3e142b1daabd52cce5e0e7c02af8e18`
+- All 438 entries in `build-inputs.json` match the archived source bytes
+- Pre-precision baseline: 17 model crop tests and full UI library 204/204 passed;
+  the earlier composite source-crop filter had 3 passes, including 2 existing
+  Canvas cases. These counts overlap later focused checks and are not additive
+- After the final CPU precision-routing change: 9 composite Image tests, 9 UI
+  crop-filter tests and 4 UI Image tests passed (one UI test overlaps). Strict
+  composite/UI all-targets Clippy and demo Clippy, formatting and diff checks
+  passed. The full 204-test UI suite was not rerun after this final routing delta
+
+The machine-readable [validation summary](validation/2026-10-02-image-crop-summary.json)
+records trace sequence evidence, screenshot names/hashes, exact comparisons,
+automated scope and unverified cases. Original screenshots, native logs and
+frozen source/binary remain in the local validation artifact bundle.

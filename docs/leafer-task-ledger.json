@@ -2,16 +2,16 @@
   "schema_version": 1,
   "ledger_version": "v1-review",
   "review": "已锁定45个能力单元和有限验收集合；审阅版，所有扩展/技术依赖显式记录",
-  "as_of": "2026-10-02T18:21:16Z",
-  "source_snapshot": "ca44fa4372128d3d1b11e6148e337cb3404d78a5",
+  "as_of": "2026-10-02T18:32:37Z",
+  "source_snapshot": "5f3af69b6f33f4ca01220a6f3f9256dcb3447310",
   "upstream": {
     "leafer_ui": "1e11641d3ea6b0211c83447268a90b8d58feec25",
     "leafer_core": "1d703303ff0759ce4973d54c87eeb8192dddc570",
     "leafer_in": "3eb445bf34debb638766615282224b77108bf610"
   },
   "counts": {
-    "bounded_verified": 26,
-    "partial": 15,
+    "bounded_verified": 27,
+    "partial": 14,
     "not_started": 4,
     "needs_verification": 0,
     "in_progress": 0
@@ -62,16 +62,17 @@
       "status": "partial",
       "acceptance": "必选现有Scene JSON v1读写/未知版本拒绝；固定原语tag、transform、基础paint的Leafer JSON映射，未知属性明确拒绝并往返",
       "boundary": "不含JS回调、任意computed缓存或完整上游JSON兼容；迁移仅在存在正式v2时定义",
-      "reference_doc": "docs/display-scenes.md",
-      "implementation_snapshot": "99392f7c35f956f8765ed5730423df19e3d474cd",
+      "reference_doc": "docs/leafer-json.md",
+      "implementation_snapshot": null,
       "evidence_commit": null,
-      "automatic": "当前serde roundtrip通过；跨格式/迁移未实现",
-      "native": "未验收",
+      "automatic": "24严格映射/往返/预算/原子拒绝测试与scene all-target strictClippy通过；12tag有限集合，不视为全项签收",
+      "native": "纯数据映射，无浏览器/GPUI视觉等价声明",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/UI.ts",
         "symbols_or_contract": "UI.one / toJSON / clone（固定可映射属性集合）"
       },
-      "technical_dependencies": []
+      "technical_dependencies": [],
+      "progress": "Scene JSON v1不变；12tag基础字段严格映射，未知字段/重复key/资源crop等明确拒绝。input/computed边界与冻结更广集合仍待核对，状态保留部分"
     },
     {
       "id": "DAT-04",
@@ -528,7 +529,7 @@
       "boundary": "受父尺寸确定性约束；不实现全CSS布局或无界observer网络",
       "reference_doc": "docs/advanced-flow-layout.md",
       "implementation_snapshot": "ca44fa4372128d3d1b11e6148e337cb3404d78a5",
-      "evidence_commit": null,
+      "evidence_commit": "5f3af69b6f33f4ca01220a6f3f9256dcb3447310",
       "automatic": "238 layout/text回归含28新增；13 GPUI文字单元+1文档、2直接baseline、5帧桥状态测试通过；严格Clippy通过",
       "native": "2026-10-02 18:19:04–18:21:16 UTC正常退出0；19原始记录/8真实callback，5成功3原子拒绝，20编辑单revision/Undo，局部1容器，12截图像素核验；见validation/2026-10-02-advanced-layout-summary.json",
       "upstream_reference": {
@@ -654,14 +655,14 @@
       "id": "ELM-06",
       "category": "元素",
       "title": "Image像素命中与内编辑",
-      "status": "partial",
+      "status": "bounded_verified",
       "acceptance": "decoded-alpha hit阈值/缩放/当前帧和crop内工具必须一致且可撤销",
       "boundary": "OSS未找到Image专属crop inner editor；属于框架明确扩展，不虚称上游已有",
-      "reference_doc": "docs/image-alpha-hit.md",
-      "implementation_snapshot": "99392f7c35f956f8765ed5730423df19e3d474cd",
-      "evidence_commit": "17f92d2fec9b136027eceb3c8d8a063fc84cb013",
-      "automatic": "alpha-hit18新回归、UI171与strict Clippy通过；crop内工具未开始",
-      "native": "14:55–15:00实际透明/阈值/当前帧/pending/failed/affine clips/remount点击验收退出0",
+      "reference_doc": "docs/image-crop.md",
+      "implementation_snapshot": "e88d78af5a235d4921414a9789d65be3c0ecb531",
+      "evidence_commit": null,
+      "automatic": "原alpha18新增/UI171；crop17模型+UI204基线；最终精度9composite、9UIcrop、4UIimage（有重叠）和strictClippy通过，精确范围见image-crop文档",
+      "native": "原alpha14:55–15:00窗口；crop18:26:32–18:32:37退出0，1434记录/28截图独立核验，Undo/外部release rollback像素一致；heldEscape/heldFocusLost及末次圆角probe未原生覆盖；显式crop均CPU",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/hit/src/UIHit.ts",
         "symbols_or_contract": "UIHit像素命中参考；crop inner工具是明确Flow扩展"
