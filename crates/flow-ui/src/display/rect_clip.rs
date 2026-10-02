@@ -44,9 +44,7 @@ pub(super) fn plan(object: &RenderObject) -> Result<RectClip, ()> {
     for clip in &object.clips {
         let transform = object.viewport_transform * clip.world_transform;
         // Never replace curved/rotated/skewed clips with their bounding box.
-        if clip.corner_radius != 0.
-            || !supports_transform(transform)
-            || !clip.local_bounds.is_valid()
+        if !clip.is_rectangular() || !supports_transform(transform) || !clip.local_bounds.is_valid()
         {
             return Err(());
         }
@@ -91,6 +89,7 @@ mod tests {
     }
     fn clip(x: f32, y: f32, w: f32, h: f32) -> ClipRegion {
         ClipRegion {
+            corner_radii: None,
             local_bounds: Bounds::new(Point::ZERO, Size::new(w, h)),
             corner_radius: 0.,
             world_transform: Affine::translation(x, y),

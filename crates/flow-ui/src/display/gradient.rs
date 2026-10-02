@@ -351,6 +351,7 @@ mod tests {
         assert!(changed != key);
         let mut changed = key.clone();
         changed.object.clips.push(scene::ClipRegion {
+            corner_radii: None,
             local_bounds: scene::Bounds::new(scene::Point::ZERO, scene::Size::new(5.0, 5.0)),
             corner_radius: 1.0,
             world_transform: scene::Affine::IDENTITY,

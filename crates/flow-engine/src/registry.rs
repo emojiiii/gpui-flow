@@ -325,7 +325,7 @@ impl ElementDefinition for BuiltinDefinition {
             }
             "group" => json!({}),
             "box" | "frame" => {
-                json!({"size":{"width":100.,"height":100.},"corner_radius":0.,"clip_children":self.0=="frame","paint_order":"before_children"})
+                json!({"size":{"width":100.,"height":100.},"corner_radius":0.,"corner_radii":null,"clip_children":self.0=="frame","paint_order":"before_children"})
             }
             _ => unreachable!("built-in definition kind"),
         };

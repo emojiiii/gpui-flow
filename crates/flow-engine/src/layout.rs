@@ -123,8 +123,9 @@ impl Builder<'_> {
         };
         let clip = object.shape.child_clip();
         let mut clips = entry.clips.clone();
-        if let Some((bounds, corner_radius)) = clip {
+        if let Some((bounds, corner_radius, corner_radii)) = clip {
             clips.push(ClipRegion {
+                corner_radii,
                 local_bounds: bounds,
                 corner_radius,
                 world_transform: entry.world_transform,
@@ -159,7 +160,7 @@ impl Builder<'_> {
                         .object
                         .transform
                         .transform_bounds(bounds);
-                    let bounds = clip.map_or(Some(bounds), |(c, _)| intersection(bounds, c));
+                    let bounds = clip.map_or(Some(bounds), |(c, _, _)| intersection(bounds, c));
                     if let Some(bounds) = bounds {
                         entry.local_bounds =
                             Some(entry.local_bounds.map_or(bounds, |b| b.union(bounds)));
@@ -185,7 +186,7 @@ impl Builder<'_> {
         entry.effect_bounds = entry.world_bounds;
         for child in &children {
             let mut bounds = self.next.entries[child].effect_bounds;
-            if let Some((c, _)) = clip {
+            if let Some((c, _, _)) = clip {
                 bounds =
                     bounds.and_then(|b| intersection(b, entry.world_transform.transform_bounds(c)));
             }

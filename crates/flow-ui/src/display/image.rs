@@ -140,6 +140,7 @@ mod tests {
                     viewport_transform: viewport,
                     opacity: 1.,
                     clips: vec![ClipRegion {
+                        corner_radii: None,
                         local_bounds: SceneBounds::new(ScenePoint::ZERO, SceneSize::new(80., 60.)),
                         corner_radius: 0.,
                         world_transform: Affine::translation(50., 30.),
@@ -191,6 +192,7 @@ mod tests {
             viewport_transform: Affine::IDENTITY,
             opacity: 1.,
             clips: vec![ClipRegion {
+                corner_radii: None,
                 local_bounds: SceneBounds::new(ScenePoint::ZERO, SceneSize::new(10., 10.)),
                 corner_radius: 0.,
                 world_transform: Affine::translation(40., 0.),

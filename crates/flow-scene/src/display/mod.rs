@@ -119,10 +119,12 @@ impl Shape {
             Self::Custom(s) => s.contours.clone(),
         }
     }
-    pub fn child_clip(&self) -> Option<(Bounds, f32)> {
+    pub fn child_clip(&self) -> Option<(Bounds, f32, Option<CornerRadii>)> {
         match self {
-            Self::Box(s) if s.clip_children => Some((s.bounds(), s.corner_radius)),
-            Self::Frame(s) if s.clip_children => Some((s.bounds(), s.corner_radius)),
+            Self::Box(s) if s.clip_children => Some((s.bounds(), s.corner_radius, s.corner_radii)),
+            Self::Frame(s) if s.clip_children => {
+                Some((s.bounds(), s.corner_radius, s.corner_radii))
+            }
             _ => None,
         }
     }
@@ -130,8 +132,8 @@ impl Shape {
         match self {
             Self::Rect(s) => s.contains(point),
             Self::Ellipse(s) => s.contains_with_rule(point, rule),
-            Self::Box(s) => crate::geometry::rounded_contains(s.bounds(), s.corner_radius, point),
-            Self::Frame(s) => crate::geometry::rounded_contains(s.bounds(), s.corner_radius, point),
+            Self::Box(s) => s.contains(point),
+            Self::Frame(s) => s.contains(point),
             Self::Text(s) => s.bounds().contains(point),
             Self::Image(s) => s.bounds().contains(point),
             Self::Line(_) | Self::Group(_) => false,
@@ -176,13 +178,6 @@ impl Shape {
                 Ok(())
             } else {
                 Err("size must be finite and positive".into())
-            }
-        }
-        fn radius(r: f32) -> Result<(), String> {
-            if r.is_finite() && r >= 0.0 {
-                Ok(())
-            } else {
-                Err("corner radius must be finite and non-negative".into())
             }
         }
         match self {
@@ -241,14 +236,8 @@ impl Shape {
                 }
             }
             Self::Group(_) => {}
-            Self::Box(s) => {
-                size(s.size)?;
-                radius(s.corner_radius)?;
-            }
-            Self::Frame(s) => {
-                size(s.size)?;
-                radius(s.corner_radius)?;
-            }
+            Self::Box(s) => s.validate()?,
+            Self::Frame(s) => s.validate()?,
         }
         if self.local_bounds().is_some_and(|b| !b.is_valid()) {
             return Err("shape bounds overflow".into());

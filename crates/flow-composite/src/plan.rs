@@ -300,8 +300,9 @@ fn visit(
         },
     });
     let mut clips = clips.to_vec();
-    if let Some((local_bounds, corner_radius)) = o.shape.child_clip() {
+    if let Some((local_bounds, corner_radius, corner_radii)) = o.shape.child_clip() {
         clips.push(ClipRegion {
+            corner_radii,
             local_bounds,
             corner_radius,
             world_transform: world,

@@ -110,8 +110,7 @@ fn prepare_vector_paints_for_phase(
             let transform = scene::Affine::translation(origin.x.into(), origin.y.into())
                 * object.viewport_transform
                 * clip.world_transform;
-            scene::display::Rect::new(clip.local_bounds.size.width, clip.local_bounds.size.height)
-                .rounded(clip.corner_radius)
+            clip.local_rect()
                 .flatten(0.25 / (transform.max_scale() * scale_factor).max(0.01))
                 .points
                 .into_iter()
@@ -398,6 +397,7 @@ mod tests {
         obj.screen_transform = Affine::translation(10.0, 5.0) * Affine::scale(2.0, 3.0);
         obj.clips = vec![
             scene::ClipRegion {
+                corner_radii: None,
                 local_bounds: scene::Bounds::from_points(
                     ScenePoint::new(12.0, 8.0),
                     ScenePoint::new(35.0, 45.0),
@@ -406,6 +406,7 @@ mod tests {
                 world_transform: Affine::IDENTITY,
             },
             scene::ClipRegion {
+                corner_radii: None,
                 local_bounds: scene::Bounds::from_points(
                     ScenePoint::new(14.0, 10.0),
                     ScenePoint::new(32.0, 40.0),
@@ -543,6 +544,7 @@ mod tests {
         obj.screen_transform = Affine::translation(10.0, 10.0) * Affine::scale(2.0, 3.0);
         obj.clips = vec![
             scene::ClipRegion {
+                corner_radii: None,
                 local_bounds: scene::Bounds::from_points(
                     ScenePoint::new(12.0, 4.0),
                     ScenePoint::new(60.0, 16.0),
@@ -551,6 +553,7 @@ mod tests {
                 world_transform: Affine::IDENTITY,
             },
             scene::ClipRegion {
+                corner_radii: None,
                 local_bounds: scene::Bounds::from_points(
                     ScenePoint::new(14.0, 5.0),
                     ScenePoint::new(55.0, 15.0),
@@ -685,6 +688,7 @@ mod tests {
         obj.screen_transform = Affine::translation(10., 10.);
         obj.clips = vec![
             scene::ClipRegion {
+                corner_radii: None,
                 local_bounds: scene::Bounds::new(
                     ScenePoint::new(8., 8.),
                     scene::Size::new(30., 30.),
@@ -693,6 +697,7 @@ mod tests {
                 world_transform: Affine::IDENTITY,
             },
             scene::ClipRegion {
+                corner_radii: None,
                 local_bounds: scene::Bounds::new(
                     ScenePoint::new(9., 9.),
                     scene::Size::new(24., 24.),
@@ -756,6 +761,7 @@ mod tests {
             .into();
         obj.screen_transform = Affine::translation(10., 10.);
         obj.clips = vec![scene::ClipRegion {
+            corner_radii: None,
             local_bounds: scene::Bounds::new(ScenePoint::new(5., 5.), scene::Size::new(32., 32.)),
             corner_radius: 0.,
             world_transform: Affine::IDENTITY,

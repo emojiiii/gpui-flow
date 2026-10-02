@@ -3,9 +3,7 @@ use crate::{
     CanvasBackdrop, CompositeError, CompositeLimits, DomainSource, ImageInputs, TextInputs,
     vector::{Preparation, PreparedNode, VectorPaint, transform},
 };
-use gpui_flow_scene::{
-    Affine, BlendMode, Bounds, ClipRegion, MaskMode, Point, Shape, Size, display::Rect,
-};
+use gpui_flow_scene::{Affine, BlendMode, Bounds, ClipRegion, MaskMode, Point, Shape, Size};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tiny_skia::{Mask, PathBuilder, Pixmap, PixmapPaint, Transform};
 
@@ -636,13 +634,7 @@ impl Raster<'_> {
             tiny_skia::IntSize::from_wh(self.width, self.height).ok_or(CompositeError::TooLarge)?,
         )
         .ok_or(CompositeError::AllocationFailed)?;
-        let shape = Shape::Rect(
-            Rect::new(
-                region.local_bounds.size.width,
-                region.local_bounds.size.height,
-            )
-            .rounded(region.corner_radius),
-        );
+        let shape = Shape::Rect(region.local_rect());
         let Some(path) = crate::vector::path(&shape)? else {
             return Ok(mask);
         };
@@ -683,21 +675,8 @@ impl Raster<'_> {
         )
         .ok_or(CompositeError::AllocationFailed)?;
         for (index, clip) in source.clips.iter().enumerate() {
-            let rect = Shape::Rect(
-                Rect::new(clip.local_bounds.size.width, clip.local_bounds.size.height)
-                    .rounded(clip.corner_radius),
-            );
-            let contour = rect.flatten(0.1).remove(0);
-            let mut builder = PathBuilder::new();
-            if let Some(p) = contour.points.first() {
-                builder.move_to(p.x, p.y);
-                for p in &contour.points[1..] {
-                    builder.line_to(p.x, p.y);
-                }
-                builder.close();
-            }
-            let path = builder
-                .finish()
+            let shape = Shape::Rect(clip.local_rect());
+            let path = crate::vector::path(&shape)?
                 .ok_or_else(|| CompositeError::InvalidGeometry("empty clip".into()))?;
             let a = self.world_to_layer
                 * clip.world_transform

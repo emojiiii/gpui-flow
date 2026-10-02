@@ -91,9 +91,27 @@ impl Default for Scene {
 pub struct ClipRegion {
     pub local_bounds: Bounds,
     pub corner_radius: f32,
+    pub corner_radii: Option<crate::display::CornerRadii>,
     pub world_transform: Affine,
 }
 impl ClipRegion {
+    /// Local rectangle geometry before applying this clip's origin/transform.
+    pub fn local_rect(self) -> crate::display::Rect {
+        crate::display::Rect {
+            size: self.local_bounds.size,
+            corner_radius: self.corner_radius,
+            corner_radii: self.corner_radii,
+        }
+    }
+    /// Native Text/Image may use only genuinely rectangular clips. An explicit
+    /// zero array overrides a nonzero scalar but invalid radii never qualify.
+    pub fn is_rectangular(self) -> bool {
+        self.corner_radius.is_finite()
+            && self.corner_radius >= 0.
+            && self
+                .corner_radii
+                .map_or(self.corner_radius == 0., |r| r.0.iter().all(|v| *v == 0.))
+    }
     /// Broad-phase visibility for a positive-area object rectangle. Exact
     /// rounded/transformed point containment still uses each clip's contains.
     /// Edge-only contact is empty; boundaries of nonempty rectangles retain the
@@ -122,11 +140,8 @@ impl ClipRegion {
     }
     pub fn contains(self, world: Point) -> bool {
         self.world_transform.inverse().is_some_and(|inverse| {
-            crate::geometry::rounded_contains(
-                self.local_bounds,
-                self.corner_radius,
-                inverse.transform_point(world),
-            )
+            self.local_rect()
+                .contains(inverse.transform_point(world) - self.local_bounds.origin)
         })
     }
 }
@@ -398,7 +413,7 @@ impl Scene {
             .get(id)
             .ok_or_else(|| SceneError::MissingNode(id.clone()))?;
         let mut result = node.object.paint_bounds();
-        let clip = node.object.shape.child_clip().map(|(bounds, _)| bounds);
+        let clip = node.object.shape.child_clip().map(|(bounds, _, _)| bounds);
         for child in &node.children {
             if let Some(bounds) = self.local_bounds_inner(child)? {
                 let bounds = self.nodes[child].object.transform.transform_bounds(bounds);
@@ -482,8 +497,9 @@ impl Scene {
                 hit_enabled,
             });
             let mut child_clips = clips;
-            if let Some((local_bounds, corner_radius)) = object.shape.child_clip() {
+            if let Some((local_bounds, corner_radius, corner_radii)) = object.shape.child_clip() {
                 child_clips.push(ClipRegion {
+                    corner_radii,
                     local_bounds,
                     corner_radius,
                     world_transform,

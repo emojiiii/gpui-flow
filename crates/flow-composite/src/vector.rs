@@ -96,12 +96,24 @@ pub(crate) fn path(shape: &Shape) -> Result<Option<Path>, CompositeError> {
         Shape::Rect(rect) if rect.corner_radii.is_some() => {
             Some(rect.to_path().map_err(CompositeError::InvalidGeometry)?)
         }
+        Shape::Box(container) if container.corner_radii.is_some() => Some(
+            container
+                .to_path()
+                .map_err(CompositeError::InvalidGeometry)?,
+        ),
+        Shape::Frame(container) if container.corner_radii.is_some() => Some(
+            container
+                .to_path()
+                .map_err(CompositeError::InvalidGeometry)?,
+        ),
         _ => None,
     };
     let commands = match shape {
         Shape::Path(p) => Some(&p.commands),
         Shape::Pen(p) => Some(&p.path.commands),
-        Shape::Ellipse(_) | Shape::Rect(_) => geometry_path.as_ref().map(|p| &p.commands),
+        Shape::Ellipse(_) | Shape::Rect(_) | Shape::Box(_) | Shape::Frame(_) => {
+            geometry_path.as_ref().map(|p| &p.commands)
+        }
         _ => None,
     };
     if let Some(commands) = commands {
@@ -395,14 +407,16 @@ impl Preparation {
             }
         }
         let own_bounds = self.bounds.take();
-        let child_clip = object
-            .shape
-            .child_clip()
-            .map(|(local_bounds, corner_radius)| ClipRegion {
-                local_bounds,
-                corner_radius,
-                world_transform: source.world_transform,
-            });
+        let child_clip =
+            object
+                .shape
+                .child_clip()
+                .map(|(local_bounds, corner_radius, corner_radii)| ClipRegion {
+                    corner_radii,
+                    local_bounds,
+                    corner_radius,
+                    world_transform: source.world_transform,
+                });
         let children = source
             .children
             .iter()
