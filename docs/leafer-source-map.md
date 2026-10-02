@@ -26,6 +26,7 @@ Status: historical source research plus a separately labelled current source map
 - 编辑旋转增量：[中心旋转手柄](rotation-handles.md)用于单选/多选vector子树，沿用共享root/capture/batch/history，默认45°可配置Shift吸附；Text/Image/Custom子树整体隐藏并拒绝，未扩大native变换能力
 - 直线端点增量：[单选Line真实端点编辑](line-endpoints.md)沿用现有outer/capture/history，保持对端和变换不动；水平/垂直及可逆仿射支持，Path/曲线排除；21项新回归、263项受影响/98项UI及有界Linux原生验收通过
 - Path/Pen数据增量：[规范化SVG导出与原子数据编辑](path-data.md)，有类型属性key、保留Path/Pen身份、dirty/bounds/hit及历史；23项新回归与四个headless crate共311项测试通过，1项原有忽略；未新增通用控制点编辑工具或宣称Leafer完整编辑器对齐
+- Motion-path查询增量：[局部弧长/距离/切线和世界点查询](motion-path-queries.md)复用Kurbo；Path/Pen、退化与尖点、仿射父级及新查询失效边界已有17项回归。自动跟随/动画绑定/路径生长/文字路径仍缺，不把只读查询等同完整插件
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
 ## 九类能力当前边界（含待验证源码增量）

@@ -333,6 +333,47 @@ impl SceneEngine {
         let changes = self.transaction(|scene| scene.insert(object, parent, index))?;
         Ok((self.handle(&id).expect("created"), changes))
     }
+    /// A fresh immutable local-distance measurement of an attached Path/Pen.
+    /// Retained snapshots do not track edits; query again for current geometry.
+    pub fn measure_path(
+        &self,
+        handle: ElementHandle,
+    ) -> Result<gpui_flow_scene::display::PathMeasure, EngineError> {
+        self.attached_id(handle)?;
+        let path = match &self.object(handle)?.shape {
+            Shape::Path(path) => path,
+            Shape::Pen(pen) => &pen.path,
+            _ => {
+                return Err(EngineError::Property(
+                    "motion path requires a Path or Pen".into(),
+                ));
+            }
+        };
+        path.measure().map_err(EngineError::Property)
+    }
+    /// Total path length in the element's local coordinates, excluding moves.
+    pub fn motion_total(&self, handle: ElementHandle) -> Result<f64, EngineError> {
+        Ok(self.measure_path(handle)?.total_length())
+    }
+    /// Sample a local-space arc distance, returning world position and tangent
+    /// through the current committed ancestor transforms. Distance is not world
+    /// arc length under scaling. This read-only query never moves another object.
+    pub fn motion_point(
+        &self,
+        handle: ElementHandle,
+        distance: f64,
+    ) -> Result<Option<gpui_flow_scene::display::PathSample>, EngineError> {
+        let id = self.attached_id(handle)?;
+        self.measure_path(handle)?
+            .sample(distance)
+            .map_err(EngineError::Property)?
+            .map(|point| {
+                point
+                    .transformed(self.world_transform(&id)?)
+                    .map_err(EngineError::Property)
+            })
+            .transpose()
+    }
     /// Atomically replace local Path/Pen geometry while retaining kind, identity,
     /// transforms and style. Invalid/oversized data leaves the engine unchanged.
     pub fn set_path_data(

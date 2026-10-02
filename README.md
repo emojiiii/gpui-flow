@@ -32,6 +32,8 @@ Group/Box/Frame外阴影使用完整子树alpha，包含子阴影、mask结果�
 
 新增[有界 Path/Pen 数据接口](docs/path-data.md)：`Path::to_svg()` 规范化导出 M/L/Q/C/Z，`PropertyKey::PathData` 与 engine/editor `set_path_data` 原子更新几何、bounds/hit/damage 和撤销历史，保留元素类型及其余属性。新23项回归、四个受影响headless crate共311项测试及严格Clippy通过；1项原有径向栅格性能测量忽略。此次未重跑完整workspace/native UI，不包含通用路径控制点工具。
 
+新增[有界 motion-path 查询](docs/motion-path-queries.md)：复用已锁定Kurbo测量真实曲线弧长、反解距离及切线，Path/Pen可查询局部距离对应的世界点和方向，支持父级仿射变换与修改后的新查询。17项新回归、四个headless crate共328项测试及严格Clippy通过；未实现自动跟随、路径生长或文字沿路径，也没有新增原生UI。
+
 ## 架构层次
 
 1. **display / scene**：Rect、Ellipse、Line、Polygon、Star、Path、Pen、Text、Image、Group、Box、Frame 独立文件；统一 identity、style、affine transform、层级、命中、事件、JSON
