@@ -7,6 +7,14 @@ use gpui_flow_interaction::{CanvasEvent, DispatchReport, scene::RoutedReport};
 #[derive(Debug, Clone, PartialEq)]
 pub enum SceneInputOperation {
     Canvas(CanvasEvent),
+    /// Wheel target picked from the current rendered geometry/source alpha.
+    /// Explicit None is background and must not fall back to canonical picking.
+    PickedWheel {
+        position: WorldPoint,
+        delta: WorldPoint,
+        modifiers: gpui_flow_interaction::Modifiers,
+        target: Option<DisplayId>,
+    },
     Focus(DisplayId),
     ClearFocus,
     /// GPUI declined native focus, so no logical input operation was performed.

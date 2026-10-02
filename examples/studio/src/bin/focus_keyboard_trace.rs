@@ -141,6 +141,29 @@ impl Mirror {
                 self.router
                     .dispatch(&mut self.editor, &mut self.host, event.clone())
             }
+            SceneInputOperation::PickedWheel {
+                position,
+                delta,
+                modifiers,
+                target,
+            } => {
+                let handle = target.as_ref().map(|id| {
+                    self.editor
+                        .engine
+                        .handle(id)
+                        .expect("trace target belongs to mirror document")
+                });
+                self.router
+                    .dispatch_picked_wheel(
+                        &mut self.editor,
+                        &mut self.host,
+                        *position,
+                        *delta,
+                        *modifiers,
+                        handle,
+                    )
+                    .expect("live mirror wheel target")
+            }
             SceneInputOperation::Focus(id) => {
                 let handle = self.editor.engine.handle(id).unwrap();
                 self.router
@@ -176,6 +199,14 @@ fn operation_value(operation: &SceneInputOperation) -> Value {
         })
     };
     match operation {
+        SceneInputOperation::PickedWheel {
+            position,
+            delta,
+            modifiers: value,
+            target,
+        } => {
+            json!({"kind":"PickedWheel", "position":position, "delta":delta, "modifiers":modifiers(*value), "target":target})
+        }
         SceneInputOperation::Focus(target) => json!({"kind":"Focus", "target":target}),
         SceneInputOperation::ClearFocus => json!({"kind":"ClearFocus"}),
         SceneInputOperation::FocusDeclined(target) => {
@@ -483,6 +514,25 @@ mod tests {
         wrong = b.clone();
         wrong.events[0].related_target = Some("b".into());
         assert_ne!(trace_value(&a), trace_value(&wrong));
+    }
+    #[test]
+    fn picked_wheel_trace_preserves_explicit_target_and_background() {
+        let mut mirror = Mirror::new();
+        let operation = |target| SceneInputOperation::PickedWheel {
+            position: gpui_flow::scene::Point::new(1000., 1000.),
+            delta: gpui_flow::scene::Point::new(0., 12.),
+            modifiers: Modifiers::default(),
+            target,
+        };
+        let target = mirror.replay(operation(Some("a".into())));
+        assert!(
+            target.events.iter().any(|e| e.kind == EventKind::Wheel
+                && e.target == gpui_flow::scene::DisplayId::from("a"))
+        );
+        let background = mirror.replay(operation(None));
+        assert!(background.events.is_empty());
+        assert_eq!(operation_value(&target.operation)["target"], "a");
+        assert!(operation_value(&background.operation)["target"].is_null());
     }
     #[test]
     fn fixture_exercises_cancellation_redirect_and_dead_generation() {

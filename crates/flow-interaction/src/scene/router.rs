@@ -4,7 +4,7 @@ mod focus;
 use super::{ScenePluginHost, action_queue::SceneAction};
 use crate::{CanvasEvent, DispatchReport, HitTarget, KeyCode, PointerButton};
 use gpui_flow_editor::SceneEditor;
-use gpui_flow_engine::{ElementHandle, InstanceState, SceneEngine};
+use gpui_flow_engine::{ElementHandle, EngineError, InstanceState, SceneEngine};
 use gpui_flow_scene::{
     DisplayId, EventInput, EventKind, InputModifiers, Point, PointerDevice, SceneEvent,
 };
@@ -134,13 +134,49 @@ impl SceneEventRouter {
         event: CanvasEvent,
     ) -> RoutedReport {
         self.actions.begin_operation();
-        self.dispatch_with_budget(editor, host, event, &mut 256)
+        self.dispatch_with_budget(editor, host, event, None, &mut 256)
+    }
+    /// Dispatch a wheel event using an adapter's already-resolved presentation
+    /// hit. `None` explicitly means background; it never triggers a canonical
+    /// repick. An active press still owns the event, as in ordinary dispatch.
+    ///
+    /// A supplied handle must belong to this engine and be currently attached.
+    /// Invalid handles fail before changing input, editor or queued-action state.
+    /// This is synchronous trusted-host input, not a deferred mount token.
+    pub fn dispatch_picked_wheel(
+        &mut self,
+        editor: &mut SceneEditor,
+        host: &mut ScenePluginHost,
+        position: Point,
+        delta: Point,
+        modifiers: crate::Modifiers,
+        target: Option<ElementHandle>,
+    ) -> Result<RoutedReport, EngineError> {
+        if let Some(target) = target {
+            editor.engine.object(target)?;
+            if editor.engine.instance(target)?.state != InstanceState::Attached {
+                return Err(EngineError::DetachedHandle);
+            }
+        }
+        self.actions.begin_operation();
+        Ok(self.dispatch_with_budget(
+            editor,
+            host,
+            CanvasEvent::Wheel {
+                position,
+                delta,
+                modifiers,
+            },
+            Some(target),
+            &mut 256,
+        ))
     }
     fn dispatch_with_budget(
         &mut self,
         editor: &mut SceneEditor,
         host: &mut ScenePluginHost,
         mut event: CanvasEvent,
+        wheel_target: Option<Option<ElementHandle>>,
         action_budget: &mut usize,
     ) -> RoutedReport {
         let mut out = RoutedReport::default();
@@ -214,18 +250,20 @@ impl SceneEventRouter {
         }
         if let CanvasEvent::Wheel { position, .. } = &event {
             self.position = *position;
-            hit = editor
-                .engine
-                .hit_test(
-                    editor.viewport.screen_to_world(*position),
-                    gpui_flow_scene::HitTestOptions {
-                        include_locked: true,
-                        ..Default::default()
-                    },
-                )
-                .ok()
-                .flatten()
-                .and_then(|h| editor.engine.handle(&h.id));
+            hit = wheel_target.unwrap_or_else(|| {
+                editor
+                    .engine
+                    .hit_test(
+                        editor.viewport.screen_to_world(*position),
+                        gpui_flow_scene::HitTestOptions {
+                            include_locked: true,
+                            ..Default::default()
+                        },
+                    )
+                    .ok()
+                    .flatten()
+                    .and_then(|h| editor.engine.handle(&h.id))
+            });
         }
         let input = metadata(&event, repeat);
         if matches!(
@@ -277,8 +315,13 @@ impl SceneEventRouter {
             self.hover_epoch = Self::epoch(&editor.engine, hit);
         }
         if matches!(event, CanvasEvent::PointerDown(_)) && self.pressed.is_some() {
-            let cancelled =
-                self.dispatch_with_budget(editor, host, CanvasEvent::PointerCancel, action_budget);
+            let cancelled = self.dispatch_with_budget(
+                editor,
+                host,
+                CanvasEvent::PointerCancel,
+                None,
+                action_budget,
+            );
             out.focus_requested |= cancelled.focus_requested;
             out.events.extend(cancelled.events);
             out.errors.extend(cancelled.errors);

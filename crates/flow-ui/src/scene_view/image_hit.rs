@@ -66,6 +66,18 @@ impl ImageHitPolicies {
         world: Point,
         options: HitTestOptions,
     ) -> Result<Option<HitTestResult>, EngineError> {
+        self.hit_test_with_geometry(engine, engine, resources, world, options)
+    }
+    /// Resource identity stays canonical while geometry follows the accepted
+    /// presentation snapshot. A snapshot never owns resource tickets or policies.
+    pub(crate) fn hit_test_with_geometry(
+        &self,
+        engine: &SceneEngine,
+        geometry: &SceneEngine,
+        resources: Option<&SceneResourceAdapter>,
+        world: Point,
+        options: HitTestOptions,
+    ) -> Result<Option<HitTestResult>, EngineError> {
         // Resolve each current resource observation once. Only valid decoded
         // samples may bypass metadata's fit geometry; unavailable resources keep
         // exactly the ordinary engine candidate and Geometry fallback behavior.
@@ -78,20 +90,30 @@ impl ImageHitPolicies {
             let Ok(object) = engine.object(*handle) else {
                 continue;
             };
-            let Shape::Image(image) = &object.shape else {
+            let Shape::Image(canonical_image) = &object.shape else {
+                continue;
+            };
+            let Some(presented) = geometry.scene().get(&object.id) else {
+                continue;
+            };
+            let Shape::Image(image) = &presented.object.shape else {
                 continue;
             };
             let sample = resources.map_or(AlphaSample::Failed, |resources| {
                 // This observation validates handle, attachment, source revision,
                 // authorization, generation and the shared playback frame index.
-                let observation = resources.composite_image(engine, &object.id, &image.source);
+                if image.source != canonical_image.source {
+                    return AlphaSample::Failed;
+                }
+                let observation =
+                    resources.composite_image(engine, &object.id, &canonical_image.source);
                 match observation.image {
                     Ok(frame) => {
                         let size = frame.size(observation.frame_index);
                         let alpha = frame.as_bytes(observation.frame_index).and_then(|bytes| {
                             sample_alpha(
                                 image,
-                                engine.world_to_local(&object.id, world).ok()?,
+                                geometry.world_to_local(&object.id, world).ok()?,
                                 size.width.0.try_into().ok()?,
                                 size.height.0.try_into().ok()?,
                                 bytes,
@@ -110,14 +132,14 @@ impl ImageHitPolicies {
             }
             samples.insert(object.id.clone(), (policy, sample));
         }
-        Ok(engine
+        Ok(geometry
             .hit_test_all_with_image_candidates(world, options, &decoded_ids)?
             .into_iter()
             .find(|hit| {
                 let Some((policy, sample)) = samples.get(&hit.id) else {
                     return true;
                 };
-                let Some(node) = engine.scene().get(&hit.id) else {
+                let Some(node) = geometry.scene().get(&hit.id) else {
                     return false;
                 };
                 let Shape::Image(image) = &node.object.shape else {

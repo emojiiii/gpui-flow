@@ -1,11 +1,17 @@
-//! Paint-only state overlays and fixed-box text placeholders. The canonical
-//! document, caches, and edit history are never overwritten by presentation.
+//! Non-mutating state presentation with explicit geometry and paint channels.
+//! Canonical documents, caches and edit history are never overwritten.
 mod named;
 pub use named::*;
+pub(super) mod geometry;
+pub use geometry::{StateGeometry, StateGeometryStyles};
+pub(super) mod timing;
+pub use timing::{StateKey, StateTransitionOverrides};
 
 use super::{SceneEventRouter, StateTransitions, state_transition::TransitionFrame};
 use gpui_flow_editor::SceneEditor;
-use gpui_flow_engine::{ElementHandle, EngineError, InstanceState, SceneEngine};
+use gpui_flow_engine::{
+    ChangeOrigin, ElementHandle, EngineError, InstanceState, PropertyKey, SceneEngine,
+};
 use gpui_flow_scene::{Color, DisplayObject, Scene, SceneError, Shape, Style};
 use std::{borrow::Cow, collections::BTreeMap, time::Duration};
 
@@ -147,6 +153,9 @@ impl std::fmt::Display for StateStyleError {
 impl std::error::Error for StateStyleError {}
 struct Binding {
     styles: StateStyles,
+    geometry: StateGeometryStyles,
+    named_geometry: BTreeMap<String, StateGeometry>,
+    state_transitions: BTreeMap<StateKey, StateTransitionOverrides>,
     disabled: bool,
     transitions: StateTransitions,
     frame: Option<TransitionFrame>,
@@ -163,6 +172,7 @@ pub struct SceneStateStyles {
     engine: u64,
     bindings: BTreeMap<ElementHandle, Binding>,
     time: Duration,
+    geometry_presentation: Option<geometry::GeometryPresentation>,
 }
 impl SceneStateStyles {
     pub fn new(engine: &SceneEngine) -> Self {
@@ -170,6 +180,7 @@ impl SceneStateStyles {
             engine: engine.engine_id(),
             bindings: BTreeMap::new(),
             time: Duration::ZERO,
+            geometry_presentation: None,
         }
     }
     fn check(&self, engine: &SceneEngine) -> Result<(), StateStyleError> {
@@ -187,9 +198,14 @@ impl SceneStateStyles {
     }
     pub fn clear(&mut self) {
         self.bindings.clear();
+        self.geometry_presentation = None;
     }
     pub fn unbind(&mut self, handle: ElementHandle) -> bool {
-        self.bindings.remove(&handle).is_some()
+        let removed = self.bindings.remove(&handle).is_some();
+        if removed {
+            self.geometry_presentation = None;
+        }
+        removed
     }
     pub fn prune(&mut self, engine: &SceneEngine) -> Result<usize, StateStyleError> {
         self.check(engine)?;
@@ -226,6 +242,9 @@ impl SceneStateStyles {
                 handle,
                 Binding {
                     styles,
+                    geometry: StateGeometryStyles::default(),
+                    named_geometry: BTreeMap::new(),
+                    state_transitions: BTreeMap::new(),
                     disabled: false,
                     transitions: StateTransitions::default(),
                     frame: None,
@@ -301,13 +320,25 @@ impl SceneStateStyles {
     ) -> Result<Cow<'a, Scene>, StateStyleError> {
         self.presentation_at(editor, router, self.time)
     }
-    /// Resolve against the current canonical style at a monotonic host time.
-    /// Entry/exit retarget from the interpolated display value. A canonical fill
-    /// or opacity edit cancels motion on that channel; the current state patch
-    /// still takes precedence. Only active fixed-box placeholder content may
-    /// replace canonical text in the returned copy; geometry stays canonical.
-    /// Invalid presentation leaves the accepted clock and all motion unchanged.
+    /// Resolve at a monotonic host time. Numeric geometry and paint retarget from
+    /// the current sample. Installed reactive layout derives the complete scene;
+    /// layout-overwritten state geometry is rejected, never silently ignored.
+    /// Placeholder text is substituted only after layout. The accepted geometry
+    /// engine and paint frame share the same layout, but picking retains canonical
+    /// paint/opacity. Errors preserve clock/motion and retire stale picking data.
     pub fn presentation_at<'a>(
+        &mut self,
+        editor: &'a SceneEditor,
+        router: &SceneEventRouter,
+        now: Duration,
+    ) -> Result<Cow<'a, Scene>, StateStyleError> {
+        let result = self.prepare_presentation_at(editor, router, now);
+        if result.is_err() {
+            self.geometry_presentation = None;
+        }
+        result
+    }
+    fn prepare_presentation_at<'a>(
         &mut self,
         editor: &'a SceneEditor,
         router: &SceneEventRouter,
@@ -318,8 +349,10 @@ impl SceneStateStyles {
             return Err(StateStyleError::TimeWentBackwards);
         }
         self.prune(&editor.engine)?;
-        let mut scene = Cow::Borrowed(editor.scene());
         let mut frames = Vec::with_capacity(self.bindings.len());
+        let mut paints = Vec::new();
+        let mut geometry = Vec::new();
+        let mut endpoint_geometry = Vec::new();
         for (handle, binding) in &self.bindings {
             let info = editor.engine.instance(*handle)?;
             if info.state != InstanceState::Attached {
@@ -332,13 +365,23 @@ impl SceneStateStyles {
                 .named
                 .as_ref()
                 .and_then(|name| binding.named.get(name));
+            let named_geometry = state
+                .named
+                .as_ref()
+                .and_then(|name| binding.named_geometry.get(name));
             let placeholder = binding.placeholder.as_ref().filter(|_| state.placeholder);
-            let target = binding.styles.resolve_layers(
+            let mut target = object.clone();
+            target.style = binding.styles.resolve_layers(
                 &object.style,
                 state.visual,
                 named,
                 placeholder.map(|p| &p.paint),
             );
+            binding
+                .geometry
+                .resolve(state.visual, named_geometry, state.placeholder)
+                .apply(&mut target)?;
+            geometry_properties(*handle, object, &target, &mut endpoint_geometry);
             let source = state.button.and_then(|button| {
                 editor
                     .engine
@@ -350,26 +393,76 @@ impl SceneStateStyles {
                 .frame
                 .clone()
                 .filter(|frame| frame.epoch == info.attachment_epoch && frame.button == source)
-                .unwrap_or_else(|| {
-                    TransitionFrame::new(info.attachment_epoch, source, &object.style)
-                });
-            let next = frame.resolve(&object.style, target, state, binding.transitions, now);
-            if next != object.style || placeholder.is_some() {
-                scene.to_mut().update_object(&info.id, |object| {
-                    object.style = next;
-                    if let (Some(placeholder), Shape::Text(text)) = (placeholder, &mut object.shape)
-                    {
-                        text.content.clone_from(&placeholder.content);
-                    }
-                })?;
+                .unwrap_or_else(|| TransitionFrame::new(info.attachment_epoch, source, object));
+            let next = frame.resolve(
+                object,
+                target,
+                state,
+                binding.transitions,
+                &binding.state_transitions,
+                now,
+            );
+            geometry_properties(*handle, object, &next, &mut geometry);
+            if next.style != object.style || placeholder.is_some() {
+                paints.push((info.id, next.style, placeholder));
             }
             frames.push((*handle, Some(frame)));
         }
+        // Preflight final geometry too: a zero-progress first frame must not hide
+        // an invalid or layout-owned endpoint until the next animation frame.
+        if !endpoint_geometry.is_empty() && endpoint_geometry != geometry {
+            let endpoint = editor
+                .engine
+                .preview_properties_batch_with_origin(ChangeOrigin::Animation, endpoint_geometry)?;
+            validate_canvas_geometry(editor.scene(), &endpoint)?;
+        }
+        let mut scene = if geometry.is_empty() {
+            Cow::Borrowed(editor.scene())
+        } else {
+            Cow::Owned(
+                editor
+                    .engine
+                    .preview_properties_batch_with_origin(ChangeOrigin::Animation, geometry)?,
+            )
+        };
+        validate_canvas_geometry(editor.scene(), &scene)?;
+        let geometry_changed = scene.as_ref() != editor.scene();
+        let new_geometry = if geometry_changed
+            && self
+                .geometry_engine(&editor.engine)
+                .is_none_or(|engine| engine.scene() != scene.as_ref())
+        {
+            Some(geometry::GeometryPresentation {
+                revision: editor.engine.revision(),
+                document_epoch: editor.engine.document_epoch(),
+                layout_provider: editor.engine.layout_provider(),
+                engine: SceneEngine::with_registry(
+                    scene.as_ref().clone(),
+                    editor.engine.registry().clone(),
+                )?,
+            })
+        } else {
+            None
+        };
+        for (id, style, placeholder) in paints {
+            scene.to_mut().update_object(&id, |object| {
+                object.style = style;
+                if let (Some(placeholder), Shape::Text(text)) = (placeholder, &mut object.shape) {
+                    text.content.clone_from(&placeholder.content);
+                }
+            })?;
+        }
+        // The whole frame is valid before any channel/clock/cache is accepted.
         for (handle, frame) in frames {
             self.bindings
                 .get_mut(&handle)
                 .expect("binding exists during presentation")
                 .frame = frame;
+        }
+        if !geometry_changed {
+            self.geometry_presentation = None;
+        } else if new_geometry.is_some() {
+            self.geometry_presentation = new_geometry;
         }
         self.time = now;
         Ok(scene)
@@ -386,4 +479,39 @@ fn validate_paint(object: &DisplayObject, paint: &StatePaint) -> Result<(), Stat
     let mut probe = object.clone();
     paint.apply(&mut probe.style);
     probe.validate().map_err(StateStyleError::InvalidStyle)
+}
+
+fn geometry_properties(
+    handle: ElementHandle,
+    base: &DisplayObject,
+    next: &DisplayObject,
+    properties: &mut Vec<(ElementHandle, PropertyKey, serde_json::Value)>,
+) {
+    if base.transform != next.transform {
+        properties.push((
+            handle,
+            PropertyKey::Transform,
+            serde_json::json!(next.transform),
+        ));
+    }
+    if base.shape != next.shape {
+        properties.push((handle, PropertyKey::Shape, serde_json::json!(next.shape)));
+    }
+}
+
+fn validate_canvas_geometry(base: &Scene, next: &Scene) -> Result<(), StateStyleError> {
+    // Canvas resource tickets require canonical dimensions, even when a layout
+    // provider indirectly changes an unbound Canvas sibling or descendant.
+    for node in next.nodes() {
+        if matches!(node.object.shape, Shape::Canvas(_))
+            && base
+                .get(&node.object.id)
+                .is_some_and(|old| old.object.shape != node.object.shape)
+        {
+            return Err(StateStyleError::InvalidStyle(
+                "state layout cannot resize an owned Canvas surface".into(),
+            ));
+        }
+    }
+    Ok(())
 }

@@ -57,6 +57,11 @@ impl SceneView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Result<(), SceneInteractionError> {
+        if self.is_layer_managed() {
+            return Err(SceneInteractionError::InvalidInput(
+                "Detach this layer before opening a native inner editor".into(),
+            ));
+        }
         if !self.interactions.allows(Capability::Edit) {
             return Err(SceneInteractionError::CapabilityDenied(Capability::Edit));
         }

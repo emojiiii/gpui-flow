@@ -435,6 +435,17 @@ impl SceneEngine {
     ) -> Result<(), EngineError> {
         self.properties_candidate(origin, properties).map(|_| ())
     }
+    /// Pure property preview through the same normalization, installed layout,
+    /// and ownership checks as a real batch. No canonical state, revisions,
+    /// handles, observers, or resources are changed. Definitions/providers must
+    /// obey their existing deterministic, side-effect-free preparation contract.
+    pub fn preview_properties_batch_with_origin(
+        &self,
+        origin: ChangeOrigin,
+        properties: impl IntoIterator<Item = (ElementHandle, PropertyKey, Value)>,
+    ) -> Result<Scene, EngineError> {
+        self.properties_candidate(origin, properties)
+    }
     /// One validated change batch across multiple attached instances, used by
     /// explicit animation/layout controllers. Invalid input changes no instance.
     pub fn set_properties_batch(

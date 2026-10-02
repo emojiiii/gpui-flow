@@ -76,16 +76,19 @@ fn state_render_frame_with_canvas(
         .and_then(|scene| convert(&scene));
     match presented {
         Ok(frame) => (frame, None),
-        Err(error) => match convert(editor.scene()) {
-            Ok(frame) => (frame, Some(error)),
-            Err(fallback) => (
-                StateFrame {
-                    objects: vec![],
-                    units: vec![],
-                },
-                Some(format!("{error}; canonical render: {fallback}")),
-            ),
-        },
+        Err(error) => {
+            styles.invalidate_geometry_presentation();
+            match convert(editor.scene()) {
+                Ok(frame) => (frame, Some(error)),
+                Err(fallback) => (
+                    StateFrame {
+                        objects: vec![],
+                        units: vec![],
+                    },
+                    Some(format!("{error}; canonical render: {fallback}")),
+                ),
+            }
+        }
     }
 }
 #[cfg(test)]
@@ -123,10 +126,13 @@ fn state_render_objects(
 }
 impl Render for SceneView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.layer_reconcile_mode();
         self.reconcile_text_editor(window, cx);
         self.reconcile_image_crop_editor(cx);
-        self.subscribe_input(window, cx);
-        self.sync_requested_focus(window, cx);
+        if !self.is_layer_managed() {
+            self.subscribe_input(window, cx);
+            self.sync_requested_focus(window, cx);
+        }
         if let Some(resources) = &mut self.resources {
             match resources.prepare(&mut self.editor.engine, window, cx) {
                 Ok(events) => {
@@ -167,8 +173,9 @@ impl Render for SceneView {
         });
         let theme = self.theme;
         let viewport = self.editor.viewport;
-        let show_grid = self.show_grid;
-        let owned_canvas = self.compositing_mode == SceneCompositing::OwnedCanvas;
+        let managed_layer = self.is_layer_managed();
+        let show_grid = self.show_grid && !managed_layer;
+        let owned_canvas = !managed_layer && self.compositing_mode == SceneCompositing::OwnedCanvas;
         let entity = cx.entity().downgrade();
         let background = canvas(
             move |bounds, window, cx| {
@@ -397,8 +404,10 @@ impl Render for SceneView {
             .relative()
             .size_full()
             .overflow_hidden()
-            .when(!owned_canvas, |view| view.bg(rgb(theme.background)))
-            .track_focus(&self.focus)
+            .when(!owned_canvas && !managed_layer, |view| {
+                view.bg(rgb(theme.background))
+            })
+            .when(!managed_layer, |view| view.track_focus(&self.focus))
             .child(background);
         let objects = frame
             .objects
@@ -569,51 +578,53 @@ impl Render for SceneView {
         if let Some(panel) = self.text_editor_panel(cx) {
             view = view.child(panel);
         }
-        view.cursor(self.input_cursor())
-            .on_hover(cx.listener(|this, hovered, _, cx| {
-                if !hovered {
-                    this.pointer_leave(cx);
-                }
-            }))
-            .on_mouse_down(MouseButton::Left, cx.listener(Self::down))
-            .on_mouse_down(MouseButton::Middle, cx.listener(Self::down))
-            .on_mouse_down(MouseButton::Right, cx.listener(Self::down))
-            .on_mouse_move(cx.listener(|this, event, _, cx| this.moved(event, cx)))
-            .on_mouse_up(
-                MouseButton::Left,
-                cx.listener(|this, event, _, cx| this.up(event, cx)),
-            )
-            .on_mouse_up_out(
-                MouseButton::Left,
-                cx.listener(|this, _, _, cx| this.cancel_input(cx)),
-            )
-            .on_mouse_up(
-                MouseButton::Middle,
-                cx.listener(|this, event, _, cx| this.up(event, cx)),
-            )
-            .on_mouse_up_out(
-                MouseButton::Middle,
-                cx.listener(|this, _, _, cx| this.cancel_input(cx)),
-            )
-            .on_mouse_up(
-                MouseButton::Right,
-                cx.listener(|this, event, _, cx| this.up(event, cx)),
-            )
-            .on_mouse_up_out(
-                MouseButton::Right,
-                cx.listener(|this, _, _, cx| this.cancel_input(cx)),
-            )
-            .on_scroll_wheel(cx.listener(|this, event, _, cx| this.scroll(event, cx)))
-            .on_key_down(cx.listener(|this, event, window, cx| {
-                if this.focus.is_focused(window) {
-                    this.key(event, cx);
-                }
-            }))
-            .on_key_up(cx.listener(|this, event, window, cx| {
-                if this.focus.is_focused(window) {
-                    this.key_up(event, cx);
-                }
-            }))
+        view.when(!managed_layer, |view| {
+            view.cursor(self.input_cursor())
+                .on_hover(cx.listener(|this, hovered, _, cx| {
+                    if !hovered {
+                        this.pointer_leave(cx);
+                    }
+                }))
+                .on_mouse_down(MouseButton::Left, cx.listener(Self::down))
+                .on_mouse_down(MouseButton::Middle, cx.listener(Self::down))
+                .on_mouse_down(MouseButton::Right, cx.listener(Self::down))
+                .on_mouse_move(cx.listener(|this, event, _, cx| this.moved(event, cx)))
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(|this, event, _, cx| this.up(event, cx)),
+                )
+                .on_mouse_up_out(
+                    MouseButton::Left,
+                    cx.listener(|this, _, _, cx| this.cancel_input(cx)),
+                )
+                .on_mouse_up(
+                    MouseButton::Middle,
+                    cx.listener(|this, event, _, cx| this.up(event, cx)),
+                )
+                .on_mouse_up_out(
+                    MouseButton::Middle,
+                    cx.listener(|this, _, _, cx| this.cancel_input(cx)),
+                )
+                .on_mouse_up(
+                    MouseButton::Right,
+                    cx.listener(|this, event, _, cx| this.up(event, cx)),
+                )
+                .on_mouse_up_out(
+                    MouseButton::Right,
+                    cx.listener(|this, _, _, cx| this.cancel_input(cx)),
+                )
+                .on_scroll_wheel(cx.listener(|this, event, _, cx| this.scroll(event, cx)))
+                .on_key_down(cx.listener(|this, event, window, cx| {
+                    if this.focus.is_focused(window) {
+                        this.key(event, cx);
+                    }
+                }))
+                .on_key_up(cx.listener(|this, event, window, cx| {
+                    if this.focus.is_focused(window) {
+                        this.key_up(event, cx);
+                    }
+                }))
+        })
     }
 }
 

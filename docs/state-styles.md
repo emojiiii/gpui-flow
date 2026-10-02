@@ -1,4 +1,9 @@
-# Paint-only state styles
+# State styles and transitions
+
+Geometry/per-state timing extension: see [state-geometry.md](state-geometry.md) for
+the supported property set, reactive layout, matching paint/hit projection and
+current validation boundary. The historical paint-only contract below is retained
+where it still applies.
 
 Local Linux validation (2026-09-30): headless regressions and workspace/all-targets
 check/strict clippy pass. See [local validation](local-validation-2026-09-30.md)
@@ -63,12 +68,12 @@ same `RenderObject`/custom-renderer pipeline. Without an active patch, rendering
 keeps using the engine's cached paint list. Invalid derived presentation is
 reported by `SceneView.state_style_error` while the canonical scene is drawn.
 
-Picking, editor geometry, bounds caches, fit, and saved documents deliberately use
-the canonical scene. In particular, an opacity-zero overlay does not make its
-interaction target disappear and flicker between hover and non-hover. This
-paint-only policy is explicit; geometry-changing states or state-dependent hit
-areas are not implemented. An active overlay currently copies/validates a scene;
-this is not an incremental or large-scene performance claim.
+Paint-only bindings retain canonical picking. Explicit geometry bindings use the
+accepted geometry projection for hit, bounds and clip queries, while picking
+retains canonical paint/opacity to avoid transparent-state flicker. Editor
+handles, commands, fit and saved documents remain canonical. The supported
+geometry/layout contract is specified in [state-geometry.md](state-geometry.md).
+An active overlay copies/validates a scene; no incremental performance is claimed.
 
 ## Registration and lifetime
 
@@ -97,7 +102,8 @@ An omitted `transition_out` falls back to `transition`; an explicit zero-duratio
 exit snaps. Adding a state uses entry timing, removing states uses exit timing;
 entering/leaving disabled explicitly uses entry/exit. Simultaneous additions and
 removals prefer entry. A new patch on the same active state also uses entry timing.
-This is a declared binding-level subset of Leafer's per-state/element settings.
+Per-state overrides now extend these binding defaults; see
+[state-geometry.md](state-geometry.md) for exact precedence and exit fallback.
 
 - Solid-to-solid RGBA and local opacity interpolate, with exact endpoints and the
   shared animation easing/color rules. Gradient or absent-fill endpoints snap;
@@ -126,7 +132,8 @@ This is a declared binding-level subset of Leafer's per-state/element settings.
 
 The sheet is runtime configuration: bindings, clocks and motion are not serialized
 or part of edit history. State transitions do not acquire an editor PlaybackToken,
-interrupt playback, add Undo steps, or change reactive layout geometry. Hosts
+interrupt playback, or add Undo steps. Explicit geometry states derive a private
+reactive-layout projection while canonical layout remains unchanged. Hosts
 should call `cx.notify()` after changing runtime styles/settings, as for other UI
 configuration. The native state_styles example uses 180ms entry and 320ms exit;
 hover, press, leave or disable midway to exercise continuous retargeting.
@@ -173,9 +180,11 @@ Rust uses a non-mutating presentation layer instead of temporarily assigning
 properties and restoring normalStyle. No upstream implementation was copied.
 Named palettes, fixed-box Text placeholders and bounded parent-button inheritance
 are now source implementations; see [named-states.md](named-states.md).
-Missing: geometry/custom-property state changes, declarative serialization,
-per-state transition overrides, transition delay/repeat, gradient/absent-fill
-interpolation, timeline composition and motion paths.
+Explicit x/y and six built-in size changes plus per-state overrides are now
+implemented in [state-geometry.md](state-geometry.md). Still excluded from state
+styles: arbitrary geometry/custom properties, declarative serialization,
+transition delay/repeat, gradient/absent-fill interpolation, state timeline
+composition and state motion-path binding.
 
 Programmatic and deferred focus now use the same focus style/transition resolution;
 see [focus-routing.md](focus-routing.md). Focus remains distinct from selection.

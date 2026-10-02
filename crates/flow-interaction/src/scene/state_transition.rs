@@ -1,10 +1,15 @@
-use super::ResolvedVisualState;
+use super::state_style::{
+    geometry::{shape_size, shape_size_mut},
+    timing::timing,
+};
+use super::{ResolvedVisualState, StateKey, StateTransitionOverrides};
 use gpui_flow_animation::{Easing, TweenValue};
 use gpui_flow_engine::ElementHandle;
-use gpui_flow_scene::{Paint, Style};
+use gpui_flow_scene::{DisplayObject, Paint};
+use std::collections::BTreeMap;
 use std::time::Duration;
 
-/// A paint-only transition. Zero duration applies the target immediately.
+/// A paint and explicit-geometry transition. Zero duration applies the target immediately.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct StateTransition {
     pub duration_ms: u64,
@@ -25,26 +30,6 @@ impl StateTransition {
 pub struct StateTransitions {
     pub transition: StateTransition,
     pub transition_out: Option<StateTransition>,
-}
-impl StateTransitions {
-    fn choose(self, old: &ResolvedVisualState, new: &ResolvedVisualState) -> StateTransition {
-        let entering = if new.visual.disabled != old.visual.disabled {
-            new.visual.disabled
-        } else {
-            (new.visual.selected && !old.visual.selected)
-                || (new.visual.focus && !old.visual.focus)
-                || (new.visual.hover && !old.visual.hover)
-                || (new.visual.press && !old.visual.press)
-                || (new.placeholder && !old.placeholder)
-                || (new.named.is_some() && new.named != old.named)
-                || new == old // changing an active patch is an entry retarget
-        };
-        if entering {
-            self.transition
-        } else {
-            self.transition_out.unwrap_or(self.transition)
-        }
-    }
 }
 
 trait Value: Clone + PartialEq {
@@ -142,38 +127,83 @@ pub(super) struct TransitionFrame {
     state: ResolvedVisualState,
     fill: Channel<Option<Paint>>,
     opacity: Channel<f32>,
+    x: Channel<f32>,
+    y: Channel<f32>,
+    width: Option<Channel<f32>>,
+    height: Option<Channel<f32>>,
 }
 impl TransitionFrame {
-    pub fn new(epoch: u64, button: Option<(ElementHandle, u64)>, base: &Style) -> Self {
+    pub fn new(epoch: u64, button: Option<(ElementHandle, u64)>, base: &DisplayObject) -> Self {
         Self {
             epoch,
             button,
             state: ResolvedVisualState::default(),
-            fill: Channel::new(base.fill.clone()),
-            opacity: Channel::new(base.opacity),
+            fill: Channel::new(base.style.fill.clone()),
+            opacity: Channel::new(base.style.opacity),
+            x: Channel::new(base.transform.tx),
+            y: Channel::new(base.transform.ty),
+            width: shape_size(&base.shape).map(|s| Channel::new(s.width)),
+            height: shape_size(&base.shape).map(|s| Channel::new(s.height)),
         }
     }
     pub fn resolve(
         &mut self,
-        base: &Style,
-        mut target: Style,
+        base: &DisplayObject,
+        mut target: DisplayObject,
         state: ResolvedVisualState,
         transitions: StateTransitions,
+        overrides: &BTreeMap<StateKey, StateTransitionOverrides>,
         now: Duration,
-    ) -> Style {
-        let spec = transitions.choose(&self.state, &state);
-        target.fill = self.fill.update(&base.fill, target.fill, spec, now);
-        target.opacity = self
-            .opacity
-            .update(&base.opacity, target.opacity, spec, now);
+    ) -> DisplayObject {
+        let spec = timing(&self.state, &state, transitions, overrides);
+        target.style.fill = self
+            .fill
+            .update(&base.style.fill, target.style.fill, spec, now);
+        target.style.opacity =
+            self.opacity
+                .update(&base.style.opacity, target.style.opacity, spec, now);
+        target.transform.tx = self
+            .x
+            .update(&base.transform.tx, target.transform.tx, spec, now);
+        target.transform.ty = self
+            .y
+            .update(&base.transform.ty, target.transform.ty, spec, now);
+        if let (Some(base_size), Some(size)) =
+            (shape_size(&base.shape), shape_size_mut(&mut target.shape))
+        {
+            size.width = self
+                .width
+                .get_or_insert_with(|| Channel::new(base_size.width))
+                .update(&base_size.width, size.width, spec, now);
+            size.height = self
+                .height
+                .get_or_insert_with(|| Channel::new(base_size.height))
+                .update(&base_size.height, size.height, spec, now);
+        } else {
+            self.width = None;
+            self.height = None;
+        }
         self.state = state;
         target
     }
     pub fn active(&self) -> bool {
-        self.fill.active || self.opacity.active
+        self.fill.active
+            || self.opacity.active
+            || self.x.active
+            || self.y.active
+            || self.width.as_ref().is_some_and(|c| c.active)
+            || self.height.as_ref().is_some_and(|c| c.active)
     }
     pub fn finish(&mut self) {
         self.fill.active = false;
         self.opacity.active = false;
+        self.x.active = false;
+        self.y.active = false;
+        if let Some(c) = &mut self.width {
+            c.active = false;
+        }
+        if let Some(c) = &mut self.height {
+            c.active = false;
+        }
     }
 }

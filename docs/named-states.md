@@ -1,5 +1,9 @@
 # Named states, text placeholders and button inheritance
 
+The explicit geometry/per-state timing extension is documented in
+[state-geometry.md](state-geometry.md). Existing paint API layouts remain intact;
+names may now be defined by paint, geometry, or both.
+
 ## Status and reuse boundary
 
 This is a source implementation of the retained-scene state slice. It adds real
@@ -78,7 +82,7 @@ package dependency or serialized document field.
 
 ### Missing names, replacement and clearing
 
-Explicitly selecting an undefined local name returns `MissingState(name)` and
+Explicitly selecting a name undefined in both local palettes returns `MissingState(name)` and
 leaves the previous selection and motion intact. This intentionally makes the
 host API stricter than Leafer's permissive arbitrary `state` assignment. An
 inherited name without a matching child palette entry simply contributes no
@@ -169,44 +173,25 @@ channel, using the existing transition implementation. Presentation still stages
 all candidate frames and commits the accepted clock/motion only after every
 Scene update succeeds. Failed validation does not partially advance another
 binding or write canonical state. Detached/dead binding pruning remains existing
-lifecycle cleanup. `finish_transitions` snaps paint motion; unbind/clear releases
+lifecycle cleanup. `finish_transitions` snaps paint and explicit geometry motion; unbind/clear releases
 the overlay.
 
-## Remaining Leafer gaps and explicit geometry proposal
+## Geometry extension and remaining gaps
 
-Implemented here: solid fill/opacity named state, state selection/clear, useful
-fixed-box Text placeholder content+style, two-level parent-button state policy,
-existing binding-level transitions, live input/epoch integration and no-history
-presentation.
+The original paint/named/placeholder/button contract is now extended by
+[state-geometry.md](state-geometry.md): explicit local x/y and six built-in box
+size fields, per-state transition overrides, existing typed-property and layout
+preview, and a shared geometry projection for cached hit and painting. The
+extension preserves this module's registration and lifecycle behavior.
 
-Not implemented here: arbitrary `IStateStyle` geometry/transforms/font-size,
-placeholder-driven intrinsic measurement, nested state-style definitions,
-per-state timing overrides, state-triggered animations, gradients/layered-paint
-interpolation, fill-to-None interpolation or state-driven hit/layout geometry.
-The canonical JSON schema still does not serialize runtime state registrations.
-
-An engine-backed arbitrary-state implementation should be a separate,
-explicitly reviewed interface, not fields silently ignored by this adapter:
-
-1. Add a validated `PresentationPatch`/`PresentationSnapshot` facility to the
-   engine, keyed by live handle, attachment epoch, canonical revision and overlay
-   revision. Patches must declare affected properties and ownership and use the
-   same property validation as canonical edits, without committing editor history.
-2. Derive transforms, bounds, clips, opacity, layout/text measurement and spatial
-   queries from that snapshot. Rendering and picking must consume a declared
-   common snapshot or an explicitly chosen canonical-hit mode; do not mix a
-   deformed rendering with silently stale caches.
-3. Introduce a layout/text-provider overlay path for font/content/size changes.
-   Reuse the existing numerical/layout and shaping backends. Validate the complete
-   derived candidate before publishing it; failures keep the last valid snapshot.
-4. Preserve animation/property-channel ownership and canonical cancellation rules,
-   and never write overlay fields back to history baselines or playback snapshots.
-5. Coordinate host hit-testing, native focus, resource identity, damage bounds and
-   invalidation. Specify how an active pointer capture responds when its geometry
-   changes. Prove generation/epoch checks and atomic rollback across these layers.
-
-This requires engine/layout/UI interfaces outside this slice's ownership. The
-proposal is documentation, not an implemented engine API.
+Still excluded: arbitrary `IStateStyle` geometry and transform decomposition,
+font-size states, placeholder-driven intrinsic measurement, nested state-style
+definitions, state-triggered animation timelines, gradient/layered-paint or
+fill-to-None interpolation. Canvas state sizes are rejected because resources
+remain canonical. Runtime registrations are not serialized into scene JSON.
+Editor affordances, mutations and exports remain canonical; this does not add
+state-aware edit handles. See the new document for failure/cache policy and the
+exact finite property and timing contracts.
 
 ## Regression sources
 

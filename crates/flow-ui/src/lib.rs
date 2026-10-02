@@ -46,3 +46,7 @@ pub mod resources;
 
 /// Bounded CPU vector domains used by SceneView.
 pub use gpui_flow_composite as composite;
+
+/// Overlapping retained-scene layers with one native input owner.
+pub mod layered_app;
+pub use layered_app::{LayerId, LayerOptions, LayeredApp, LayeredAppError, LayeredAppEvent};

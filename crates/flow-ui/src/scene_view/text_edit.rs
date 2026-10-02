@@ -62,6 +62,11 @@ impl SceneView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Result<TextSessionToken, SceneInteractionError> {
+        if self.is_layer_managed() {
+            return Err(SceneInteractionError::InvalidInput(
+                "Detach this layer before opening a native inner editor".into(),
+            ));
+        }
         self.close_image_crop_editor(cx);
         self.reconcile_text_editor(window, cx);
         // Same-session activation never resets text selection or local history.

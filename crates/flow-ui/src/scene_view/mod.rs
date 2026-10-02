@@ -6,9 +6,10 @@ mod flow_layout;
 pub use flow_layout::FlowFrameEvent;
 mod input_trace;
 mod interaction;
+mod layer_host;
 pub use input_trace::*;
-pub(crate) mod image_hit;
 mod image_crop;
+pub(crate) mod image_hit;
 mod plugins;
 mod render;
 mod text_edit;
@@ -70,6 +71,7 @@ pub struct SceneView {
     pub state_styles: gpui_flow_interaction::scene::SceneStateStyles,
     pub state_style_error: Option<String>,
     state_clock: std::time::Instant,
+    layer_host: layer_host::LayerHostState,
     focus: FocusHandle,
     pending_native_focus: bool,
     input_tracing: bool,
@@ -129,6 +131,7 @@ impl SceneView {
             state_styles,
             state_style_error: None,
             state_clock: std::time::Instant::now(),
+            layer_host: Default::default(),
             focus: cx.focus_handle(),
             pending_native_focus: false,
             input_tracing: false,
@@ -329,20 +332,24 @@ impl SceneView {
         WorldPoint::new(p.x.into(), p.y.into()) - self.origin
     }
     fn hit(&self, p: WorldPoint) -> Option<DisplayId> {
-        self.image_alpha_hits
-            .hit_test(
+        let options = HitTestOptions {
+            tolerance: 4. / self.editor.viewport.zoom,
+            include_locked: true,
+            ..Default::default()
+        };
+        let hit = if let Some(geometry) = self.state_styles.geometry_engine(&self.editor.engine) {
+            self.image_alpha_hits.hit_test_with_geometry(
                 &self.editor.engine,
+                geometry,
                 self.resources.as_ref(),
                 p,
-                HitTestOptions {
-                    tolerance: 4. / self.editor.viewport.zoom,
-                    include_locked: true,
-                    ..Default::default()
-                },
+                options,
             )
-            .ok()
-            .flatten()
-            .map(|hit| hit.id)
+        } else {
+            self.image_alpha_hits
+                .hit_test(&self.editor.engine, self.resources.as_ref(), p, options)
+        };
+        hit.ok().flatten().map(|hit| hit.id)
     }
     fn line_handles(
         &self,

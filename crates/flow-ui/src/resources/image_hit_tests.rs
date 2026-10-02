@@ -522,3 +522,94 @@ fn image_alpha_crop_unavailable_geometry_fallback_never_expands_metadata_bounds(
         }
     }
 }
+
+#[test]
+fn state_geometry_alpha_uses_presented_coordinates_and_canonical_resource_identity() {
+    let mut source = scene();
+    source
+        .update_object(&"back".into(), |o| {
+            o.shape = display::Rect::new(400., 100.).into()
+        })
+        .unwrap();
+    source
+        .update_object(&"image".into(), |o| {
+            if let Shape::Image(image) = &mut o.shape {
+                image.fit = display::ImageFit::Fill;
+            }
+        })
+        .unwrap();
+    let (mut canonical, mut resources, mut policies) = setup(source);
+    install(&mut policies, &canonical, strict());
+    load(
+        &mut canonical,
+        &mut resources,
+        vec![image::Frame::new(image::RgbaImage::from_fn(
+            2,
+            2,
+            |x, _| image::Rgba([10, 20, 30, if x == 0 { 255 } else { 0 }]),
+        ))],
+    );
+    let before = canonical.scene().to_json().unwrap();
+    let revision = canonical.revision();
+    let mut presented = canonical.scene().clone();
+    presented
+        .update_object(&"image".into(), |o| {
+            o.transform = Affine::translation(120., 0.);
+            if let Shape::Image(image) = &mut o.shape {
+                image.size.width = 200.;
+            }
+        })
+        .unwrap();
+    let geometry = SceneEngine::new(presented).unwrap();
+    let query = |canonical: &SceneEngine, x| {
+        policies
+            .hit_test_with_geometry(
+                canonical,
+                &geometry,
+                Some(&resources),
+                Point::new(x, 50.),
+                HitTestOptions::default(),
+            )
+            .unwrap()
+            .unwrap()
+            .id
+    };
+    assert_eq!(query(&canonical, 150.), DisplayId::from("image"));
+    assert_eq!(query(&canonical, 270.), DisplayId::from("back"));
+    assert_eq!(query(&canonical, 20.), DisplayId::from("back"));
+    assert_eq!(canonical.revision(), revision);
+    assert_eq!(canonical.scene().to_json().unwrap(), before);
+    // A changed source cannot sample the still-retained old loaded frame.
+    change_source(&mut canonical, "b.png");
+    assert_eq!(query(&canonical, 150.), DisplayId::from("back"));
+}
+
+#[test]
+fn state_geometry_without_alpha_policy_uses_existing_presented_engine_hits() {
+    let (canonical, resources, policies) = setup(scene());
+    let mut presented = canonical.scene().clone();
+    presented
+        .update_object(&"image".into(), |o| {
+            o.transform = Affine::translation(120., 0.)
+        })
+        .unwrap();
+    let geometry = SceneEngine::new(presented).unwrap();
+    let hit = policies
+        .hit_test_with_geometry(
+            &canonical,
+            &geometry,
+            Some(&resources),
+            Point::new(150., 50.),
+            HitTestOptions::default(),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(hit.id, DisplayId::from("image"));
+    assert_eq!(hit.local_point, Point::new(30., 50.));
+    assert!(
+        canonical
+            .hit_test(Point::new(150., 50.), HitTestOptions::default())
+            .unwrap()
+            .is_none()
+    );
+}

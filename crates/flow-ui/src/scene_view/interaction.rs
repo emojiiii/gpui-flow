@@ -19,7 +19,7 @@ fn button(value: MouseButton) -> Option<input::PointerButton> {
     }
 }
 impl SceneView {
-    fn input_hit(&self, local: WorldPoint, _control: bool) -> input::HitTarget {
+    pub(super) fn input_hit(&self, local: WorldPoint, _control: bool) -> input::HitTarget {
         if let Some(hit) = self.image_crop_hit(local) {
             return hit;
         }
@@ -54,22 +54,73 @@ impl SceneView {
             input::HitTarget::Background
         }
     }
-    fn plugin_event(&mut self, event: input::CanvasEvent, cx: &mut Context<Self>) -> bool {
+    pub(super) fn plugin_event(
+        &mut self,
+        event: input::CanvasEvent,
+        cx: &mut Context<Self>,
+    ) -> bool {
         self.reconcile_image_crop_editor(cx);
-        let traced = self
-            .input_tracing
-            .then(|| SceneInputOperation::Canvas(event.clone()));
-        let report = self
-            .router
-            .dispatch(&mut self.editor, &mut self.interactions, event);
-        if let Some(operation) = traced {
+        let (operation, report) = match event {
+            input::CanvasEvent::Wheel {
+                position,
+                delta,
+                modifiers,
+            } => {
+                let target = match self.input_hit(position, false) {
+                    input::HitTarget::Object(id)
+                    | input::HitTarget::ObjectResize(id)
+                    | input::HitTarget::ObjectResizeHandle { id, .. }
+                    | input::HitTarget::LineEndpoint { id, .. }
+                    | input::HitTarget::ImageCrop { id, .. } => Some(DisplayId::from(id)),
+                    _ => None,
+                };
+                let handle = target.as_ref().and_then(|id| self.editor.engine.handle(id));
+                let operation = self
+                    .input_tracing
+                    .then_some(SceneInputOperation::PickedWheel {
+                        position,
+                        delta,
+                        modifiers,
+                        target,
+                    });
+                let report = self
+                    .router
+                    .dispatch_picked_wheel(
+                        &mut self.editor,
+                        &mut self.interactions,
+                        position,
+                        delta,
+                        modifiers,
+                        handle,
+                    )
+                    .unwrap_or_else(|error| input::scene::RoutedReport {
+                        errors: vec![error.to_string()],
+                        ..Default::default()
+                    });
+                (operation, report)
+            }
+            event => {
+                let operation = self
+                    .input_tracing
+                    .then(|| SceneInputOperation::Canvas(event.clone()));
+                let report = self
+                    .router
+                    .dispatch(&mut self.editor, &mut self.interactions, event);
+                (operation, report)
+            }
+        };
+        if let Some(operation) = operation {
             self.emit_input_trace(operation, &report, cx);
         }
-        let allowed = !report.default.default_prevented;
+        let allowed = report.errors.is_empty() && !report.default.default_prevented;
         self.apply_routed_report(report, cx);
         allowed
     }
-    fn apply_routed_report(&mut self, report: input::scene::RoutedReport, cx: &mut Context<Self>) {
+    pub(super) fn apply_routed_report(
+        &mut self,
+        report: input::scene::RoutedReport,
+        cx: &mut Context<Self>,
+    ) {
         self.pending_native_focus |= report.focus_requested;
         for event in report.events {
             cx.emit(SceneViewEvent::Pointer(Box::new(event)));
@@ -90,6 +141,11 @@ impl SceneView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Result<bool, gpui_flow_engine::EngineError> {
+        if self.is_layer_managed() {
+            return Err(gpui_flow_engine::EngineError::Property(
+                "Use LayeredApp::focus_element for a managed layer".into(),
+            ));
+        }
         self.editor.engine.object(handle)?;
         if self.editor.engine.instance(handle)?.state != gpui_flow_engine::InstanceState::Attached {
             return Err(gpui_flow_engine::EngineError::DetachedHandle);

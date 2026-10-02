@@ -94,7 +94,7 @@ impl SceneStateStyles {
             .ok_or(StateStyleError::Unbound)?;
         if let Some(name) = name {
             validate_name(name)?;
-            if !binding.named.contains_key(name) {
+            if !binding.named.contains_key(name) && !binding.named_geometry.contains_key(name) {
                 return Err(StateStyleError::MissingState(name.into()));
             }
         }
@@ -238,7 +238,7 @@ impl SceneStateStyles {
     }
 }
 
-fn validate_name(name: &str) -> Result<(), StateStyleError> {
+pub(super) fn validate_name(name: &str) -> Result<(), StateStyleError> {
     if name.trim().is_empty() || name.len() > MAX_STATE_NAME_BYTES {
         return Err(StateStyleError::InvalidStyle(format!(
             "state name must be nonblank and at most {MAX_STATE_NAME_BYTES} UTF-8 bytes"
