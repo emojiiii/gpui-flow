@@ -178,6 +178,46 @@ impl TextMeasurer for GpuiTextMeasurer {
         // Stale results must not escape to the document, even uncached.
         cache.complete(epoch, request.clone(), metrics)
     }
+    fn first_baseline(&self, request: &TextMeasureRequest) -> Result<f32, String> {
+        request.validate()?;
+        let epoch = self
+            .cache
+            .lock()
+            .map_err(|_| "text metric cache poisoned")?
+            .epoch;
+        let baseline = catch_unwind(AssertUnwindSafe(|| {
+            if self.text_system.all_font_names().is_empty() {
+                return Err("native text system has no available fonts".to_owned());
+            }
+            let shaper = WindowTextSystem::new(self.text_system.clone());
+            let lines = shape_text(&shaper, request, gpui::Hsla::default())?;
+            let first = lines
+                .first()
+                .ok_or_else(|| "native text shaping returned no first line".to_owned())?;
+            let baseline = (request.line_height
+                - f32::from(first.unwrapped_layout.ascent)
+                - f32::from(first.unwrapped_layout.descent))
+                * 0.5
+                + f32::from(first.unwrapped_layout.ascent);
+            if !baseline.is_finite() {
+                return Err("native text returned a non-finite baseline".into());
+            }
+            Ok(baseline)
+        }))
+        .map_err(|_| "native text baseline shaping failed (font resolution or platform panic)")??;
+        if self
+            .cache
+            .lock()
+            .map_err(|_| "text metric cache poisoned")?
+            .epoch
+            != epoch
+        {
+            return Err(
+                "fonts invalidated during baseline measurement; retry the transaction".into(),
+            );
+        }
+        Ok(baseline)
+    }
     fn invalidate(&self) {
         let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
         cache.invalidate();

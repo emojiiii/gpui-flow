@@ -3,6 +3,10 @@
 #![doc = include_str!("../README.md")]
 
 mod arrange;
+mod content;
+mod incremental;
+mod queue;
+pub use queue::*;
 mod ratio;
 mod reactive;
 mod style;
@@ -23,6 +27,7 @@ pub enum FlowError {
     Engine(EngineError),
     Serialization(String),
     TextMeasurement(String),
+    Scheduling(String),
     NonConvergent { passes: usize },
 }
 impl std::fmt::Display for FlowError {
@@ -33,6 +38,7 @@ impl std::fmt::Display for FlowError {
             Self::Engine(e) => e.fmt(f),
             Self::Serialization(e) => write!(f, "flow document: {e}"),
             Self::TextMeasurement(e) => write!(f, "text measurement: {e}"),
+            Self::Scheduling(e) => write!(f, "flow scheduling: {e}"),
             Self::NonConvergent { passes } => write!(
                 f,
                 "flow layout did not converge within {passes} measure/arrange passes"
@@ -138,6 +144,7 @@ impl FlowLayout {
                     style.item_box,
                 )?;
                 ratio::validate(self, scene, child, style, &item)?;
+                validate_advanced(self, scene, child, style, &item)?;
                 // Pinned Leafer flowY runs automatic gaps after growY, unlike
                 // flowX's grow-or-gap branch. Do not approximate that ordering
                 // on top of this adapter's existing basis/minimum allocation.
@@ -176,10 +183,14 @@ impl FlowLayout {
                     } else {
                         (cross_allocated, main_allocated)
                     };
-                    let width_allocated =
-                        width_allocated || item.min_width.is_some() || item.max_width.is_some();
-                    let height_allocated =
-                        height_allocated || item.min_height.is_some() || item.max_height.is_some();
+                    let width_allocated = width_allocated
+                        || item.width_percent.is_some()
+                        || item.min_width.is_some()
+                        || item.max_width.is_some();
+                    let height_allocated = height_allocated
+                        || item.height_percent.is_some()
+                        || item.min_height.is_some()
+                        || item.max_height.is_some();
                     if (style.width_sizing.is_content() && width_allocated)
                         || (style.height_sizing.is_content() && height_allocated)
                     {
@@ -212,6 +223,15 @@ impl FlowLayout {
         limit: usize,
         measurer: Option<&dyn TextMeasurer>,
     ) -> Result<(Scene, FlowReport), FlowError> {
+        self.arranged_selected(scene, limit, measurer, None)
+    }
+    fn arranged_selected(
+        &self,
+        scene: &Scene,
+        limit: usize,
+        measurer: Option<&dyn TextMeasurer>,
+        selected: Option<&incremental::Selection>,
+    ) -> Result<(Scene, FlowReport), FlowError> {
         self.validate(scene)?;
         if !self.texts.is_empty() && measurer.is_none() {
             return Err(FlowError::TextMeasurement(
@@ -235,6 +255,15 @@ impl FlowLayout {
                 order.push(id);
             }
         }
+        if let Some(selected) = selected {
+            order.retain(|id| selected.containers.contains(id));
+        }
+        let texts: BTreeMap<DisplayId, TextSizing> = self
+            .texts
+            .iter()
+            .filter(|(id, _)| selected.is_none_or(|s| s.texts.contains(*id)))
+            .map(|(id, sizing)| (id.clone(), *sizing))
+            .collect();
         let automatic = self
             .containers
             .values()
@@ -244,26 +273,38 @@ impl FlowLayout {
             containers: order.len(),
             ..Default::default()
         };
-        if !order.is_empty() || !self.texts.is_empty() {
+        if !order.is_empty() || !texts.is_empty() {
             let mut converged = false;
             for pass in 0..if automatic { limit } else { 1 } {
                 let before = next.clone();
-                text::measure(&mut next, &self.texts, measurer)?;
+                text::measure(&mut next, &texts, measurer)?;
+                let baselines = text::baselines(&next, self, &order, measurer)?;
                 if automatic {
                     // Measure nested content before a parent consumes it.
                     for id in order.iter().rev() {
-                        arrange::container(&mut next, id, &self.containers[id], &self.items)?;
+                        arrange::container(
+                            &mut next,
+                            id,
+                            &self.containers[id],
+                            &self.items,
+                            &baselines,
+                        )?;
                     }
                 }
                 report.items = 0;
                 // Parent allocations are final before wrapping/arranging children.
                 for id in &order {
-                    report.items +=
-                        arrange::container(&mut next, id, &self.containers[id], &self.items)?;
+                    report.items += arrange::container(
+                        &mut next,
+                        id,
+                        &self.containers[id],
+                        &self.items,
+                        &baselines,
+                    )?;
                 }
                 // Parent width allocation can change wrapping; settle text again
                 // before measuring the next candidate pass.
-                text::measure(&mut next, &self.texts, measurer)?;
+                text::measure(&mut next, &texts, measurer)?;
                 report.passes = pass + 1;
                 if !automatic || next == before {
                     converged = true;
@@ -331,6 +372,82 @@ impl FlowLayout {
         *scene = next;
         Ok(report)
     }
+}
+
+fn validate_advanced(
+    layout: &FlowLayout,
+    scene: &Scene,
+    id: &DisplayId,
+    parent: &FlowStyle,
+    item: &FlowItem,
+) -> Result<(), FlowError> {
+    let row = parent.direction.is_row();
+    let align = item.align_self.unwrap_or(parent.align_items);
+    for (percent, sizing, main) in [
+        (item.width_percent, parent.width_sizing, row),
+        (item.height_percent, parent.height_sizing, !row),
+    ] {
+        if percent.is_none() {
+            continue;
+        }
+        if sizing.is_content() {
+            return Err(invalid(
+                id,
+                "percent dimensions require a fixed parent axis; content/percent cycles are unsupported",
+            ));
+        }
+        if item.lock_ratio
+            || (main && (item.grow > 0.0 || item.basis.is_some()))
+            || (!main && align == AlignItems::Stretch)
+        {
+            return Err(invalid(
+                id,
+                "percent dimension conflicts with another derived size owner",
+            ));
+        }
+    }
+    if item.width_percent.is_some() || item.height_percent.is_some() {
+        let object = &scene.get(id).expect("validated child").object;
+        let t = object.transform;
+        if t.a <= 0.0 || t.d <= 0.0 || t.b != 0.0 || t.c != 0.0 {
+            return Err(invalid(
+                id,
+                "percent sizing requires a positive axis-aligned transform",
+            ));
+        }
+        if !matches!(
+            object.shape,
+            Shape::Rect(_)
+                | Shape::Ellipse(_)
+                | Shape::Text(_)
+                | Shape::Image(_)
+                | Shape::Canvas(_)
+                | Shape::Box(_)
+                | Shape::Frame(_)
+        ) {
+            return Err(invalid(
+                id,
+                "percent sizing requires an explicitly resizable shape",
+            ));
+        }
+    }
+    if align == AlignItems::Baseline {
+        let object = &scene.get(id).expect("validated child").object;
+        if !row || !matches!(object.shape, Shape::Text(_)) || !layout.texts.contains_key(id) {
+            return Err(invalid(
+                id,
+                "baseline alignment requires explicitly measured Text in a row",
+            ));
+        }
+        let t = object.transform;
+        if t.a <= 0.0 || t.d <= 0.0 || t.b != 0.0 || t.c != 0.0 {
+            return Err(invalid(
+                id,
+                "baseline alignment requires a positive axis-aligned transform",
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Persistence wrapper: saves explicit flow input beside the scene without

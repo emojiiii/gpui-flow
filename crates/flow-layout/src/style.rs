@@ -38,6 +38,9 @@ pub enum AlignItems {
     Center,
     End,
     Stretch,
+    /// Align measured first text baselines within each row. Text must have an
+    /// explicit TextSizing and a backend providing first_baseline.
+    Baseline,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -178,6 +181,23 @@ impl ItemBox {
     }
 }
 
+/// Padded content-box normalization. Neither policy shrinks child geometry.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContentBoundsPolicy {
+    /// Legacy Flow behavior: over-padding collapses an axis to zero.
+    #[default]
+    Clamp,
+    /// Pinned Leafer shrinkContent + copyAndSpread + unsign behavior. An
+    /// over-padded axis reflects its negative extent and shifts its origin.
+    LeaferShrink,
+}
+impl ContentBoundsPolicy {
+    fn is_clamp(&self) -> bool {
+        *self == Self::Clamp
+    }
+}
+
 /// Box/Frame content layout, in the container's intrinsic local units.
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -189,6 +209,9 @@ pub struct FlowStyle {
     #[serde(skip_serializing_if = "ItemBox::is_box")]
     pub item_box: ItemBox,
     pub padding: Insets,
+    /// Opt-in upstream normalization; absent JSON keeps legacy clamping.
+    #[serde(skip_serializing_if = "ContentBoundsPolicy::is_clamp")]
+    pub content_bounds_policy: ContentBoundsPolicy,
     /// Minimum gap between items on the main axis, when gap_mode is Fixed.
     pub gap: f32,
     /// Optional automatic main-axis spacing. Missing JSON retains numeric gaps.
@@ -227,6 +250,13 @@ pub struct FlowItem {
     /// Main-axis basis. A growing item defaults to zero (then its minimum);
     /// a fixed item defaults to its current measured box size.
     pub basis: Option<f32>,
+    /// Fraction of the fixed parent content width (0.5 means 50%). Values above
+    /// one may overflow. Min/max clamp the result; competing owners reject.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width_percent: Option<f32>,
+    /// Fraction of the fixed parent content height, in parent-local slot units.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height_percent: Option<f32>,
     pub min_width: Option<f32>,
     pub max_width: Option<f32>,
     pub min_height: Option<f32>,
@@ -240,6 +270,8 @@ impl Default for FlowItem {
             grow: 0.0,
             lock_ratio: false,
             basis: None,
+            width_percent: None,
+            height_percent: None,
             min_width: None,
             max_width: None,
             min_height: None,
@@ -284,6 +316,11 @@ pub(crate) fn validate_style(s: &FlowStyle) -> Result<(), String> {
 pub(crate) fn validate_item(s: &FlowItem) -> Result<(), String> {
     if !s.grow.is_finite() || s.grow < 0.0 {
         return Err("grow must be finite and non-negative".into());
+    }
+    for value in [s.width_percent, s.height_percent].into_iter().flatten() {
+        if !value.is_finite() || value <= 0.0 {
+            return Err("percent fractions must be finite and positive".into());
+        }
     }
     if s.basis.is_some_and(|v| !v.is_finite() || v < 0.0) {
         return Err("basis must be finite and non-negative".into());

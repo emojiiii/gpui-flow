@@ -56,8 +56,14 @@ impl LayoutProvider for ReactiveFlow {
         layout
             .texts
             .retain(|id, _| self.active(engine, candidate, id));
+        let selected = layout.dirty_selection(engine.scene(), candidate);
         layout
-            .arranged_measured(candidate, MAX_FLOW_LAYOUT_PASSES, self.measurer.as_deref())
+            .arranged_selected(
+                candidate,
+                MAX_FLOW_LAYOUT_PASSES,
+                self.measurer.as_deref(),
+                Some(&selected),
+            )
             .map(|(scene, _)| scene)
             .map_err(|e| EngineError::Layout(e.to_string()))
     }
@@ -83,6 +89,15 @@ impl FlowLayout {
             return Err(FlowError::TextMeasurement(
                 "text sizing requires a measurement backend".into(),
             ));
+        }
+        // The incremental provider assumes the current scene is settled. Do
+        // this full check explicitly: an empty dirty set cannot certify it.
+        let (settled, _) =
+            self.arranged_measured(engine.scene(), MAX_FLOW_LAYOUT_PASSES, measurer.as_deref())?;
+        if &settled != engine.scene() {
+            return Err(FlowError::Engine(EngineError::Layout(
+                "arrange the initial scene before installing a reactive provider".into(),
+            )));
         }
         let mut bindings = BTreeMap::new();
         for id in self

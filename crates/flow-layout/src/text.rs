@@ -43,8 +43,14 @@ pub(super) fn validate(layout: &FlowLayout, scene: &Scene) -> Result<(), FlowErr
             } else {
                 (cross, main)
             };
-            let width = width || item.min_width.is_some() || item.max_width.is_some();
-            let height = height || item.min_height.is_some() || item.max_height.is_some();
+            let width = width
+                || item.width_percent.is_some()
+                || item.min_width.is_some()
+                || item.max_width.is_some();
+            let height = height
+                || item.height_percent.is_some()
+                || item.min_height.is_some()
+                || item.max_height.is_some();
             if height || (*sizing == TextSizing::Natural && width) {
                 return Err(invalid(
                     id,
@@ -67,25 +73,7 @@ pub(super) fn measure(
         let Shape::Text(text) = &scene.get(id).expect("validated text").object.shape else {
             unreachable!("validated text")
         };
-        let request = TextMeasureRequest {
-            content: text.content.clone(),
-            font_family: text.font_family.clone(),
-            font_size: text.font_size,
-            font_weight: text.font_weight,
-            italic: text.italic,
-            text_case: match text.text_case {
-                gpui_flow_scene::display::TextCase::None => gpui_flow_text::TextCase::None,
-                gpui_flow_scene::display::TextCase::Upper => gpui_flow_text::TextCase::Upper,
-                gpui_flow_scene::display::TextCase::Lower => gpui_flow_text::TextCase::Lower,
-            },
-            para_spacing: text.para_spacing,
-            line_height: text.font_size * text.line_height,
-            wrap_width: if *sizing == TextSizing::AutoHeight && text.wrap {
-                Some(text.content_bounds().size.width)
-            } else {
-                None
-            },
-        };
+        let request = request(text, *sizing);
         request.validate().map_err(|e| invalid(id, e))?;
         let metrics = catch_unwind(AssertUnwindSafe(|| backend.measure(&request)))
             .map_err(|_| invalid(id, "text measurement backend panicked"))?
@@ -117,6 +105,74 @@ pub(super) fn measure(
         }
     }
     Ok(())
+}
+
+fn request(text: &gpui_flow_scene::display::Text, sizing: TextSizing) -> TextMeasureRequest {
+    TextMeasureRequest {
+        content: text.content.clone(),
+        font_family: text.font_family.clone(),
+        font_size: text.font_size,
+        font_weight: text.font_weight,
+        italic: text.italic,
+        text_case: match text.text_case {
+            gpui_flow_scene::display::TextCase::None => gpui_flow_text::TextCase::None,
+            gpui_flow_scene::display::TextCase::Upper => gpui_flow_text::TextCase::Upper,
+            gpui_flow_scene::display::TextCase::Lower => gpui_flow_text::TextCase::Lower,
+        },
+        para_spacing: text.para_spacing,
+        line_height: text.font_size * text.line_height,
+        wrap_width: if sizing == TextSizing::AutoHeight && text.wrap {
+            Some(text.content_bounds().size.width)
+        } else {
+            None
+        },
+    }
+}
+
+pub(super) fn baselines(
+    scene: &Scene,
+    layout: &FlowLayout,
+    containers: &[DisplayId],
+    backend: Option<&dyn TextMeasurer>,
+) -> Result<BTreeMap<DisplayId, f64>, FlowError> {
+    let mut result = BTreeMap::new();
+    for id in containers {
+        let style = &layout.containers[id];
+        for child in &scene.get(id).expect("validated container").children {
+            let item = layout.items.get(child).cloned().unwrap_or_default();
+            if !item.in_flow || item.align_self.unwrap_or(style.align_items) != AlignItems::Baseline
+            {
+                continue;
+            }
+            let object = &scene.get(child).expect("validated child").object;
+            let Shape::Text(text) = &object.shape else {
+                unreachable!("validated baseline Text")
+            };
+            let request = request(text, layout.texts[child]);
+            request.validate().map_err(|e| invalid(child, e))?;
+            let backend = backend.ok_or_else(|| {
+                invalid(child, "baseline alignment requires a measurement backend")
+            })?;
+            let baseline = catch_unwind(AssertUnwindSafe(|| backend.first_baseline(&request)))
+                .map_err(|_| invalid(child, "text baseline backend panicked"))?
+                .map_err(|e| invalid(child, e))?;
+            if !baseline.is_finite() || !(0.0..=request.line_height).contains(&baseline) {
+                return Err(invalid(
+                    child,
+                    "backend returned a baseline outside the first line box",
+                ));
+            }
+            // Measured Text owns its complete line-box height, so there is no
+            // extra vertical-align slack. Padding and positive scale are real.
+            let baseline =
+                (f64::from(text.padding[0]) + f64::from(baseline)) * f64::from(object.transform.d);
+            if !baseline.is_finite() || baseline > f64::from(f32::MAX) {
+                return Err(invalid(child, "text baseline overflow"));
+            }
+            result.insert(child.clone(), baseline);
+        }
+    }
+    Ok(result)
 }
 
 /// Runtime binding of serializable layout input to a real measurement service.

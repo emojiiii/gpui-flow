@@ -176,7 +176,9 @@ pub(super) fn solve(
 
 fn alignment(align: AlignItems) -> TaffyAlign {
     match align {
-        AlignItems::Start => TaffyAlign::START,
+        // Taffy's leaf fallback baseline is the box bottom. Actual font
+        // baselines are measured above this numeric solver and placed there.
+        AlignItems::Start | AlignItems::Baseline => TaffyAlign::START,
         AlignItems::Center => TaffyAlign::SAFE_CENTER,
         AlignItems::End => TaffyAlign::SAFE_END,
         AlignItems::Stretch => TaffyAlign::STRETCH,

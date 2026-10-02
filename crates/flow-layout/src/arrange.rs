@@ -14,12 +14,15 @@ struct Item {
     main_max: f64,
     cross_min: f64,
     cross_max: f64,
+    baseline: Option<f64>,
 }
 #[derive(Default)]
 struct Line {
     items: Vec<Item>,
     main: f64,
     cross: f64,
+    ascent: f64,
+    descent: f64,
 }
 
 fn has_visible_stroke(object: &DisplayObject) -> bool {
@@ -95,6 +98,7 @@ pub(crate) fn container(
     id: &DisplayId,
     style: &FlowStyle,
     options: &BTreeMap<DisplayId, FlowItem>,
+    baselines: &BTreeMap<DisplayId, f64>,
 ) -> Result<usize, FlowError> {
     let parent = scene.get(id).expect("validated container");
     let size = parent.object.shape.local_bounds().expect("Box/Frame").size;
@@ -117,14 +121,11 @@ pub(crate) fn container(
     .is_content();
     // Like upstream Flow, content-sized main axes have no finite wrapping line.
     let wrap = style.wrap && !auto_main;
-    // Saturate the content area at zero when padding exceeds the fixed box.
-    let width =
-        (size.width as f64 - style.padding.left as f64 - style.padding.right as f64).max(0.0);
-    let height =
-        (size.height as f64 - style.padding.top as f64 - style.padding.bottom as f64).max(0.0);
+    let content = crate::content::resolve(id, size, style)?;
+    let width = content.width;
+    let height = content.height;
     let (mut available_main, mut available_cross) = axis(row, width, height);
-    let (origin_main, origin_cross) =
-        axis(row, style.padding.left as f64, style.padding.top as f64);
+    let (mut origin_main, mut origin_cross) = axis(row, content.x, content.y);
     // Leafer forms auto/fit lines with zero gap, then distributes their space.
     // Keep fixed-gap line formation and the existing Taffy adapter unchanged.
     let gap = style.gap_mode.initial(style.gap);
@@ -140,8 +141,19 @@ pub(crate) fn container(
         // Visibility is a painting policy, not the collapsed layout sentinel.
         let object = scene.get(&child).expect("validated child").object.clone();
         let bounds = linear_bounds(&object, style.item_box)?;
-        let (current_main, current_cross) =
-            axis(row, bounds.size.width as f64, bounds.size.height as f64);
+        let (current_main, current_cross) = axis(
+            row,
+            input
+                .width_percent
+                .map_or(f64::from(bounds.size.width), |fraction| {
+                    width * f64::from(fraction)
+                }),
+            input
+                .height_percent
+                .map_or(f64::from(bounds.size.height), |fraction| {
+                    height * f64::from(fraction)
+                }),
+        );
         let (width_min, width_max) = constraints(input.min_width, input.max_width);
         let (height_min, height_max) = constraints(input.min_height, input.max_height);
         let ((main_min, main_max), (cross_min, cross_max)) = if row {
@@ -163,6 +175,7 @@ pub(crate) fn container(
         }
         line.main += main + if line.items.is_empty() { 0.0 } else { gap };
         line.cross = line.cross.max(cross);
+        let baseline = baselines.get(&child).copied();
         line.items.push(Item {
             object,
             bounds,
@@ -172,7 +185,15 @@ pub(crate) fn container(
             main_max,
             cross_min,
             cross_max,
+            baseline,
         });
+        // First-baseline extents are an O(1) accumulation per item. Ordinary
+        // non-baseline rows retain linear line-formation work.
+        if let Some(baseline) = baseline {
+            line.ascent = line.ascent.max(baseline);
+            line.descent = line.descent.max(cross - baseline);
+            line.cross = line.cross.max(line.ascent + line.descent);
+        }
         count += 1;
     }
     if !line.items.is_empty() {
@@ -208,11 +229,13 @@ pub(crate) fn container(
         })?;
     }
     if auto_main || auto_cross {
-        (available_main, available_cross) = axis(
-            row,
-            (next_width as f64 - style.padding.left as f64 - style.padding.right as f64).max(0.0),
-            (next_height as f64 - style.padding.top as f64 - style.padding.bottom as f64).max(0.0),
-        );
+        let content = crate::content::resolve(
+            id,
+            gpui_flow_scene::Size::new(next_width, next_height),
+            style,
+        )?;
+        (available_main, available_cross) = axis(row, content.width, content.height);
+        (origin_main, origin_cross) = axis(row, content.x, content.y);
     }
     for line in &mut lines {
         if !wrap {
@@ -264,6 +287,11 @@ pub(crate) fn container(
         };
         let mut positions =
             solver::solve(id, &mut line, available_main, &numeric_style, auto_main)?;
+        for (item, position) in line.items.iter().zip(&mut positions) {
+            if let Some(baseline) = item.baseline {
+                position.cross = line.ascent - baseline;
+            }
+        }
         // Leafer lockRatio scales both intrinsic dimensions from the allocated
         // main axis. CSS aspect_ratio is not this operation: definite dimensions
         // suppress it, while cross min/max and stretch transfer different rules.

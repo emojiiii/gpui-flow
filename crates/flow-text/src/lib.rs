@@ -91,6 +91,12 @@ impl TextMetrics {
 /// A cache must include all request fields and discard entries on invalidate.
 pub trait TextMeasurer: Send + Sync {
     fn measure(&self, request: &TextMeasureRequest) -> Result<TextMetrics, String>;
+    /// Distance from the first logical line-box top to its alphabetic baseline.
+    /// Legacy measurement implementations remain source-compatible and fail
+    /// explicitly only when a caller opts into baseline alignment.
+    fn first_baseline(&self, _request: &TextMeasureRequest) -> Result<f32, String> {
+        Err("text backend does not provide first-baseline metrics".into())
+    }
     fn invalidate(&self) {}
 }
 
