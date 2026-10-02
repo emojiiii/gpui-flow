@@ -31,6 +31,11 @@ pub enum HitTarget {
     /// Retained-scene object ID for a SceneEditor-backed plugin host.
     Object(String),
     ObjectResize(String),
+    /// Fixed source-frame inner Image editor.
+    ImageCrop {
+        id: String,
+        part: gpui_flow_editor::ImageCropPart,
+    },
     /// True local geometry endpoint of one built-in straight Line.
     LineEndpoint {
         id: String,

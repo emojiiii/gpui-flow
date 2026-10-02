@@ -23,7 +23,7 @@ pub use custom::Custom;
 pub use ellipse::Ellipse;
 pub use frame::Frame;
 pub use group::Group;
-pub use image::{Image, ImageFit};
+pub use image::{Image, ImageFit, ImageMapping};
 pub use line::Line;
 pub use path::{Path, PathCommand};
 pub use path_measure::{PathMeasure, PathSample};

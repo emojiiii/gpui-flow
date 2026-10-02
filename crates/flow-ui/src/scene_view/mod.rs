@@ -8,6 +8,7 @@ mod input_trace;
 mod interaction;
 pub use input_trace::*;
 pub(crate) mod image_hit;
+mod image_crop;
 mod plugins;
 mod render;
 mod text_edit;
@@ -62,6 +63,7 @@ pub struct SceneView {
     resources: Option<crate::resources::SceneResourceAdapter>,
     image_alpha_hits: image_hit::ImageHitPolicies,
     frame_layout: flow_layout::FrameLayoutState,
+    image_crop: Option<image_crop::ImageCropMode>,
     pub resource_error: Option<String>,
     pub renderers: crate::display::DisplayRegistry,
     /// Opt-in paint-only state presentation; never writes editor documents.
@@ -121,6 +123,7 @@ impl SceneView {
             resources,
             image_alpha_hits: Default::default(),
             frame_layout: Default::default(),
+            image_crop: None,
             resource_error,
             renderers: crate::display::DisplayRegistry::default(),
             state_styles,
@@ -348,6 +351,7 @@ impl SceneView {
         [gpui_flow_interaction::scene::SceneLineHandle; 2],
     )> {
         if self.text_editor_active()
+            || self.image_crop_editor_active()
             || !self.is_editable()
             || !self.interactions.is_enabled("line-endpoints")
             || self.tools.as_ref().is_some_and(|tools| {
@@ -374,6 +378,7 @@ impl SceneView {
         [gpui_flow_interaction::scene::SceneResizeHandle; 8],
     )> {
         if self.text_editor_active()
+            || self.image_crop_editor_active()
             || self.line_handles().is_some()
             || !self.is_editable()
             || !self.interactions.is_enabled("resize")
@@ -402,6 +407,7 @@ impl SceneView {
     }
     fn rotation_handle(&self) -> Option<gpui_flow_interaction::scene::SceneRotationHandle> {
         if self.text_editor_active()
+            || self.image_crop_editor_active()
             || self.line_handles().is_some()
             || !self.is_editable()
             || !self.interactions.is_enabled("rotate")

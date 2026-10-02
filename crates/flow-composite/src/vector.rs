@@ -334,17 +334,13 @@ impl Preparation {
         } else if let Shape::Image(image) = &object.shape {
             self.has_image_clips |= image.is_rounded();
             let pixels = images.get(&object.id)?;
-            // Native GPUI object-fit uses decoded dimensions, not optional
-            // document metadata. Reuse the scene fit geometry with those facts.
-            let mut fitted = image.clone();
-            fitted.natural_size = Some(gpui_flow_scene::Size::new(
-                pixels.width() as f32,
-                pixels.height() as f32,
-            ));
-            let content = fitted.content_bounds();
-            if !content.is_valid() {
-                return Err(CompositeError::InvalidImage);
-            }
+            let mapping = image
+                .mapping(gpui_flow_scene::Size::new(
+                    pixels.width() as f32,
+                    pixels.height() as f32,
+                ))
+                .ok_or(CompositeError::InvalidImage)?;
+            let content = mapping.destination;
             let fitted_rect = tiny_skia::Rect::from_xywh(
                 content.origin.x,
                 content.origin.y,
@@ -363,11 +359,13 @@ impl Preparation {
                         world_transform: source.world_transform,
                     }),
                     smooth: true,
-                    texture_to_local: Affine::translation(content.origin.x, content.origin.y)
-                        * Affine::scale(
-                            content.size.width / pixels.width() as f32,
-                            content.size.height / pixels.height() as f32,
-                        ),
+                    texture_to_local: Affine::translation(
+                        mapping.full_source.origin.x,
+                        mapping.full_source.origin.y,
+                    ) * Affine::scale(
+                        mapping.full_source.size.width / pixels.width() as f32,
+                        mapping.full_source.size.height / pixels.height() as f32,
+                    ),
                     image: pixels,
                     path,
                     world: source.world_transform,

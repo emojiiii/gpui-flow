@@ -224,6 +224,29 @@ pub(crate) fn diff(
                         &data(&b[key]),
                         property_dirty("path.data"),
                     );
+                } else if key == "shape" && a[key]["type"] == "image" && b[key]["type"] == "image" {
+                    record_property(
+                        &mut change,
+                        &id,
+                        "image.source_crop",
+                        &a[key]["geometry"]["source_crop"],
+                        &b[key]["geometry"]["source_crop"],
+                        property_dirty("image.source_crop"),
+                    );
+                    let mut old_shape = a[key].clone();
+                    let mut new_shape = b[key].clone();
+                    old_shape["geometry"]["source_crop"] = Value::Null;
+                    new_shape["geometry"]["source_crop"] = Value::Null;
+                    if old_shape != new_shape {
+                        record_property(
+                            &mut change,
+                            &id,
+                            "shape",
+                            &a[key],
+                            &b[key],
+                            property_dirty("shape"),
+                        );
+                    }
                 } else if key == "shape" && a[key]["type"] == "text" && b[key]["type"] == "text" {
                     record_property(
                         &mut change,

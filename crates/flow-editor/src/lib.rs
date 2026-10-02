@@ -11,3 +11,6 @@ mod text_resize;
 pub use text_resize::*;
 mod text_font_resize;
 pub use text_font_resize::*;
+
+mod image_crop;
+pub use image_crop::*;

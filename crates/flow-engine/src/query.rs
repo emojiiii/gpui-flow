@@ -364,6 +364,21 @@ impl SceneEngine {
         world: Point,
         options: HitTestOptions,
     ) -> Result<Vec<HitTestResult>, EngineError> {
+        self.hit_test_all_with_image_candidates(world, options, &BTreeSet::new())
+    }
+    /// Ordered broad-phase candidates for a runtime Image pixel picker. Only
+    /// the explicitly supplied Image IDs may additionally use their rounded
+    /// outer box, avoiding stale intrinsic-size letterboxing. Callers must
+    /// supply only current, sampleable decoded frames and filter their alpha;
+    /// pending/failed fallback must retain ordinary `hit_test_all` geometry.
+    /// All visibility, lock, hit-policy, transform and ancestor-clip gates are
+    /// identical to `hit_test_all`; non-Images and default picking are unchanged.
+    pub fn hit_test_all_with_image_candidates(
+        &self,
+        world: Point,
+        options: HitTestOptions,
+        image_ids: &BTreeSet<DisplayId>,
+    ) -> Result<Vec<HitTestResult>, EngineError> {
         if !world.is_finite() || !options.tolerance.is_finite() || options.tolerance < 0. {
             return Err(
                 SceneError::InvalidGeometry("invalid hit point or tolerance".into()).into(),
@@ -424,7 +439,9 @@ impl SceneEngine {
                 }
                 HitPolicy::Painted => object.shape.hit_test(local, &object.style, tolerance),
             });
-            if hit {
+            let image_candidate = image_ids.contains(id)
+                && matches!(&object.shape, Shape::Image(image) if image.contains(local));
+            if hit || image_candidate {
                 hits.push(HitTestResult {
                     id: id.clone(),
                     world_point: world,

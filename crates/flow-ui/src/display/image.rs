@@ -242,3 +242,37 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod crop_tests {
+    use super::*;
+    use core::prelude::v1::test;
+    use gpui_flow_scene::{Affine, DisplayObject};
+    #[test]
+    fn all_explicit_crops_require_cpu_while_full_source_preview_keeps_native_eligibility() {
+        for fit in [ImageFit::Contain, ImageFit::Cover, ImageFit::Fill] {
+            for crop in [
+                SceneBounds::new(ScenePoint::ZERO, SceneSize::new(1., 1.)),
+                SceneBounds::new(ScenePoint::new(0.13, 0.21), SceneSize::new(0.51, 0.57)),
+            ] {
+                let mut image = Image::new("source", SceneSize::new(40., 24.));
+                image.fit = fit;
+                image.source_crop = Some(crop);
+                let mut object = RenderObject {
+                    object: DisplayObject::new("i", image),
+                    screen_transform: Affine::IDENTITY,
+                    viewport_transform: Affine::IDENTITY,
+                    opacity: 1.,
+                    clips: vec![],
+                };
+                assert!(!object.native_renderable());
+                let gpui_flow_scene::Shape::Image(image) = &mut object.object.shape else {
+                    panic!()
+                };
+                image.source_crop = None;
+                image.fit = ImageFit::Fill;
+                assert!(object.native_renderable());
+            }
+        }
+    }
+}

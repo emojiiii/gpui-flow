@@ -62,6 +62,7 @@ impl SceneView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Result<TextSessionToken, SceneInteractionError> {
+        self.close_image_crop_editor(cx);
         self.reconcile_text_editor(window, cx);
         // Same-session activation never resets text selection or local history.
         if self.text_editor_target() == Some(target)

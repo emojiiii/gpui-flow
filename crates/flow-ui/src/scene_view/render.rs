@@ -35,8 +35,17 @@ fn state_render_frame_with_canvas(
     styles: &mut gpui_flow_interaction::scene::SceneStateStyles,
     now: std::time::Duration,
     backdrop: Option<CanvasBackdrop>,
+    crop_preview: Option<&DisplayId>,
 ) -> (StateFrame, Option<String>) {
     let convert = |scene: &Scene| -> Result<StateFrame, String> {
+        let preview;
+        let scene = if crop_preview.is_some() {
+            preview =
+                super::image_crop::crop_preview(scene, crop_preview).map_err(|e| e.to_string())?;
+            &preview
+        } else {
+            scene
+        };
         let units = if let Some(backdrop) = backdrop {
             vec![match gpui_flow_composite::owned_canvas(
                 scene,
@@ -86,7 +95,7 @@ fn state_render_frame(
     styles: &mut gpui_flow_interaction::scene::SceneStateStyles,
     now: std::time::Duration,
 ) -> (StateFrame, Option<String>) {
-    state_render_frame_with_canvas(editor, router, styles, now, None)
+    state_render_frame_with_canvas(editor, router, styles, now, None, None)
 }
 fn canvas_backdrop(
     theme: FlowTheme,
@@ -115,6 +124,7 @@ fn state_render_objects(
 impl Render for SceneView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.reconcile_text_editor(window, cx);
+        self.reconcile_image_crop_editor(cx);
         self.subscribe_input(window, cx);
         self.sync_requested_focus(window, cx);
         if let Some(resources) = &mut self.resources {
@@ -207,12 +217,14 @@ impl Render for SceneView {
         .absolute()
         .size_full();
         self.diagnostics.clear();
+        let crop_preview = self.image_crop_preview_id();
         let (frame, state_error) = state_render_frame_with_canvas(
             &self.editor,
             &self.router,
             &mut self.state_styles,
             self.state_clock.elapsed(),
             owned_canvas.then(|| canvas_backdrop(theme, show_grid, viewport)),
+            crop_preview.as_ref(),
         );
         self.state_style_error = state_error;
         let domains = frame
@@ -261,7 +273,7 @@ impl Render for SceneView {
             .selection
             .ids
             .iter()
-            .filter(|_| !self.text_editor_active())
+            .filter(|_| !self.text_editor_active() && !self.image_crop_editor_active())
             .filter_map(|id| self.selection_corners(id))
             .collect();
         let marquee = self.interactions.marquee();
@@ -278,6 +290,9 @@ impl Render for SceneView {
         });
         let rotation_handle = self.rotation_handle();
         let line_handles = self.line_handles();
+        let crop_handles = self
+            .image_crop_geometry()
+            .and_then(|g| g.screen_handles(&self.editor));
         let overlay = canvas(
             |_, _, _| (),
             move |bounds, _, window, _| {
@@ -291,6 +306,24 @@ impl Render for SceneView {
                     path.close();
                     if let Ok(path) = path.build() {
                         window.paint_path(path, rgb(theme.accent));
+                    }
+                }
+                if let Some(handles) = crop_handles {
+                    let p = |p: WorldPoint| bounds.origin + point(px(p.x), px(p.y));
+                    let mut path = PathBuilder::stroke(px(2.));
+                    path.move_to(p(handles[0].1));
+                    for i in [2, 4, 6] {
+                        path.line_to(p(handles[i].1));
+                    }
+                    path.close();
+                    if let Ok(path) = path.build() {
+                        window.paint_path(path, rgb(0xffd166));
+                    }
+                    for (_, position) in handles {
+                        window.paint_quad(fill(
+                            Bounds::new(p(position) - point(px(4.), px(4.)), size(px(8.), px(8.))),
+                            rgb(0xffd166),
+                        ));
                     }
                 }
                 if let Some(handles) = resize_handles {
@@ -1315,6 +1348,7 @@ mod owned_canvas_tests {
             &mut styles,
             std::time::Duration::ZERO,
             Some(canvas_backdrop(FlowTheme::default(), true, editor.viewport)),
+            None,
         );
         assert!(error.is_none());
         assert_eq!(owned.units.len(), 1);
@@ -1382,6 +1416,7 @@ mod owned_canvas_tests {
                 false,
                 editor.viewport,
             )),
+            None,
         );
         assert!(error.is_none());
         assert!(matches!(

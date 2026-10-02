@@ -321,7 +321,7 @@ impl ElementDefinition for BuiltinDefinition {
                 json!({"content":"","size":{"width":100.,"height":30.},"font_family":"sans-serif","font_size":14.,"font_weight":400,"italic":false,"line_height":1.2,"text_case":"none","para_spacing":0.,"align":"start","wrap":true,"padding":[0.,0.,0.,0.],"vertical_align":"top","overflow":"clip","decoration":"none"})
             }
             "image" => {
-                json!({"source":"","size":{"width":100.,"height":100.},"natural_size":null,"fit":"contain","corner_radius":0.,"corner_radii":null})
+                json!({"source":"","size":{"width":100.,"height":100.},"natural_size":null,"fit":"contain","source_crop":null,"corner_radius":0.,"corner_radii":null})
             }
             "canvas" => {
                 json!({"size":{"width":100.,"height":100.},"pixel_ratio":1.,"smooth":true,"safe_resize":false,"corner_radius":0.,"corner_radii":null})
@@ -393,6 +393,8 @@ pub enum PropertyKey {
     Shape,
     /// Plain content of a built-in Text, preserving its layout box and typography.
     TextContent,
+    /// Normalized source rectangle of a built-in Image; null restores full source.
+    ImageSourceCrop,
     /// Normalized Path data, preserving whether the element is a Path or Pen.
     PathData,
     Custom(String),
@@ -423,6 +425,7 @@ impl PropertyKey {
             Self::Mask => "mask".into(),
             Self::Shape => "shape".into(),
             Self::TextContent => "text.content".into(),
+            Self::ImageSourceCrop => "image.source_crop".into(),
             Self::PathData => "path.data".into(),
         }
     }
@@ -432,6 +435,21 @@ pub(crate) fn apply_property(
     key: &PropertyKey,
     value: Value,
 ) -> Result<(), EngineError> {
+    if *key == PropertyKey::ImageSourceCrop {
+        let Shape::Image(image) = &mut object.shape else {
+            return Err(EngineError::Property(
+                "source crop requires a built-in Image".into(),
+            ));
+        };
+        let crop =
+            serde_json::from_value(value).map_err(|e| EngineError::Property(e.to_string()))?;
+        if let Some(crop) = crop {
+            gpui_flow_scene::display::Image::validate_source_crop(crop)
+                .map_err(EngineError::Property)?;
+        }
+        image.source_crop = crop;
+        return Ok(());
+    }
     if *key == PropertyKey::PathData {
         let target = match &mut object.shape {
             Shape::Path(path) => path,
@@ -501,7 +519,7 @@ pub(crate) fn property_dirty(name: &str) -> DirtyFlags {
         | "style.inner_shadow_layers" => DirtyFlags::PAINT,
         "mask" => DirtyFlags::PAINT | DirtyFlags::GEOMETRY,
         "transform" => DirtyFlags::TRANSFORM | DirtyFlags::HIT,
-        "shape" | "text.content" | "path.data" => {
+        "shape" | "text.content" | "path.data" | "image.source_crop" => {
             DirtyFlags::GEOMETRY | DirtyFlags::PAINT | DirtyFlags::HIT
         }
         "style.stroke" | "style.stroke_layers" | "style.fill_rule" => {
@@ -551,7 +569,7 @@ impl PropertyKey {
             ),
             Self::BlendMode => (PropertyType::String, Some(json!("pass_through"))),
             Self::Mask => (PropertyType::String, Some(json!("none"))),
-            Self::Shadow => (PropertyType::Any, Some(Value::Null)),
+            Self::Shadow | Self::ImageSourceCrop => (PropertyType::Any, Some(Value::Null)),
             Self::HitPolicy | Self::FillRule => (PropertyType::String, None),
             Self::Shape => (PropertyType::Object, None),
             Self::PathData => (PropertyType::Object, Some(json!({"commands": []}))),

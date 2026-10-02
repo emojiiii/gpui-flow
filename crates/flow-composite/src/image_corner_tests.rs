@@ -317,3 +317,231 @@ fn own_corner_shadow_uses_real_fit_alpha_and_missing_pixels_fail_atomically() {
     ));
     assert_eq!(budget.surface_writes(), 0);
 }
+
+#[test]
+fn source_crop_maps_real_decoded_pixels_through_fit_rounding_affine_and_ancestor_clip() {
+    let mut inputs = ImageInputs::default();
+    let bytes: Vec<u8> = (0..40)
+        .flat_map(|_| {
+            (0..80).flat_map(|x| {
+                if x < 40 {
+                    [255, 0, 0, 255]
+                } else {
+                    [0, 255, 0, 255]
+                }
+            })
+        })
+        .collect();
+    inputs.insert(
+        "i".into(),
+        Ok(Arc::new(
+            StaticImage::from_premultiplied_rgba(80, 40, bytes, CompositeLimits::default())
+                .unwrap(),
+        )),
+    );
+    for fit in [
+        display::ImageFit::Contain,
+        display::ImageFit::Cover,
+        display::ImageFit::Fill,
+    ] {
+        for transform in [
+            Affine::IDENTITY,
+            Affine::translation(60., 5.) * Affine::scale(-1.2, 1.4),
+        ] {
+            let mut s = scene(fit, Some(true), transform);
+            s.update_object(&"i".into(), |o| {
+                if let gpui_flow_scene::Shape::Image(image) = &mut o.shape {
+                    image.natural_size = Some(Size::new(1., 700.));
+                    image.source_crop = Some(Bounds::new(Point::new(0.5, 0.), Size::new(0.5, 1.)));
+                }
+            })
+            .unwrap();
+            let mut budget = PixelBudget::new(CompositeLimits::default(), 0).unwrap();
+            let frame = rasterize_with_images(
+                &source(&s),
+                &inputs,
+                RasterViewport {
+                    world_to_screen: Affine::IDENTITY,
+                    canvas_bounds: rect(120., 100.),
+                    content_mask: rect(120., 100.),
+                    device_scale: 1.,
+                },
+                &mut budget,
+                &AtomicBool::new(false),
+            )
+            .unwrap()
+            .unwrap();
+            let center = transform.transform_point(Point::new(20., 20.));
+            assert_eq!(
+                at(&frame, center.x.floor() as u32, center.y.floor() as u32),
+                [0, 255, 0, 255]
+            );
+            let corner = transform.transform_point(Point::new(1., 1.));
+            assert_eq!(
+                at(&frame, corner.x.floor() as u32, corner.y.floor() as u32),
+                [0; 4]
+            );
+        }
+    }
+}
+
+#[test]
+fn explicit_crop_always_uses_bounded_cpu_and_fractional_pixels_match_unsnapped_reference() {
+    // Source rectangle is (.65, .63, 2.55, 1.71) pixels. Native GPUI's
+    // integer atlas rectangle would instead select (1, 1, 3, 2).
+    let mut inputs = ImageInputs::default();
+    let bytes: Vec<u8> = (0..3)
+        .flat_map(|y| {
+            (0..5).flat_map(move |x| [(x * 50) as u8, (y * 90) as u8, ((x + y) * 30) as u8, 255])
+        })
+        .collect();
+    inputs.insert(
+        "i".into(),
+        Ok(Arc::new(
+            StaticImage::from_premultiplied_rgba(5, 3, bytes, CompositeLimits::default()).unwrap(),
+        )),
+    );
+    let raster = |scene: &Scene| {
+        let mut budget = PixelBudget::new(CompositeLimits::default(), 0).unwrap();
+        rasterize_with_images(
+            &source(scene),
+            &inputs,
+            RasterViewport {
+                world_to_screen: Affine::IDENTITY,
+                canvas_bounds: rect(40., 24.),
+                content_mask: rect(40., 24.),
+                device_scale: 1.,
+            },
+            &mut budget,
+            &AtomicBool::new(false),
+        )
+        .unwrap()
+        .unwrap()
+    };
+    for fit in [
+        display::ImageFit::Contain,
+        display::ImageFit::Cover,
+        display::ImageFit::Fill,
+    ] {
+        let mut image = display::Image::new("pixels", Size::new(40., 24.));
+        image.fit = fit;
+        image.natural_size = Some(Size::new(999., 1.));
+        let crop = Bounds::new(Point::new(0.13, 0.21), Size::new(0.51, 0.57));
+        image.source_crop = Some(crop);
+        let mut actual = Scene::new();
+        actual
+            .insert(DisplayObject::new("i", image.clone()), None, None)
+            .unwrap();
+        assert!(matches!(
+            scene_units(&actual, CompositeLimits::default()).unwrap()[0],
+            SceneUnit::Domain(_)
+        ));
+        assert!(matches!(
+            scene_units(
+                &actual,
+                CompositeLimits {
+                    max_domains: 0,
+                    ..Default::default()
+                }
+            )
+            .unwrap()[0],
+            SceneUnit::Rejected(CompositeIssue {
+                error: CompositeError::InputLimit,
+                ..
+            })
+        ));
+        let pixels = raster(&actual);
+
+        // Independent reference: place the entire source behind an outer Frame,
+        // deriving its affine placement directly from fractional source pixels.
+        // Its placement has no source_crop and is derived without Image::mapping.
+        let (x, y, w, h) = (
+            0.13f32 as f64 * 5.,
+            0.21f32 as f64 * 3.,
+            0.51f32 as f64 * 5.,
+            0.57f32 as f64 * 3.,
+        );
+        let (sx, sy) = match fit {
+            display::ImageFit::Fill => (40. / w, 24. / h),
+            display::ImageFit::Contain => {
+                let s = (40. / w).min(24. / h);
+                (s, s)
+            }
+            display::ImageFit::Cover => {
+                let s = (40. / w).max(24. / h);
+                (s, s)
+            }
+        };
+        let destination = Bounds::new(
+            Point::new(((40. - w * sx) / 2.) as f32, ((24. - h * sy) / 2.) as f32),
+            Size::new((w * sx) as f32, (h * sy) as f32),
+        );
+        let mut reference = Scene::new();
+        reference
+            .insert(
+                DisplayObject::new("frame", display::Frame::new(40., 24.)).with_style(Style {
+                    fill: None,
+                    blend_mode: BlendMode::Normal,
+                    ..Default::default()
+                }),
+                None,
+                None,
+            )
+            .unwrap();
+        reference
+            .insert(
+                DisplayObject::new(
+                    "crop-clip",
+                    display::Frame::new(destination.size.width, destination.size.height),
+                )
+                .with_transform(Affine::translation(
+                    destination.origin.x,
+                    destination.origin.y,
+                ))
+                .with_style(Style {
+                    fill: None,
+                    ..Default::default()
+                }),
+                Some("frame".into()),
+                None,
+            )
+            .unwrap();
+        let mut full = display::Image::new("pixels", Size::new((5. * sx) as f32, (3. * sy) as f32));
+        full.fit = display::ImageFit::Fill;
+        reference
+            .insert(
+                DisplayObject::new("i", full)
+                    .with_transform(Affine::translation((-x * sx) as f32, (-y * sy) as f32)),
+                Some("crop-clip".into()),
+                None,
+            )
+            .unwrap();
+        let expected = raster(&reference);
+        for py in 0..24 {
+            for px in 0..40 {
+                let a = at(&pixels, px, py);
+                let b = at(&expected, px, py);
+                assert!(
+                    a.iter().zip(b).all(|(a, b)| a.abs_diff(b) <= 2),
+                    "fit={fit:?}, pixel={px},{py}: {a:?} vs {b:?}"
+                );
+            }
+        }
+        image.source_crop = Some(Bounds::new(
+            Point::new(1. / 5., 1. / 3.),
+            Size::new(3. / 5., 2. / 3.),
+        ));
+        let mut snapped = Scene::new();
+        snapped
+            .insert(DisplayObject::new("i", image), None, None)
+            .unwrap();
+        let rounded = raster(&snapped);
+        assert!(
+            (0..24).any(|y| (0..40).any(|x| at(&pixels, x, y)
+                .iter()
+                .zip(at(&rounded, x, y))
+                .any(|(a, b)| a.abs_diff(b) > 15))),
+            "fixture must detect source-texel snapping"
+        );
+    }
+}

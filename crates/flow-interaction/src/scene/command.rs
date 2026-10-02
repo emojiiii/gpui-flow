@@ -83,6 +83,11 @@ pub enum SceneCommand {
         endpoint: super::LineEndpoint,
         position: Point,
     },
+    /// Typed crop-only write, guarded against target changes through middleware.
+    SetImageCrop {
+        target: gpui_flow_engine::ElementHandle,
+        crop: Option<gpui_flow_scene::Bounds>,
+    },
     RotateSelection {
         degrees: f32,
     },

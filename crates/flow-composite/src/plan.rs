@@ -329,7 +329,11 @@ fn visit(
         .iter()
         .any(|c| !c.is_rectangular() || !c.world_transform.is_positive_uniform_scale_translation());
     let image_geometry_domain = matches!(&o.shape, Shape::Image(image)
-        if !world.is_positive_uniform_scale_translation()
+        // GPUI's native atlas crop rounds source UVs to integer texels. A
+        // decoded size is unavailable here, so every explicit normalized crop
+        // uses the existing bounded CPU path, without silently snapping it.
+        if image.source_crop.is_some()
+            || !world.is_positive_uniform_scale_translation()
             || complex_ancestor_clip
             || (image.is_rounded() && image.fit == gpui_flow_scene::display::ImageFit::Contain));
     // Native Text content masks are rectangular. Preserve actual ancestor

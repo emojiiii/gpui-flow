@@ -20,6 +20,9 @@ fn button(value: MouseButton) -> Option<input::PointerButton> {
 }
 impl SceneView {
     fn input_hit(&self, local: WorldPoint, _control: bool) -> input::HitTarget {
+        if let Some(hit) = self.image_crop_hit(local) {
+            return hit;
+        }
         if let Some((id, handles)) = self.line_handles()
             && let Some(handle) = input::scene::hit_line_handle(&handles, local)
         {
@@ -52,6 +55,7 @@ impl SceneView {
         }
     }
     fn plugin_event(&mut self, event: input::CanvasEvent, cx: &mut Context<Self>) -> bool {
+        self.reconcile_image_crop_editor(cx);
         let traced = self
             .input_tracing
             .then(|| SceneInputOperation::Canvas(event.clone()));
@@ -259,6 +263,13 @@ impl SceneView {
         );
     }
     pub(super) fn key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
+        if self.image_crop_editor_active()
+            && (event.keystroke.key == "enter"
+                || (event.keystroke.key == "escape" && !self.interactions.has_capture()))
+        {
+            self.close_image_crop_editor(cx);
+            return;
+        }
         if self.text_editor_active() {
             return;
         }

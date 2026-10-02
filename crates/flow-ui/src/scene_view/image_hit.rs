@@ -1,10 +1,17 @@
-//! Filter existing ordered engine candidates; never invent bounds-only targets.
+//! Ordered runtime Image candidates use decoded pixels without weakening fallback.
 use super::SceneView;
 use crate::{
     ImageAlphaHit, ImageHitFallback, image_hit::sample_alpha, resources::SceneResourceAdapter,
 };
 use gpui_flow_engine::{ElementHandle, EngineError, InstanceState, SceneEngine};
 use gpui_flow_scene::{HitTestOptions, HitTestResult, Point, Shape};
+
+#[derive(Clone, Copy)]
+enum AlphaSample {
+    Loaded(u8),
+    Pending,
+    Failed,
+}
 use std::collections::BTreeMap;
 
 #[derive(Default)]
@@ -59,16 +66,55 @@ impl ImageHitPolicies {
         world: Point,
         options: HitTestOptions,
     ) -> Result<Option<HitTestResult>, EngineError> {
-        // SceneView used engine.hit_test before opting in: preserve its complete
-        // geometry/visibility/clip/locked/custom semantics and painted ordering.
+        // Resolve each current resource observation once. Only valid decoded
+        // samples may bypass metadata's fit geometry; unavailable resources keep
+        // exactly the ordinary engine candidate and Geometry fallback behavior.
+        let mut samples = BTreeMap::new();
+        let mut decoded_ids = std::collections::BTreeSet::new();
+        for handle in self.entries.keys() {
+            let Some(policy) = self.get(engine, *handle) else {
+                continue;
+            };
+            let Ok(object) = engine.object(*handle) else {
+                continue;
+            };
+            let Shape::Image(image) = &object.shape else {
+                continue;
+            };
+            let sample = resources.map_or(AlphaSample::Failed, |resources| {
+                // This observation validates handle, attachment, source revision,
+                // authorization, generation and the shared playback frame index.
+                let observation = resources.composite_image(engine, &object.id, &image.source);
+                match observation.image {
+                    Ok(frame) => {
+                        let size = frame.size(observation.frame_index);
+                        let alpha = frame.as_bytes(observation.frame_index).and_then(|bytes| {
+                            sample_alpha(
+                                image,
+                                engine.world_to_local(&object.id, world).ok()?,
+                                size.width.0.try_into().ok()?,
+                                size.height.0.try_into().ok()?,
+                                bytes,
+                            )
+                        });
+                        alpha.map_or(AlphaSample::Failed, AlphaSample::Loaded)
+                    }
+                    Err(gpui_flow_composite::CompositeError::ImagePending(_)) => {
+                        AlphaSample::Pending
+                    }
+                    Err(_) => AlphaSample::Failed,
+                }
+            });
+            if matches!(sample, AlphaSample::Loaded(_)) {
+                decoded_ids.insert(object.id.clone());
+            }
+            samples.insert(object.id.clone(), (policy, sample));
+        }
         Ok(engine
-            .hit_test_all(world, options)?
+            .hit_test_all_with_image_candidates(world, options, &decoded_ids)?
             .into_iter()
             .find(|hit| {
-                let Some(handle) = engine.handle(&hit.id) else {
-                    return false;
-                };
-                let Some(policy) = self.get(engine, handle) else {
+                let Some((policy, sample)) = samples.get(&hit.id) else {
                     return true;
                 };
                 let Some(node) = engine.scene().get(&hit.id) else {
@@ -77,40 +123,15 @@ impl ImageHitPolicies {
                 let Shape::Image(image) = &node.object.shape else {
                     return true;
                 };
-                // Even Bounds/tolerance candidates cannot enlarge an alpha image's
-                // rounded silhouette. Ancestor clips were already checked above.
+                // Even Bounds/tolerance candidates cannot enlarge an alpha
+                // image's rounded silhouette. Ancestor clips remain engine-owned.
                 if !image.contains(hit.local_point) {
                     return false;
                 }
-                let Some(resources) = resources else {
-                    return policy.failed == ImageHitFallback::Geometry;
-                };
-                // The established observation validates handle, attachment epoch,
-                // source revision/generation, authorization, and timeline limits.
-                // It shares the actual playback index with native and CPU paint.
-                let observation = resources.composite_image(engine, &hit.id, &image.source);
-                match observation.image {
-                    Ok(frame) => {
-                        let size = frame.size(observation.frame_index);
-                        frame
-                            .as_bytes(observation.frame_index)
-                            .and_then(|bytes| {
-                                sample_alpha(
-                                    image,
-                                    hit.local_point,
-                                    size.width.0.try_into().ok()?,
-                                    size.height.0.try_into().ok()?,
-                                    bytes,
-                                )
-                            })
-                            .map_or(policy.failed == ImageHitFallback::Geometry, |alpha| {
-                                alpha > policy.threshold
-                            })
-                    }
-                    Err(gpui_flow_composite::CompositeError::ImagePending(_)) => {
-                        policy.pending == ImageHitFallback::Geometry
-                    }
-                    Err(_) => policy.failed == ImageHitFallback::Geometry,
+                match sample {
+                    AlphaSample::Loaded(alpha) => *alpha > policy.threshold,
+                    AlphaSample::Pending => policy.pending == ImageHitFallback::Geometry,
+                    AlphaSample::Failed => policy.failed == ImageHitFallback::Geometry,
                 }
             }))
     }

@@ -397,3 +397,128 @@ fn image_alpha_install_query_and_sample_leave_document_revision_and_undo_untouch
     assert!(!editor.undo());
     assert!(!editor.redo());
 }
+
+#[test]
+fn image_alpha_crop_uses_decoded_candidates_with_opposite_stale_aspect_ratios() {
+    use gpui_flow_scene::{Bounds, display::ImageFit};
+    for (width, height, stale, point) in [
+        (4, 2, Size::new(1., 100.), Point::new(10., 50.)),
+        (2, 4, Size::new(100., 1.), Point::new(50., 10.)),
+    ] {
+        for crop in [
+            None,
+            Some(Bounds::new(Point::new(0.5, 0.), Size::new(0.5, 1.))),
+        ] {
+            for fit in [ImageFit::Contain, ImageFit::Cover, ImageFit::Fill] {
+                let mut scene = scene();
+                scene
+                    .update_object(&"image".into(), |o| {
+                        if let Shape::Image(i) = &mut o.shape {
+                            i.natural_size = Some(stale);
+                            i.source_crop = crop;
+                            i.fit = fit;
+                        }
+                    })
+                    .unwrap();
+                let (mut e, mut r, mut p) = setup(scene);
+                load(
+                    &mut e,
+                    &mut r,
+                    vec![image::Frame::new(image::RgbaImage::from_pixel(
+                        width,
+                        height,
+                        image::Rgba([0, 0, 0, 255]),
+                    ))],
+                );
+                let canonical = hit(&p, &e, &r, point.x, point.y);
+                if fit == ImageFit::Contain {
+                    assert_eq!(
+                        canonical,
+                        Some("back".into()),
+                        "fixture must expose metadata rejection"
+                    );
+                }
+                install(&mut p, &e, strict());
+                assert_eq!(hit(&p, &e, &r, point.x, point.y), Some("image".into()));
+                if fit == ImageFit::Contain {
+                    let letterbox = if width > height && crop.is_none() {
+                        Some(Point::new(50., 10.))
+                    } else if width < height {
+                        Some(Point::new(10., 50.))
+                    } else {
+                        None
+                    };
+                    if let Some(point) = letterbox {
+                        assert_eq!(hit(&p, &e, &r, point.x, point.y), Some("back".into()));
+                    }
+                }
+                assert!(p.set(&e, e.handle(&"image".into()).unwrap(), None));
+                assert_eq!(hit(&p, &e, &r, point.x, point.y), canonical);
+            }
+        }
+    }
+}
+
+#[test]
+fn image_alpha_crop_unavailable_geometry_fallback_never_expands_metadata_bounds() {
+    let mut scene = scene();
+    scene
+        .update_object(&"image".into(), |o| {
+            if let Shape::Image(i) = &mut o.shape {
+                i.natural_size = Some(Size::new(1., 100.));
+                i.source_crop = Some(gpui_flow_scene::Bounds::new(
+                    Point::new(0.5, 0.),
+                    Size::new(0.5, 1.),
+                ));
+            }
+        })
+        .unwrap();
+    let (mut e, mut r, mut p) = setup(scene);
+    install(&mut p, &e, ImageAlphaHit::default());
+    // Pending retains the old narrow metadata box, even though ready pixels
+    // will fill this square once the actual dimensions become available.
+    assert_eq!(hit(&p, &e, &r, 10., 50.), Some("back".into()));
+    assert_eq!(hit(&p, &e, &r, 50., 50.), Some("image".into()));
+    load(
+        &mut e,
+        &mut r,
+        vec![image::Frame::new(image::RgbaImage::from_pixel(
+            4,
+            2,
+            image::Rgba([0, 0, 0, 255]),
+        ))],
+    );
+    assert_eq!(hit(&p, &e, &r, 10., 50.), Some("image".into()));
+    for source in ["b.png", "a.png"] {
+        change_source(&mut e, source);
+        assert_eq!(hit(&p, &e, &r, 10., 50.), Some("back".into()));
+        assert_eq!(hit(&p, &e, &r, 50., 50.), Some("image".into()));
+    }
+    r.tracker.synchronize(&mut e).unwrap();
+    let t = r
+        .tracker
+        .ticket(&e, e.handle(&"image".into()).unwrap())
+        .unwrap();
+    r.settle(
+        &mut e,
+        t,
+        ResourceOutcome::Failed("decode failed".into()),
+        Some(SceneImagePresentation::Failed("decode failed".into())),
+        &mut vec![],
+    )
+    .unwrap();
+    for resources in [Some(&r), None] {
+        for (point, expected) in [
+            (Point::new(10., 50.), "back"),
+            (Point::new(50., 50.), "image"),
+        ] {
+            assert_eq!(
+                p.hit_test(&e, resources, point, HitTestOptions::default())
+                    .unwrap()
+                    .unwrap()
+                    .id,
+                DisplayId::from(expected)
+            );
+        }
+    }
+}

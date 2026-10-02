@@ -25,12 +25,15 @@ canvas background.
 
 ## Geometry and sampling contract
 
-The existing `SceneEngine::hit_test_all` supplies the ordered candidates and
-continues to enforce inherited visibility/opacity, locks, hit policy, custom
-picking, singular transforms and exact ancestor clip containment. The optional
-filter cannot add a target excluded by that geometric stage. In particular,
-document `natural_size` can still constrain the engine's Painted candidate box;
-applications should keep that metadata consistent or omit it.
+The engine supplies ordered candidates and continues to enforce inherited
+visibility/opacity, locks, hit policy, custom picking, singular transforms and
+exact ancestor clip containment. Runtime alpha opt-ins with a current, valid
+decoded sample use `hit_test_all_with_image_candidates`: only those explicit Image
+IDs may additionally use their rounded outer box. This prevents stale
+`natural_size` metadata from rejecting visible decoded pixels before sampling.
+The default `hit_test_all` path is unchanged. Pending, failed, cancelled or invalid
+frames do not receive expanded candidates: Geometry fallback retains the original
+metadata-based hit shape. See [source crop](image-crop.md) for shared fit mapping.
 
 For an opted-in Image, its own rounded silhouette is an additional strict gate,
 even if its document hit policy is Bounds or pointer tolerance is nonzero.
@@ -74,8 +77,8 @@ separately enables pixel fill/stroke testing and renders a bounded hit canvas.
 This Flow slice implements only runtime Image source-alpha picking using its
 existing resource/render infrastructure. It does not implement that entire hit
 canvas, pixel stroke picking, Canvas pixel picking, effects/shadow hits, final
-composite/sibling-mask alpha, configurable hit-radius sampling, or crop/inner
-image editing. Pure `Scene`/`SceneEngine` picking remains geometric.
+composite/sibling-mask alpha, configurable hit-radius sampling, or a general-purpose photo editor. The separate [fixed source-crop editor](image-crop.md)
+reuses the same mapping. Pure `Scene`/`SceneEngine` picking remains geometric.
 
 ## Regression coverage
 

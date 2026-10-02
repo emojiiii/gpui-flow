@@ -63,3 +63,6 @@ pub use rotation_handles::*;
 
 mod line_endpoints;
 pub use line_endpoints::*;
+
+mod image_crop;
+pub use image_crop::*;

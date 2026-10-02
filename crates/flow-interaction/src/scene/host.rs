@@ -1,3 +1,4 @@
+mod image_crop;
 mod text_resize;
 use super::{SceneCommand, object_editable, selection_bounds};
 use crate::*;
@@ -513,6 +514,10 @@ impl ScenePluginHost {
             } => Some((*token, *handle, key.clone())),
             _ => None,
         };
+        let image_crop_identity = match &command {
+            SceneCommand::SetImageCrop { target, .. } => Some(*target),
+            _ => None,
+        };
         let line_identity = match &command {
             SceneCommand::SetLineEndpoint {
                 target, endpoint, ..
@@ -589,6 +594,13 @@ impl ScenePluginHost {
         {
             return Err(InteractionError::InvalidInput(
                 "middleware cannot retarget an owned edit command".into(),
+            ));
+        }
+        if let Some(target) = image_crop_identity
+            && !matches!(&command,SceneCommand::SetImageCrop {target:actual,..} if *actual==target)
+        {
+            return Err(InteractionError::InvalidInput(
+                "middleware cannot retarget an image crop command".into(),
             ));
         }
         if let Some((target, endpoint)) = line_identity
@@ -1073,6 +1085,9 @@ impl ScenePluginHost {
                 {
                     guard.accepted_revision = editor.engine.revision();
                 }
+            }
+            SceneCommand::SetImageCrop { target, crop } => {
+                self.apply_image_crop(editor, target, crop)?
             }
             SceneCommand::SetLineEndpoint {
                 target,

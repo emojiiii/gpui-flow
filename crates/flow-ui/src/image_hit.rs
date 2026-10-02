@@ -61,16 +61,15 @@ pub(crate) fn sample_alpha(
     }
     // Match native object-fit and the CPU image compositor: actual decoded
     // dimensions override optional, possibly stale natural_size metadata.
-    let mut fitted = image.clone();
-    fitted.natural_size = Some(Size::new(width as f32, height as f32));
-    let content = fitted.content_bounds();
-    if !content.is_valid() || !content.size.is_positive() {
-        return None;
+    let mapping = image.mapping(Size::new(width as f32, height as f32))?;
+    let content = mapping.destination;
+    let u = (f64::from(local.x) - f64::from(content.origin.x)) / f64::from(content.size.width);
+    let v = (f64::from(local.y) - f64::from(content.origin.y)) / f64::from(content.size.height);
+    if !(0. ..1.).contains(&u) || !(0. ..1.).contains(&v) {
+        return Some(0);
     }
-    let x = (f64::from(local.x) - f64::from(content.origin.x)) * f64::from(width)
-        / f64::from(content.size.width);
-    let y = (f64::from(local.y) - f64::from(content.origin.y)) * f64::from(height)
-        / f64::from(content.size.height);
+    let x = f64::from(mapping.source.origin.x) + u * f64::from(mapping.source.size.width);
+    let y = f64::from(mapping.source.origin.y) + v * f64::from(mapping.source.size.height);
     if x < 0. || y < 0. || x >= f64::from(width) || y >= f64::from(height) {
         return Some(0);
     }
@@ -154,6 +153,61 @@ mod tests {
         assert_eq!(
             sample_alpha(&image, Point::ZERO, 1, 1, &[0, 0, 0, 255]),
             Some(255)
+        );
+    }
+}
+
+#[cfg(test)]
+mod crop_tests {
+    use super::*;
+    use gpui_flow_scene::{Bounds, display::ImageFit};
+    #[test]
+    fn crop_alpha_uses_selected_pixels_for_all_fits_and_rounded_edges() {
+        let bytes: Vec<u8> = [0, 64, 128, 255, 0, 64, 128, 255]
+            .into_iter()
+            .flat_map(|a| [0, 0, 0, a])
+            .collect();
+        let mut image = Image::new("source", Size::new(100., 100.));
+        image.source_crop = Some(Bounds::new(Point::new(0.5, 0.), Size::new(0.5, 1.)));
+        image.natural_size = Some(Size::new(1., 100.));
+        for fit in [ImageFit::Contain, ImageFit::Cover, ImageFit::Fill] {
+            image.fit = fit;
+            assert_eq!(
+                sample_alpha(&image, Point::new(1., 50.), 4, 2, &bytes),
+                Some(128)
+            );
+            assert_eq!(
+                sample_alpha(&image, Point::new(99., 50.), 4, 2, &bytes),
+                Some(255)
+            );
+        }
+        image.corner_radius = 40.;
+        assert_eq!(
+            sample_alpha(&image, Point::new(1., 1.), 4, 2, &bytes),
+            Some(0)
+        );
+        image.source_crop = Some(Bounds::new(Point::new(0., 0.), Size::new(0.25, 1.)));
+        assert_eq!(
+            sample_alpha(&image, Point::new(50., 50.), 4, 2, &bytes),
+            Some(0)
+        );
+    }
+    #[test]
+    fn crop_contain_letterbox_uses_cropped_aspect_ratio() {
+        let bytes = [0, 0, 0, 255].repeat(8);
+        let mut image = Image::new("source", Size::new(100., 100.));
+        image.source_crop = Some(Bounds::new(Point::new(0.25, 0.), Size::new(0.25, 1.)));
+        assert_eq!(
+            sample_alpha(&image, Point::new(24., 50.), 4, 2, &bytes),
+            Some(0)
+        );
+        assert_eq!(
+            sample_alpha(&image, Point::new(25., 50.), 4, 2, &bytes),
+            Some(255)
+        );
+        assert_eq!(
+            sample_alpha(&image, Point::new(75., 50.), 4, 2, &bytes),
+            Some(0)
         );
     }
 }
