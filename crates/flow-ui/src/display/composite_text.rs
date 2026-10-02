@@ -1,4 +1,5 @@
 //! Same-native-backend text input producer, used only by an admitted CPU job.
+mod transform;
 use gpui_flow_composite::{
     CompositeError, CompositeLimits, DomainSource, RasterViewport, StaticImage, TextImage,
     TextInputs,
@@ -48,8 +49,8 @@ fn positive_uniform(m: Affine) -> bool {
         && (m.a - m.d).abs() <= m.a * 0.00001
 }
 /// These inputs are complete, immutable and tied to source/attachment/font epochs
-/// in RequestKey. Bitmap pixels are rendered at final screen DPI, then mapped
-/// back into the node's local coordinates without rescaling the glyph layout.
+/// in RequestKey. Uniform text keeps final-screen raster metrics; affine text
+/// uses maximum-scale local raster space, then the existing image transform.
 pub(crate) struct TextPreparation<'a> {
     pub backend: Option<&'a TextBackendSnapshot>,
     pub viewport: RasterViewport,
@@ -61,6 +62,7 @@ pub(crate) struct TextPreparation<'a> {
 impl TextPreparation<'_> {
     pub fn domain(&mut self, source: &DomainSource, inputs: &mut TextInputs) {
         for (object, world, full_source) in source.text_sources() {
+            let mut exact_local_clip = None;
             let result = (|| {
                 let Shape::Text(text) = &object.shape else {
                     unreachable!()
@@ -75,9 +77,6 @@ impl TextPreparation<'_> {
                     return Err(CompositeError::UnsupportedTextStyle(object.id.clone()));
                 }
                 let m = self.viewport.world_to_screen * world;
-                if !positive_uniform(m) {
-                    return Err(CompositeError::UnsupportedTransform);
-                }
                 let Some(Paint::Solid { color }) = object.style.fills().next() else {
                     return Ok(None);
                 };
@@ -88,16 +87,17 @@ impl TextPreparation<'_> {
                     .backend
                     .ok_or_else(|| CompositeError::TextBackendRequired(object.id.clone()))?;
                 let content = text.content_bounds();
+                let Some(space) = transform::space(m, content, self.viewport, full_source)? else {
+                    return Ok(None);
+                };
+                let m = space.matrix;
                 let bounds = [
                     m.tx + content.origin.x * m.a,
                     m.ty + content.origin.y * m.d,
                     content.size.width * m.a,
                     content.size.height * m.d,
                 ];
-                let clip = source_clip(full_source, bounds, self.viewport);
-                let Some(clip) = clip else {
-                    return Ok(None);
-                };
+                let clip = space.clip;
                 let request = TextRasterRequest {
                     overflow: crate::text_measure::text_overflow(text.overflow),
                     decoration: crate::text_measure::text_decoration(text.decoration),
@@ -173,12 +173,17 @@ impl TextPreparation<'_> {
                     CompositeLimits::default(),
                 )?;
                 *self.source_bytes += bytes;
+                exact_local_clip = space.exact_local_clip;
                 Ok(Some(Arc::new(TextImage {
                     image: Arc::new(image),
                     local_bounds,
                 })))
             })();
-            inputs.insert(object.id.clone(), result);
+            if let Some(clip) = exact_local_clip {
+                inputs.insert_clipped(object.id.clone(), result, clip);
+            } else {
+                inputs.insert(object.id.clone(), result);
+            }
         }
     }
 }

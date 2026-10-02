@@ -168,3 +168,6 @@ mod canvas_pixel_tests;
 
 #[cfg(test)]
 mod canvas_command_tests;
+
+#[cfg(test)]
+mod text_affine_tests;

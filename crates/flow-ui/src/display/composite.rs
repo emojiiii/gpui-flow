@@ -2619,3 +2619,6 @@ mod tests {
 
 #[cfg(test)]
 mod text_clip_tests;
+
+#[cfg(test)]
+mod affine_text_tests;

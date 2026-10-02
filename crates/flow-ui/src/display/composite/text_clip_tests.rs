@@ -150,7 +150,7 @@ fn automatic_text_clip_domains_preserve_real_glyph_pixels_and_padding() {
     }
 }
 #[test]
-fn rounded_text_clips_keep_missing_bridge_and_unsupported_transform_explicit() {
+fn rounded_text_clips_keep_missing_bridge_explicit_and_accept_affine_glyphs() {
     let (_app, bridge) =
         gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
     let mut e = SceneEngine::new(scene()).unwrap();
@@ -159,10 +159,7 @@ fn rounded_text_clips_keep_missing_bridge_and_unsupported_transform_explicit() {
     );
     e.transaction(|s| s.update_object(&"text".into(), |o| o.transform = Affine::rotation(10.)))
         .unwrap();
-    assert!(matches!(
-        render(&e, Some(&bridge)),
-        Err(CompositeError::UnsupportedTransform)
-    ));
+    assert!(render(&e, Some(&bridge)).unwrap().is_some());
 }
 #[test]
 fn ancestor_corner_edit_and_undo_discard_late_text_clip_jobs() {

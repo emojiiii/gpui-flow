@@ -826,7 +826,7 @@ fn rasterize_inner(
     }
     for (_, world) in source.texts() {
         let m = viewport.world_to_screen * world;
-        if m.a <= 0. || m.d <= 0. || m.b != 0. || m.c != 0. || (m.a - m.d).abs() > m.a * 0.00001 {
+        if m.inverse().is_none() {
             return Err(CompositeError::UnsupportedTransform);
         }
     }

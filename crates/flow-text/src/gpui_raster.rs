@@ -21,8 +21,9 @@ const MAX_BYTES: usize = 32 * 1024 * 1024;
 const MAX_PIXELS: usize = 4_194_304;
 const MAX_WRITES: u64 = 32_000_000;
 
-/// Screen-logical plain-text paint input. Font size, line height and wrap width
-/// have already been scaled exactly as they are on the native text path.
+/// Raster-logical plain-text paint input. Uniform producers use screen metrics;
+/// affine producers choose an isotropic local raster space. Font size, line
+/// height, bounds, clip and wrap width must all use that same space.
 #[derive(Clone, Debug)]
 pub struct TextRasterRequest {
     pub text: TextMeasureRequest,
@@ -32,7 +33,7 @@ pub struct TextRasterRequest {
     pub decoration: crate::TextDecoration,
     /// Full alignment/clip box, before viewport clipping: [x, y, width, height].
     pub bounds: [f32; 4],
-    /// Screen-logical viewport/host content intersection: [x, y, width, height].
+    /// Viewport/host intersection in the chosen raster space: [x, y, width, height].
     pub clip: [f32; 4],
     pub device_scale: f32,
     /// Straight RGBA. Emoji preserve their RGB and use this alpha.
@@ -43,7 +44,7 @@ pub struct TextRasterRequest {
 pub struct RasterizedText {
     pub width: u32,
     pub height: u32,
-    /// Absolute device-pixel origin. Dividing by device_scale gives screen coordinates.
+    /// Absolute device-pixel origin. Divide by device_scale for raster-space coordinates.
     pub origin: [i32; 2],
     pub premul_rgba: Vec<u8>,
     pub glyphs: usize,

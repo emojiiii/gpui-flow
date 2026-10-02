@@ -306,8 +306,20 @@ impl Preparation {
                         .ok_or_else(|| CompositeError::InvalidGeometry("text ink bounds".into()))?;
                 let path = PathBuilder::from_rect(rect);
                 self.add_path(&path, source.world_transform, limits)?;
+                let local_clip = texts.clip(&object.id);
+                if local_clip.is_some_and(|b| !b.is_valid() || !b.size.is_positive()) {
+                    return Err(CompositeError::InvalidGeometry(
+                        "text local clip bounds".into(),
+                    ));
+                }
+                self.has_image_clips |= local_clip.is_some();
                 image_paint = Some(ImagePaint {
-                    own_clip: None,
+                    own_clip: local_clip.map(|local_bounds| ClipRegion {
+                        local_bounds,
+                        corner_radius: 0.,
+                        corner_radii: None,
+                        world_transform: source.world_transform,
+                    }),
                     smooth: true,
                     texture_to_local: Affine::translation(b.origin.x, b.origin.y)
                         * Affine::scale(
