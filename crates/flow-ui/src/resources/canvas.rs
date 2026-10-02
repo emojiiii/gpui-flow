@@ -171,6 +171,9 @@ impl CanvasResources {
                 "resize through the scene component, not pixel edit".into(),
             ));
         }
+        if surface.generation() == entry.surface.generation() {
+            return Ok(());
+        }
         let image = upload(&surface)?;
         entry.surface = surface;
         entry.image = image;

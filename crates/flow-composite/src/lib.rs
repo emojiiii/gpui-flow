@@ -165,3 +165,6 @@ mod text_clip_tests;
 
 #[cfg(test)]
 mod canvas_pixel_tests;
+
+#[cfg(test)]
+mod canvas_command_tests;

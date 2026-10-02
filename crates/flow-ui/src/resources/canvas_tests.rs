@@ -271,3 +271,70 @@ fn failed_pixel_transaction_rolls_back_all_writes_and_retains_exportable_snapsho
     assert!(r.canvas_snapshot(&e, h).is_none());
     assert!(old.encode_png(CompositeLimits::default()).is_ok());
 }
+
+#[test]
+fn canvas_vector_commands_publish_one_generation_without_document_edits() {
+    use gpui_flow_composite::CanvasCommand;
+    use gpui_flow_scene::FillRule;
+    let (mut e, mut r, h) = setup();
+    r.prepare_canvases(&mut e).unwrap();
+    let cfg = match &e.object(h).unwrap().shape {
+        Shape::Canvas(c) => c.clone(),
+        _ => unreachable!(),
+    };
+    let before = r.composite_canvas(&e, &"c".into(), &cfg);
+    let document = e.scene().clone();
+    let revision = e.revision();
+    let commands = [
+        CanvasCommand::SetOpacity(0.5),
+        CanvasCommand::FillPath {
+            path: display::Path::from_svg("M 1 1 L 7 1 L 7 6 L 1 6 Z").unwrap(),
+            paint: Color::WHITE.into(),
+            rule: FillRule::NonZero,
+        },
+    ];
+    r.edit_canvas(&mut e, h, |s| s.draw_commands(&commands).map(|_| ()))
+        .unwrap();
+    let after = r.composite_canvas(&e, &"c".into(), &cfg);
+    assert_eq!(after.playback_generation, before.playback_generation + 1);
+    assert!(!before.resource_eq(&after));
+    assert_eq!(at(&r, &e, h, 2, 2), [128; 4]);
+    assert_eq!(e.scene(), &document);
+    assert_eq!(e.revision(), revision);
+    let old = r.canvas_snapshot(&e, h).unwrap();
+    r.edit_canvas(&mut e, h, |s| {
+        s.draw_commands(&[CanvasCommand::Save, CanvasCommand::Restore])
+            .map(|_| ())
+    })
+    .unwrap();
+    assert!(Arc::ptr_eq(&old, &r.canvas_snapshot(&e, h).unwrap()));
+    assert!(after.resource_eq(&r.composite_canvas(&e, &"c".into(), &cfg)));
+    let mut invalid = commands.to_vec();
+    invalid.push(CanvasCommand::Restore);
+    assert!(
+        r.edit_canvas(&mut e, h, |s| s.draw_commands(&invalid).map(|_| ()))
+            .is_err()
+    );
+    assert!(after.resource_eq(&r.composite_canvas(&e, &"c".into(), &cfg)));
+    assert!(Arc::ptr_eq(&old, &r.canvas_snapshot(&e, h).unwrap()));
+}
+#[test]
+fn canvas_vector_commands_reject_stale_handle_and_release_owned_snapshot() {
+    use gpui_flow_composite::CanvasCommand;
+    let (mut e, mut r, h) = setup();
+    let commands = [CanvasCommand::StrokePath {
+        path: display::Path::from_svg("M 1 3 L 9 3").unwrap(),
+        stroke: gpui_flow_scene::Stroke::new(Color::WHITE, 2.),
+    }];
+    r.edit_canvas(&mut e, h, |s| s.draw_commands(&commands).map(|_| ()))
+        .unwrap();
+    let old = r.canvas_snapshot(&e, h).unwrap();
+    let weak = Arc::downgrade(&old);
+    drop(old);
+    e.destroy(h).unwrap();
+    assert!(weak.upgrade().is_none());
+    assert!(
+        r.edit_canvas(&mut e, h, |s| s.draw_commands(&commands).map(|_| ()))
+            .is_err()
+    );
+}
