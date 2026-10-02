@@ -30,6 +30,8 @@ Group/Box/Frame外阴影使用完整子树alpha，包含子阴影、mask结果�
 
 新增闭合轮廓`StrokeAlignment::Inside/Outside`，旧JSON保持Center；native/CPU、命中、bounds与stroke-box布局共用最终mesh，开放轮廓和超预算/精度输入原子拒绝。契约及原生比较示例见[描边对齐](docs/stroke-alignment.md)。本轮云端本地764项headless（8项原有忽略）、85项UI、严格Clippy/格式与原生链接通过；真实窗口验证两种后端的对齐/填充规则/dash/变换/clip/Undo/pan/zoom。未触发GitHub Actions。
 
+新增[有界 Path/Pen 数据接口](docs/path-data.md)：`Path::to_svg()` 规范化导出 M/L/Q/C/Z，`PropertyKey::PathData` 与 engine/editor `set_path_data` 原子更新几何、bounds/hit/damage 和撤销历史，保留元素类型及其余属性。新23项回归、四个受影响headless crate共311项测试及严格Clippy通过；1项原有径向栅格性能测量忽略。此次未重跑完整workspace/native UI，不包含通用路径控制点工具。
+
 ## 架构层次
 
 1. **display / scene**：Rect、Ellipse、Line、Polygon、Star、Path、Pen、Text、Image、Group、Box、Frame 独立文件；统一 identity、style、affine transform、层级、命中、事件、JSON

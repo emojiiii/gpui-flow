@@ -25,6 +25,7 @@ Status: historical source research plus a separately labelled current source map
 - 资源增量：新SceneResources身份/attachment epoch/源generation票据与SceneView原生image/text结果、资源事件、Ready/ViewReady/Complete receipt已接入源码。Complete含失败/取消，ViewReady为GPUI paint回执，不是GPU呈现fence；媒体桥接、共享加载硬取消和字节预算仍缺，见[resource-lifecycle.md](resource-lifecycle.md)
 - 编辑旋转增量：[中心旋转手柄](rotation-handles.md)用于单选/多选vector子树，沿用共享root/capture/batch/history，默认45°可配置Shift吸附；Text/Image/Custom子树整体隐藏并拒绝，未扩大native变换能力
 - 直线端点增量：[单选Line真实端点编辑](line-endpoints.md)沿用现有outer/capture/history，保持对端和变换不动；水平/垂直及可逆仿射支持，Path/曲线排除；21项新回归、263项受影响/98项UI及有界Linux原生验收通过
+- Path/Pen数据增量：[规范化SVG导出与原子数据编辑](path-data.md)，有类型属性key、保留Path/Pen身份、dirty/bounds/hit及历史；23项新回归与四个headless crate共311项测试通过，1项原有忽略；未新增通用控制点编辑工具或宣称Leafer完整编辑器对齐
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
 ## 九类能力当前边界（含待验证源码增量）
