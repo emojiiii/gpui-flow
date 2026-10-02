@@ -68,3 +68,7 @@ Code/test inputs stayed unchanged: tree
 `dfd1cd1a446de2444da42a31b800d7ce91d61551eb3e853bf6f26094a1c0b29d`.
 No Actions, deployment or merge was launched; this bounded Linux receipt is not
 cross-platform or arbitrary-scale performance proof.
+
+The later [Image outer transform slice](image-transform-tools.md) enables
+nonuniform resize and pointer rotation through these actual rendering paths.
+Its gesture validation is separate from the rendering receipt above.

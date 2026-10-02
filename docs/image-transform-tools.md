@@ -1,6 +1,6 @@
 # Image outer resize and rotation
 
-Status: source checkpoint, final validation and native gestures pending. This
+Status: bounded Linux tests and native gestures validated on 2026-10-02. This
 extends the established bounded outer tools after the exact Image rendering
 pipeline landed; it does not introduce an inner image editor or a crop tool.
 
@@ -48,13 +48,44 @@ added. Flow's established uniform-corner projection and bounded no-flip behavior
 remain explicit differences from Leafer. Crop, skew/pivot handles, arbitrary
 inner-tool factories and the pinned stub point editor are not claimed.
 
-## Validation checkpoint
+## Validation (2026-10-02)
 
-The initial 64 focused resize, rotation and shared-resize tests passed after a
-new stale-source regression exposed the older single-resize capture weakness.
-That fix is included. Two additional derived-scene/locked-descendant regressions,
-the complete interaction suite and the new native example are being checked.
-This section is updated with final exact-source evidence before completion.
+- 10 new tests: 5 named-single-resize, 3 rotation and 2 shared-resize cases.
+  They cover affine/reflected parents, unchanged shape and identity, one-step
+  Undo/Redo, root deduplication, Text mixed selections, cancellation, external
+  source/retype changes, locked descendants and post-layout atomic rejection
+- Complete interaction suite: 242 passed, zero failures/ignored. UI library:
+  114 passed, zero failures/ignored. Total 356 affected tests; focused earlier
+  runs overlap and are not additive. This is not a fresh whole-workspace run
+- Strict interaction all-targets Clippy and example Clippy, formatting, example
+  check and one-job native link passed. No dependency or system change was needed
+- The first new stale-source test exposed the old named-single capture weakness.
+  The full interaction run also caught accidental removal of the legacy Image
+  uniform default. The capture fix was retained and legacy behavior restored
+  before final passing runs; named Image handles use their new geometry policy
+- Real cloud native window ran 09:15:37–09:19:33 UTC and exited 0. Verified actual
+  rounded pixels during Image nonuniform side resize, 90-degree rotation,
+  Shift-uniform resizing, Image/vector shared resize and 45-degree snap,
+  nonuniform-parent Image resize/rotation, parent+child root deduplication,
+  mixed Text uniform-only handles, viewport zoom and repeated Undo/Redo
+- Read-only hid handles; a drag panned the viewport through its existing
+  read-only behavior without editing object transforms. Reset restored the
+  scene/viewport. Final Undo and zoom restore showed the original Image matrix
+- Async CPU frames briefly displayed the explicit `Compositing...` status;
+  validation waited for actual settled pixels. Screenshots remain in the native
+  tool record; the process trace contains only accepted matrices and no runtime
+  error lines. Window inventory confirmed closure
+- In-flight native Escape/focus-loss/outside-release timing, cross-platform
+  behavior and arbitrary media/crop editing were not manually accepted here.
+  Cancellation, stale identity and rejection paths have headless regressions
+
+The tested source checkpoint is tree
+`f019b1ae3935360fee8dce8994a433b08aec3b20` (remote WIP
+`9e1a7dde9d89463b6494bcda9a73d4073d91232a`). Its deterministic archive SHA-256 is
+`1314857bf79e9f70f62f86bae42260150a51d57571c460302a9da194646c350d`;
+Linux example binary SHA-256 is
+`a323463679f3b2df36a6960a73a19dd384f39e1b44f9335bf10678501f70c52f`.
+Only documentation changed after the passing checks and native run.
 
 Run `cargo run -p flow-studio --bin image_transforms -- --trace` for the real
 SceneView demo. Presets cover Image, Image/vector, affine-parent Image,
