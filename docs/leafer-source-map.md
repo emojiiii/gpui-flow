@@ -38,6 +38,7 @@ Status: historical source research plus a separately labelled current source map
 - Text裁切增量：[圆角/仿射祖先自动合成](text-ancestor-clips.md)复用同App字体bridge和真实mask，不再要求无关blend/effect强制建域；保留矩形native及显式后端/文字变换限制。新增8项回归，318项不同测试通过，原生窗口角半径/padding/clip/bridge恢复/Undo退出0；同时修复曲线mask边缘裁切覆盖率偏差
 - Text溢出增量：[固定框末尾省略号](text-overflow.md)复用GPUI实际wrap/shape与已锁定unicode-segmentation，不改原文/内在测量；native与CPU共享末行marker及垂直溢出顶对齐。新增16项回归，受影响152项通过，真实Unicode/窄框/换行/高度/Undo双路径窗口退出0；默认clip保持，任意marker/富文本/字间距仍缺
 - Canvas像素增量：[物理RGBA读写与PNG字节导出](canvas-pixels.md)独立模块区分straight/premultiplied及DPR坐标，支持透明越界读取、裁切replace原子写、不可变快照和有界stream编码。新增11项回归，受影响338项通过；真实窗口PNG预览/拒绝批次/Clear/重复恢复退出0，四份480×320文件已独立解码核验alpha与hash。完整2D context/多格式和整场景导出仍缺
+- Text字体增量：[真实italic face与font_weight工厂补齐](text-italic.md)贯通独立测量request/cache、响应式尺寸、资源、ellipsis和native/CPU字形；fixed box不加猜测宽度，原生字体fallback归宿主。新增9项回归，157项受影响检查通过；真实斜体/粗斜体/Unicode/换行/Undo对照窗口退出0。装饰线/字词与段间距/富文本仍缺
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
 ## 九类能力当前边界（含待验证源码增量）

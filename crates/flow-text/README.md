@@ -70,3 +70,8 @@ paint policy; `TextMeasurer` still measures the original source. `TextRasterRequ
 now includes `overflow: TextOverflow::Clip` (old behavior) or `Ellipsis`. The
 contracts-only default stays dependency-free; the GPUI feature reuses the locked
 Unicode segmentation crate. See [limits and native evidence](../../docs/text-overflow.md).
+
+`TextMeasureRequest::italic` selects the native italic face and participates in
+measurement cache keys. Set `false` in existing Rust literals to preserve upright
+behavior. Explicit-box clipping/advances stay unchanged; see the
+[font-face contract and native receipt](../../docs/text-italic.md).

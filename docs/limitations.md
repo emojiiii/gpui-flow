@@ -118,3 +118,7 @@ remain outside this slice.
 Canvas now has [physical straight-RGBA exchange and raw PNG bytes](canvas-pixels.md).
 The bounded export excludes retained style/ancestor presentation and does not
 provide browser contexts, multi-format export or document pixel persistence.
+
+Text [italic face selection and factory font weight](text-italic.md) now flow
+through the real measurement/native/CPU pipeline. Font matching belongs to the
+host, explicit boxes still clip overhang, and richer typography remains separate.

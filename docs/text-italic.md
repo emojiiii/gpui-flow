@@ -1,7 +1,7 @@
 # Text italic face and weight factory coverage
 
-Status: recoverable source checkpoint. Focused real-font/model checks passed;
-final affected checks and native side-by-side acceptance are pending.
+Status: bounded Linux real-font, model and native side-by-side acceptance passed
+on 2026-10-02. This is face selection, not complete typography parity.
 
 ## Contract
 
@@ -41,9 +41,35 @@ Text decorations, custom font features/axes, letter/word/paragraph spacing,
 vertical writing and rich text remain separate gaps. Italic does not relax
 Text's existing positive-uniform world-transform restriction.
 
-## Validation checkpoint
+## Validation (2026-10-02)
 
-Nine new tests cover legacy JSON and fixed boxes, factory/default/range rejection,
-stale resource tickets, reactive intrinsic measurement/Undo, cache isolation,
-actual distinct italic font IDs and raster pixels, italic ellipsis width and late
-composite-job rejection. Final counts and native receipt follow.
+- Nine new regressions: two scene/default/box, two factory/resource, one reactive
+  intrinsic layout/history, one metric cache and three actual-font/UI cases
+- 157 affected checks passed: 132 UI library, 10 optional-GPUI text library,
+  14 targeted scene/engine/text-layout tests and one contracts-only doctest.
+  Zero failures/ignored. Earlier focused tests overlap and are not additive;
+  unchanged whole-workspace modules were not broadly rerun
+- Verified distinct resolved font IDs and different actual glyph bitmap bytes,
+  actual measurement against shaped line advances, bold-italic ellipsis fitting,
+  stale text tickets/jobs, ordinary reflow/Undo/Redo and fixed-box geometry
+- Strict affected all-targets Clippy, four migrated example/probe Clippy targets,
+  formatting, locked checks and real native link passed. No new dependency,
+  font package or substitute shaping engine was required
+- Native cloud window ran 10:45:59–10:48:50 UTC and exited 0 with empty stderr.
+  Native and CPU paths visibly agreed for upright, italic, bold italic, changed
+  wrap points, ellipsis/clip modes, nowrap Unicode/CJK fallback, repeated face
+  replacement and five-step Undo to the initial upright scene. Explicit boxes
+  remained fixed; the font change affected actual glyphs and line layout
+- Window inventory confirmed closure and screenshots remain in the native tool
+  record. Other font installations, platform fallback/synthesis choices, actual
+  glyph-overhang containment and cross-platform rendering were not accepted here
+
+Exact source tree: `bf50b5de97eed0edc896b8ebf6c9a3f439a2b588`.
+Deterministic archive SHA-256:
+`9af90732f42fad4e832510e85737264d2e4294f4f4bc183f43a7bae8a4d43cd2`.
+Linux example binary SHA-256:
+`5b64359dea405a6f303b2915223eacc26fbf0e8f8c5a526867f6b4d5469abc11`.
+Only documentation changed after these tests and the native run.
+
+Run `cargo run -p flow-studio --bin text_italic` for the side-by-side native/CPU
+font, weight, wrap, ellipsis, Unicode and Undo demonstration.
