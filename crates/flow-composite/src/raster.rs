@@ -858,7 +858,16 @@ fn rasterize_inner(
             bounds(clip.local_bounds),
             viewport.world_to_screen * clip.world_transform,
         );
-        let Some(next) = intersect(b, cb) else {
+        if cb[2] <= cb[0] || cb[3] <= cb[1] {
+            return Ok(None);
+        }
+        // Retain one physical pixel around ancestor paths, as for ordinary
+        // geometry. Cutting the mask surface exactly at a curved path's AABB
+        // changes tiny-skia's edge coverage relative to an internal clip.
+        // The real mask still removes every outside pixel before presentation.
+        let guard = 1. / scale;
+        let clipped_bounds = [cb[0] - guard, cb[1] - guard, cb[2] + guard, cb[3] + guard];
+        let Some(next) = intersect(b, clipped_bounds) else {
             return Ok(None);
         };
         b = next;

@@ -257,7 +257,7 @@ fn default_native_fast_path_and_geometry_domains_are_selected_deliberately() {
     }
 }
 #[test]
-fn rounded_ancestor_selects_image_domain_but_does_not_fake_native_text_support() {
+fn rounded_ancestor_selects_image_and_text_domains_without_native_aabb_fallback() {
     let mut s = Scene::new();
     s.insert(
         DisplayObject::new("p", display::Frame::new(40., 40.).rounded(10.)).with_style(Style {
@@ -287,7 +287,7 @@ fn rounded_ancestor_selects_image_domain_but_does_not_fake_native_text_support()
     );
     assert!(
         u.iter()
-            .any(|u| matches!(u,SceneUnit::Native(id)if id.as_str()=="t"))
+            .any(|u| matches!(u,SceneUnit::Domain(d)if d.root_id().as_str()=="t"))
     );
 }
 #[test]

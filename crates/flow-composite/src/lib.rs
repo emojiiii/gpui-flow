@@ -158,3 +158,6 @@ mod canvas_component_tests;
 
 #[cfg(test)]
 mod image_corner_tests;
+
+#[cfg(test)]
+mod text_clip_tests;

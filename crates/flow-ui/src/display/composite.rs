@@ -2605,3 +2605,6 @@ mod tests {
         assert!(c.frame(&"g".into()).is_some());
     }
 }
+
+#[cfg(test)]
+mod text_clip_tests;
