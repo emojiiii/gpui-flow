@@ -56,7 +56,9 @@ impl Canvas {
     pub fn pixel_size(&self) -> Result<[u32; 2], String> {
         if !self.size.is_positive()
             || !self.pixel_ratio.is_finite()
-            || self.pixel_ratio <= 0.
+            || self.pixel_ratio < 0.000001
+            || self.size.width < 0.000001
+            || self.size.height < 0.000001
             || self.pixel_ratio > 8.
             || self.size.width > 1_000_000.
             || self.size.height > 1_000_000.

@@ -31,6 +31,7 @@ Status: historical source research plus a separately labelled current source map
 - Ellipse组件增量：[弧线/扇形/圆环及环形扇区](ellipse-arcs.md)在独立文件复用Kurbo生成曲线，贯通实际bounds/hit、共享多轮廓、CPU像素与撤销；25项新回归及八crate共806项测试通过。默认整椭圆保持；角度规范化差异与Rust flatten迁移已明确，原生窗口未验
 - Rect组件增量：[独立四角半径](rect-corners.md)复用Kurbo并保留旧scalar/default JSON；曲线/CPU像素/命中/描边/历史及工厂schema已接入（同时补齐Ellipse工厂字段）。20项新增回归，八crate共826项测试通过；后续容器裁切见下一条
 - Box/Frame组件增量：[独立四角与真实子级裁切](container-corners.md)贯通组件曲线、ClipRegion、缓存/命中/撤销、CPU mask和原生矢量/渐变裁切；12项新增headless及4项原生适配器回归通过。八crate共838项和原生UI 102项测试通过；Text/Image遇圆角祖先仍明确拒绝native路径，未声称真实窗口或Canvas元素完成
+- Canvas组件增量：[独立保留配置与运行时拥有像素](canvas-component.md)含原子clear/fill/image/subtree draw、DPR/smooth/safe-resize、真实CPU合成及代际资源释放；24项新增回归，受影响356项测试通过。像素不进入文档/Undo，任意浏览器2D context、自动URL载入和导出仍缺；整视图OwnedCanvas是另一功能
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
 ## 九类能力当前边界（含待验证源码增量）
@@ -44,7 +45,7 @@ Status: historical source research plus a separately labelled current source map
 | 外观 | 多层矢量paint、线性/径向渐变、共享mesh的cap/join/dash描边、named/placeholder/button状态及fill/opacity过渡、Text/Image矩形祖先clip链、有界矢量整体opacity/内部blend/alpha mask | 开放轮廓inside/outside与scale-fixed stroke、geometry状态、复杂文字样式/变换、域内Custom、外部backdrop、更多mask、不安全PassThrough组阴影、Custom/spread/box/scale-fixed shadow及通用filter |
 | 布局 | 固定/内容轴、双轴reverse遍历/wrap-reverse、wrap测量、真实字体文字Natural/AutoHeight、嵌套有界收敛、opt-in提交前自动派生 | 帧合并/局部依赖调度、百分比、shrinkContent、文本baseline/富排版 |
 | 数据 | 类型属性/schema/default、原子变化、dirty分类、JSON | 完整input/computed分离及Leafer导入导出 |
-| 元素 | 主要原语、场景树、变换、矢量完整裁切及原生矩形clip、统一几何命中 | 命令式Canvas元素、各类型高级属性完全覆盖 |
+| 元素 | 主要原语、场景树、变换、矢量完整裁切及原生矩形clip、统一几何命中 | Canvas完整context/导出/内容持久化、各类型高级属性完全覆盖 |
 | 自定义元素 | 注册factory/schema、确定性自定义几何/picking、数值动画 | 自定义resize/编辑工具协议、异步资源就绪整合 |
 | 实例 | 独立引擎/代际handle、clone/detach/reparent/destroy | 多层App实例组合与跨层转发 |
 | 生命周期 | 原子结构事件、销毁清理、动画目标/历史保护；新源码桥接原生image/text结果、资源票据和Ready/ViewReady/Complete回执 | 媒体资源桥接、共享后台加载硬取消/字节预算、GPU呈现fence |

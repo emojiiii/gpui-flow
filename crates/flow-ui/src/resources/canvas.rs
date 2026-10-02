@@ -108,15 +108,11 @@ impl CanvasResources {
         }
         let surface = if let Some(old) = entries
             .get(&ticket.handle)
-            .filter(|e| e.ticket.attachment_epoch == ticket.attachment_epoch)
+            .filter(|e| e.ticket.attachment_epoch == ticket.attachment_epoch && !e.reset)
         {
             let mut surface = old.surface.clone();
             surface.reconfigure(config.clone())?;
-            if old.reset {
-                surface.clear()?;
-            } else {
-                surface.retain_pixels(old.crop[0], old.crop[1])?;
-            }
+            surface.retain_pixels(old.crop[0], old.crop[1])?;
             surface
         } else {
             CanvasSurface::new(config.clone(), CompositeLimits::default())?

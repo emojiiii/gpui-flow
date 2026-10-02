@@ -41,7 +41,7 @@ pub(super) fn validate(
     ) {
         return Err(invalid(
             id,
-            "lock_ratio supports Rect/Ellipse/Image/Box/Frame only; text and custom resize policies are unsupported",
+            "lock_ratio supports Rect/Ellipse/Image/Canvas/Box/Frame only; text and custom resize policies are unsupported",
         ));
     }
     let row = parent.direction.is_row();

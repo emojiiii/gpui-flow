@@ -1,8 +1,8 @@
-# Canvas component and owned runtime pixels (WIP)
+# Canvas component and owned runtime pixels
 
-This source checkpoint implements a distinct retained `display::Canvas`, not an
+This slice implements a distinct retained `display::Canvas`, not an
 Image alias or the existing whole-SceneView `OwnedCanvas` compositing mode.
-Validation is still in progress; it must not be read as a completed parity claim.
+It is a bounded implementation, not a completed Leafer parity claim.
 
 The pinned [Leafer Canvas component](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/Canvas.ts)
 owns a canvas/context, draws images/subtrees, resizes and destroys its resource.
@@ -21,7 +21,7 @@ upload; no upstream implementation or new dependency is copied.
   `capture_subtree` and `draw` remove the source root world transform before the
   supplied local transform, exclude ancestor clips/opacity, and preserve the
   actual subtree/effects. Unsupported input fails without publishing partial ink.
-- Dimensions are positive; DPR is finite in (0,8]. Physical dimensions ceil
+- Logical dimensions are finite and at least 1e-6; DPR is finite in [1e-6,8]. Physical dimensions ceil
   logical dimensions times DPR, at most 4096 per axis and 4194304 pixels. Logical
   drawing scales to the allocated extent. This intentionally rejects zero sizes
   instead of upstream's zero-to-one fallback. Existing compositor limits apply.
@@ -39,6 +39,8 @@ upload; no upstream implementation or new dependency is copied.
   still remove cropped pixels even if the view did not render between commits.
   Shape corner/smooth-only updates preserve content. Retained surface + upload
   buffers are capped at 64 MiB per adapter, with 64 entries and candidate admission.
+  Capacity failures are explicit resource failures; `retry_canvases` requests fresh
+  tickets after a host frees capacity, without discarding existing live content.
 - SceneView uses the real CPU domain for Canvas content, fills, strokes, affine
   transforms, opacity, inherited clips and supported effects. Standalone native
   DisplayElement reports the required compositing path instead of painting an
@@ -51,8 +53,28 @@ already-authorized decoded pixels; external snapshot owners and GPUI's private
 GPU atlas remain outside the adapter's explicit CPU-byte accounting. Picking uses
 the component rectangle/corners and stroke geometry, not runtime alpha sampling.
 
-## Checkpoint validation
+## Validation
 
-The model/compositor/UI library compile against the real locked dependencies.
-New regression tests, final focused lint and native example verification remain
-pending. No Actions, deployment, merge or cross-platform run is launched.
+Fresh Linux/Rust 1.98.1 local validation on 2026-10-02:
+
+- 24 new regressions: three scene, two engine, one editor, two layout, nine CPU
+  surface/compositor and seven native-adapter tests.
+- Actual coverage includes default JSON/no pixel persistence, finite/DPR/pixel
+  limits, factory rollback, layout grow/ratio and oversized derived rejection,
+  config Undo/Redo/cancellation, decoded-image filtering, fill/content/stroke
+  ordering, independent corners, normalized subtree drawing, failed-draw rollback,
+  memory/work admission, intermediate safe shrink, unsafe A-B-A reset, immediate
+  detach/destroy/retype/disposal, per-view ownership, and stale asynchronous CPU
+  success rejected after a pixel-only edit without a document revision change.
+- Affected native UI/compositor libraries: 298 tests pass. Selected scene, engine
+  resources, editor and layout integration tests: 58 pass. Total 356, zero failures
+  and zero ignored for these commands; this is not a rerun of every workspace test.
+  After the final allocation-admission cleanup, the 44 Canvas-focused native/CPU
+  tests and affected Clippy were repeated successfully.
+- Strict all-target Clippy passes for the six directly affected packages. The
+  `canvas_element` Studio example compiles and links with the real locked GPUI.
+  Workspace rustfmt and `git diff --check` pass.
+
+The native example is prepared for a bounded interactive check; live-window
+results are still pending. No Actions, deployment, merge or cross-platform run is
+launched.

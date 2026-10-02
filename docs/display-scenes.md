@@ -73,6 +73,15 @@ backend diagnostics 为 0。未运行 Windows/macOS、完整 SVG 文档、外部
 
 场景树支持嵌套容器，不等于节点图的单层 Group。两者是不同领域模型。
 
+## Canvas 像素组件
+
+`display::Canvas` 是独立叶元素，配置位于 `flow-scene/src/display/canvas.rs`。
+`flow-composite/src/canvas_surface.rs` 复用 tiny-skia 提供有界原子像素操作，
+`flow-ui/src/resources/canvas.rs` 持有实例/attachment 绑定的资源，SceneView
+通过既有合成器显示真实像素。形状配置参与 Undo，像素不进入 JSON 或历史。
+它与节点图 FlowCanvas、整视图 OwnedCanvas 模式均不同；接口、预算、释放及
+验证边界见 [Canvas 组件契约](canvas-component.md)。
+
 ## 自定义显示元素
 
 `display::Custom::new(kind, bounds, contours).with_data(json)` 提供业务类型标识、声明边界、可序列化的后备矢量路径与自定义属性。缺少业务 renderer 时仍能显示其后备几何；反序列化从不执行任意应用代码。

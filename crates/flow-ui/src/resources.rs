@@ -129,6 +129,15 @@ impl SceneResourceAdapter {
         }
         Ok(events)
     }
+    /// Explicit retry after a host releases capacity or changes resource limits.
+    /// Existing live pixel content is retained; failed producers get fresh tickets.
+    pub fn retry_canvases(
+        &mut self,
+        engine: &mut SceneEngine,
+    ) -> Result<Vec<ResourceEvent>, ResourceError> {
+        self.tracker.invalidate(engine, ResourceKind::Canvas)?;
+        self.prepare_canvases(engine)
+    }
     /// Atomic imperative drawing. Scene/Undo contains only the Canvas config;
     /// pixel edits are runtime-only and must be followed by a host repaint.
     pub fn edit_canvas(
@@ -182,7 +191,12 @@ impl SceneResourceAdapter {
             None => (
                 Err(gpui_flow_composite::CompositeError::ImageUnavailable {
                     image: id.clone(),
-                    reason: "Canvas has no current owned surface".into(),
+                    reason: ticket
+                        .and_then(|t| self.tracker.state(engine, t))
+                        .map_or_else(
+                            || "Canvas has no current owned surface".into(),
+                            |state| format!("Canvas resource: {state:?}"),
+                        ),
                 }),
                 0,
             ),
@@ -884,3 +898,6 @@ mod tests {
         assert_eq!(r.playbacks.len(), 16);
     }
 }
+
+#[cfg(test)]
+mod canvas_tests;

@@ -2416,4 +2416,57 @@ mod tests {
         assert!(work.cancel.load(Ordering::Relaxed));
         assert!(c.old_frame(&id).is_none());
     }
+    #[test]
+    fn canvas_pixel_generation_rejects_late_cpu_success_without_document_changes() {
+        use gpui_flow_scene::{Bounds, Color, DisplayObject, Point, Scene, Size, Style, display};
+        let mut scene = Scene::new();
+        scene
+            .insert(
+                DisplayObject::new("c", display::Canvas::new(20., 20.)).with_style(Style {
+                    fill: None,
+                    ..Default::default()
+                }),
+                None,
+                None,
+            )
+            .unwrap();
+        let mut e = SceneEngine::new(scene).unwrap();
+        let h = e.handle(&"c".into()).unwrap();
+        let mut resources = crate::resources::SceneResourceAdapter::new(&mut e).unwrap();
+        let bounds = Bounds::new(Point::ZERO, Size::new(20., 20.));
+        resources
+            .edit_canvas(&mut e, h, |s| s.fill_rect(bounds, Color::hex(0xff0000)))
+            .unwrap();
+        let revision = e.revision();
+        let first = Arc::new((*key(&e)).clone().with_resources(&e, Some(&resources)));
+        let mut c = CompositeController::default();
+        c.request(first.clone());
+        let work = c.take_work().unwrap();
+        let late = work.run();
+        assert!(matches!(late.as_slice(), [(_, Ok(Some(_)))]));
+        resources
+            .edit_canvas(&mut e, h, |s| s.fill_rect(bounds, Color::hex(0x0000ff)))
+            .unwrap();
+        assert_eq!(revision, e.revision());
+        let second = Arc::new((*key(&e)).clone().with_resources(&e, Some(&resources)));
+        assert!(!second.compatible(&first, &"c".into()));
+        c.request(second.clone());
+        assert!(work.cancel.load(Ordering::Relaxed));
+        c.finish(first, late);
+        assert!(c.frame(&"c".into()).is_none());
+        let fresh = c.take_work().unwrap();
+        let result = fresh.run();
+        let [(_, Ok(Some(frame)))] = result.as_slice() else {
+            panic!("complete canvas frame expected")
+        };
+        let offset = ((10 * frame.width + 10) * 4) as usize;
+        assert_eq!(&frame.premul_rgba[offset..offset + 4], &[0, 0, 255, 255]);
+        c.finish(second.clone(), result);
+        let image = c.frame(&"c".into()).unwrap().0;
+        c.accepted(&second, &"c".into(), &image.image);
+        resources.edit_canvas(&mut e, h, |s| s.clear()).unwrap();
+        let third = Arc::new((*key(&e)).clone().with_resources(&e, Some(&resources)));
+        assert_eq!(c.request(third).len(), 1);
+        assert!(c.old_frame(&"c".into()).is_none());
+    }
 }

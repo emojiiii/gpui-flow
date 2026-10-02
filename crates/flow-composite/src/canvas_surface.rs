@@ -59,7 +59,18 @@ impl CanvasSurface {
             self.pixels.height() as f32 / self.config.size.height,
         )
     }
+    fn admit_work(&self, passes: u64) -> Result<(), CompositeError> {
+        if (self.pixels.width() as u64 * self.pixels.height() as u64).saturating_mul(passes)
+            > self.limits.max_surface_writes
+        {
+            Err(CompositeError::WorkLimit)
+        } else {
+            Ok(())
+        }
+    }
     fn copy(&self, retained: u64) -> Result<Pixmap, CompositeError> {
+        // Zero initialization, copy and one worst-case full-surface paint.
+        self.admit_work(3)?;
         let mut target = allocate(
             self.pixels.width(),
             self.pixels.height(),
@@ -83,6 +94,9 @@ impl CanvasSurface {
             let [w, h] = config
                 .pixel_size()
                 .map_err(CompositeError::InvalidGeometry)?;
+            if config.safe_resize && w as u64 * h as u64 * 2 > self.limits.max_surface_writes {
+                return Err(CompositeError::WorkLimit);
+            }
             let mut target = allocate(w, h, self.limits, self.byte_len())?;
             if config.safe_resize {
                 let count = w.min(self.pixels.width()) as usize * 4;
@@ -108,6 +122,7 @@ impl CanvasSurface {
             return Ok(());
         }
         let generation = self.next()?;
+        self.admit_work(2)?;
         let mut target = allocate(
             self.pixels.width(),
             self.pixels.height(),
@@ -141,6 +156,7 @@ impl CanvasSurface {
     /// Solid source-over fill in logical Canvas coordinates.
     pub fn fill_rect(&mut self, bounds: Bounds, color: Color) -> Result<(), CompositeError> {
         validate_bounds(bounds)?;
+        validate_bounds(self.scale().transform_bounds(bounds))?;
         let generation = self.next()?;
         let mut target = self.copy(0)?;
         let rect = tiny_skia::Rect::from_xywh(
@@ -168,6 +184,7 @@ impl CanvasSurface {
         if !opacity.is_finite() || !(0. ..=1.).contains(&opacity) {
             return Err(CompositeError::InvalidImage);
         }
+        validate_bounds(self.scale().transform_bounds(destination))?;
         let generation = self.next()?;
         let mut target = self.copy(image.byte_len())?;
         let matrix = self.scale()
@@ -217,7 +234,7 @@ impl CanvasSurface {
         );
         // Current + candidate surface are admitted before compositor scratch.
         let mut budget = PixelBudget::new(self.limits, self.byte_len().saturating_mul(2))?;
-        budget.charge_input_work(self.pixels.width() as u64 * self.pixels.height() as u64)?;
+        budget.charge_input_work(self.pixels.width() as u64 * self.pixels.height() as u64 * 3)?;
         let frame = rasterize_with_inputs(
             source,
             images,
