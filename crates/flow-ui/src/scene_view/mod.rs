@@ -2,6 +2,8 @@
 mod canvas_commands;
 mod composite;
 pub(crate) mod export;
+mod flow_layout;
+pub use flow_layout::FlowFrameEvent;
 mod input_trace;
 mod interaction;
 pub use input_trace::*;
@@ -20,6 +22,8 @@ use gpui_flow_scene::{DisplayId, EventKind, HitTestOptions, Scene, SceneError, S
 
 pub enum SceneViewEvent {
     Changed,
+    /// Result of one opt-in real-frame layout batch.
+    FlowFrame(FlowFrameEvent),
     SelectionChanged,
     Pointer(Box<SceneEvent>),
     /// Opt-in completed input snapshot; no history is retained by the view.
@@ -57,6 +61,7 @@ pub struct SceneView {
     text_rasterizer: Option<std::sync::Arc<gpui_flow_text::GpuiTextRasterizer>>,
     resources: Option<crate::resources::SceneResourceAdapter>,
     image_alpha_hits: image_hit::ImageHitPolicies,
+    frame_layout: flow_layout::FrameLayoutState,
     pub resource_error: Option<String>,
     pub renderers: crate::display::DisplayRegistry,
     /// Opt-in paint-only state presentation; never writes editor documents.
@@ -115,6 +120,7 @@ impl SceneView {
             text_rasterizer: None,
             resources,
             image_alpha_hits: Default::default(),
+            frame_layout: Default::default(),
             resource_error,
             renderers: crate::display::DisplayRegistry::default(),
             state_styles,
