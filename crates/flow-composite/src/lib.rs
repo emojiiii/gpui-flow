@@ -9,6 +9,7 @@ mod image;
 mod nonseparable;
 mod plan;
 mod raster;
+mod scene_export;
 mod shadow;
 mod text;
 mod vector;
@@ -16,6 +17,7 @@ pub use canvas_surface::*;
 pub use image::*;
 pub use plan::*;
 pub use raster::*;
+pub use scene_export::*;
 pub use text::*;
 
 use gpui_flow_scene::DisplayId;
@@ -177,3 +179,6 @@ mod canvas_image_command_tests;
 
 #[cfg(test)]
 mod canvas_text_command_tests;
+
+#[cfg(test)]
+mod scene_export_tests;

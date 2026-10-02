@@ -7,8 +7,8 @@ publish.workspace = true
 [dependencies]
 gpui-flow-core.workspace = true
 gpui-flow-scene.workspace = true
-# Reuse the locked, audited A8 Gaussian implementation without image codecs.
-image = { version = "=0.25.10", default-features = false }
+# Reuse locked Gaussian and JPEG/lossless WebP codecs; no default-format bundle.
+image = { version = "=0.25.10", default-features = false, features = ["jpeg", "webp"] }
 tiny-skia = { version = "=0.11.4", default-features = false, features = ["std", "simd"] }
 
 # Streaming PNG export reuses the version already present in Cargo.lock.
