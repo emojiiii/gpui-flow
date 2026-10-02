@@ -2,7 +2,7 @@
 
 Status: historical source research plus a separately labelled current source map, **not a full parity claim**. Reviewed 2026-09-30. The original research changed no Rust source and executed no upstream code, install, build script or example. Later implementation slices below must not be confused with that original read-only report.
 
-> 当前批次已恢复Linux本地验证：headless及UI回归、workspace check/严格clippy和可执行文档通过；精确范围见[本地验证记录](local-validation-2026-09-30.md)。CI、真实窗口交互与跨平台仍未验，自动回归不表示完整Leafer能力已经完成。
+> 当前批次已恢复Linux本地验证：headless及UI回归、workspace check/严格clippy和可执行文档通过；精确范围见[本地验证记录](local-validation-2026-09-30.md)。该历史批次未验CI、真实窗口交互与跨平台；后续独立Linux真实窗口验收见下面各增量契约，仍不表示完整Leafer能力已经完成。
 
 > 基线说明：下方差距矩阵记录源码研究时的 `43eda10` 状态。后续已实现的引擎身份/生命周期/schema/dirty 缓存及原生事件接入见 [engine.md](engine.md)，不要把历史矩阵的“absent”误读为最新状态。后续批次实现了[多层矢量 paints](appearance.md)和[显式行列布局](flow-layout.md)；另有基础属性动画和编辑器安全播放会话；完整外观合成/效果、全局响应式布局调度、完整timeline/高级状态过渡/运动路径仍然缺失。
 
@@ -31,16 +31,17 @@ Status: historical source research plus a separately labelled current source map
 - Ellipse组件增量：[弧线/扇形/圆环及环形扇区](ellipse-arcs.md)在独立文件复用Kurbo生成曲线，贯通实际bounds/hit、共享多轮廓、CPU像素与撤销；25项新回归及八crate共806项测试通过。默认整椭圆保持；角度规范化差异与Rust flatten迁移已明确，原生窗口未验
 - Rect组件增量：[独立四角半径](rect-corners.md)复用Kurbo并保留旧scalar/default JSON；曲线/CPU像素/命中/描边/历史及工厂schema已接入（同时补齐Ellipse工厂字段）。20项新增回归，八crate共826项测试通过；后续容器裁切见下一条
 - Box/Frame组件增量：[独立四角与真实子级裁切](container-corners.md)贯通组件曲线、ClipRegion、缓存/命中/撤销、CPU mask和原生矢量/渐变裁切；12项新增headless及4项原生适配器回归通过。八crate共838项和原生UI 102项测试通过；Text/Image遇圆角祖先仍明确拒绝native路径，未声称真实窗口或Canvas元素完成
-- Canvas组件增量：[独立保留配置与运行时拥有像素](canvas-component.md)含原子clear/fill/image/subtree draw、DPR/smooth/safe-resize、真实CPU合成及代际资源释放；24项新增回归，受影响356项测试通过，Linux真实窗口Draw/Clear/安全与重置resize/Undo复验退出0。像素不进入文档/Undo，任意浏览器2D context、自动URL载入和导出仍缺；整视图OwnedCanvas是另一功能
-- Text组件增量：[四边padding与垂直对齐](text-box.md)复用同源GPUI shaping/行高，native与CPU共享inner box、wrap宽度及溢出顶对齐；测量auto-size/响应布局/资源/Undo贯通。13项新回归，受影响667项通过（1项原有忽略），真实窗口双路径对照/连续Undo退出0；富文本/ellipsis/italic/字词间距仍缺
+- Canvas组件增量：[独立保留配置与运行时拥有像素](canvas-component.md)含原子clear/fill/image/subtree draw、DPR/smooth/safe-resize、真实CPU合成及代际资源释放；24项新增回归，受影响356项测试通过，Linux真实窗口Draw/Clear/安全与重置resize/Undo复验退出0。像素不进入文档/Undo，后续矢量命令及RGBA/PNG见下方；完整浏览器2D context和自动URL载入仍缺；整视图OwnedCanvas是另一功能
+- Text组件增量：[四边padding与垂直对齐](text-box.md)复用同源GPUI shaping/行高，native与CPU共享inner box、wrap宽度及溢出顶对齐；测量auto-size/响应布局/资源/Undo贯通。13项新回归，受影响667项通过（1项原有忽略），真实窗口双路径对照/连续Undo退出0；后续ellipsis/italic/装饰见下方；富文本/字词间距仍缺
 - Image组件增量：[独立角半径与几何驱动合成](image-corners.md)复用Rect/Kurbo、GPUI Cover/Fill角半径和CPU实际fit-mask；Contain圆角及复杂变换/祖先clip自动进入有界CPU域。16项新回归，受影响664项通过（1项原有忽略），真实静态/动画/旋转/clip/Undo窗口退出0。没有alpha hit或原生圆角Text；后续Image编辑工具见下一条
 - Image交互增量：[非均匀缩放与旋转手柄](image-transform-tools.md)复用已有仿射/多选root/history与实际CPU域，保留Text约束及legacy兼容。新增10项回归并修复单选命名手柄陈旧source/派生布局捕获漏洞；受影响356项测试通过，Linux真实多路径拖动/Shift/Undo/Redo/zoom窗口退出0；crop/inner editor仍缺
 - Text裁切增量：[圆角/仿射祖先自动合成](text-ancestor-clips.md)复用同App字体bridge和真实mask，不再要求无关blend/effect强制建域；保留矩形native及显式后端/文字变换限制。新增8项回归，318项不同测试通过，原生窗口角半径/padding/clip/bridge恢复/Undo退出0；同时修复曲线mask边缘裁切覆盖率偏差
 - Text溢出增量：[固定框末尾省略号](text-overflow.md)复用GPUI实际wrap/shape与已锁定unicode-segmentation，不改原文/内在测量；native与CPU共享末行marker及垂直溢出顶对齐。新增16项回归，受影响152项通过，真实Unicode/窄框/换行/高度/Undo双路径窗口退出0；默认clip保持，任意marker/富文本/字间距仍缺
 - Canvas像素增量：[物理RGBA读写与PNG字节导出](canvas-pixels.md)独立模块区分straight/premultiplied及DPR坐标，支持透明越界读取、裁切replace原子写、不可变快照和有界stream编码。新增11项回归，受影响338项通过；真实窗口PNG预览/拒绝批次/Clear/重复恢复退出0，四份480×320文件已独立解码核验alpha与hash。完整2D context/多格式和整场景导出仍缺
-- Text字体增量：[真实italic face与font_weight工厂补齐](text-italic.md)贯通独立测量request/cache、响应式尺寸、资源、ellipsis和native/CPU字形；fixed box不加猜测宽度，原生字体fallback归宿主。新增9项回归，157项受影响检查通过；真实斜体/粗斜体/Unicode/换行/Undo对照窗口退出0。装饰线/字词与段间距/富文本仍缺
+- Text字体增量：[真实italic face与font_weight工厂补齐](text-italic.md)贯通独立测量request/cache、响应式尺寸、资源、ellipsis和native/CPU字形；fixed box不加猜测宽度，原生字体fallback归宿主。新增9项回归，157项受影响检查通过；真实斜体/粗斜体/Unicode/换行/Undo对照窗口退出0。后续装饰见下方；字词与段间距/富文本仍缺
 - Text装饰增量：[共享实际行宽的下划线与删除线](text-decoration.md)贯通独立组件配置、工厂、资源、历史及native/CPU共同几何；非透明装饰自动合成以确保字形/线条重叠后整体opacity只应用一次。新增12项回归，373项受影响检查通过；真实四种装饰/对齐/换行/ellipsis/italic/opacity及十次Undo窗口退出0。自定义装饰色/offset、字词段间距及富文本仍缺
 - Canvas绘图增量：[原子矢量命令批次](canvas-commands.md)用独立模块复用现有domain/渐变/曲线及Kurbo-Lyon描边，支持批次内变换/opacity/save/restore与一次像素代际发布。新增11项回归，360项受影响测试通过；真实DPR 1/2、无效末命令回滚、resize/Undo/重绘窗口退出0，拒绝及重绘前后画面区域逐像素相同。完整context、clip stack及文字/图像命令仍缺
+- Canvas裁切增量：[逐次绘制的Path裁切栈](canvas-clips.md)冻结当前变换，支持NonZero/EvenOdd、交集、空clip与save/restore；复用已有alpha-mask并在每次source-over前应用覆盖率，显式核算复制几何及mask预算。新增7项回归，367项受影响测试通过；真实双DPR模式/无效命令/resize/Undo/重绘窗口退出0，三组画面区域逐像素一致。非持久context，未扩展retained场景clip schema
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
 ## 九类能力当前边界（含待验证源码增量）

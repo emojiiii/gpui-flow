@@ -1,7 +1,6 @@
 # Canvas command clipping
 
-Status: recoverable source checkpoint; six new CPU pixel regressions, one adapter
-regression and strict affected/example Clippy pass. Native acceptance is pending.
+Status: implemented and validated on Linux, with bounded per-draw clipping.
 
 `CanvasCommand::ClipPath { path, rule }` intersects the current clip with an owned
 Path using NonZero or EvenOdd. Geometry is frozen at the current transform when
@@ -35,3 +34,34 @@ Current limitations: clips affect only FillPath/StrokePath within this command
 batch. Standalone clear/image/subtree/pixel APIs do not inherit the batch clip.
 Arbitrary clip paths remain a Canvas-owned pixel operation; this does not expand
 the retained scene's Box/Frame clip schema or native toolkit clipping APIs.
+
+## Validation
+
+Seven new regressions cover frozen transforms, opacity-independent clipping, DPR,
+nested intersections, save/restore order, evenodd holes, empty paths, batch state
+isolation, late invalid geometry and compiled geometry/mask/depth/byte/work
+budgets. A curved-edge test independently checks per-draw source-over alpha and
+compares a two-draw batch with two individual clipped draws, pixel for pixel.
+Adapter checks preserve document configuration and snapshot identity on failure.
+
+Affected tests: **367 passed, zero failed or ignored** (143 UI + 224 composite).
+Strict affected all-targets Clippy, example Clippy and native linking passed.
+The exact production source remained unchanged through native acceptance.
+
+The updated `canvas_commands` window ran 2026-10-02 11:57:10–11:59:22 UTC and
+closed normally with exit 0 and empty stdout/stderr. Actual DPR 1/2 pixels were
+inspected for curved clips, nested evenodd holes, no clipping, an unclipped next
+batch, late-invalid rollback, safe resize/configuration Undo and regeneration.
+Saved artwork-region comparisons were exactly identical before/after rejection,
+between the initial and regenerated clip, and between no-clip output and the
+previous verified command-batch build. Save/Restore clip-state transitions and
+per-draw edge-alpha arithmetic have focused CPU tests; the native controls do not
+separately exercise every state-stack combination.
+
+Source commit: `25776373accb59e7c966da31c89fa6ce1613cdb1`, tree
+`4824d1a5756fe3fb9567fad11d3d9160e9315422`. Archive SHA-256:
+`72cc7387a746e85dfea321c8b58da71da074ecf8a612ed0787ec05ccf6735710`.
+Binary SHA-256:
+`2376df89247679da8d2beb63c649e8b486ed4b4c12e047e7ba3cbae957ec5949`.
+Screenshots and close receipt were retained with the local validation artifacts.
+This is Linux coverage, not browser or cross-platform pixel equivalence.

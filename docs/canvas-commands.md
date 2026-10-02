@@ -36,8 +36,9 @@ as the unchanged generation. Failed edits retain the previous snapshot and do
 not alter the scene, history or resource generation. Pixel edits are runtime
 content, so configuration Undo does not replay commands.
 
-This does not implement current-path construction, arbitrary clipping stacks,
-clearRect, image/text commands, patterns, filters/shadows, non-source-over modes,
+A later [per-draw clip-path slice](canvas-clips.md) adds batch-local clipping.
+This does not implement current-path construction, clearRect, image/text commands,
+patterns, filters/shadows, non-source-over modes,
 inside/outside strokes, hit testing, persistent context state or browser API
 compatibility. Existing explicit clear/image/subtree/pixel APIs remain available.
 Stroke defaults are Flow's documented Round/Round, not browser Butt/Miter; callers

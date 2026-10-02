@@ -133,5 +133,7 @@ measurement or permit outside-box paint.
 Canvas [vector command batches](canvas-commands.md) now support owned Path
 fill/stroke, gradients and batch-local transform/alpha/save/restore through the
 existing compositor. They do not provide a persistent browser context, current
-path builder, arbitrary clip stack, clearRect, image/text commands or additional
-composite operations. Atomicity is per surface batch.
+path builder, clearRect, image/text commands or additional composite operations.
+[Per-draw Path clip stacks](canvas-clips.md) now support frozen transforms,
+intersection and save/restore inside a batch; they do not change retained
+Box/Frame clipping schemas. Atomicity is per surface batch.
