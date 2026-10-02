@@ -52,9 +52,15 @@ impl SceneView {
         }
     }
     fn plugin_event(&mut self, event: input::CanvasEvent, cx: &mut Context<Self>) -> bool {
+        let traced = self
+            .input_tracing
+            .then(|| SceneInputOperation::Canvas(event.clone()));
         let report = self
             .router
             .dispatch(&mut self.editor, &mut self.interactions, event);
+        if let Some(operation) = traced {
+            self.emit_input_trace(operation, &report, cx);
+        }
         let allowed = !report.default.default_prevented;
         self.apply_routed_report(report, cx);
         allowed
@@ -84,13 +90,20 @@ impl SceneView {
         if self.editor.engine.instance(handle)?.state != gpui_flow_engine::InstanceState::Attached {
             return Err(gpui_flow_engine::EngineError::DetachedHandle);
         }
+        let id = self.editor.engine.instance(handle)?.id;
         window.focus(&self.focus, cx);
         if !self.focus.is_focused(window) {
+            self.emit_input_trace(
+                SceneInputOperation::FocusDeclined(id),
+                &input::scene::RoutedReport::default(),
+                cx,
+            );
             return Ok(false);
         }
         let report =
             self.router
                 .set_focus(&mut self.editor, &mut self.interactions, Some(handle))?;
+        self.emit_input_trace(SceneInputOperation::Focus(id), &report, cx);
         self.apply_routed_report(report, cx);
         self.pending_native_focus = false;
         let accepted = self.router.focused(&self.editor.engine) == Some(handle);
@@ -108,6 +121,7 @@ impl SceneView {
         let report = self
             .router
             .clear_focus(&mut self.editor, &mut self.interactions);
+        self.emit_input_trace(SceneInputOperation::ClearFocus, &report, cx);
         self.apply_routed_report(report, cx);
         self.pending_native_focus = false;
         if self.focus.is_focused(window) {
@@ -125,6 +139,7 @@ impl SceneView {
                 let report = self
                     .router
                     .clear_focus(&mut self.editor, &mut self.interactions);
+                self.emit_input_trace(SceneInputOperation::ClearFocus, &report, cx);
                 self.apply_routed_report(report, cx);
                 self.pending_native_focus = false;
                 self.interaction_error =

@@ -2,6 +2,8 @@
 mod composite;
 mod canvas_commands;
 mod interaction;
+mod input_trace;
+pub use input_trace::*;
 pub(crate) mod image_hit;
 mod plugins;
 mod render;
@@ -19,6 +21,8 @@ pub enum SceneViewEvent {
     Changed,
     SelectionChanged,
     Pointer(Box<SceneEvent>),
+    /// Opt-in completed input snapshot; no history is retained by the view.
+    InputTrace(Box<SceneInputTrace>),
     Resource(gpui_flow_engine::ResourceEvent),
     ResourceView(gpui_flow_engine::ResourceViewEvent),
     EditorTool(gpui_flow_interaction::scene::SceneToolEvent),
@@ -60,6 +64,7 @@ pub struct SceneView {
     state_clock: std::time::Instant,
     focus: FocusHandle,
     pending_native_focus: bool,
+    input_tracing: bool,
     origin: WorldPoint,
     extent: WorldSize,
     subscriptions: Vec<Subscription>,
@@ -116,6 +121,7 @@ impl SceneView {
             state_clock: std::time::Instant::now(),
             focus: cx.focus_handle(),
             pending_native_focus: false,
+            input_tracing: false,
             origin: WorldPoint::ZERO,
             extent: WorldSize::new(1000., 700.),
             subscriptions: vec![],
