@@ -194,4 +194,24 @@ mod tests {
             "clip does not change text alignment box"
         );
     }
+    #[::core::prelude::v1::test]
+    fn text_box_padding_preserves_inner_alignment_frame_under_pan_and_zoom() {
+        use gpui_flow_scene::display::TextVerticalAlign;
+        let mut text = Text::new("wrapped content", Size::new(100., 60.));
+        text.padding = [3., 5., 7., 11.];
+        text.vertical_align = TextVerticalAlign::Bottom;
+        for zoom in [0.5, 1., 2.] {
+            let p = TextPaintPlan::new(
+                &text,
+                Affine::translation(13., 17.) * Affine::scale(zoom, zoom),
+            );
+            assert_eq!(p.request.wrap_width, Some(84. * zoom));
+            assert_eq!(
+                p.bounds.origin,
+                point(px(13. + 11. * zoom), px(17. + 3. * zoom))
+            );
+            assert_eq!(p.bounds.size, size(px(84. * zoom), px(50. * zoom)));
+            assert_eq!(p.vertical_align, gpui_flow_text::VerticalAlign::Bottom);
+        }
+    }
 }

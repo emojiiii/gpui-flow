@@ -1,4 +1,4 @@
-# Text padding and vertical alignment (source checkpoint)
+# Text padding and vertical alignment
 
 The Text component gains typed top/middle/bottom vertical alignment and four-side
 padding in [top,right,bottom,left] order. Zero padding/top remain the exact old
@@ -28,5 +28,31 @@ IME, letter/word spacing and arbitrary text transformations remain out of scope.
 Existing Text/RasterRequest Rust struct literals need the newly added fields;
 repo callers are migrated. Scene JSON without them remains compatible.
 
-This is a recoverable source checkpoint. Native all-target compilation passes;
-new regression tests and final runtime validation remain pending.
+## Validation
+
+Fresh Linux/Rust 1.98.1 validation on 2026-10-02:
+
+- 13 new regressions cover legacy/default JSON, four-side geometry and invalid
+  padding, factory/atomic rollback, unchanged-outer-bounds resource invalidation,
+  Undo/Redo/cancellation, measured Natural/AutoHeight and reactive convergence,
+  native pan/zoom plan, resource wrap requests, shared clipped-overflow offset,
+  and actual same-backend CPU glyph pixels for all vertical alignments.
+- Affected UI/text library tests: 121 passed. Scene/engine/editor/layout library
+  and integration tests: 546 passed and one existing ignored manual radial
+  raster benchmark. Total 667, zero failures; this is the affected subset, not
+  every workspace crate or doctest.
+- Native all-target check, six-package strict all-target Clippy, workspace
+  rustfmt, diff checks and the `text_box` Studio example link all pass.
+
+The side-by-side native/CPU example was observed on the Linux cloud desktop from
+08:12:28 to 08:14:24 UTC. Both columns matched for initial padded top alignment,
+middle and bottom, padding removal and rewrap, clipped overflowing content,
+restored padding during overflow, and repeated Undo back to the initial state.
+No source/test inputs changed during the run. The source snapshot tree was
+`db446f6e70fe349e228534311fa380c3aab51b03`; executable SHA-256 was
+`d3eb6be9162eea4b31908527afe284a9824a6e5258e56ba1416cb3b0291c6ed3`.
+Normal close returned exit 0 with an empty runtime error log. Window screenshots
+were inspected after each meaningful change. This is bounded single-desktop
+visual/interaction evidence, not a pixel-identical cross-platform claim.
+
+No GitHub Actions, deployment or merge was launched.

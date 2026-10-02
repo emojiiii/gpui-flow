@@ -158,3 +158,8 @@ Text/Image 已支持平移与正等比缩放下的嵌套矩形 Frame/Box 裁切�
 The Ellipse component now supports bounded clockwise arcs, pie sectors and rings.
 Its real geometry bounds, multi-contour fill/stroke/hit and CPU composite pixels
 share the same curve data. See [semantics, migration and validation](ellipse-arcs.md).
+
+Text now has optional four-side padding and top/middle/bottom vertical alignment,
+shared by native glyph paint, CPU glyph rasterization and measured auto-size.
+Zero/top defaults preserve old JSON. See [Text inner-box contract](text-box.md)
+for clipped overflow, invalid padding, migration and the native comparison receipt.

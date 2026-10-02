@@ -901,3 +901,16 @@ mod tests {
 
 #[cfg(test)]
 mod canvas_tests;
+
+#[cfg(test)]
+mod text_box_tests {
+    use super::*;
+    #[test]
+    fn text_box_resource_requests_use_inner_wrap_width() {
+        let mut text = Text::new("source", gpui_flow_scene::Size::new(100., 60.));
+        text.padding = [3., 5., 7., 11.];
+        assert_eq!(text_request(&text).wrap_width, Some(84.));
+        text.wrap = false;
+        assert_eq!(text_request(&text).wrap_width, None);
+    }
+}

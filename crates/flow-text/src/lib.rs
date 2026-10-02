@@ -96,3 +96,23 @@ impl VerticalAlign {
         }
     }
 }
+
+#[cfg(test)]
+mod alignment_tests {
+    use super::VerticalAlign;
+    #[test]
+    fn vertical_alignment_offsets_only_nonoverflowing_blocks() {
+        assert_eq!(VerticalAlign::Top.offset(80., 20.), 0.);
+        assert_eq!(VerticalAlign::Middle.offset(80., 20.), 30.);
+        assert_eq!(VerticalAlign::Bottom.offset(80., 20.), 60.);
+        for align in [
+            VerticalAlign::Top,
+            VerticalAlign::Middle,
+            VerticalAlign::Bottom,
+        ] {
+            assert_eq!(align.offset(20., 40.), 0.);
+            assert_eq!(align.offset(20., 20.), 0.);
+            assert_eq!(align.offset(f32::INFINITY, 20.), 0.);
+        }
+    }
+}

@@ -2470,4 +2470,90 @@ mod tests {
         assert_eq!(c.request(third).len(), 1);
         assert!(c.old_frame(&"c".into()).is_none());
     }
+    #[test]
+    fn text_box_actual_glyph_pixels_follow_vertical_alignment_and_padding() {
+        use display::TextVerticalAlign;
+        use gpui_flow_scene::{BlendMode, Color, DisplayObject, Scene, Size, Style, display};
+        let (_app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
+            gpui_kit::platform::current_platform(true),
+        );
+        let render = |align, content: &str, height| {
+            let mut scene = Scene::new();
+            scene
+                .insert(
+                    DisplayObject::new("g", display::Group::new()).with_style(Style {
+                        blend_mode: BlendMode::Normal,
+                        ..Default::default()
+                    }),
+                    None,
+                    None,
+                )
+                .unwrap();
+            let mut text = display::Text::new(content, Size::new(100., height));
+            text.font_family = "DejaVu Sans".into();
+            text.font_size = 16.;
+            text.line_height = 1.25;
+            text.padding = [10.; 4];
+            text.vertical_align = align;
+            scene
+                .insert(
+                    DisplayObject::new("text", text).with_style(Style::fill(Color::WHITE)),
+                    Some("g".into()),
+                    None,
+                )
+                .unwrap();
+            let e = SceneEngine::new(scene).unwrap();
+            let request = Arc::new((*key(&e)).clone().with_text_backend(Some(&bridge)));
+            let mut controller = CompositeController::default();
+            controller.request(request);
+            controller
+                .take_work()
+                .unwrap()
+                .run()
+                .remove(0)
+                .1
+                .unwrap()
+                .unwrap()
+        };
+        let ink = |frame: &CpuFrame| {
+            let mut min = [f32::INFINITY; 2];
+            let mut max = [f32::NEG_INFINITY; 2];
+            let mut count = 0;
+            for y in 0..frame.height {
+                for x in 0..frame.width {
+                    if frame.premul_rgba[((y * frame.width + x) * 4 + 3) as usize] > 0 {
+                        count += 1;
+                        let p = [
+                            frame.screen_bounds.origin.x + x as f32,
+                            frame.screen_bounds.origin.y + y as f32,
+                        ];
+                        for i in 0..2 {
+                            min[i] = min[i].min(p[i]);
+                            max[i] = max[i].max(p[i]);
+                        }
+                    }
+                }
+            }
+            assert!(count > 0);
+            (min, max, count)
+        };
+        let top = render(TextVerticalAlign::Top, "A\nB", 100.);
+        let middle = render(TextVerticalAlign::Middle, "A\nB", 100.);
+        let bottom = render(TextVerticalAlign::Bottom, "A\nB", 100.);
+        let (a, amax, count) = ink(&top);
+        let (b, _, count_b) = ink(&middle);
+        let (c, cmax, count_c) = ink(&bottom);
+        assert_eq!(b[1] - a[1], 20.);
+        assert_eq!(c[1] - a[1], 40.);
+        assert_eq!(a[0], b[0]);
+        assert_eq!(a[0], c[0]);
+        assert_eq!(count, count_b);
+        assert_eq!(count, count_c);
+        assert!(a[0] >= 10. && amax[0] < 90. && a[1] >= 10. && cmax[1] < 90.);
+        // More line boxes than the inner height: clipped overflow stays at top.
+        let top = render(TextVerticalAlign::Top, "A\nB\nC", 40.);
+        let bottom = render(TextVerticalAlign::Bottom, "A\nB\nC", 40.);
+        assert_eq!(top.screen_bounds, bottom.screen_bounds);
+        assert_eq!(top.premul_rgba, bottom.premul_rgba);
+    }
 }
