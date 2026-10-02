@@ -1,8 +1,12 @@
 # Canvas current-path construction
 
-Status: implemented with local Linux automated validation.
-The standalone native acceptance fixture is prepared, but native acceptance is
-pending; it does not claim browser or cross-platform pixel equivalence.
+Status: implemented with Linux automated and bounded native acceptance.
+The full DPR 1/2 functional run passed against published source
+[`39fcf56a`](https://github.com/emojiiii/gpui-flow/commit/39fcf56a2e91f59d5da7a04ee519cade66f8cb69).
+Its original clipped-footer defect is preserved in the evidence; a separate
+layout-only run verified the footer fix. See the [native report](canvas-current-path-native.md)
+and [machine-readable summary](validation/2026-10-02-canvas-current-path-native-summary.json).
+No browser or cross-platform pixel equivalence is claimed.
 
 ## Runtime path and batch-local state
 
@@ -173,14 +177,47 @@ Near-full adapter geometry pools still allow BeginPath to release capacity.
 Upload/OOM failure commit ordering was reviewed; allocator failure itself was not
 injected. No cross-platform, browser-equivalence or GitHub Actions run is claimed.
 
-## Native validation boundary
+## Native validation (2026-10-02)
 
-The fixture is prepared for current-path native inspection at DPR 1 and 2,
-including rollback, path-only persistence, transform timing, clipping, resize,
-and configuration Undo. No native window execution or screenshot acceptance is claimed here until those
-checks are performed against the frozen implementation. The remaining frozen
-ELM-10 blockers are strokeText and createPattern repeat/no-repeat with transform;
-current-path completion does not close those items.
+The original Linux native run, **21:12:30–21:18:56 UTC**, exited normally with
+code 0: **55 physical button actions, 84 JSON records, 63 original PNGs**.
+The recorded trace audit passed **27/27 assertions**. Twenty screenshot pairs
+have zero differing pixels in both 300 × 210 displayed Canvas regions.
+Cross-call Q/C construction, Clear versus BeginPath, reusable geometry, evenodd
+holes, paint/pen transform timing, frozen clips, four late-invalid rollbacks,
+safe/reset resize, DPR swap, configuration Undo, and regeneration were exercised.
+The comparisons are within-run stable-region checks, not DPR 1 versus DPR 2
+pixel equivalence or proof of every renderer frame.
 
+All 475 frozen repository build inputs match the archive, pre/post-link
+manifests, and published functional source `39fcf56a`. External dependencies,
+compiler, and system libraries are excluded; no full reproducibility is claimed.
+The original fixed-height footer clipped the Right result row; its complete
+receipts remain in JSON. Expected immediate `Compositing...` transitions and
+preceding-state captures remain in the original screenshot set, followed by
+settled witnesses.
+
+A separate **21:26:06–21:27:04 UTC** layout-only run exited 0 after two physical
+button actions, with 11 JSON records and eight PNGs. At restored **1090 × 670**
+content size, both result rows were fully visible after Regenerate and Reject
+late. The footer-only source fix is published as
+[`8dd6f110`](https://github.com/emojiiii/gpui-flow/commit/8dd6f1104d2e134b8b15f83e64c8fdb336ee4044).
+That follow-up executable also contains unpublished-at-build open-stroke work;
+its 475-input frozen shared-tree provenance does **not** establish a build of one
+published commit, repeat the full matrix, or accept that other work.
+
+See the [native report](canvas-current-path-native.md),
+[native summary](validation/2026-10-02-canvas-current-path-native-summary.json),
+and [automated summary](validation/2026-10-02-canvas-current-path-summary.json)
+for separate source/publication records and raw-evidence hashes. Native pool
+rejection, font failure, upload/OOM injection, safe A→B→A before preparation,
+and all-frame behavior were not established by these controls. Automated
+coverage remains separately recorded above.
+
+The exact frozen ELM-10 current-path constructor set is covered. ELM-10 remains
+**partial** for required `strokeText` and `createPattern` repeat/no-repeat with
+transform. Arc/ellipse, arcTo, rect/roundRect conveniences and full browser
+context state remain exclusions, not additional closure criteria. Prior
+fillText/measureText evidence remains separate in [Canvas text](canvas-text-commands.md).
 Existing slices: [command batches](canvas-commands.md),
 [per-draw clips](canvas-clips.md), and [Canvas ownership](canvas-component.md).

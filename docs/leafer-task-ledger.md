@@ -60,7 +60,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | ELM-07 | 元素 / [Canvas拥有像素与生命周期](canvas-component.md) | 有界契约已验证 | 独立配置、运行时surface、DPR/smooth/safe-resize/clear/draw/snapshot、代际释放 | 像素不进文档/Undo；非整视图OwnedCanvas |
 | ELM-08 | 元素 / [Canvas矢量上下文批次](canvas-clips.md) | 有界契约已验证 | Path填充/描边、transform/alpha/save/restore/冻结clip栈；晚失败原子回滚 | 无持久current path/context；图文分别归ELM-09/10 |
 | ELM-09 | 元素 / [Canvas图像批次](canvas-image-commands.md) | 有界契约已验证 | immutable image输入、source crop/destination/DPR、仿射/clip/alpha和单代际原子提交 | 不取URL；负尺寸拒绝；不保证浏览器精确filter边缘 |
-| ELM-10 | 元素 / [Canvas文字与路径/图案状态](canvas-text-commands.md) | 部分实现 | 必选fillText、measureText、strokeText；beginPath/moveTo/lineTo/quadraticCurveTo/bezierCurveTo/closePath；createPattern的repeat/no-repeat与transform | 不包含DOM focus控件、CSS字体parser或全部浏览器context状态；新增操作另增范围 |
+| ELM-10 | 元素 / [Canvas文字](canvas-text-commands.md)与[路径/图案状态](canvas-current-path.md) | 部分实现 | 必选fillText、measureText、strokeText；beginPath/moveTo/lineTo/quadraticCurveTo/bezierCurveTo/closePath；createPattern的repeat/no-repeat与transform | 必选current-path集合已覆盖；仍缺strokeText及pattern；DOM focus/CSS字体parser、arc/rect便利构造和全部浏览器context状态均排除，不增收口条件 |
 | ELM-11 | 元素 / [Canvas与场景导出](scene-raster-export.md) | 有界契约已验证 | Canvas RGBA/PNG已实现；固定Scene区域PNG/JPEG/WebP和SVG，含背景/透明度/裁切范围及缺资源拒绝 | WebP为lossless；SVG保留vector并嵌每节点Image/Canvas/Text PNG，无editable text/outlines或SVG/PNG位等价；不含完整SVG导入 |
 | CUS-01 | 自定义元素 / [动态几何命中与宿主呈现](custom-geometry-validation.md) | 有界契约已验证 | custom属性驱动几何/bounds/hit、显式native renderer、实例隔离；拒绝不支持合成 | schema本身归DAT-01；不双计工厂 |
 | CUS-02 | 自定义元素 / [自定义resize和异步资源协议](custom-nodes.md) | 未开始该能力 | 自定义尺寸/编辑策略与测量、异步ready/cancel事件正式接入 | 任意宿主回调能实现不等于框架已提供协议 |
@@ -112,7 +112,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | ELM-07 | 24新回归及356受影响通过 | Canvas实际Draw/Clear/resize/Undo窗口通过 | `d365f5a9e533e823e43e09db5154935e01b68c49` |
 | ELM-08 | 11矢量+7clip新回归、360/367受影响记录通过 | 11:41和11:57窗口、DPR/回滚/重绘像素对照通过 | `e4f7d9455f7aaaf38d160951c330ae03249435d1` |
 | ELM-09 | 12新回归；63 composite+18 UI=81聚焦通过，strict Clippy/link通过 | 14:00:18–14:03:12 Linux窗口退出0；DPR1/2、crop/透明源/反射/clip/晚失败/resize/Undo/Clear；三组像素区域一致 | `0ab6ffbf8bdbdb837a30f6cbf193e5506cb0124d` |
-| ELM-10 | FillTextBox/同源measure已实现：8新回归、119不同受影响检查及严格Clippy通过；stroke/current path/pattern未实现 | 14:37–14:39双DPR真实字形/clip/bridge/measure/resize/Undo/Clear退出0，四组像素一致 | `003288b3a9b4178890c162a4f1271f3b8dd41f4f` |
+| ELM-10 | 保留文字8新回归/119不同检查；current-path新增15 composite+7 UI，全库309/252、focused88/29（重叠），strict/格式/链接通过；必选路径构造已覆盖，strokeText及pattern仍缺 | 21:12:30–21:18:56退出0，55按钮/84 JSON/63 PNG，27/27审计，20对双区域零差；原footer裁切/Compositing过渡保留。21:26–21:27仅footer复验通过，非完整矩阵 | 功能源码[`39fcf56a`](https://github.com/emojiiii/gpui-flow/commit/39fcf56a2e91f59d5da7a04ee519cade66f8cb69)；[原生报告](canvas-current-path-native.md)/[摘要](validation/2026-10-02-canvas-current-path-native-summary.json)随本次文档修订新增；footer源码`8dd6f110`与含open-stroke WIP的布局测试树分列；原文字证据`003288b3a9b4178890c162a4f1271f3b8dd41f4f`独立保留 |
 | ELM-11 | 先前栅格21核心+7 UI；SVG28 focused/294 composite/5夹具及strict通过（重叠） | 先前PNG/JPEG/WebP10文件4拒绝；新SVG13尝试8SVG+2PNG/3拒绝、真实resvg及独立审计，退出0 | `93ee7f7cabfb7979aeca93ec137ccf81644baeb5`；[SVG证据](validation/2026-10-02-scene-svg-native-summary.json)，[先前栅格](validation/2026-10-02-scene-export-summary.json) |
 | CUS-01 | 9项新回归、12既有registry与184 UI库检查通过；strict Clippy及链接通过 | 16:32–16:36八步真实点击/UndoRedo/双实例/renderer fallback/整域拒绝与恢复；49状态检查0失败、13 renderer输入；退出0 | `09bc537a551da09d4cb7c407e22ee10d49d3c667` |
 | CUS-02 | 无完整协议验收 | 未实现/未验收 | 尚无独立完整验收提交 |

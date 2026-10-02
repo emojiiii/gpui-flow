@@ -2,8 +2,8 @@
   "schema_version": 1,
   "ledger_version": "v1-review",
   "review": "已锁定45个能力单元和有限验收集合；审阅版，所有扩展/技术依赖显式记录",
-  "as_of": "2026-10-02T20:51:00Z",
-  "source_snapshot": "93ee7f7cabfb7979aeca93ec137ccf81644baeb5",
+  "as_of": "2026-10-02T21:39:00Z",
+  "source_snapshot": "8dd6f1104d2e134b8b15f83e64c8fdb336ee4044",
   "upstream": {
     "leafer_ui": "1e11641d3ea6b0211c83447268a90b8d58feec25",
     "leafer_core": "1d703303ff0759ce4973d54c87eeb8192dddc570",
@@ -753,19 +753,58 @@
       "title": "Canvas文字与路径/图案状态",
       "status": "partial",
       "acceptance": "必选fillText、measureText、strokeText；beginPath/moveTo/lineTo/quadraticCurveTo/bezierCurveTo/closePath；createPattern的repeat/no-repeat与transform",
-      "boundary": "不包含DOM focus控件、CSS字体parser或全部浏览器context状态；新增操作另增范围",
-      "reference_doc": "docs/canvas-text-commands.md",
-      "implementation_snapshot": "99392f7c35f956f8765ed5730423df19e3d474cd",
-      "evidence_commit": "003288b3a9b4178890c162a4f1271f3b8dd41f4f",
-      "automatic": "FillTextBox/同源measure已实现：8新回归、119不同受影响检查及严格Clippy通过；stroke/current path/pattern未实现",
-      "native": "14:37–14:39双DPR真实字形/clip/bridge/measure/resize/Undo/Clear退出0，四组像素一致",
+      "boundary": "不包含DOM focus控件、CSS字体parser、arc/ellipse/arcTo及rect/roundRect便利构造或全部浏览器context状态；这些排除项不是新增收口条件",
+      "reference_doc": "docs/canvas-current-path.md",
+      "implementation_snapshot": "39fcf56a2e91f59d5da7a04ee519cade66f8cb69",
+      "evidence_commit": null,
+      "automatic": "保留FillTextBox/同源measure原8新回归及119不同受影响检查；current-path新增15 composite+7 UI，全库309/252、focused88/29（重叠），strict Clippy/格式/链接通过；必选current-path构造集合已覆盖，strokeText和createPattern repeat/no-repeat+transform仍缺",
+      "native": "current-path 21:12:30–21:18:56退出0，55物理按钮/84 JSON/63 PNG，27/27审计，20对双300×210区域零差；原footer裁切和Compositing过渡保留。21:26:06–21:27:04仅footer复验，两按钮/11 JSON/8 PNG，1090×670双行可见；共享树含open-stroke WIP，不替代功能验收",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/interface/src/canvas/ICanvas.ts",
         "symbols_or_contract": "CanvasText / CanvasPath / createPattern / CanvasPattern.setTransform"
       },
       "technical_dependencies": [
         "同App字体bridge和字形预算；strokeText需要真实描边语义，不能以bbox替代"
-      ]
+      ],
+      "evidence_summary": "docs/validation/2026-10-02-canvas-current-path-native-summary.json",
+      "native_report": "docs/canvas-current-path-native.md",
+      "automated_summary": "docs/validation/2026-10-02-canvas-current-path-summary.json",
+      "source_tree": "565b687a9392635ac9adfead5260a070358fbd78",
+      "source_publication_url": "https://github.com/emojiiii/gpui-flow/commit/39fcf56a2e91f59d5da7a04ee519cade66f8cb69",
+      "prior_fill_text_measure_text_evidence": {
+        "reference_doc": "docs/canvas-text-commands.md",
+        "implementation_snapshot": "99392f7c35f956f8765ed5730423df19e3d474cd",
+        "evidence_commit": "003288b3a9b4178890c162a4f1271f3b8dd41f4f",
+        "automatic": "FillTextBox/同源measure已实现：8新回归、119不同受影响检查及严格Clippy通过；仅保留此前文字子集证据",
+        "native": "14:37–14:39双DPR真实字形/clip/bridge/measure/resize/Undo/Clear退出0，四组像素一致"
+      },
+      "required_current_path_constructors_covered": [
+        "beginPath",
+        "moveTo",
+        "lineTo",
+        "quadraticCurveTo",
+        "bezierCurveTo",
+        "closePath"
+      ],
+      "remaining_frozen_scope": [
+        "strokeText",
+        "createPattern repeat/no-repeat and pattern transform"
+      ],
+      "footer_layout_follow_up": {
+        "footer_only_source_commit": "8dd6f1104d2e134b8b15f83e64c8fdb336ee4044",
+        "footer_only_source_tree": "3c25a050e5e01ad0be205377660dfdb76653f084",
+        "tested_build_source_commit": null,
+        "provenance": "Frozen shared-tree build also contains unpublished-at-build open-stroke work; no single published commit is claimed to match all 475 inputs.",
+        "scope": "layout-only; does not replace the functional source39fc evidence or accept open-stroke work"
+      },
+      "verification_limits": [
+        "Per-surface transaction atomicity, not a two-surface distributed transaction.",
+        "Repository input manifests exclude external dependencies, compiler and system libraries; no full reproducible-build claim.",
+        "Native controls do not establish resource-pool budget rejection, font failure, upload/OOM injection, every malformed command, safe A-to-B-to-A before preparation, or all renderer frames.",
+        "Device display DPR was not separately queried; Canvas resource DPR comes from configuration receipts.",
+        "No browser/cross-platform pixel equivalence or new workspace-wide/CI result."
+      ],
+      "evidence_publication_note": "This documentation revision adds the report and native summary after the separately verified source publications; neither source commit is claimed to contain these new evidence documents."
     },
     {
       "id": "ELM-11",

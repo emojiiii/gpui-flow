@@ -1,7 +1,7 @@
 {
   "recorded_utc": "2026-10-02T21:09:33.811994+00:00",
   "feature": "ELM-10 persistent current-path increment",
-  "state": "implementation and automated validation complete; native acceptance pending",
+  "state": "implementation and automated validation complete; bounded Linux native acceptance passed; separate footer layout-only follow-up passed",
   "environment": "Linux cloud; /workspace/shared/gpui-flow-native-env.sh; existing shared native target; CARGO_BUILD_JOBS=1",
   "new_tests": {
     "composite": 15,
@@ -70,14 +70,16 @@
     "manifest_sha256": "a4a79d1e3c6fc755b31aa06af441c996ffede744a8b4db56f45fba5f2917bd88"
   },
   "binary": {
-    "path": "/workspace/shared/rust-target-native/debug/canvas_current_path",
-    "sha256": "531921c529dd27894d5b194d699439c26d17e6adf0a2c9b35eba8e759a823a8c"
+    "path": "/workspace/shared/canvas-current-path-native-validation-20261002T2109Z/canvas_current_path",
+    "sha256": "531921c529dd27894d5b194d699439c26d17e6adf0a2c9b35eba8e759a823a8c",
+    "linked_output_path_at_build": "/workspace/shared/rust-target-native/debug/canvas_current_path",
+    "path_note": "The preserved original native executable; the shared target output path is mutable and is recorded only as the historical link destination."
   },
   "disk_free_after": "5.5 GiB (3 GiB floor preserved)",
   "untested": [
-    "Native window acceptance is pending",
     "Actual allocator/upload OOM injection (atomic commit ordering reviewed; reduced admission rollback tested)",
-    "Windows/macOS/browser pixel equivalence"
+    "Windows/macOS/browser pixel equivalence",
+    "Native resource-pool rejection, font failure, safe A-to-B-to-A before preparation, every malformed-command case and all-frame behavior; see native summary for exact physical coverage"
   ],
   "remaining_frozen_elm10_scope": [
     "strokeText",
@@ -87,6 +89,43 @@
     "directory": "/workspace/shared/canvas-current-path-native-validation-20261002T2109Z",
     "binary_sha256": "531921c529dd27894d5b194d699439c26d17e6adf0a2c9b35eba8e759a823a8c",
     "source_archive_sha256": "1a83e6cf888efdbb200907f1276d647944a524c644cfc0c06d7f819f0b48a988",
-    "source_scope": "475 repository build inputs; external dependency sources/toolchain/system libraries are not included"
-  }
+    "source_scope": "475 repository build inputs; external dependency sources/toolchain/system libraries are not included",
+    "status": "functional native acceptance passed; original clipped-footer defect retained",
+    "started_utc": "2026-10-02T21:12:30Z",
+    "ended_utc": "2026-10-02T21:18:56Z",
+    "exit_code": 0,
+    "physical_button_actions": 55,
+    "json_records": 84,
+    "original_pngs": 63,
+    "trace_audit_passed": 27,
+    "pixel_comparison_pairs_both_300x210_regions_identical": 20
+  },
+  "native_report": "docs/canvas-current-path-native.md",
+  "native_summary": "docs/validation/2026-10-02-canvas-current-path-native-summary.json",
+  "source_publication": {
+    "commit": "39fcf56a2e91f59d5da7a04ee519cade66f8cb69",
+    "tree": "565b687a9392635ac9adfead5260a070358fbd78",
+    "url": "https://github.com/emojiiii/gpui-flow/commit/39fcf56a2e91f59d5da7a04ee519cade66f8cb69",
+    "all_475_frozen_repository_build_inputs_match": true
+  },
+  "footer_layout_follow_up": {
+    "scope": "Layout-only acceptance; full functional matrix not repeated and no acceptance of included open-stroke work.",
+    "directory": "/workspace/shared/canvas-current-path-footer-validation-20261002T2122Z",
+    "footer_only_source_commit": "8dd6f1104d2e134b8b15f83e64c8fdb336ee4044",
+    "tested_build_source_commit": null,
+    "tested_build_provenance": "Frozen shared-tree build also contains unpublished-at-build open-stroke work; no single published commit is claimed to match all 475 inputs.",
+    "binary_sha256": "d2793b833a532e43bdeaadcfd0b3ac9dfc8e11c5b21f446cd8be6aa47939828c",
+    "exit_code": 0,
+    "restored_content_size": [
+      1090,
+      670
+    ],
+    "both_result_rows_visible_after": [
+      "Regenerate",
+      "Reject late"
+    ],
+    "details": "docs/validation/2026-10-02-canvas-current-path-native-summary.json"
+  },
+  "evidence_commit": null,
+  "evidence_publication_note": "This documentation revision adds the report and native summary after the separately verified source publications; neither source commit is claimed to contain these new evidence documents."
 }
