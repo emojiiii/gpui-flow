@@ -1,7 +1,7 @@
 # Canvas physical pixel exchange and PNG bytes
 
-Status: recoverable source checkpoint. Focused pixel/codec/adapter tests passed;
-final affected checks and native round-trip preview are pending.
+Status: bounded Linux tests, native interaction and actual PNG readback passed
+on 2026-10-02. This is owned-surface export, not a whole-scene export system.
 
 ## API and metrics
 
@@ -71,11 +71,47 @@ No browser CanvasRenderingContext2D, dirty subrect overload, color-space options
 JPEG/WebP/SVG, data URLs, arbitrary file dialogs, asynchronous export, whole-scene
 trim/scale/screenshot, or persistence in scene JSON/history is introduced.
 
-## Validation checkpoint
+## Validation (2026-10-02)
 
-Nine new pure pixel/PNG regressions and two new resource-adapter tests pass.
-Coverage includes physical DPR, alpha replacement, negative/offscreen coordinates,
-zero/invalid/budget rejection, immutable snapshots, 65536 channel/alpha round-trip
-samples, PNG decode comparison, raw corners, output/work/memory failure, atomic
-adapter rollback and retained snapshots after destruction. Existing stale-CPU-job
-coverage now exercises write_pixels directly. Final counts/native evidence follow.
+- Eleven new regressions: nine pure pixel/PNG tests and two resource-adapter
+  tests. Existing late-CPU-success coverage now uses write_pixels directly
+- 338 affected library tests passed: 209 composite and 129 UI, zero failures or
+  ignored. Earlier focused runs overlap and are not additive. Unchanged model
+  and editor suites were not rerun wholesale
+- Coverage includes physical DPR, alpha replacement, negative/offscreen origins,
+  zero/invalid/budget rejection, immutable snapshots, 65536 channel/alpha
+  round-trip samples, PNG decode comparison, raw corners, output/work/memory
+  failures, adapter rollback and retained snapshots after destruction
+- Strict affected all-targets and example Clippy, formatting, locked check and
+  real one-job native link passed. PNG 0.17.16 was already present in Cargo.lock;
+  no package version was changed
+- Native cloud window ran 10:25:49–10:27:43 UTC and exited 0 with empty stderr.
+  Verified real Canvas pattern, physical read/invert/write, rejected multi-write
+  batch, PNG export loaded through GPUI, Clear with frozen preview, transparent
+  re-export and repeated initial-pattern recovery. Final inventory confirmed
+  normal closure; screenshots remain in the native tool record
+- Four actual native-generated PNG files were independently decoded/read back.
+  Each is RGBA 480x320 for the logical 240x160/DPR-2 Canvas. Alpha samples were
+  0, 160 and 255. The inverted 80x80 physical region appeared at the requested
+  destination, the clear export had zero alpha everywhere, and raw corner pixels
+  remained present despite the retained Canvas mask. Low-alpha straight color
+  130 becoming 131 is expected premultiplication quantization, not a promise of
+  lossless recovery of arbitrary original straight channels
+- Recreating the initial pattern produced byte-identical PNG files (8296 bytes,
+  SHA-256 `7891c8de56755c88a7ac5b481dcac4e23fe3b0774eb720f32925527f7754e21a`).
+  The inverted export was 8437 bytes with SHA-256
+  `bdda2c75ae0562f4cee186269428925d0ed80bec87e65d8da14658655a739ecd`;
+  transparent export was 4233 bytes with SHA-256
+  `a904e88507ffff803f07bbfdf8ea903ef288ef9511503560e4963231a32dd784`
+
+Exact tested source tree: `983b01ac15209d3ee22ea5fa47037dd3af707465`.
+Deterministic source archive SHA-256:
+`3f9bc3d23bd98e47a116bff7bf3189199ef4742c514fb5242c4754791cc27a2e`.
+Linux example binary SHA-256:
+`e5c4e0094c46bc2369995520d44184ee54a3c9cafaa9cff719a3b3deab6c7905`.
+Only documentation changed after these checks and the native run.
+
+Run `cargo run -p flow-studio --bin canvas_pixels`. The core API returns bytes;
+only this demo saves new PNG files to its explicitly selected temporary directory.
+Cross-platform codec/GPU behavior, complete browser contexts and whole-scene
+export remain outside this acceptance.

@@ -47,7 +47,7 @@ upload; no upstream implementation or new dependency is copied.
   empty rectangle. CPU content uses nearest/bilinear filtering from `smooth`.
 
 This is a bounded explicit drawing API, not a browser CanvasRenderingContext2D
-replacement. No arbitrary JS context, automatic URL/base64 loading, export,
+replacement. No arbitrary JS context, automatic URL/base64 loading, whole-scene export,
 recording, arbitrary filters or content persistence is claimed. Hosts provide
 already-authorized decoded pixels; external snapshot owners and GPUI's private
 GPU atlas remain outside the adapter's explicit CPU-byte accounting. Picking uses
@@ -95,3 +95,7 @@ empty runtime error log.
 This validates those seven bounded interaction flows on one Linux desktop,
 not arbitrary drawing contexts, GPU/driver combinations or cross-platform parity.
 No Actions, deployment or merge was launched.
+
+The later [physical RGBA/PNG slice](canvas-pixels.md) adds bounded read/replace
+pixel exchange and raw-surface PNG bytes. It preserves this component/history
+contract; its export does not include retained style, corner masks or ancestors.

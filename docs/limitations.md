@@ -114,3 +114,7 @@ Text now supports [bounded opt-in end ellipsis](text-overflow.md) using shared
 native/CPU shaping and grapheme boundaries. Default clipping and intrinsic
 measurement stay unchanged; custom markers, rich text and arbitrary typography
 remain outside this slice.
+
+Canvas now has [physical straight-RGBA exchange and raw PNG bytes](canvas-pixels.md).
+The bounded export excludes retained style/ancestor presentation and does not
+provide browser contexts, multi-format export or document pixel persistence.

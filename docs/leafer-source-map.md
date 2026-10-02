@@ -37,6 +37,7 @@ Status: historical source research plus a separately labelled current source map
 - Image交互增量：[非均匀缩放与旋转手柄](image-transform-tools.md)复用已有仿射/多选root/history与实际CPU域，保留Text约束及legacy兼容。新增10项回归并修复单选命名手柄陈旧source/派生布局捕获漏洞；受影响356项测试通过，Linux真实多路径拖动/Shift/Undo/Redo/zoom窗口退出0；crop/inner editor仍缺
 - Text裁切增量：[圆角/仿射祖先自动合成](text-ancestor-clips.md)复用同App字体bridge和真实mask，不再要求无关blend/effect强制建域；保留矩形native及显式后端/文字变换限制。新增8项回归，318项不同测试通过，原生窗口角半径/padding/clip/bridge恢复/Undo退出0；同时修复曲线mask边缘裁切覆盖率偏差
 - Text溢出增量：[固定框末尾省略号](text-overflow.md)复用GPUI实际wrap/shape与已锁定unicode-segmentation，不改原文/内在测量；native与CPU共享末行marker及垂直溢出顶对齐。新增16项回归，受影响152项通过，真实Unicode/窄框/换行/高度/Undo双路径窗口退出0；默认clip保持，任意marker/富文本/字间距仍缺
+- Canvas像素增量：[物理RGBA读写与PNG字节导出](canvas-pixels.md)独立模块区分straight/premultiplied及DPR坐标，支持透明越界读取、裁切replace原子写、不可变快照和有界stream编码。新增11项回归，受影响338项通过；真实窗口PNG预览/拒绝批次/Clear/重复恢复退出0，四份480×320文件已独立解码核验alpha与hash。完整2D context/多格式和整场景导出仍缺
 - 余项继续按 D/E 的实际行为和测试推进，不以字段或同名模块存在认定对齐
 
 ## 九类能力当前边界（含待验证源码增量）
@@ -50,7 +51,7 @@ Status: historical source research plus a separately labelled current source map
 | 外观 | 多层矢量paint、线性/径向渐变、共享mesh的cap/join/dash描边、named/placeholder/button状态及fill/opacity过渡、Text/Image矩形祖先clip链、有界矢量整体opacity/内部blend/alpha mask | 开放轮廓inside/outside与scale-fixed stroke、geometry状态、复杂文字样式/变换、域内Custom、外部backdrop、更多mask、不安全PassThrough组阴影、Custom/spread/box/scale-fixed shadow及通用filter |
 | 布局 | 固定/内容轴、双轴reverse遍历/wrap-reverse、wrap测量、真实字体文字Natural/AutoHeight、嵌套有界收敛、opt-in提交前自动派生 | 帧合并/局部依赖调度、百分比、shrinkContent、文本baseline/富排版 |
 | 数据 | 类型属性/schema/default、原子变化、dirty分类、JSON | 完整input/computed分离及Leafer导入导出 |
-| 元素 | 主要原语、场景树、变换、矢量完整裁切及原生矩形clip、统一几何命中 | Canvas完整context/导出/内容持久化、各类型高级属性完全覆盖 |
+| 元素 | 主要原语、场景树、变换、矢量完整裁切及原生矩形clip、统一几何命中 | Canvas完整context/多格式与整场景导出/内容持久化、各类型高级属性完全覆盖 |
 | 自定义元素 | 注册factory/schema、确定性自定义几何/picking、数值动画 | 自定义resize/编辑工具协议、异步资源就绪整合 |
 | 实例 | 独立引擎/代际handle、clone/detach/reparent/destroy | 多层App实例组合与跨层转发 |
 | 生命周期 | 原子结构事件、销毁清理、动画目标/历史保护；新源码桥接原生image/text结果、资源票据和Ready/ViewReady/Complete回执 | 媒体资源桥接、共享后台加载硬取消/字节预算、GPU呈现fence |
