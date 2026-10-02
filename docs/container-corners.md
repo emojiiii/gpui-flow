@@ -1,6 +1,6 @@
-# Box/Frame per-corner clipping (validation in progress)
+# Box/Frame per-corner clipping
 
-This checkpoint propagates the typed independent radii from Rect into Box/Frame
+This slice propagates the typed independent radii from Rect into Box/Frame
 painted geometry, factory schemas, ClipRegion, retained clip caches, CPU masks
 and the native vector/gradient clip paths. The existing scalar/default JSON is
 preserved. New `with_corners` data uses the same pinned fallback normalization
@@ -22,9 +22,29 @@ struct literal/destructuring updates; repository call sites are migrated.
 the scalar. No first-class Canvas resource or other unimplemented component is
 claimed by this work.
 
-## Current checkpoint
+## Validation
 
-Headless cargo check for the eight-crate subset passes. New geometry, cache,
-pixel/history and native adapter regressions are being added; full affected and
-native validation are not complete. This source checkpoint is intentionally
-labelled WIP. No GitHub Actions, deployment or merge is launched.
+Fresh Linux/Rust 1.98.1 validation on 2026-10-02:
+
+- 12 new headless regressions: six engine, two editor and four CPU pixel tests.
+  They cover Box and Frame defaults, real independent corner hits, affine and
+  nonzero-origin clips, nested intersections, clipping toggles, unchanged-AABB
+  descendant cache invalidation, factory schemas, invalid-update rollback,
+  cancellation/Undo/Redo and equivalent internal/external-domain mask pixels.
+- Four new native adapter regressions cover every vector paint layer, nested
+  geometry intersections, gradient cache invalidation on corner-only edits and
+  explicit Text/Image rejection/zero-array override. All 102 UI library tests
+  pass, using the real GPUI dependency and native linker.
+- The eight-crate headless suite passes 838 tests including doctests, with no
+  failures and one existing ignored radial-raster performance benchmark. Strict
+  headless all-target Clippy passes. Final-source full native workspace all-target
+  `cargo check` and strict `cargo clippy -- -D warnings` also pass, including Studio.
+  The real full-workspace library/integration suite also passes 1215 tests,
+  zero failures and eight existing ignored tests (doctests were not part of that
+  command). Workspace rustfmt and `git diff --check` pass. The copied manifest arrangement is described
+  in [Ellipse validation](ellipse-arcs.md#validation).
+
+The native adapters are exercised through prepared triangle pixels and eligibility
+checks, not a live window/GPU presentation. Cross-platform and actual native-window
+interaction remain unverified for this slice. No GitHub Actions, deployment or
+merge was launched.

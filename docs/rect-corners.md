@@ -58,10 +58,7 @@ points). Legacy large scalar rectangles remain valid. Invalid/over-budget inputs
 reject at validated mutation boundaries, and existing stroke/compositor budgets
 still apply. No extra crate or dependency was introduced.
 
-This slice is **Rect only**. Box/Frame and `ClipRegion` still carry uniform scalar
-corners; propagating independent corners through nested vector/native/media clips
-requires its own complete change. No container-clipping or native-window parity
-claim is made here.
+This original slice was **Rect only**. The later [Box/Frame corner clipping](container-corners.md) slice propagates independent corners through `ClipRegion`, nested vector/CPU clips and native-media eligibility. Validation receipts below describe this Rect slice, not a native-window parity claim.
 
 ## Validation
 

@@ -802,4 +802,85 @@ mod tests {
                 .all(|p| p.x >= 5. - 0.001 && p.x <= 37. + 0.001)
         );
     }
+    #[test]
+    fn independent_corner_clips_affect_every_native_vector_paint_layer() {
+        let mut obj = object(Style {
+            fill: Some(Color::WHITE.into()),
+            fill_layers: vec![linear(Color::WHITE)],
+            ..Default::default()
+        });
+        obj.object.shape = scene::display::Rect::new(60., 40.).into();
+        obj.clips = vec![scene::ClipRegion {
+            local_bounds: scene::Bounds::new(ScenePoint::ZERO, scene::Size::new(60., 40.)),
+            corner_radius: 0.,
+            corner_radii: Some([15., 0., 10., 0.].into()),
+            world_transform: Affine::IDENTITY,
+        }];
+        let paints = prepare_vector_paints(&obj, point(px(0.), px(0.)), 1.);
+        assert_eq!(paints.len(), 2);
+        for paint in &paints {
+            assert_eq!(
+                sample(paint, Affine::IDENTITY, ScenePoint::new(1.5, 1.5), 1.),
+                Color::TRANSPARENT
+            );
+            assert_eq!(
+                sample(paint, Affine::IDENTITY, ScenePoint::new(58.5, 1.5), 1.),
+                Color::WHITE
+            );
+            assert_eq!(
+                sample(paint, Affine::IDENTITY, ScenePoint::new(58.5, 38.5), 1.),
+                Color::TRANSPARENT
+            );
+        }
+        drop(paints);
+        obj.clips[0].corner_radii = Some([0., 15., 0., 10.].into());
+        let paints = prepare_vector_paints(&obj, point(px(0.), px(0.)), 1.);
+        for paint in &paints {
+            assert_eq!(
+                sample(paint, Affine::IDENTITY, ScenePoint::new(1.5, 1.5), 1.),
+                Color::WHITE
+            );
+            assert_eq!(
+                sample(paint, Affine::IDENTITY, ScenePoint::new(58.5, 1.5), 1.),
+                Color::TRANSPARENT
+            );
+        }
+    }
+    #[test]
+    fn nested_independent_corner_clips_intersect_in_native_geometry() {
+        let mut obj = object(Style::fill(Color::WHITE));
+        obj.object.shape = scene::display::Rect::new(60., 40.).into();
+        let clip = scene::ClipRegion {
+            local_bounds: scene::Bounds::new(ScenePoint::ZERO, scene::Size::new(60., 40.)),
+            corner_radius: 0.,
+            corner_radii: Some([15., 0., 0., 0.].into()),
+            world_transform: Affine::IDENTITY,
+        };
+        obj.clips = vec![
+            clip,
+            scene::ClipRegion {
+                corner_radii: Some([0., 15., 0., 0.].into()),
+                ..clip
+            },
+        ];
+        let paints = prepare_vector_paints(&obj, point(px(0.), px(0.)), 1.);
+        assert_eq!(paints.len(), 1);
+        assert_eq!(
+            sample(&paints[0], Affine::IDENTITY, ScenePoint::new(1.5, 1.5), 1.),
+            Color::TRANSPARENT
+        );
+        assert_eq!(
+            sample(&paints[0], Affine::IDENTITY, ScenePoint::new(58.5, 1.5), 1.),
+            Color::TRANSPARENT
+        );
+        assert_eq!(
+            sample(
+                &paints[0],
+                Affine::IDENTITY,
+                ScenePoint::new(30.5, 20.5),
+                1.
+            ),
+            Color::WHITE
+        );
+    }
 }

@@ -277,4 +277,35 @@ mod tests {
         assert_ne!(get(&scene), clipped);
         assert_eq!(get(&before), clipped);
     }
+    #[test]
+    fn native_media_rejects_any_rounded_corner_but_accepts_explicit_zero_override() {
+        let mut value = object();
+        value.clips = vec![clip(0., 0., 100., 80.)];
+        value.clips[0].corner_radii = Some([15., 0., 0., 0.].into());
+        assert!(plan(&value).is_err());
+        assert!(
+            value
+                .diagnostics()
+                .iter()
+                .any(|issue| issue.feature == UnsupportedFeature::ClippedText)
+        );
+        value.object.shape = display::Image::new("unused.png", Size::new(80., 70.)).into();
+        assert!(
+            value
+                .diagnostics()
+                .iter()
+                .any(|issue| issue.feature == UnsupportedFeature::ClippedImage)
+        );
+        value.clips[0].corner_radius = 7.;
+        value.clips[0].corner_radii = Some([0.; 4].into());
+        assert!(plan(&value).is_ok());
+        assert!(
+            !value
+                .diagnostics()
+                .iter()
+                .any(|issue| issue.feature == UnsupportedFeature::ClippedImage)
+        );
+        value.clips[0].local_bounds.size.width = 0.;
+        assert_eq!(plan(&value).unwrap(), RectClip::Empty);
+    }
 }

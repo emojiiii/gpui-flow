@@ -147,3 +147,6 @@ mod ellipse_tests;
 
 #[cfg(test)]
 mod rect_corner_tests;
+
+#[cfg(test)]
+mod container_corner_tests;

@@ -389,4 +389,17 @@ mod tests {
         assert_eq!(gradient_render_issues(2).len(), 1);
         CACHE.with(|cache| cache.borrow_mut().issues.clear());
     }
+    #[test]
+    fn clip_corner_only_edits_invalidate_gradient_cache_keys() {
+        let mut key = entry(0, 4).key;
+        key.object.clips.push(scene::ClipRegion {
+            local_bounds: scene::Bounds::new(scene::Point::ZERO, scene::Size::new(60., 40.)),
+            corner_radius: 0.,
+            corner_radii: Some([15., 0., 10., 0.].into()),
+            world_transform: scene::Affine::IDENTITY,
+        });
+        let mut changed = key.clone();
+        changed.object.clips[0].corner_radii = Some([0., 15., 0., 10.].into());
+        assert!(changed != key);
+    }
 }
