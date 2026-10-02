@@ -498,10 +498,11 @@ impl Render for Lab {
                 .child(ControlButton::new("undo", "Undo config").on_click(cx.listener(|s,_,_,cx| s.undo(cx))))
                 .child(ControlButton::new("regenerate", "Regenerate").on_click(cx.listener(|s,_,_,cx| s.regenerate(cx)))))
             .child(div().flex_1().min_h_0().overflow_hidden().child(self.view.clone()))
-            .child(div().h(px(156.)).px_4().text_sm()
-                .child(format!("Left: {}  |  Right: {}\n", config[0], config[1]))
-                .child("Try Clear pixels -> Fill + stroke; Clear pixels -> BeginPath -> Fill; Build -> Append -> Fill.\nPath-only edits retain snapshot identity and generation. Each surface is an independent transaction.\n")
-                .child(self.status.clone()))
+            .child(div().flex().flex_col().flex_shrink_0().gap_1().px_4().py_2().text_sm()
+                .child(div().child(format!("Left: {}  |  Right: {}", config[0], config[1])))
+                .child(div().child("Try Clear pixels -> Fill + stroke; Clear pixels -> BeginPath -> Fill; Build -> Append -> Fill."))
+                .child(div().child("Path-only edits retain snapshot identity and generation. Each surface is an independent transaction."))
+                .children(self.status.lines().map(|line| div().child(line.to_owned()))))
     }
 }
 
