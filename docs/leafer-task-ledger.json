@@ -2,8 +2,8 @@
   "schema_version": 1,
   "ledger_version": "v1-review",
   "review": "已锁定45个能力单元和有限验收集合；审阅版，所有扩展/技术依赖显式记录",
-  "as_of": "2026-10-02T21:39:00Z",
-  "source_snapshot": "8dd6f1104d2e134b8b15f83e64c8fdb336ee4044",
+  "as_of": "2026-10-02T21:59:00Z",
+  "source_snapshot": "a6639014ceb276d2b33c64e04ad3e73adc770b30",
   "upstream": {
     "leafer_ui": "1e11641d3ea6b0211c83447268a90b8d58feec25",
     "leafer_core": "1d703303ff0759ce4973d54c87eeb8192dddc570",
@@ -402,17 +402,29 @@
       "title": "高级描边",
       "status": "partial",
       "acceptance": "cap/join/miter/dash、闭合及开放轮廓内外对齐、scale-fixed；bounds/hit/paint同源",
-      "boundary": "现有居中及闭合inside/outside；开放和scale-fixed缺",
+      "boundary": "居中、闭合及开放inside/outside已支持；开放闭合仅用于fill mask；scale-fixed仍缺，Canvas命令仍center-only，native/CPU不承诺位等价",
       "reference_doc": "docs/stroke-alignment.md",
-      "implementation_snapshot": "99392f7c35f956f8765ed5730423df19e3d474cd",
+      "implementation_snapshot": "a6639014ceb276d2b33c64e04ad3e73adc770b30",
       "evidence_commit": null,
-      "automatic": "Kurbo/Lyon/i_overlay已有回归；缺失行为未测",
-      "native": "已实现子集有原生像素；全项未验",
+      "automatic": "最终default1566通过/10既有ignored，UI252及七场景fixture tour通过；strict workspace/docs、格式和链接通过；shared mesh与数值拒绝覆盖",
+      "native": "21:40:50–21:47:54退出0；38按钮/39JSON/60PNG，23 trace及41 focused pixel断言通过；五history ROI零差、Line12/0/24px。辅助bbox20/21，孤立低对比像素保留",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/interface/src/ICommonAttr.ts",
         "symbols_or_contract": "IStrokeAttrData / IStrokeInputData；strokeAlign、cap/join/dash/scale-fixed语义"
       },
-      "technical_dependencies": []
+      "technical_dependencies": [],
+      "evidence_summary": "docs/validation/2026-10-02-open-stroke-native-summary.json",
+      "native_report": "docs/open-stroke-native.md",
+      "remaining_frozen_scope": [
+        "scale-fixed stroke"
+      ],
+      "verification_limits": [
+        "Auxiliary native/CPU boxes are20/21 within one pixel, not all-pixel agreement; isolated CPU pixel cause is unknown.",
+        "Physical controls do not cover every Cartesian combination, memory/precision rejection, zero-length/empty geometry or every supported shape type.",
+        "No device-level DPR measurement, browser/cross-platform equivalence or performance claim.",
+        "Scale-fixed remains absent. Canvas command strokes remain centered-only."
+      ],
+      "evidence_publication_note": "本次文档修订新增native报告；实现源码a6639014不被描述为已包含后续报告。"
     },
     {
       "id": "APP-03",
@@ -717,7 +729,7 @@
       "title": "Canvas矢量上下文批次",
       "status": "bounded_verified",
       "acceptance": "Path填充/描边、transform/alpha/save/restore/冻结clip栈；晚失败原子回滚",
-      "boundary": "无持久current path/context；图文分别归ELM-09/10",
+      "boundary": "绘制状态仍为batch-local；持久current path归ELM-10，图像归ELM-09，不将其他项重复计数",
       "reference_doc": "docs/canvas-clips.md",
       "implementation_snapshot": "99392f7c35f956f8765ed5730423df19e3d474cd",
       "evidence_commit": "e4f7d9455f7aaaf38d160951c330ae03249435d1",

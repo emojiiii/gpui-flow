@@ -42,7 +42,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | INT-05 | 交互 / [路径与倾斜中心编辑工具](line-endpoints.md) | 未开始该能力 | Path控制点、skew和pivot交互须各有真实几何/取消/history验收 | 固定Leafer OSS通用点编辑器是stub，不把自建功能称上游已实现；Line端点现有独立基础 |
 | INT-06 | 交互 / [拖动约束与高级视口](drag-viewport-constraints.md) | 有界契约已验证 | 固定世界/父局部矩形drag bounds、可开关网格/边缘吸附、viewport min/max及惯性取消 | 固定AABB及有限惯性；多指归EVT-03，无自动寻路/物理碰撞；持鼠/guide物理覆盖与6文件来源限制单列 |
 | APP-01 | 外观 / [有序填充与渐变](appearance.md) | 有界契约已验证 | 多层矢量fill、实色/线性/径向、多stop、透明度与缓存/DPR预算 | Text/Image多paint不在此项支持子集 |
-| APP-02 | 外观 / [高级描边](stroke-alignment.md) | 部分实现 | cap/join/miter/dash、闭合及开放轮廓内外对齐、scale-fixed；bounds/hit/paint同源 | 现有居中及闭合inside/outside；开放和scale-fixed缺 |
+| APP-02 | 外观 / [高级描边](stroke-alignment.md) | 部分实现 | cap/join/miter/dash、闭合及开放轮廓内外对齐、scale-fixed；bounds/hit/paint同源 | 居中及闭合/开放inside/outside已支持，开放仅隐式闭合mask；scale-fixed仍缺，Canvas命令仍center-only |
 | APP-03 | 外观 / [隔离混合与蒙版擦除](compositing.md) | 部分实现 | 组透明度/多paint隔离、固定blend集合、mask/erase覆盖关系与hit规则 | 已有有界CPU及owned backdrop；Custom/外部任意backdrop与erase缺 |
 | APP-04 | 外观 / [阴影与固定滤镜集合](multiple-shadows.md) | 部分实现 | 已有leaf/group inner/outer多影；必补spread/box/scale-fixed shadow、blur、backgroundBlur及grayscale并有像素/预算测试 | backgroundBlur仅可在拥有完整背景的有界surface执行；不承诺任意宿主backdrop |
 | APP-05 | 外观 / [状态样式与过渡](state-geometry.md) | 有界契约已验证 | hover/press/focus/selected/disabled、命名状态/继承、每态transition及geometry变化 | 固定实色/opacity、每态timing、x/y及六种size；任意属性/rotation/scale/skew等为边界；hard invalidation loading与canonical event-local坐标保留 |
@@ -58,7 +58,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | ELM-05 | 元素 / [Image真实帧与几何呈现](image-corners.md) | 有界契约已验证 | 静态/动画帧、fit、四角及仿射/复杂clip，真实CPU像素和资源代际 | alpha hit/crop内编辑归ELM-06；解码与URL权限归宿主 |
 | ELM-06 | 元素 / [Image像素命中与内编辑](image-crop.md) | 有界契约已验证 | decoded-alpha hit阈值/缩放/当前帧和crop内工具必须一致且可撤销 | OSS未找到Image专属crop inner editor；属于框架明确扩展，不虚称上游已有 |
 | ELM-07 | 元素 / [Canvas拥有像素与生命周期](canvas-component.md) | 有界契约已验证 | 独立配置、运行时surface、DPR/smooth/safe-resize/clear/draw/snapshot、代际释放 | 像素不进文档/Undo；非整视图OwnedCanvas |
-| ELM-08 | 元素 / [Canvas矢量上下文批次](canvas-clips.md) | 有界契约已验证 | Path填充/描边、transform/alpha/save/restore/冻结clip栈；晚失败原子回滚 | 无持久current path/context；图文分别归ELM-09/10 |
+| ELM-08 | 元素 / [Canvas矢量上下文批次](canvas-clips.md) | 有界契约已验证 | Path填充/描边、transform/alpha/save/restore/冻结clip栈；晚失败原子回滚 | 绘制状态仍batch-local；持久current path归ELM-10，图像归ELM-09 |
 | ELM-09 | 元素 / [Canvas图像批次](canvas-image-commands.md) | 有界契约已验证 | immutable image输入、source crop/destination/DPR、仿射/clip/alpha和单代际原子提交 | 不取URL；负尺寸拒绝；不保证浏览器精确filter边缘 |
 | ELM-10 | 元素 / [Canvas文字](canvas-text-commands.md)与[路径/图案状态](canvas-current-path.md) | 部分实现 | 必选fillText、measureText、strokeText；beginPath/moveTo/lineTo/quadraticCurveTo/bezierCurveTo/closePath；createPattern的repeat/no-repeat与transform | 必选current-path集合已覆盖；仍缺strokeText及pattern；DOM focus/CSS字体parser、arc/rect便利构造和全部浏览器context状态均排除，不增收口条件 |
 | ELM-11 | 元素 / [Canvas与场景导出](scene-raster-export.md) | 有界契约已验证 | Canvas RGBA/PNG已实现；固定Scene区域PNG/JPEG/WebP和SVG，含背景/透明度/裁切范围及缺资源拒绝 | WebP为lossless；SVG保留vector并嵌每节点Image/Canvas/Text PNG，无editable text/outlines或SVG/PNG位等价；不含完整SVG导入 |
@@ -94,7 +94,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | INT-05 | Line已验证；本项三类工具未开始 | 未实现/未验收 | 尚无独立完整验收提交 |
 | INT-06 | 28约束+7 wheel、2夹具+2导航focused及strict通过；较早334 interaction非最终全套 | 9224trace/58PNG/33审计通过；19实际衰减帧、6种tail中断、约束/吸附/只读/Undo，退出0 | `93ee7f7cabfb7979aeca93ec137ccf81644baeb5`；[原生证据与来源限制](validation/2026-10-02-drag-viewport-native-summary.json) |
 | APP-01 | appearance/gradient和CPU对应回归通过 | 历史渐变/多paint窗口及Canvas矢量窗口通过 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
-| APP-02 | Kurbo/Lyon/i_overlay已有回归；缺失行为未测 | 已实现子集有原生像素；全项未验 | 尚无独立完整验收提交 |
+| APP-02 | 最终default1566/10既有ignored、UI252、fixture tour及strict通过 | 38按钮/39JSON/60PNG；23 trace+41 focused pixel通过，辅助bbox20/21及原始outlier保留 | 源码`a6639014ceb276d2b33c64e04ad3e73adc770b30`；[native证据](open-stroke-native.md)，scale-fixed仍缺 |
 | APP-03 | 现有多种blend/alpha mask CPU与UI通过 | 已有真实合成窗口；全固定源码契约未齐 | 尚无独立完整验收提交 |
 | APP-04 | 现有shadow/inner/group回归通过 | 历史受限视觉检查；缺失模式未验 | 尚无独立完整验收提交 |
 | APP-05 | 历史74 state；修订UI245含13coherent，最终hook后2导航/4镜像focused复验，strict/链接通过（重叠） | 新72记录/57PNG，33状态样本完整，7点击符合accepted geometry；12硬失效样本loading保留，退出0 | `93ee7f7cabfb7979aeca93ec137ccf81644baeb5`；[coherent复验](validation/2026-10-02-state-coherent-native-summary.json)，[原始失败证据](validation/2026-10-02-state-geometry-summary.json)保留 |
@@ -199,3 +199,5 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 - 本轮源码已核实发布：`93ee7f7cabfb7979aeca93ec137ccf81644baeb5`，tree `a8f08d035dde97d13eecc932630e8fdda65dfb42`。INT-06的13精确源码/218预链接快照/6仅mtime分类、29取消订阅时间差，以及SVG mixed-raster/非位等价边界不会因发布而消失。
 
 本轮三项的证据报告随本次文档修订新增，JSON的`evidence_commit`暂为空；表中`93ee7f7c`仅表示已发布实现源码，不声称后续报告已在该源码提交内。
+
+- 2026-10-02 21:59：APP-02开放轮廓mask-only closure完成源码及有界native矩阵，scale-fixed仍缺，计数保持31已验证/11部分/3未开始。辅助bbox20/21及原42检查中未满足的一项原始记录保留，不改写为全像素通过。ELM-08边界澄清持久current path归ELM-10，无新增能力或计数。

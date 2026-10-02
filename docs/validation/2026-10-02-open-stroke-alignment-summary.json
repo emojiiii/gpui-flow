@@ -1,7 +1,7 @@
 {
   "recorded_utc": "2026-10-02T21:39:50.476310+00:00",
   "feature": "APP-02 open-contour Inside/Outside stroke alignment increment",
-  "state": "implementation and automated validation complete; native acceptance pending; APP-02 remains partial because scale-fixed is absent",
+  "state": "Automated validation and exercised native open-contour matrix recorded; auxiliary pixel-bound outlier retained; APP-02 remains partial for scale-fixed",
   "repository_head_at_recording": "fab70ec211abca078a37057c49852181ab52be91",
   "environment": "Linux cloud; /workspace/shared/gpui-flow-native-env.sh; existing shared native Cargo target; CARGO_BUILD_JOBS=1; no incremental compilation; debug info disabled; 3 GiB free-space floor",
   "checks": [
@@ -124,13 +124,17 @@
       "odd_phase": -13
     },
     "diagnostics": "One JSON stderr record at startup and per action, including accepted change/error, revision, geometry/style/fill rule/transform/clip, and six backend/alignment panel IDs",
-    "footer": "Natural-height and nonshrinking; native layout still requires visual acceptance"
+    "footer": "Natural-height and nonshrinking; all panels/status rows verified visible at1060x720 in the later native run."
   },
   "disk_free_after_bytes": 4229419008,
   "untested": [
-    "Native open-contour comparison window/interaction acceptance",
     "Windows/macOS/browser pixel equivalence",
-    "Broad performance and exact analytic-curve topology below documented 0.1 local-unit flattening tolerance"
+    "Broad performance and exact analytic-curve topology below documented 0.1 local-unit flattening tolerance",
+    "Unexercised native corner cases, including memory/precision rejection, zero-length/empty geometry and every control combination, are listed in the native summary."
   ],
-  "publication_note": "Automated validation only; native acceptance is pending and source publication is recorded separately. No GitHub Actions or deployment was run."
+  "publication_note": "Source is published separately from this later native evidence update. No GitHub Actions or deployment was run.",
+  "automated_record_state_at_source_publication": "implementation and automated validation complete; native acceptance pending; APP-02 remains partial because scale-fixed is absent",
+  "native_evidence_summary": "docs/validation/2026-10-02-open-stroke-native-summary.json",
+  "native_report": "docs/open-stroke-native.md",
+  "implementation_snapshot": "a6639014ceb276d2b33c64e04ad3e73adc770b30"
 }

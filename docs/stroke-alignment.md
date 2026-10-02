@@ -199,5 +199,9 @@ sequence. Exact commands, log hashes, scope and binary provenance are recorded
 in the [validation summary](validation/2026-10-02-open-stroke-alignment-summary.json).
 The fixture's bounded even/odd dash patterns are `36/24` and `36/24/12` at phase
 `-13`; the latter is exercised with all cap types without raising production
-budgets. Native open-contour window acceptance remains pending separately. The
-historical 2026-10-01 native result above applies only to its earlier source.
+budgets. The later [open-contour native acceptance](open-stroke-native.md) records
+seven scenarios, history and navigation,23 trace assertions and41 focused pixel
+assertions. Its auxiliary native/CPU box comparison is20/21 within one pixel;
+the isolated outlier is preserved, with no backend pixel-equivalence claim.
+APP-02 remains partial for scale-fixed. The historical 2026-10-01 result above
+applies only to its earlier source.
