@@ -336,9 +336,22 @@ impl SceneEngine {
         }
         Ok(result)
     }
+    /// Conservative visible positive geometry, without subtracting erased pixels.
+    /// Eraser roots and their complete subtrees do not contribute to this extent.
     pub fn visible_bounds(&self) -> Result<Option<Bounds>, EngineError> {
         let mut bounds = None;
+        let mut eraser_subtrees = BTreeSet::new();
         for item in self.paint_list()? {
+            let node = self.scene().get(&item.object.id).expect("node");
+            if item.object.eraser != gpui_flow_scene::EraserMode::None
+                || node
+                    .parent
+                    .as_ref()
+                    .is_some_and(|parent| eraser_subtrees.contains(parent))
+            {
+                eraser_subtrees.insert(item.object.id.clone());
+                continue;
+            }
             let mut next = item
                 .object
                 .paint_bounds()

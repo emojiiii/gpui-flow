@@ -76,11 +76,15 @@ impl Admission<'_> {
         {
             return Ok(());
         }
-        let isolated = !node.shadows.is_empty()
-            || !node.inner_shadows.is_empty()
-            || node.opacity < 1.
-            || node.blend != BlendMode::PassThrough;
-        if isolated {
+        if node.eraser == EraserMode::Path {
+            if node.erase_path.is_some() {
+                self.budget.reserve(self.pixels)?;
+                self.budget.write(self.pixels * 2)?;
+                self.budget.in_use -= self.pixels;
+            }
+            return Ok(());
+        }
+        if node.isolated() {
             if depth >= self.budget.limits.max_depth {
                 return Err(CompositeError::NestingLimit);
             }
@@ -186,7 +190,7 @@ impl Admission<'_> {
             i += 1;
             while i < node.children.len() && node.children[i].mask == MaskMode::None {
                 let content = &node.children[i];
-                let flush = child.opacity == 1. && content.blend != BlendMode::PassThrough;
+                let flush = content.flushes_mask(child.opacity);
                 if flush {
                     self.budget.write(self.pixels * 3)?;
                 }

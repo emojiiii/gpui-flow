@@ -1,9 +1,11 @@
 mod admission;
 use crate::{
     CanvasBackdrop, CompositeError, CompositeLimits, DomainSource, ImageInputs, TextInputs,
-    vector::{Preparation, PreparedNode, VectorPaint, VectorSource, transform},
+    vector::{CompositeOperation, Preparation, PreparedNode, VectorPaint, VectorSource, transform},
 };
-use gpui_flow_scene::{Affine, BlendMode, Bounds, ClipRegion, MaskMode, Point, Shape, Size};
+use gpui_flow_scene::{
+    Affine, BlendMode, Bounds, ClipRegion, EraserMode, MaskMode, Point, Shape, Size,
+};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tiny_skia::{Mask, PathBuilder, Pixmap, PixmapPaint, Transform};
 
@@ -213,11 +215,40 @@ impl Raster<'_> {
         target: &mut Pixmap,
         source: &Pixmap,
         opacity: f32,
-        blend: BlendMode,
+        operation: CompositeOperation,
         clip: Option<&Mask>,
     ) -> Result<(), CompositeError> {
         self.check()?;
         self.budget.write(self.pixels)?;
+        let blend = match operation {
+            CompositeOperation::DestinationOut => {
+                for (y, (dst, src)) in target
+                    .data_mut()
+                    .chunks_mut(self.width as usize * 4)
+                    .zip(source.data().chunks(self.width as usize * 4))
+                    .enumerate()
+                {
+                    self.check()?;
+                    for (x, (dst, src)) in dst
+                        .as_chunks_mut::<4>()
+                        .0
+                        .iter_mut()
+                        .zip(src.as_chunks::<4>().0)
+                        .enumerate()
+                    {
+                        let coverage = clip.map_or(255, |m| m.data()[y * self.width as usize + x]);
+                        let keep = 1.
+                            - f64::from(src[3]) / 255. * f64::from(opacity) * f64::from(coverage)
+                                / 255.;
+                        for channel in dst {
+                            *channel = (f64::from(*channel) * keep).round() as u8;
+                        }
+                    }
+                }
+                return Ok(());
+            }
+            CompositeOperation::Blend(blend) => blend,
+        };
         if crate::nonseparable::is_nonseparable(blend) {
             for (index, (dst, src)) in target
                 .data_mut()
@@ -294,21 +325,67 @@ impl Raster<'_> {
         }) {
             return Ok(());
         }
-        let isolated = !node.shadows.is_empty()
-            || !node.inner_shadows.is_empty()
-            || node.opacity < 1.
-            || node.blend != BlendMode::PassThrough;
-        if isolated {
+        if node.eraser == EraserMode::Path {
+            return self.erase_path(node, target, clip);
+        }
+        if node.isolated() {
             if depth >= self.budget.limits.max_depth {
                 return Err(CompositeError::NestingLimit);
             }
             let mut layer = self.surface()?;
             self.contents(node, &mut layer, depth + 1, None, true)?;
-            self.composite(target, &layer, node.opacity, node.blend, clip)?;
+            self.composite(target, &layer, node.opacity, node.operation(), clip)?;
             self.release(layer);
         } else {
             self.contents(node, target, depth, clip, true)?;
         }
+        Ok(())
+    }
+    fn erase_path(
+        &mut self,
+        node: &PreparedNode,
+        target: &mut Pixmap,
+        clip: Option<&Mask>,
+    ) -> Result<(), CompositeError> {
+        let Some(path) = &node.erase_path else {
+            return Ok(());
+        };
+        let a = self.world_to_layer * path.world;
+        if a.inverse().is_none() || transform(a).invert().is_none_or(|t| !t.is_finite()) {
+            return Err(CompositeError::UnsupportedTransform);
+        }
+        for p in path.path.points() {
+            let q = a.transform_point(Point::new(p.x, p.y));
+            if !q.is_finite() || q.x.abs() > 1_000_000. || q.y.abs() > 1_000_000. {
+                return Err(CompositeError::UnsupportedTransform);
+            }
+        }
+        self.check()?;
+        self.budget.reserve(self.pixels)?;
+        let mut mask = Mask::from_vec(
+            bytes(self.pixels)?,
+            tiny_skia::IntSize::from_wh(self.width, self.height).ok_or(CompositeError::TooLarge)?,
+        )
+        .ok_or(CompositeError::AllocationFailed)?;
+        self.budget.write(self.pixels * 2)?;
+        mask.fill_path(&path.path, path.rule, true, transform(a));
+        for (y, row) in target
+            .data_mut()
+            .chunks_mut(self.width as usize * 4)
+            .enumerate()
+        {
+            self.check()?;
+            for (x, pixel) in row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+                let index = y * self.width as usize + x;
+                let coverage = u32::from(mask.data()[index])
+                    * u32::from(clip.map_or(255, |m| m.data()[index]));
+                for channel in pixel {
+                    *channel =
+                        ((u32::from(*channel) * (65_025 - coverage) + 32_512) / 65_025) as u8;
+                }
+            }
+        }
+        self.budget.in_use -= self.pixels;
         Ok(())
     }
     fn contents(
@@ -654,17 +731,29 @@ impl Raster<'_> {
                 // Leafer flushes independent blend children through an opaque
                 // mask to the parent's actual CPU backdrop. A translucent mask
                 // instead composites the entire run before applying alpha.
-                let flush = mask_node.opacity == 1. && c.blend != BlendMode::PassThrough;
+                let flush = c.flushes_mask(mask_node.opacity);
                 if flush {
-                    self.masked(target, &mut content, &mask, BlendMode::Normal, clip)?;
+                    self.masked(
+                        target,
+                        &mut content,
+                        &mask,
+                        CompositeOperation::Blend(BlendMode::Normal),
+                        clip,
+                    )?;
                 }
                 self.node(c, &mut content, depth, None)?;
                 if flush {
-                    self.masked(target, &mut content, &mask, c.blend, clip)?;
+                    self.masked(target, &mut content, &mask, c.operation(), clip)?;
                 }
                 i += 1;
             }
-            self.masked(target, &mut content, &mask, BlendMode::Normal, clip)?;
+            self.masked(
+                target,
+                &mut content,
+                &mask,
+                CompositeOperation::Blend(BlendMode::Normal),
+                clip,
+            )?;
             self.release(content);
             self.budget.in_use -= self.pixels;
             drop(mask);
@@ -676,14 +765,14 @@ impl Raster<'_> {
         target: &mut Pixmap,
         content: &mut Pixmap,
         mask: &Mask,
-        blend: BlendMode,
+        operation: CompositeOperation,
         clip: Option<&Mask>,
     ) -> Result<(), CompositeError> {
         self.check()?;
         self.budget.write(self.pixels)?;
         // Exact common dimensions/origin are guaranteed by this raster owner.
         content.apply_mask(mask);
-        self.composite(target, content, 1., blend, clip)?;
+        self.composite(target, content, 1., operation, clip)?;
         self.budget.write(self.pixels)?;
         content.fill(tiny_skia::Color::TRANSPARENT);
         Ok(())
@@ -873,7 +962,9 @@ fn rasterize_inner(
     if cancelled.load(Ordering::Relaxed) {
         return Err(CompositeError::Superseded);
     }
-    if source.root.object.style.blend_mode.requires_backdrop() {
+    if source.root.object.eraser != EraserMode::None
+        || source.root.object.style.blend_mode.requires_backdrop()
+    {
         return Err(CompositeError::UnsupportedExternalBackdrop);
     }
     if !viewport.device_scale.is_finite()
@@ -970,7 +1061,7 @@ fn rasterize_inner(
         budget,
         cancelled,
     };
-    if prep.has_shadows || prep.has_inner_shadows || prep.has_image_clips {
+    if prep.has_shadows || prep.has_inner_shadows || prep.has_image_clips || prep.has_erasers {
         // No domain RGBA, mask, or filter scratch has been allocated yet.
         admission::admit(&raster, &root, source)?;
     }

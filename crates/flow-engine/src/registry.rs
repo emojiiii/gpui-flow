@@ -390,6 +390,7 @@ pub enum PropertyKey {
     ShadowLayers,
     InnerShadowLayers,
     Mask,
+    Eraser,
     Shape,
     /// Plain content of a built-in Text, preserving its layout box and typography.
     TextContent,
@@ -423,6 +424,7 @@ impl PropertyKey {
             Self::ShadowLayers => "style.shadow_layers".into(),
             Self::InnerShadowLayers => "style.inner_shadow_layers".into(),
             Self::Mask => "mask".into(),
+            Self::Eraser => "eraser".into(),
             Self::Shape => "shape".into(),
             Self::TextContent => "text.content".into(),
             Self::ImageSourceCrop => "image.source_crop".into(),
@@ -518,6 +520,7 @@ pub(crate) fn property_dirty(name: &str) -> DirtyFlags {
         | "style.shadow_layers"
         | "style.inner_shadow_layers" => DirtyFlags::PAINT,
         "mask" => DirtyFlags::PAINT | DirtyFlags::GEOMETRY,
+        "eraser" => DirtyFlags::PAINT | DirtyFlags::GEOMETRY | DirtyFlags::HIT,
         "transform" => DirtyFlags::TRANSFORM | DirtyFlags::HIT,
         "shape" | "text.content" | "path.data" | "image.source_crop" => {
             DirtyFlags::GEOMETRY | DirtyFlags::PAINT | DirtyFlags::HIT
@@ -568,7 +571,7 @@ impl PropertyKey {
                 ),
             ),
             Self::BlendMode => (PropertyType::String, Some(json!("pass_through"))),
-            Self::Mask => (PropertyType::String, Some(json!("none"))),
+            Self::Mask | Self::Eraser => (PropertyType::String, Some(json!("none"))),
             Self::Shadow | Self::ImageSourceCrop => (PropertyType::Any, Some(Value::Null)),
             Self::HitPolicy | Self::FillRule => (PropertyType::String, None),
             Self::Shape => (PropertyType::Object, None),

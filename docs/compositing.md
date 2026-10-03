@@ -14,6 +14,7 @@ At the GPUI boundary, those bytes pass once through `swap_rgba_pa_to_bgra` into 
 
 - `Style.blend_mode`: `PassThrough` (JSON `pass_through`, legacy default), `Normal`, `Multiply`, `Screen`, `Overlay`, `Darken`, `Lighten`, `ColorDodge`, `ColorBurn`, `HardLight`, `SoftLight`, `Difference`, `Exclusion`, `Hue`, `Saturation`, `Color`, `Luminosity`
 - `DisplayObject.mask`: `None` (legacy default), `Alpha`; a mask must be a direct Group child
+- `DisplayObject.eraser`: `None` (legacy default), `Pixel`, `Path`; [bounded scene erasers](scene-erasers.md) isolate the direct parent, use complete producer alpha for Pixel and filled geometric leaf contours for Path
 - Engine `PropertyKey::BlendMode` marks PAINT; `PropertyKey::Mask` marks PAINT | GEOMETRY, without redefining picking
 - Group opacity and multi-paint primitive opacity apply once after the object's complete contents, including overlaps
 - Normal groups isolate; pass-through groups reuse their actual CPU parent. Internal multiply/screen blend against preceding pixels in the same domain
@@ -43,7 +44,7 @@ produced [207,0,0] through that implementation instead of the expected [94,0,0].
 The adapter retains the existing surfaces/rasterizer, applies source opacity,
 source-over alpha and clip coverage once, checks cancellation per row, and
 allocates no extra surface. It uses encoded RGB, not linear-light or ICC-aware
-color management. Porter-Duff erase/copy and filters remain separate work.
+color management. [Scene erasers](scene-erasers.md) add an internal destination-out operation; unrestricted Porter-Duff copy and filters remain separate work.
 
 `owned_canvas` has a Next blend control cycling all 15 artistic modes and shows
 the selected blue object's mode in its footer.
@@ -53,6 +54,8 @@ the selected blue object's mode in its footer.
 Set `view.compositing_mode = gpui_flow::SceneCompositing::OwnedCanvas` while constructing/updating the view, then notify it normally. `Domains` remains the default. This runtime setting is not serialized into the Scene.
 
 OwnedCanvas rasterizes the view's opaque `theme.background`, optional `show_grid` / `theme.grid`, and the complete presented document into **one bounded CPU domain**, in that order. Roots retain stable sibling z-order and tree order. Top-level Multiply/Screen and blends inside pass-through groups can now read the actual preceding roots, grid and background. Explicit Normal groups and opacity isolation still isolate their children, while masks and rounded clips use the existing implementation. The native background/grid/document paint is replaced, never duplicated. Selection, resize handles, marquee and diagnostics are drawn afterward as overlays and are not blend backdrops.
+
+Any root eraser marker, including a hidden marker, forces a separate document surface within that domain. Document erasure then reveals the separately retained background/grid; root artistic blends see that isolated document surface. See the [eraser ownership and mask schedules](scene-erasers.md).
 
 The host still supplies the existing image resolver/cache and, for visible Text, the explicit same-native-backend text bridge above. Current static and animated images and supported text use the same immutable inputs, clock, worker, upload acceptance and retirement lifecycle. Visible Custom, missing text capability, unsupported text styles/transforms, missing/denied/failed image input or any budget error rejects the entire canvas. There is no partial native fallback or reordered native overlay. Hidden/zero-opacity subtrees do not require producers; hidden mask markers retain zero-alpha runs. Ordinary host controls outside SceneView are not part of the domain.
 
@@ -163,7 +166,7 @@ Custom inside a required domain rejects the entire domain. Text requires the exp
 
 In the default `SceneCompositing::Domains` mode, a domain root that needs multiply/screen against external content returns `UnsupportedExternalBackdrop`. A mask alone does not isolate a pass-through opacity-1 Group: a blend escaping an opaque mask run is rejected too. Explicit Normal groups and opacity isolation are supported, as are translucent mask runs that genuinely isolate their content. Put a required vector background inside the same Normal Group. Native siblings, host background, grid and selection decorations are not captured by that default mode. The explicit owned-canvas mode below includes only pixels owned by SceneView; arbitrary host GPUI content remains unsupported.
 
-No eraser, spread/box/scale-fixed shadows, general blur/background filters, grayscale/path/clipping masks, scale-fixed stroke, pixel picking, automatic resolution reduction or tiling is claimed. The single leaf-shadow subset is described below and [bounded subtree shadows](group-shadows.md) extend it; supported text, artistic blends and closed aligned strokes are covered in their dedicated sections. The engine's hit testing and conservative selection/layout bounds still include geometry beyond transparent mask pixels. Alpha-mask bounds do not become Leafer-style layout bounds. Rounded contours and stroke expansion retain the existing 0.1 local-unit approximation; gradient/AA bytes need not match the older native renderer. There is no wide-gamut, ICC or linear-light guarantee.
+Beyond the [bounded scene erasers](scene-erasers.md), no unrestricted eraser, spread/box/scale-fixed shadows, general blur/background filters, grayscale/path/clipping masks, scale-fixed stroke, pixel picking, automatic resolution reduction or tiling is claimed. The single leaf-shadow subset is described below and [bounded subtree shadows](group-shadows.md) extend it; supported text, artistic blends and closed aligned strokes are covered in their dedicated sections. The engine's hit testing and conservative selection/layout bounds still include geometry beyond transparent mask pixels. Alpha-mask bounds do not become Leafer-style layout bounds. Rounded contours and stroke expansion retain the existing 0.1 local-unit approximation; gradient/AA bytes need not match the older native renderer. There is no wide-gamut, ICC or linear-light guarantee.
 
 ## Budget, invalidation and lifecycle
 

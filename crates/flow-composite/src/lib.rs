@@ -98,6 +98,8 @@ pub enum CompositeError {
         reason: String,
     },
     UnsupportedExternalBackdrop,
+    /// Path erasure currently accepts only geometric vector leaves.
+    UnsupportedPathEraser(DisplayId),
     UnsupportedTransform,
     UnsupportedShadow(DisplayId),
     /// Custom producers do not expose a supported inner-shadow alpha source.
@@ -200,3 +202,6 @@ mod canvas_pattern_command_tests;
 
 #[cfg(test)]
 mod canvas_stroke_text_tests;
+
+#[cfg(test)]
+mod eraser_tests;

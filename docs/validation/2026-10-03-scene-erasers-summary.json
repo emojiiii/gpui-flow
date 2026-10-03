@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-10-03T04:53:46.840572+00:00",
+  "scope": "Bounded Pixel and geometric-leaf Path erasers through existing Scene/Engine/compositor plus UI publication-state test; APP03 remains partial",
+  "new_tests": {
+    "composite": 17,
+    "scene": 7,
+    "engine": 6,
+    "ui_publication": 1
+  },
+  "checks": [
+    {
+      "name": "focused",
+      "command": "cargo test --locked --offline -j1 -p gpui-flow-scene -p gpui-flow-engine -p gpui-flow-composite eraser -- --nocapture",
+      "exit_code": 101,
+      "started_utc": "2026-10-03T04:30:20.507560+00:00",
+      "finished_utc": "2026-10-03T04:33:09.585224+00:00",
+      "free_before": 18433998848,
+      "free_after": 17878548480,
+      "minimum_observed": 17878548480,
+      "log_sha256": "ab43718cd05ce366076fb2bf4d1a1678f452bcaa570aed59f96b56632ec9e6bc",
+      "receipt_sha256": "e4a6eff66aa911dad7eaf06a588111e8bac9c436724ba4763d9a318005add7e2"
+    },
+    {
+      "name": "focused-retry",
+      "command": "cargo test --locked --offline -j1 -p gpui-flow-scene -p gpui-flow-engine -p gpui-flow-composite eraser -- --nocapture",
+      "exit_code": 0,
+      "started_utc": "2026-10-03T04:34:08.360521+00:00",
+      "finished_utc": "2026-10-03T04:34:13.364245+00:00",
+      "free_before": 17877164032,
+      "free_after": 17877131264,
+      "minimum_observed": 17864638464,
+      "log_sha256": "3efecd75489792d253c27dd8fc4365d065cf48c9e44b5f2b867c0119b77ba9d3",
+      "receipt_sha256": "750d3057066f3465dffc26dd3bf6f5114f5e9238dc9afd4885e2f956c1fd021b",
+      "passed": 29,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "name": "affected-full",
+      "command": "cargo test --locked --offline -j1 -p gpui-flow-scene -p gpui-flow-engine -p gpui-flow-composite",
+      "exit_code": 0,
+      "started_utc": "2026-10-03T04:34:50.333831+00:00",
+      "finished_utc": "2026-10-03T04:35:03.343620+00:00",
+      "free_before": 17877090304,
+      "free_after": 17868328960,
+      "minimum_observed": 17859903488,
+      "log_sha256": "24b396c6f1440eb40834e5d33c2e6748664825782787f3fbccef2d9f7582c97c",
+      "receipt_sha256": "5077b164dc2785986892a3fc862cd5fe4dda4ba1b7429082512c047a12441e24",
+      "passed": 778,
+      "failed": 0,
+      "ignored": 3
+    },
+    {
+      "name": "affected-clippy",
+      "command": "cargo clippy --locked --offline -j1 -p gpui-flow-scene -p gpui-flow-engine -p gpui-flow-composite --all-targets -- -D warnings",
+      "exit_code": 0,
+      "started_utc": "2026-10-03T04:35:35.588928+00:00",
+      "finished_utc": "2026-10-03T04:36:06.611488+00:00",
+      "free_before": 17866993664,
+      "free_after": 17819299840,
+      "minimum_observed": 17819299840,
+      "log_sha256": "8e2f2f99b6dc1ecb154022f11762c83137b4243cba662aa70e2a51c37ce86bb5",
+      "receipt_sha256": "8470e6e38faa6089821e601478b324ebfbba46fdea3321686ccc24f720ea583a"
+    },
+    {
+      "name": "ui-focused",
+      "command": "cargo test --locked --offline -j1 -p gpui-flow -p flow-studio --features gpui-flow/canvas-stroke-text,flow-studio/outline-font-binding-x11 --lib eraser_mode_changes",
+      "exit_code": 0,
+      "started_utc": "2026-10-03T04:37:42.917877+00:00",
+      "finished_utc": "2026-10-03T04:44:37.204839+00:00",
+      "free_before": 17817083904,
+      "free_after": 15449972736,
+      "minimum_observed": 15449972736,
+      "log_sha256": "c5fab7760407a9f67d075afe78e024d0e51a4043f8c190c133125ec4781b7756",
+      "receipt_sha256": "4d061dee2e1cf1042e7c68ccc7dc5a3c68b6c07d0ebae31b49ebd6ce8abbde4b",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "name": "ui-clippy",
+      "command": "cargo clippy --locked --offline -j1 -p gpui-flow -p flow-studio --features gpui-flow/canvas-stroke-text,flow-studio/outline-font-binding-x11 --all-targets -- -D warnings",
+      "exit_code": 0,
+      "started_utc": "2026-10-03T04:45:16.693317+00:00",
+      "finished_utc": "2026-10-03T04:48:38.788727+00:00",
+      "free_before": 15449956352,
+      "free_after": 15033749504,
+      "minimum_observed": 15033749504,
+      "log_sha256": "576dc56405f6caa4e649f810977e1c02a383fecfb168d784d959deb812d49d46",
+      "receipt_sha256": "06913622c95c1f2175aa29bf3b95f0dfa9ae13c6586e4410fbb12c8dba60d44a"
+    }
+  ],
+  "source_sha256": {
+    "Cargo.toml": "da5b3dfcbfebd4d684c7957fc0d3edafff2b123a66622cf9b08d02bb942ef79b",
+    "Cargo.lock": "df1d5f77aa891d5b71063269b4c38ca0a9dc698c7932a26b09659bf0b1af3c4e",
+    "crates/flow-scene/src/object.rs": "62059311e74efd6056ceb1154043ff5a37bd7a1353f4828016d58928c9417f04",
+    "crates/flow-scene/src/scene.rs": "cfe7f4dc8696a1e970b38f88441486fa694c5f271481e8f48925fe76de33ad26",
+    "crates/flow-scene/src/leafer_json.rs": "ac3ffd51b76b1593864c42bf2605f49f63a8fdeed769456646f76282995cc7f1",
+    "crates/flow-scene/tests/erasers.rs": "dd18df6c2d65d34a220c54be009db0059523917a73e3e40ce49dc0602380d1b5",
+    "crates/flow-engine/src/registry.rs": "056fa1164e707a1e7fa417af3185e0e85a643a33773fde40ebcbd695e6b6018b",
+    "crates/flow-engine/src/layout.rs": "7c74e3d1601582b89905c5d5dce220260800b69ca3527d2c29eb2aa3025d0c0f",
+    "crates/flow-engine/src/query.rs": "6b17e8b0319d6765eb7a4d26d131601f69093c5e76a1ffbd5483632c43f29773",
+    "crates/flow-engine/tests/erasers.rs": "726e53d0c203e5eb76bfa75140f5172bed1fe0a3fe145bea88c290bfa918300c",
+    "crates/flow-composite/src/plan.rs": "1e27bca159cd859a12377de3e5a2f7cb1125f5a4c60dd6d019567c822ecb8e7e",
+    "crates/flow-composite/src/vector.rs": "a97fb7e4cbf4df84c1305c6d16a68be187bd898c07e2062c0a4b60d7a724d5bf",
+    "crates/flow-composite/src/raster.rs": "39cdc7cc8d8614ec0cfdfc1e41777237aa1940f40690770fe0ff3d851c35e8d6",
+    "crates/flow-composite/src/raster/admission.rs": "2968327bfabf5b91bc4f5a28adc8eee6390dac43bbd840286576a2894f1e6bb4",
+    "crates/flow-composite/src/scene_svg.rs": "100645df031fb97cbabc6b0c6db8c8f491f086c15543da2d660c10a9358ecc08",
+    "crates/flow-composite/src/lib.rs": "7ea52dfe194aaa86b1baa16ee63fd727f9f6420e719491ed2ba19b824e8e89ce",
+    "crates/flow-composite/src/eraser_tests.rs": "703f92e30f6298b6bfb8063a3ccf652de4e1d23994691f87c5ebaee9065e5c13",
+    "crates/flow-ui/src/display/composite/presentation_tests.rs": "3b2dcefd8da28b36e998b79d7d23dc3e2108d7740e7ee84fd98317879b8fb294"
+  },
+  "docs_sha256": {
+    "docs/scene-erasers.md": "d04ad4db918989f5c2eaec93c6673f39685a115464bd1eae6e3cddf632581827",
+    "docs/compositing.md": "cd6748df9a6c9c8cf65721e5441630c508d3b1b2086afb679f7f5dfa048b2361"
+  },
+  "review": {
+    "finding": "Full-opacity Pixel containers with effects were incorrectly rejected as shadow backdrop dependent",
+    "fix": "Restrict the shadow-backdrop check to non-eraser containers; preserve exposed eraser-root rejection",
+    "regressions": "Group/Box/Frame outer/inner shadow opacity1/.5 actual source-alpha checks, plus actual effects ignored by Path",
+    "initial_review": "Independent read-only reviewer",
+    "follow_up": "Parent source review and executed regressions, not a second independent reviewer approval",
+    "parent_follow_up_sha256": "b978c7ba1d390ac1d9aa1edea19173509166ac9dd34ce3c7da7757f9b319d64b"
+  },
+  "original_failed_test": "Affine test selected only inner Frame domain but expected an outside red sibling; corrected capture to the explicit shared Group. Original log retained.",
+  "resource_context": "User-authorized official cargo clean preceded these checks; cold locked/offline dependency rebuilding stayed above3GiB. No new dependency or target directory.",
+  "native_acceptance": false,
+  "limitations": [
+    "UI test checks production controller state with modeled upload receipts; no native App/Window or actual GPU upload.",
+    "Cancellation tests cover pre-cancelled requests; row checks implemented but deterministic mid-pass interruption not tested.",
+    "Path containers/Text/Image/Canvas/Custom, external backdrop, SVG erase encoding, bare captured eraser root and full mask layout/hit parity remain unsupported.",
+    "No browser/cross-platform equivalence or full-workspace runtime result claimed."
+  ]
+}

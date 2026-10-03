@@ -6,7 +6,7 @@ use crate::{
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use gpui_flow_scene::{
-    Affine, BlendMode, Bounds, Color, FillRule, MaskMode, Paint, Shape, Size,
+    Affine, BlendMode, Bounds, Color, EraserMode, FillRule, MaskMode, Paint, Shape, Size,
     display::{Path, PathCommand},
 };
 use std::{
@@ -27,6 +27,9 @@ pub(crate) fn validate(source: &DomainSource) -> Result<(), CompositeError> {
         }
         if !o.visible || o.style.opacity == 0. {
             return Ok(());
+        }
+        if o.eraser != EraserMode::None {
+            return Err(CompositeError::UnsupportedShape("SVG erasers".into()));
         }
         if !matches!(
             o.style.blend_mode,

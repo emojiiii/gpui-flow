@@ -292,3 +292,72 @@ fn coherent_empty_cpu_result_can_be_republished_for_native_only_changes() {
             .is_some()
     );
 }
+
+#[test]
+fn eraser_mode_changes_hide_incompatible_frames_cancel_late_work_and_wait_for_upload() {
+    use gpui_flow_engine::PropertyKey;
+    use gpui_flow_scene::EraserMode;
+
+    let mut engine = engine();
+    engine
+        .transaction(|scene| {
+            scene.insert(
+                DisplayObject::new("back", display::Rect::new(40., 40.))
+                    .with_style(Style::fill(Color::WHITE)),
+                Some("g".into()),
+                Some(0),
+            )
+        })
+        .unwrap();
+    let domain: DisplayId = "g".into();
+    let mut controller = CompositeController::default();
+    let first = key(&engine);
+    controller.request(first.clone());
+    finish(&mut controller);
+    let frame = controller.frame(&domain).unwrap().0;
+    assert!(controller.accepted.is_empty());
+    controller.accepted(&first, &domain, &frame.image);
+
+    for mode in [EraserMode::Pixel, EraserMode::Path, EraserMode::None] {
+        // Finish a paint-only refresh but delay its delivery until the mode edit.
+        engine
+            .set_property(
+                engine.handle(&"r".into()).unwrap(),
+                PropertyKey::Fill,
+                serde_json::to_value(gpui_flow_scene::Paint::solid(Color::rgb(40, 90, 180)))
+                    .unwrap(),
+            )
+            .unwrap();
+        let previous = key(&engine);
+        controller.request(previous.clone());
+        // Later loop iterations may already have this exact fill.
+        let late = controller.take_work().map(|work| {
+            let result = work.run();
+            (work, result)
+        });
+        engine
+            .set_property(
+                engine.handle(&"r".into()).unwrap(),
+                PropertyKey::Eraser,
+                serde_json::to_value(mode).unwrap(),
+            )
+            .unwrap();
+        let current = key(&engine);
+        assert!(!current.compatible(&previous, &domain));
+        controller.request(current.clone());
+        assert!(controller.frame(&domain).is_none());
+        if let Some((work, result)) = late {
+            assert!(work.cancel.load(Ordering::Relaxed));
+            controller.finish(work.key.clone(), result);
+            assert!(controller.candidates.is_empty());
+        }
+        finish(&mut controller);
+        assert!(controller.accepted.is_empty());
+        let (frame, candidate) = controller.frame(&domain).unwrap();
+        assert!(candidate);
+        controller.accepted(&previous, &domain, &frame.image);
+        assert!(controller.accepted.is_empty());
+        controller.accepted(&current, &domain, &frame.image);
+        assert_eq!(controller.accepted.len(), 1);
+    }
+}

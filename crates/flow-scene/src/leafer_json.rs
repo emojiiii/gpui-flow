@@ -4,9 +4,9 @@
 //! dispatch, computed caches, or permissive unknown-field fallback is involved.
 //! See `docs/leafer-json.md` for tag-specific fields and semantic boundaries.
 use crate::{
-    Affine, BlendMode, Color, ContainerPaintOrder, DisplayId, DisplayObject, FillRule, HitPolicy,
-    MaskMode, Paint, Point, Scene, Shape, Size, Stroke, StrokeAlignment, StrokeCap, StrokeJoin,
-    Style, display,
+    Affine, BlendMode, Color, ContainerPaintOrder, DisplayId, DisplayObject, EraserMode, FillRule,
+    HitPolicy, MaskMode, Paint, Point, Scene, Shape, Size, Stroke, StrokeAlignment, StrokeCap,
+    StrokeJoin, Style, display,
 };
 use serde::de::{self, DeserializeSeed, MapAccess, SeqAccess, Visitor};
 use serde_json::{Map, Value, json};
@@ -753,6 +753,9 @@ fn admit_export(scene: &Scene) -> Result<()> {
     for node in scene.nodes() {
         let o = &node.object;
         let s = &o.style;
+        if o.eraser != EraserMode::None {
+            return Err(error(o.id.to_string(), "erasers are unsupported"));
+        }
         if s.has_layers()
             || s.has_shadows()
             || s.has_inner_shadows()

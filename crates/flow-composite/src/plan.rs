@@ -1,7 +1,7 @@
 use crate::{CompositeError, CompositeIssue, CompositeLimits};
 use gpui_flow_scene::{
-    Affine, BlendMode, ClipRegion, Color, DisplayId, DisplayObject, MaskMode, PaintPhase, Point,
-    Scene, SceneError, Shape, display::Group,
+    Affine, BlendMode, ClipRegion, Color, DisplayId, DisplayObject, EraserMode, MaskMode,
+    PaintPhase, Point, Scene, SceneError, Shape, display::Group,
 };
 
 /// An opaque canvas that the caller owns completely. This does not capture a
@@ -129,6 +129,9 @@ pub fn capture_subtree(
     let node = scene
         .get(id)
         .ok_or_else(|| CompositeError::InvalidGeometry("missing Canvas draw source".into()))?;
+    if node.object.eraser != EraserMode::None {
+        return Err(CompositeError::UnsupportedExternalBackdrop);
+    }
     let world = scene
         .world_transform(id)
         .map_err(|e| CompositeError::InvalidGeometry(e.to_string()))?;
@@ -193,6 +196,7 @@ impl DomainSource {
                 && a.world_transform == b.world_transform
                 && a.object.visible == b.object.visible
                 && a.object.mask == b.object.mask
+                && a.object.eraser == b.object.eraser
                 && a.object.style.stroke == b.object.style.stroke
                 && a.object.style.stroke_layers == b.object.style.stroke_layers
                 && a.object.style.fill_rule == b.object.style.fill_rule
@@ -296,6 +300,7 @@ fn boundary(scene: &Scene, id: &DisplayId) -> bool {
     };
     let o = &node.object;
     matches!(o.shape, Shape::Canvas(_))
+        || o.eraser != EraserMode::None
         || (matches!(&o.shape,Shape::Text(t) if t.decoration != gpui_flow_scene::display::TextDecoration::None)
             && o.style
                 .fills()
@@ -308,9 +313,9 @@ fn boundary(scene: &Scene, id: &DisplayId) -> bool {
                 || matches!(&o.shape,Shape::Text(t) if t.decoration != gpui_flow_scene::display::TextDecoration::None)
                 || o.style.fills().count() + o.style.strokes().count() > 1))
         || node.children.iter().any(|id| {
-            scene
-                .get(id)
-                .is_some_and(|n| n.object.mask != MaskMode::None)
+            scene.get(id).is_some_and(|n| {
+                n.object.mask != MaskMode::None || n.object.eraser != EraserMode::None
+            })
         })
 }
 fn visit(
@@ -353,7 +358,7 @@ fn visit(
             }));
             return;
         }
-        let result = if o.style.blend_mode.requires_backdrop() {
+        let result = if o.eraser != EraserMode::None || o.style.blend_mode.requires_backdrop() {
             Err(CompositeError::UnsupportedExternalBackdrop)
         } else {
             capture(scene, id, parent, limits, &mut Counts::default(), 0)
@@ -421,6 +426,7 @@ fn capture(
         .get(id)
         .ok_or_else(|| CompositeError::InvalidGeometry("missing child".into()))?;
     let o = &node.object;
+    validate_eraser(o)?;
     counts.nodes += 1;
     if counts.nodes > limits.max_nodes {
         return Err(CompositeError::InputLimit);
@@ -499,6 +505,7 @@ fn capture(
     // A new effect surface must not silently sever a pass-through descendant
     // from its existing backdrop, even when the outer domain owns that backdrop.
     if o.shape.allows_children()
+        && o.eraser == EraserMode::None
         && (o.style.has_visible_shadows() || o.style.has_visible_inner_shadows())
         && o.style.blend_mode == BlendMode::PassThrough
         && o.style.opacity == 1.
@@ -516,10 +523,16 @@ fn requires_parent_backdrop(node: &DomainNode) -> bool {
     if !node.object.visible || node.object.style.opacity == 0. {
         return false;
     }
-    if node.object.style.blend_mode.requires_backdrop() {
+    if node.object.eraser != EraserMode::None || node.object.style.blend_mode.requires_backdrop() {
         return true;
     }
-    if node.object.style.blend_mode == BlendMode::Normal || node.object.style.opacity < 1. {
+    if node.object.style.blend_mode == BlendMode::Normal
+        || node.object.style.opacity < 1.
+        || node
+            .children
+            .iter()
+            .any(|child| child.object.eraser != EraserMode::None)
+    {
         return false;
     }
     let mut translucent_run = false;
@@ -533,4 +546,22 @@ fn requires_parent_backdrop(node: &DomainNode) -> bool {
         }
     }
     false
+}
+
+pub(crate) fn validate_eraser(object: &DisplayObject) -> Result<(), CompositeError> {
+    if object.eraser == EraserMode::Path
+        && !matches!(
+            object.shape,
+            Shape::Rect(_)
+                | Shape::Ellipse(_)
+                | Shape::Line(_)
+                | Shape::Polygon(_)
+                | Shape::Star(_)
+                | Shape::Path(_)
+                | Shape::Pen(_)
+        )
+    {
+        return Err(CompositeError::UnsupportedPathEraser(object.id.clone()));
+    }
+    Ok(())
 }

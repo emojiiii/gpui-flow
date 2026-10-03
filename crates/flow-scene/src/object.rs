@@ -46,6 +46,17 @@ pub enum MaskMode {
     None,
     Alpha,
 }
+/// Erase earlier contents of the direct parent's isolated render surface.
+/// Pixel uses rendered alpha; Path uses the geometric filled contour. Renderers
+/// may reject unsupported producers, while retained geometry remains pickable.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EraserMode {
+    #[default]
+    None,
+    Pixel,
+    Path,
+}
 fn yes() -> bool {
     true
 }
@@ -77,6 +88,8 @@ pub struct DisplayObject {
     pub hit_children: bool,
     #[serde(default)]
     pub mask: MaskMode,
+    #[serde(default)]
+    pub eraser: EraserMode,
 }
 impl DisplayObject {
     pub fn new(id: impl Into<DisplayId>, shape: impl Into<Shape>) -> Self {
@@ -94,7 +107,12 @@ impl DisplayObject {
             hit_policy: HitPolicy::Painted,
             hit_children: true,
             mask: MaskMode::None,
+            eraser: EraserMode::None,
         }
+    }
+    pub fn with_eraser(mut self, eraser: EraserMode) -> Self {
+        self.eraser = eraser;
+        self
     }
     pub fn with_mask(mut self, mask: MaskMode) -> Self {
         self.mask = mask;

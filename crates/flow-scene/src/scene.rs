@@ -402,7 +402,9 @@ impl Scene {
         Ok(result)
     }
     /// Geometric subtree bounds in the object's local coordinate space. Hidden
-    /// children are included; clipping and stroke extents are respected.
+    /// children are included; clipping and stroke extents are respected. Eraser
+    /// child subtrees do not expand their parent, but retain their own bounds.
+    /// Alpha masks keep conservative bounds rather than clipping sibling bounds.
     pub fn local_bounds(&self, id: &DisplayId) -> Result<Option<Bounds>, SceneError> {
         self.validate()?;
         self.local_bounds_inner(id)
@@ -419,6 +421,9 @@ impl Scene {
                 let bounds = self.nodes[child].object.transform.transform_bounds(bounds);
                 if !bounds.is_valid() {
                     return Err(SceneError::InvalidGeometry("child bounds overflow".into()));
+                }
+                if self.nodes[child].object.eraser != crate::EraserMode::None {
+                    continue;
                 }
                 let bounds = if let Some(clip) = clip {
                     crate::geometry::intersection(bounds, clip)
@@ -518,9 +523,22 @@ impl Scene {
         }
         Ok(result)
     }
+    /// Conservative visible positive geometry, without subtracting erased pixels.
+    /// Eraser roots and their complete subtrees do not contribute to this extent.
     pub fn visible_bounds(&self) -> Result<Option<Bounds>, SceneError> {
         let mut result = None;
+        let mut eraser_subtrees = BTreeSet::new();
         for item in self.paint_list()? {
+            let node = &self.nodes[&item.object.id];
+            if item.object.eraser != crate::EraserMode::None
+                || node
+                    .parent
+                    .as_ref()
+                    .is_some_and(|parent| eraser_subtrees.contains(parent))
+            {
+                eraser_subtrees.insert(item.object.id.clone());
+                continue;
+            }
             if let Some(bounds) = item.object.paint_bounds() {
                 let mut bounds = Some(item.world_transform.transform_bounds(bounds));
                 for clip in &item.clips {

@@ -1,6 +1,7 @@
 use crate::{CompositeError, CompositeLimits, DomainNode, ImageInputs, StaticImage, TextInputs};
 use gpui_flow_scene::{
-    Affine, BlendMode, ClipRegion, FillRule, MaskMode, Paint, Shape, display::PathCommand,
+    Affine, BlendMode, ClipRegion, EraserMode, FillRule, MaskMode, Paint, Shape,
+    display::PathCommand,
 };
 use std::sync::Arc;
 use tiny_skia::{Path, PathBuilder, Transform};
@@ -13,6 +14,9 @@ pub(crate) struct PreparedNode {
     pub opacity: f32,
     pub blend: BlendMode,
     pub mask: MaskMode,
+    pub eraser: EraserMode,
+    pub has_eraser_children: bool,
+    pub erase_path: Option<VectorPaint>,
     pub paints: Vec<VectorPaint>,
     /// Fill prefix followed by stroke meshes. Geometry is prepared once.
     pub fill_count: usize,
@@ -22,6 +26,32 @@ pub(crate) struct PreparedNode {
     pub image: Option<ImagePaint>,
     pub children: Vec<PreparedNode>,
     pub child_clip: Option<ClipRegion>,
+}
+#[derive(Clone, Copy)]
+pub(crate) enum CompositeOperation {
+    Blend(BlendMode),
+    DestinationOut,
+}
+impl PreparedNode {
+    pub fn operation(&self) -> CompositeOperation {
+        if self.eraser == EraserMode::Pixel {
+            CompositeOperation::DestinationOut
+        } else {
+            CompositeOperation::Blend(self.blend)
+        }
+    }
+    pub fn flushes_mask(&self, mask_opacity: f32) -> bool {
+        mask_opacity == 1.
+            && (self.eraser == EraserMode::Pixel || self.blend != BlendMode::PassThrough)
+    }
+    pub fn isolated(&self) -> bool {
+        self.eraser == EraserMode::Pixel
+            || self.has_eraser_children
+            || !self.shadows.is_empty()
+            || !self.inner_shadows.is_empty()
+            || self.opacity < 1.
+            || self.blend != BlendMode::PassThrough
+    }
 }
 pub(crate) struct ImagePaint {
     pub own_clip: Option<ClipRegion>,
@@ -73,6 +103,7 @@ pub(crate) struct Preparation {
     pub has_shadows: bool,
     pub has_inner_shadows: bool,
     pub has_image_clips: bool,
+    pub has_erasers: bool,
     nodes: usize,
     masks: usize,
     source_points: usize,
@@ -284,6 +315,12 @@ impl Preparation {
             return Err(CompositeError::NestingLimit);
         }
         let object = &source.object;
+        crate::plan::validate_eraser(object)?;
+        let has_eraser_children = source
+            .children
+            .iter()
+            .any(|child| child.object.eraser != EraserMode::None);
+        self.has_erasers |= object.eraser != EraserMode::None || has_eraser_children;
         // Preserve mask-run markers even when their contents contribute zero.
         // Invisible/zero-opacity subtrees do not require loaded image pixels.
         if !object.visible || object.style.opacity == 0. {
@@ -295,6 +332,9 @@ impl Preparation {
                 opacity: object.style.opacity,
                 blend: object.style.blend_mode,
                 mask: object.mask,
+                eraser: object.eraser,
+                has_eraser_children,
+                erase_path: None,
                 paints: vec![],
                 fill_count: 0,
                 children_before_inner: true,
@@ -321,6 +361,44 @@ impl Preparation {
             return Err(CompositeError::InputLimit);
         }
         let previous_bounds = self.bounds.take();
+        if object.eraser == EraserMode::Path {
+            let erase_path = if let Some(path) = path(&object.shape)? {
+                self.add_path(&path, source.world_transform, limits)?;
+                Some(VectorPaint {
+                    path,
+                    paint: VectorSource::Scene(tiny_skia::Paint::default()),
+                    rule: match object.style.fill_rule {
+                        FillRule::EvenOdd => tiny_skia::FillRule::EvenOdd,
+                        FillRule::NonZero => tiny_skia::FillRule::Winding,
+                    },
+                    world: source.world_transform,
+                })
+            } else {
+                None
+            };
+            let bounds = self.bounds.take();
+            // Keep operation bounds for culling, but an eraser cannot enlarge
+            // its parent's positive contribution or the domain allocation.
+            self.bounds = previous_bounds;
+            return Ok(PreparedNode {
+                bounds,
+                shadows: vec![],
+                inner_shadows: vec![],
+                visible: object.visible,
+                opacity: object.style.opacity,
+                blend: object.style.blend_mode,
+                mask: object.mask,
+                eraser: object.eraser,
+                has_eraser_children: false,
+                erase_path,
+                paints: vec![],
+                fill_count: 0,
+                children_before_inner: true,
+                image: None,
+                children: vec![],
+                child_clip: None,
+            });
+        }
         let mut paints = Vec::new();
         let mut fill_count = 0;
         let mut image_paint = None;
@@ -591,7 +669,14 @@ impl Preparation {
                 });
             }
         }
-        self.bounds = match (previous_bounds, node_bounds) {
+        self.bounds = match (
+            previous_bounds,
+            if object.eraser == EraserMode::None {
+                node_bounds
+            } else {
+                None
+            },
+        ) {
             (Some(a), Some(b)) => Some([
                 a[0].min(b[0]),
                 a[1].min(b[1]),
@@ -608,6 +693,9 @@ impl Preparation {
             opacity: object.style.opacity,
             blend: object.style.blend_mode,
             mask: object.mask,
+            eraser: object.eraser,
+            has_eraser_children,
+            erase_path: None,
             fill_count,
             children_before_inner: !matches!(object.shape, Shape::Box(_) | Shape::Frame(_))
                 || object.shape.paint_phases().1.is_some(),

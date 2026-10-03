@@ -1,8 +1,10 @@
 use crate::{DirtyFlags, LayoutStats};
-use gpui_flow_scene::{Affine, Bounds, ClipRegion, DisplayId, Scene, SceneError};
+use gpui_flow_scene::{Affine, Bounds, ClipRegion, DisplayId, EraserMode, Scene, SceneError};
 use std::collections::{BTreeMap, BTreeSet};
 /// Cached geometry. `local_bounds` is the clipped geometric subtree including
 /// strokes; `content_bounds` excludes stroke. No unsupported effects are inferred.
+/// Eraser child subtrees retain their own entries but do not expand parent bounds.
+/// Alpha masks retain the existing conservative, non-mask-clipped layout policy.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LayoutEntry {
     pub world_transform: Affine,
@@ -152,14 +154,12 @@ impl Builder<'_> {
             entry.content_bounds = object.shape.local_bounds();
             entry.local_bounds = object.paint_bounds();
             for child in &children {
+                let child_object = &self.scene.get(child).expect("child").object;
+                if child_object.eraser != EraserMode::None {
+                    continue;
+                }
                 if let Some(bounds) = self.next.entries[child].local_bounds {
-                    let bounds = self
-                        .scene
-                        .get(child)
-                        .expect("child")
-                        .object
-                        .transform
-                        .transform_bounds(bounds);
+                    let bounds = child_object.transform.transform_bounds(bounds);
                     let bounds = clip.map_or(Some(bounds), |(c, _, _)| intersection(bounds, c));
                     if let Some(bounds) = bounds {
                         entry.local_bounds =
@@ -185,6 +185,9 @@ impl Builder<'_> {
         // parent's shadow. Geometric bounds remain deliberately unchanged.
         entry.effect_bounds = entry.world_bounds;
         for child in &children {
+            if self.scene.get(child).expect("child").object.eraser != EraserMode::None {
+                continue;
+            }
             let mut bounds = self.next.entries[child].effect_bounds;
             if let Some((c, _, _)) = clip {
                 bounds =
