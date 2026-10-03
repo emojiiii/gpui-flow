@@ -8,6 +8,7 @@ mod input_trace;
 mod interaction;
 mod layer_host;
 pub use input_trace::*;
+mod custom_tool;
 mod image_crop;
 pub(crate) mod image_hit;
 mod navigation;
@@ -19,6 +20,7 @@ use crate::{
     FlowTheme,
     display::{RenderIssue, RenderObject},
 };
+pub use custom_tool::{SceneToolWidget, ToolWidgetContext};
 use gpui::{prelude::*, *};
 use gpui_flow_core::{Point as WorldPoint, Size as WorldSize};
 use gpui_flow_editor::SceneEditor;
@@ -87,6 +89,7 @@ pub struct SceneView {
     pub interaction_error: Option<String>,
     tools: Option<gpui_flow_interaction::scene::SceneToolController>,
     text_input: Option<text_edit::TextInputSession>,
+    tool_widgets: custom_tool::ToolWidgets,
 }
 impl SceneView {
     pub fn new(scene: Scene, cx: &mut Context<Self>) -> Result<Self, SceneError> {
@@ -103,6 +106,7 @@ impl SceneView {
                 Err(error) => (None, Some(error.to_string())),
             };
         cx.on_release(|this: &mut Self, cx| {
+            this.dispose_tool_widgets(cx);
             if let Some(tools) = &mut this.tools {
                 let _ = tools.dispose(&mut this.editor, &mut this.interactions);
             }
@@ -151,6 +155,7 @@ impl SceneView {
             interaction_error: None,
             tools: None,
             text_input: None,
+            tool_widgets: Default::default(),
         }
     }
     /// Mutate owned Canvas pixels and request a repaint; configuration continues
@@ -375,7 +380,7 @@ impl SceneView {
         DisplayId,
         [gpui_flow_interaction::scene::SceneLineHandle; 2],
     )> {
-        if self.text_editor_active()
+        if self.inner_tool_active()
             || self.image_crop_editor_active()
             || !self.is_editable()
             || !self.interactions.is_enabled("line-endpoints")
@@ -393,7 +398,7 @@ impl SceneView {
         Option<DisplayId>,
         [gpui_flow_interaction::scene::SceneResizeHandle; 8],
     )> {
-        if self.text_editor_active()
+        if self.inner_tool_active()
             || self.image_crop_editor_active()
             || self.line_handles().is_some()
             || !self.is_editable()
@@ -423,7 +428,7 @@ impl SceneView {
         Some((Some(id), handles))
     }
     fn rotation_handle(&self) -> Option<gpui_flow_interaction::scene::SceneRotationHandle> {
-        if self.text_editor_active()
+        if self.inner_tool_active()
             || self.image_crop_editor_active()
             || self.line_handles().is_some()
             || !self.is_editable()

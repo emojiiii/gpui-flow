@@ -30,28 +30,48 @@ impl SceneView {
         cx: &mut Context<Self>,
     ) {
         if enabled {
-            self.tools
-                .get_or_insert_with(SceneToolController::with_text);
+            let tools = self.tools.get_or_insert_with(SceneToolController::new);
+            if tools.registry().inner_for_shape("text").is_none()
+                && let Err(error) =
+                    tools.register_text(gpui_flow_interaction::scene::DEFAULT_TEXT_TOOL)
+            {
+                self.interaction_error = Some(error.to_string());
+            }
         } else {
             self.close_text_editor(false, ToolCloseReason::Disabled, window, cx);
             if self.text_input.is_none()
-                && let Some(mut tools) = self.tools.take()
+                && let Some(tools) = &mut self.tools
+                && tools
+                    .registry()
+                    .get(gpui_flow_interaction::scene::DEFAULT_TEXT_TOOL)
+                    .is_some_and(|entry| {
+                        entry.kind == gpui_flow_interaction::scene::SceneToolKind::PlainText
+                    })
             {
-                let _ = tools.dispose(&mut self.editor, &mut self.interactions);
-                for event in tools.drain_events() {
-                    cx.emit(SceneViewEvent::EditorTool(event));
-                }
+                let _ = tools.unregister(
+                    &mut self.editor,
+                    &mut self.interactions,
+                    gpui_flow_interaction::scene::DEFAULT_TEXT_TOOL,
+                );
             }
         }
         cx.notify();
     }
     pub fn text_editing_enabled(&self) -> bool {
-        self.tools.is_some()
+        self.tools.as_ref().is_some_and(|tools| {
+            tools
+                .registry()
+                .inner_for_shape("text")
+                .is_some_and(|entry| {
+                    entry.kind == gpui_flow_interaction::scene::SceneToolKind::PlainText
+                })
+        })
     }
     pub fn text_editor_active(&self) -> bool {
         self.text_input.is_some()
     }
     pub fn text_editor_target(&self) -> Option<gpui_flow_engine::ElementHandle> {
+        self.text_input.as_ref()?;
         self.tools.as_ref()?.active_target()
     }
     /// Open exactly this live Text instance, enabling the optional tool if
@@ -69,6 +89,19 @@ impl SceneView {
         }
         self.close_image_crop_editor(cx);
         self.reconcile_text_editor(window, cx);
+        self.set_text_editing_enabled(true, window, cx);
+        if self.custom_tool_active() {
+            self.tools
+                .as_ref()
+                .expect("controller")
+                .validate_text_target(&self.editor, &self.interactions, target)?;
+            self.close_custom_tool(false, ToolCloseReason::TargetSwitch, window, cx);
+            if self.custom_tool_active() {
+                return Err(SceneInteractionError::InvalidInput(
+                    "current tool could not close".into(),
+                ));
+            }
+        }
         // Same-session activation never resets text selection or local history.
         if self.text_editor_target() == Some(target)
             && let Some(input) = &self.text_input
@@ -104,7 +137,7 @@ impl SceneView {
                     value.as_ref(),
                 )
             {
-                self.emit_text_tool_changes(before, cx);
+                self.emit_tool_changes(before, cx);
                 self.reconcile_text_editor(window, cx);
                 return Err(error);
             }
@@ -112,7 +145,7 @@ impl SceneView {
         let token = match tools.open_text(&mut self.editor, &mut self.interactions, target) {
             Ok(token) => token,
             Err(error) => {
-                self.emit_text_tool_changes(before, cx);
+                self.emit_tool_changes(before, cx);
                 self.reconcile_text_editor(window, cx);
                 return Err(error);
             }
@@ -164,7 +197,7 @@ impl SceneView {
                                 Err(error) => this.interaction_error = Some(error.to_string()),
                             }
                         }
-                        this.emit_text_tool_changes(before, cx);
+                        this.emit_tool_changes(before, cx);
                         this.reconcile_text_editor(window, cx);
                     }
                     // Ignore a queued blur after native focus already came
@@ -196,9 +229,31 @@ impl SceneView {
         });
         self.pending_native_focus = false;
         state.update(cx, |state, cx| state.focus(window, cx));
-        self.emit_text_tool_changes(before, cx);
+        self.emit_tool_changes(before, cx);
         Self::repaint_text_editor(window, cx);
         Ok(token)
+    }
+    pub(super) fn flush_text_for_tool_switch(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Result<(), SceneInteractionError> {
+        if let Some(input) = &self.text_input {
+            if input.state.update(cx, |state, cx| {
+                state.marked_text_range(window, cx).is_some()
+            }) {
+                return Err(SceneInteractionError::InvalidInput(
+                    "Finish the current IME composition before switching tools".into(),
+                ));
+            }
+            self.close_text_editor(false, ToolCloseReason::TargetSwitch, window, cx);
+            if self.text_input.is_some() {
+                return Err(SceneInteractionError::InvalidInput(
+                    "text editor rejected its pending value".into(),
+                ));
+            }
+        }
+        Ok(())
     }
     /// Commit one document undo step. Kit-local undo is discarded on close.
     /// Repeated calls are harmless. Returns false for no session or a rejection.
@@ -290,7 +345,7 @@ impl SceneView {
         if focused && self.text_input.is_none() {
             window.focus(&self.focus, cx);
         }
-        self.emit_text_tool_changes(before, cx);
+        self.emit_tool_changes(before, cx);
         Self::repaint_text_editor(window, cx);
         closed
     }
@@ -328,7 +383,7 @@ impl SceneView {
             }
         }
     }
-    fn emit_text_tool_changes(&mut self, before: u64, cx: &mut Context<Self>) {
+    pub(super) fn emit_tool_changes(&mut self, before: u64, cx: &mut Context<Self>) {
         if before != self.editor.engine.revision() {
             cx.emit(SceneViewEvent::Changed);
         }

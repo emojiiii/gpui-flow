@@ -38,7 +38,8 @@ impl SceneView {
     }
     pub(crate) fn layer_mount(&mut self, owner: u64, cx: &mut Context<Self>) -> bool {
         if !mountable(&self.layer_host, self.compositing_mode)
-            || self.text_editor_active()
+            || self.inner_tool_active()
+            || self.has_tool_widget()
             || self.image_crop_editor_active()
             || self.pending_flow_edits() > 0
         {
@@ -77,6 +78,7 @@ impl SceneView {
             let _ = tools.dispose(&mut self.editor, &mut self.interactions);
         }
         self.text_input = None;
+        self.dispose_tool_widgets(cx);
         self.image_crop = None;
         self.compositing.dispose(cx);
         self.presentations = Default::default();

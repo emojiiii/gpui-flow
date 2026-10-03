@@ -7,8 +7,8 @@
     "leafer_in": "3eb445bf34debb638766615282224b77108bf610"
   },
   "counts": {
-    "bounded_verified": 34,
-    "partial": 8,
+    "bounded_verified": 35,
+    "partial": 7,
     "not_started": 3,
     "needs_verification": 0,
     "in_progress": 0
@@ -247,10 +247,10 @@
       "id": "INT-04",
       "category": "交互",
       "title": "自定义内外工具协议",
-      "status": "partial",
+      "status": "bounded_verified",
       "acceptance": "registry、load/update/unload/destroy、策略门控与宿主自定义widget挂载和释放",
-      "boundary": "现有controller/registry与Text专用面板；任意内层widget不足",
-      "reference_doc": "docs/text-editing.md",
+      "boundary": "宿主AnyElement/Entity及owned属性会话；outer输入插件由宿主提供，managed layer拒绝原生panel",
+      "reference_doc": "docs/custom-tools.md",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/editor/src/tool/EditToolCreator.ts",
         "symbols_or_contract": "EditToolCreator / EditTool / InnerEditor"

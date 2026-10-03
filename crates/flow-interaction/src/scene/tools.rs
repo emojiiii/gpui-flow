@@ -1,6 +1,6 @@
-//! Optional, per-editor tool selection and one target-aware plain-text session.
+//! Per-editor tool registration and one token-owned inner editing session.
 //!
-//! Registrations are declarative lifecycle identities, not widget factories.
+//! Platform-neutral registrations are paired with widget factories by native adapters.
 //! Applications implement outer-tool behavior and native text input themselves.
 //! No text buffer, caret model, shaping engine, global registration, or keyboard
 //! listener lives here. Call `reconcile` before input/render and `dispose` before
@@ -19,12 +19,13 @@ pub const DEFAULT_TEXT_TOOL: &str = "text";
 pub enum SceneToolKind {
     Outer,
     PlainText,
+    CustomInner,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SceneToolRegistration {
     pub id: String,
     pub kind: SceneToolKind,
-    /// Inner tool dispatch uses the built-in Shape tag, never a Custom kind.
+    /// Inner dispatch uses Shape::tag(); custom element kinds share the `custom` tag.
     pub shape_tag: Option<String>,
 }
 /// Isolated registry. Duplicate IDs and ambiguous shape registrations error;
@@ -64,6 +65,39 @@ impl SceneToolRegistry {
             id: id.into(),
             kind: SceneToolKind::PlainText,
             shape_tag: Some("text".into()),
+        })
+    }
+    /// Register a host-defined inner editor for a canonical shape tag.
+    /// A Custom element uses the explicit `custom` tag, never its arbitrary kind.
+    pub fn register_inner(
+        &mut self,
+        id: impl Into<String>,
+        shape_tag: impl Into<String>,
+    ) -> Result<(), InteractionError> {
+        let tag = shape_tag.into();
+        if !matches!(
+            tag.as_str(),
+            "rect"
+                | "ellipse"
+                | "line"
+                | "polygon"
+                | "star"
+                | "path"
+                | "pen"
+                | "text"
+                | "image"
+                | "canvas"
+                | "group"
+                | "box"
+                | "frame"
+                | "custom"
+        ) {
+            return Err(invalid("unknown canonical tool shape tag"));
+        }
+        self.insert(SceneToolRegistration {
+            id: id.into(),
+            kind: SceneToolKind::CustomInner,
+            shape_tag: Some(tag),
         })
     }
     fn insert(&mut self, entry: SceneToolRegistration) -> Result<(), InteractionError> {
@@ -112,6 +146,8 @@ impl SceneToolRegistry {
 /// Opaque runtime ownership. Late callbacks must keep their original token.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TextSessionToken(EditSessionToken);
+/// Shared opaque ownership token; the Text name remains source-compatible.
+pub type ToolSessionToken = TextSessionToken;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolCloseReason {
     Done,
@@ -140,7 +176,8 @@ pub struct SceneToolEvent {
     pub token: Option<TextSessionToken>,
     pub kind: ToolLifecycleKind,
 }
-struct TextSession {
+struct ToolSession {
+    kind: SceneToolKind,
     tool_id: String,
     token: TextSessionToken,
     target: ElementHandle,
@@ -157,7 +194,7 @@ pub struct SceneToolController {
     outer: String,
     outer_loaded: bool,
     bound_engine: Option<u64>,
-    active: Option<TextSession>,
+    active: Option<ToolSession>,
     events: Vec<SceneToolEvent>,
     enabled: bool,
     disposed: bool,
@@ -223,7 +260,16 @@ impl SceneToolController {
         self.active.as_ref().map(|s| s.target)
     }
     pub fn active_text(&self) -> Option<&str> {
-        self.active.as_ref().map(|s| s.text.as_str())
+        self.active
+            .as_ref()
+            .filter(|s| s.kind == SceneToolKind::PlainText)
+            .map(|s| s.text.as_str())
+    }
+    pub fn active_kind(&self) -> Option<SceneToolKind> {
+        self.active.as_ref().map(|s| s.kind)
+    }
+    pub fn active_tool_id(&self) -> Option<&str> {
+        self.active.as_ref().map(|s| s.tool_id.as_str())
     }
     pub fn drain_events(&mut self) -> Vec<SceneToolEvent> {
         std::mem::take(&mut self.events)
@@ -269,34 +315,61 @@ impl SceneToolController {
         self.bound_engine = Some(id);
         Ok(())
     }
-    fn target_text<'a>(
-        editor: &'a SceneEditor,
+    fn target_epoch(
+        editor: &SceneEditor,
         host: &ScenePluginHost,
         target: ElementHandle,
-    ) -> Result<(&'a str, u64), InteractionError> {
+    ) -> Result<u64, InteractionError> {
         if !host.allows(Capability::Edit) {
             return Err(InteractionError::CapabilityDenied(Capability::Edit));
         }
         let instance = editor
             .engine
             .instance(target)
-            .map_err(|error| invalid(error.to_string()))?;
+            .map_err(|e| invalid(e.to_string()))?;
         if instance.state != InstanceState::Attached
             || !object_editable(editor.scene(), &instance.id)
         {
             return Err(invalid(
-                "text target is detached, missing, locked, or non-invertible",
+                "tool target is detached, missing, locked, or non-invertible",
             ));
         }
+        Ok(instance.attachment_epoch)
+    }
+    fn target_text<'a>(
+        editor: &'a SceneEditor,
+        host: &ScenePluginHost,
+        target: ElementHandle,
+    ) -> Result<(&'a str, u64), InteractionError> {
+        let epoch = Self::target_epoch(editor, host, target)?;
         let Shape::Text(text) = &editor
             .engine
             .object(target)
-            .map_err(|error| invalid(error.to_string()))?
+            .map_err(|e| invalid(e.to_string()))?
             .shape
         else {
             return Err(invalid("text editing requires a built-in Text element"));
         };
-        Ok((&text.content, instance.attachment_epoch))
+        Ok((&text.content, epoch))
+    }
+    fn session_target_valid(
+        &self,
+        editor: &SceneEditor,
+        host: &ScenePluginHost,
+        session: &ToolSession,
+    ) -> bool {
+        Self::target_epoch(editor, host, session.target)
+            .is_ok_and(|epoch| epoch == session.attachment_epoch)
+            && self.registry.get(&session.tool_id).is_some_and(|entry| {
+                entry.kind == session.kind
+                    && editor
+                        .engine
+                        .object(session.target)
+                        .is_ok_and(|o| entry.shape_tag.as_deref() == Some(o.shape.tag()))
+            })
+            && (session.kind != SceneToolKind::PlainText
+                || Self::target_text(editor, host, session.target)
+                    .is_ok_and(|(text, _)| text == session.text))
     }
     /// Revoke invalid/stale sessions without restoring any baseline. An external
     /// engine write is reconciled before deciding whether cancellation is safe.
@@ -315,9 +388,7 @@ impl SceneToolController {
         let token = session.token;
         let valid = self.is_enabled()
             && session.document_epoch == editor.engine.document_epoch()
-            && Self::target_text(editor, host, session.target).is_ok_and(|(text, epoch)| {
-                epoch == session.attachment_epoch && text == session.text
-            })
+            && self.session_target_valid(editor, host, session)
             && !host.has_capture()
             && editor.is_edit_session_active(token.0);
         if valid {
@@ -350,7 +421,11 @@ impl SceneToolController {
         {
             return Err(invalid("tool controller belongs to another editor engine"));
         }
-        if self.registry.inner_for_shape("text").is_none() {
+        if !self
+            .registry
+            .inner_for_shape("text")
+            .is_some_and(|entry| entry.kind == SceneToolKind::PlainText)
+        {
             return Err(invalid("plain text tool is not registered"));
         }
         Self::target_text(editor, host, target)?;
@@ -375,6 +450,7 @@ impl SceneToolController {
         let tool_id = self
             .registry
             .inner_for_shape("text")
+            .filter(|entry| entry.kind == SceneToolKind::PlainText)
             .ok_or_else(|| invalid("plain text tool is not registered"))?
             .id
             .clone();
@@ -386,7 +462,7 @@ impl SceneToolController {
             ));
         }
         if let Some(session) = &self.active {
-            if session.target == target {
+            if session.target == target && session.tool_id == tool_id {
                 return Ok(session.token);
             }
             let old = session.token;
@@ -400,7 +476,8 @@ impl SceneToolController {
             }
         };
         self.unload_outer(ToolCloseReason::InnerOpened);
-        self.active = Some(TextSession {
+        self.active = Some(ToolSession {
+            kind: SceneToolKind::PlainText,
             tool_id,
             token,
             target,
@@ -410,6 +487,127 @@ impl SceneToolController {
         });
         self.session_event(ToolLifecycleKind::Loaded);
         Ok(token)
+    }
+    /// Validate before a native host closes another editor or allocates a widget.
+    pub fn validate_inner_target(
+        &self,
+        editor: &SceneEditor,
+        host: &ScenePluginHost,
+        id: &str,
+        target: ElementHandle,
+    ) -> Result<(), InteractionError> {
+        if !self.is_enabled()
+            || self
+                .bound_engine
+                .is_some_and(|v| v != editor.engine.engine_id())
+        {
+            return Err(invalid(
+                "tool controller is disabled or belongs to another engine",
+            ));
+        }
+        let entry = self
+            .registry
+            .get(id)
+            .filter(|e| e.kind == SceneToolKind::CustomInner)
+            .ok_or_else(|| invalid("custom inner tool is not registered"))?;
+        Self::target_epoch(editor, host, target)?;
+        let object = editor
+            .engine
+            .object(target)
+            .map_err(|e| invalid(e.to_string()))?;
+        if entry.shape_tag.as_deref() != Some(object.shape.tag()) {
+            return Err(invalid("tool does not support target shape"));
+        }
+        if host.has_capture() {
+            return Err(InteractionError::GestureOwned(
+                "active pointer capture".into(),
+            ));
+        }
+        Ok(())
+    }
+    pub fn open_inner(
+        &mut self,
+        editor: &mut SceneEditor,
+        host: &mut ScenePluginHost,
+        id: &str,
+        target: ElementHandle,
+    ) -> Result<ToolSessionToken, InteractionError> {
+        self.bind(editor)?;
+        self.validate_inner_target(editor, host, id, target)?;
+        self.reconcile(editor, host);
+        let epoch = Self::target_epoch(editor, host, target)?;
+        if let Some(active) = &self.active {
+            if active.target == target && active.tool_id == id {
+                return Ok(active.token);
+            }
+            let old_token = active.token;
+            self.finish_with_resume(
+                editor,
+                host,
+                old_token,
+                ToolCloseReason::TargetSwitch,
+                false,
+            )?;
+        }
+        let token = match editor.begin_edit_session() {
+            Ok(token) => TextSessionToken(token),
+            Err(error) => {
+                self.load_outer();
+                return Err(invalid(error.to_string()));
+            }
+        };
+        self.unload_outer(ToolCloseReason::InnerOpened);
+        self.active = Some(ToolSession {
+            kind: SceneToolKind::CustomInner,
+            tool_id: id.into(),
+            token,
+            target,
+            document_epoch: editor.engine.document_epoch(),
+            attachment_epoch: epoch,
+            text: String::new(),
+        });
+        self.session_event(ToolLifecycleKind::Loaded);
+        Ok(token)
+    }
+    /// A custom widget edits only its live target through the normal policy/filter path.
+    pub fn set_inner_property(
+        &mut self,
+        editor: &mut SceneEditor,
+        host: &mut ScenePluginHost,
+        token: ToolSessionToken,
+        key: PropertyKey,
+        value: serde_json::Value,
+    ) -> Result<(), InteractionError> {
+        self.bind(editor)?;
+        self.reconcile(editor, host);
+        let target = self
+            .active
+            .as_ref()
+            .filter(|s| s.token == token && s.kind == SceneToolKind::CustomInner)
+            .ok_or_else(|| invalid("custom tool session ended or token is stale"))?
+            .target;
+        let before = editor.engine.revision();
+        let result = host.execute(
+            editor,
+            SceneCommand::SetSessionProperty {
+                token: token.0,
+                handle: target,
+                key,
+                value,
+            },
+        );
+        if let Err(error) = result {
+            self.reconcile(editor, host);
+            return Err(error);
+        }
+        // A successful edit may lock or otherwise invalidate its own target.
+        // Report that accepted command as success, then seal and unload it;
+        // a stale callback still cannot edit or cancel the completed session.
+        if editor.engine.revision() != before {
+            self.session_event(ToolLifecycleKind::Updated);
+        }
+        self.reconcile(editor, host);
+        Ok(())
     }
     pub fn set_text(
         &mut self,
@@ -423,7 +621,7 @@ impl SceneToolController {
         let session = self
             .active
             .as_ref()
-            .filter(|s| s.token == token)
+            .filter(|s| s.token == token && s.kind == SceneToolKind::PlainText)
             .ok_or_else(|| invalid("text session ended or token is stale"))?;
         let target = session.target;
         let text = text.into();
@@ -596,6 +794,24 @@ impl SceneToolController {
         }
         let id = id.into();
         self.registry.register_outer(id.clone())?;
+        self.events.push(SceneToolEvent {
+            tool_id: id,
+            target: None,
+            token: None,
+            kind: ToolLifecycleKind::Created,
+        });
+        Ok(())
+    }
+    pub fn register_inner(
+        &mut self,
+        id: impl Into<String>,
+        shape_tag: impl Into<String>,
+    ) -> Result<(), InteractionError> {
+        if self.disposed {
+            return Err(invalid("tool controller is disposed"));
+        }
+        let id = id.into();
+        self.registry.register_inner(id.clone(), shape_tag)?;
         self.events.push(SceneToolEvent {
             tool_id: id,
             target: None,

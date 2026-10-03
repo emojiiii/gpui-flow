@@ -88,7 +88,7 @@ impl SceneView {
             ));
         }
         self.finish_text_editor(window, cx);
-        if self.text_editor_active() {
+        if self.inner_tool_active() {
             return Err(SceneInteractionError::InvalidInput(
                 "finish text composition before cropping".into(),
             ));
@@ -140,7 +140,7 @@ impl SceneView {
         let mode = self.image_crop.as_ref()?;
         (self.interactions.allows(Capability::Edit)
             && self.interactions.is_enabled(IMAGE_CROP_PLUGIN)
-            && !self.text_editor_active()
+            && !self.inner_tool_active()
             && mode.valid(&self.editor))
         .then_some(mode.target)
     }

@@ -222,6 +222,12 @@ impl SceneView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.custom_tool_active() {
+            self.finish_inner_tool(window, cx);
+            if self.custom_tool_active() {
+                return;
+            }
+        }
         if self.text_editor_active() {
             self.finish_text_editor(window, cx);
             if self.text_editor_active() {
@@ -251,7 +257,7 @@ impl SceneView {
             cx,
         );
         if allowed
-            && self.tools.is_some()
+            && self.text_editing_enabled()
             && let Some(handle) = text_target
             && let Err(error) = self.open_text_editor(handle, window, cx)
         {
@@ -260,7 +266,7 @@ impl SceneView {
         }
     }
     pub(super) fn moved(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
-        if self.text_editor_active() {
+        if self.inner_tool_active() {
             return;
         }
         let local = self.local(event.position);
@@ -282,7 +288,7 @@ impl SceneView {
         );
     }
     pub(super) fn up(&mut self, event: &MouseUpEvent, cx: &mut Context<Self>) {
-        if self.text_editor_active() {
+        if self.inner_tool_active() {
             return;
         }
         let local = self.local(event.position);
@@ -301,7 +307,7 @@ impl SceneView {
         self.plugin_event(input::CanvasEvent::PointerCancel, cx);
     }
     pub(super) fn pointer_leave(&mut self, cx: &mut Context<Self>) {
-        if self.text_editor_active() {
+        if self.inner_tool_active() {
             return;
         }
         self.plugin_event(input::CanvasEvent::PointerLeave, cx);
@@ -332,7 +338,7 @@ impl SceneView {
             self.close_image_crop_editor(cx);
             return;
         }
-        if self.text_editor_active() {
+        if self.inner_tool_active() {
             return;
         }
         self.plugin_event(
@@ -345,7 +351,7 @@ impl SceneView {
         cx.notify();
     }
     pub(super) fn key_up(&mut self, event: &KeyUpEvent, cx: &mut Context<Self>) {
-        if self.text_editor_active() {
+        if self.inner_tool_active() {
             return;
         }
         self.plugin_event(

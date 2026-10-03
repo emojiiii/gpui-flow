@@ -149,6 +149,7 @@ impl Render for SceneView {
         self.prepare_navigation_frame(window, cx);
         self.layer_reconcile_mode();
         self.reconcile_text_editor(window, cx);
+        self.sync_tool_widget(window, cx);
         self.reconcile_image_crop_editor(cx);
         if !self.is_layer_managed() {
             self.subscribe_input(window, cx);
@@ -307,7 +308,7 @@ impl Render for SceneView {
             .selection
             .ids
             .iter()
-            .filter(|_| !self.text_editor_active() && !self.image_crop_editor_active())
+            .filter(|_| !self.inner_tool_active() && !self.image_crop_editor_active())
             .filter_map(|id| self.selection_corners(id))
             .collect();
         let marquee = self.interactions.marquee();
@@ -620,6 +621,9 @@ impl Render for SceneView {
                     .text_xs()
                     .child(error.clone()),
             );
+        }
+        if let Some(panel) = self.custom_tool_panel(window, cx) {
+            view = view.child(panel);
         }
         if let Some(panel) = self.text_editor_panel(cx) {
             view = view.child(panel);
