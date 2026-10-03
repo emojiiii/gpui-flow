@@ -1,4 +1,5 @@
 use gpui_flow_core::{EdgeId, GroupId, NodeId, Point, PortRef};
+pub use gpui_flow_scene::PointerDevice;
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Modifiers {
     pub shift: bool,
@@ -17,6 +18,22 @@ pub enum PointerButton {
     Left,
     Middle,
     Right,
+}
+impl PointerButton {
+    pub fn mask(self) -> u16 {
+        match self {
+            Self::Left => 1,
+            Self::Right => 2,
+            Self::Middle => 4,
+        }
+    }
+}
+/// Pointer IDs are scoped to a device kind. Touch IDs may never cancel a mouse
+/// with the same numeric ID.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct PointerIdentity {
+    pub device: PointerDevice,
+    pub pointer_id: u64,
 }
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub enum HitTarget {
@@ -70,8 +87,42 @@ pub struct PointerInput {
     pub modifiers: Modifiers,
     pub hit: HitTarget,
     pub pointer_id: u64,
+    pub device: PointerDevice,
+    /// Current held-button mask (primary=1, secondary=2, auxiliary=4).
+    /// None retains legacy inference from button and event phase.
+    pub buttons: Option<u16>,
+    /// Hardware-supplied normalized force; None means unavailable.
+    pub pressure: Option<f32>,
+    /// Monotonic milliseconds in the router's host clock domain. None keeps
+    /// legacy untimed clicks but cannot arm long-press/double-tap recognition.
+    pub timestamp_millis: Option<u64>,
 }
 impl PointerInput {
+    pub fn identity(&self) -> PointerIdentity {
+        PointerIdentity {
+            device: self.device,
+            pointer_id: self.pointer_id,
+        }
+    }
+    pub fn held_buttons(&self, released: bool) -> u16 {
+        self.buttons.unwrap_or_else(|| {
+            if released {
+                0
+            } else {
+                self.button.map_or(0, PointerButton::mask)
+            }
+        })
+    }
+    /// A primary touch contact. The host must supply timestamps and optional
+    /// hardware pressure, and set buttons=Some(0) on release.
+    pub fn touch(pointer_id: u64, position: Point, hit: HitTarget) -> Self {
+        Self {
+            pointer_id,
+            device: PointerDevice::Touch,
+            buttons: Some(1),
+            ..Self::left(position, hit)
+        }
+    }
     pub fn left(position: Point, hit: HitTarget) -> Self {
         Self {
             position,
@@ -99,6 +150,8 @@ pub enum CanvasEvent {
     /// capture until release/cancel so a drag can continue outside the view.
     PointerLeave,
     PointerCancel,
+    /// Cancel one contact without disturbing another pointer's capture or keys.
+    PointerCancelFor(PointerIdentity),
     FocusLost,
     Wheel {
         position: Point,

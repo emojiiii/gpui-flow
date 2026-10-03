@@ -7,6 +7,10 @@ use gpui_flow_interaction::{CanvasEvent, DispatchReport, scene::RoutedReport};
 #[derive(Debug, Clone, PartialEq)]
 pub enum SceneInputOperation {
     Canvas(CanvasEvent),
+    /// A native callback advancing the pointer receipt clock for long presses.
+    GestureFrame {
+        now_millis: u64,
+    },
     /// A real native animation callback, separately replayable from input time.
     NavigationFrame {
         now: std::time::Duration,

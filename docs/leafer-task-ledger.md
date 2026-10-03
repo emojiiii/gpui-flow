@@ -17,7 +17,7 @@
 | LIF-03 | 生命周期 / [加载取消与媒体资源桥](owned-resource-loading.md) | 有界已验证 | 共享加载字节预算、无引用任务硬取消、媒体统一代际票据和错误传播 | 显式owned本地PNG/JPEG/GIF/WebP worker与FFmpeg媒体共享池；外部GPUI cache、URI和GPU内存不在硬取消/字节保证内 |
 | EVT-01 | 事件 / [树路由与默认动作顺序](focus-keyboard-validation.md) | 有界已验证 | capture/target/bubble、once/off、监听队列和prevent-default；原生适配器trace与纯路由一致 | 限定现有鼠标/默认动作与精确trace；设备扩展归EVT-03，不声称全浏览器事件兼容 |
 | EVT-02 | 事件 / [键盘与程序焦点](focus-keyboard-validation.md) | 有界已验证 | KeyDown/Up、重复/Space、Focus/Blur重定向、窗口失焦清理及实例隔离 | 不把Kit文本输入当完整IME/a11y |
-| EVT-03 | 事件 / [设备元数据与复合手势](keyboard-routing.md) | 部分实现 | pointer type/buttons/time/pressure、触摸多指、tap/double/longpress的稳定事件契约 | 已有mouse/pointer_id、序号与原生Text双击；不是完整事件族 |
+| EVT-03 | 事件 / [设备元数据与复合手势](pointer-gestures.md) | 部分实现 | pointer type/buttons/time/pressure、触摸多指、tap/double/longpress的稳定事件契约 | 已实现有界16-contact host路由、buttons/time/pressure、tap/double/longpress及取消；Linux鼠标原生已验，GPUI原始多指/pen硬件入口仍受限 |
 | EVT-04 | 事件 / [IME与无障碍输入](text-editing.md) | 部分实现 | 中文输入组合/切换/失焦、Tab可达与语义树，定义受支持平台验收 | Kit Textarea提供基础；平台IME边界明确未验 |
 | INT-01 | 交互 / [外部选择移动缩放旋转](text-transform-tools.md) | 有界已验证 | 单选/共享root、多选、Image和能力开启Text的仿射手柄；撤销/取消/只读/陈旧capture | Custom及未支持样式拒绝；不改intrinsic尺寸 |
 | INT-02 | 交互 / [内在尺寸编辑](intrinsic-resize.md) | 有界已验证 | 按组件定义尺寸/内容/字体resize策略，与布局所有权及单Undo一致 | 内置组件有界尺寸/坐标/Group内容策略及Text盒子/字体模式；布局拥有的覆盖原子拒绝，Text测量须精确相等；退化Line用端点工具，Custom另有正式协议 |

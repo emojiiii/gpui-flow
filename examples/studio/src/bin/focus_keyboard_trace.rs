@@ -149,6 +149,10 @@ impl Mirror {
             assert!(sync.errors.is_empty());
         }
         let report = match &operation {
+            SceneInputOperation::GestureFrame { now_millis } => {
+                self.router
+                    .advance_time(&mut self.editor, &mut self.host, *now_millis)
+            }
             SceneInputOperation::NavigationFrame { now } => RoutedReport {
                 default: self.host.advance_navigation(&mut self.editor, *now),
                 ..Default::default()
@@ -215,6 +219,9 @@ fn operation_value(operation: &SceneInputOperation) -> Value {
         })
     };
     match operation {
+        SceneInputOperation::GestureFrame { now_millis } => {
+            json!({"kind":"GestureFrame", "now_millis":now_millis})
+        }
         SceneInputOperation::NavigationFrame { now } => {
             json!({"kind":"NavigationFrame", "secs":now.as_secs(), "nanos":now.subsec_nanos()})
         }
@@ -237,7 +244,7 @@ fn operation_value(operation: &SceneInputOperation) -> Value {
             | CanvasEvent::PointerUp(pointer) => json!({
                 "kind":match event {CanvasEvent::PointerDown(_) => "PointerDown", CanvasEvent::PointerMove(_) => "PointerMove", _ => "PointerUp"},
                 "position":pointer.position, "button":format!("{:?}",pointer.button),
-                "modifiers":modifiers(pointer.modifiers), "hit":format!("{:?}",pointer.hit), "pointer_id":pointer.pointer_id,
+                "modifiers":modifiers(pointer.modifiers), "hit":format!("{:?}",pointer.hit), "pointer_id":pointer.pointer_id, "device":pointer.device, "buttons":pointer.buttons, "pressure":pointer.pressure, "timestamp_millis":pointer.timestamp_millis,
             }),
             CanvasEvent::KeyDown {
                 key,
@@ -258,6 +265,9 @@ fn operation_value(operation: &SceneInputOperation) -> Value {
                 json!({"kind":"Wheel", "position":position, "delta":delta, "modifiers":modifiers(*value)})
             }
             CanvasEvent::PointerLeave => json!({"kind":"PointerLeave"}),
+            CanvasEvent::PointerCancelFor(identity) => {
+                json!({"kind":"PointerCancelFor", "pointer_id":identity.pointer_id, "device":identity.device})
+            }
             CanvasEvent::PointerCancel => json!({"kind":"PointerCancel"}),
             CanvasEvent::FocusLost => json!({"kind":"FocusLost"}),
         },
@@ -574,6 +584,39 @@ mod tests {
         );
         assert_eq!(trace.navigation_time, Duration::from_millis(56));
         assert_eq!(trace.viewport, initial);
+    }
+    #[test]
+    fn gesture_clock_trace_replays_long_press_without_synthetic_pointer_motion() {
+        use gpui_flow::interaction::{HitTarget, PointerInput};
+        let mut first = Mirror::new();
+        let mut second = Mirror::new();
+        let pointer = PointerInput {
+            timestamp_millis: Some(100),
+            buttons: Some(1),
+            pressure: Some(0.4),
+            ..PointerInput::left(
+                gpui_flow::scene::Point::new(20., 20.),
+                HitTarget::Object("a".into()),
+            )
+        };
+        for mirror in [&mut first, &mut second] {
+            mirror.replay(SceneInputOperation::Canvas(CanvasEvent::PointerDown(
+                pointer.clone(),
+            )));
+        }
+        let a = first.replay(SceneInputOperation::GestureFrame { now_millis: 600 });
+        let b = second.replay(SceneInputOperation::GestureFrame { now_millis: 600 });
+        assert_eq!(trace_value(&a), trace_value(&b));
+        assert_eq!(
+            a.events
+                .iter()
+                .map(|event| event.kind.clone())
+                .collect::<Vec<_>>(),
+            vec![EventKind::LongPress]
+        );
+        assert_eq!(a.events[0].timestamp_millis, Some(600));
+        assert_eq!(operation_value(&a.operation)["kind"], "GestureFrame");
+        assert_eq!(operation_value(&a.operation)["now_millis"], 600);
     }
     #[test]
     fn fixture_exercises_cancellation_redirect_and_dead_generation() {

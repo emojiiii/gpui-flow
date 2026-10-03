@@ -53,6 +53,7 @@ struct Entry {
 struct Capture {
     owner: String,
     pointer_id: u64,
+    device: crate::PointerDevice,
     button: Option<PointerButton>,
     selection: Selection,
     viewport: Viewport,
@@ -73,6 +74,7 @@ pub struct PluginHost {
     guides: Vec<SnapGuide>,
     cursor: CanvasCursor,
     event_button: Option<PointerButton>,
+    event_device: crate::PointerDevice,
 }
 impl Default for PluginHost {
     fn default() -> Self {
@@ -89,6 +91,7 @@ impl Default for PluginHost {
             guides: Vec::new(),
             cursor: CanvasCursor::Default,
             event_button: None,
+            event_device: crate::PointerDevice::Mouse,
         }
     }
 }
@@ -315,8 +318,17 @@ impl PluginHost {
         self.cancel_active(editor, &mut report);
         report
     }
-    pub fn dispatch(&mut self, editor: &mut Editor, event: CanvasEvent) -> DispatchReport {
+    pub fn dispatch(&mut self, editor: &mut Editor, mut event: CanvasEvent) -> DispatchReport {
         let mut report = DispatchReport::default();
+        if let CanvasEvent::PointerCancelFor(identity) = &event {
+            if self.capture.as_ref().is_none_or(|capture| {
+                capture.pointer_id != identity.pointer_id || capture.device != identity.device
+            }) {
+                return report;
+            }
+            event = CanvasEvent::PointerCancel;
+        }
+
         if !editor.viewport.is_valid() {
             self.cancel_active(editor, &mut report);
             report.errors.push(InteractionError::InvalidInput(
@@ -325,18 +337,26 @@ impl PluginHost {
             return report;
         }
         self.event_button = event.pointer().and_then(|p| p.button);
+        self.event_device = event
+            .pointer()
+            .map_or(crate::PointerDevice::Mouse, |p| p.device);
         if let Some(pointer) = event.pointer() {
-            if !pointer.position.is_finite() {
+            if !pointer.position.is_finite()
+                || pointer
+                    .pressure
+                    .is_some_and(|p| !p.is_finite() || !(0.0..=1.0).contains(&p))
+            {
                 self.cancel_active(editor, &mut report);
                 report.errors.push(InteractionError::InvalidInput(
-                    "pointer coordinates must be finite".into(),
+                    "pointer coordinates and pressure must be finite; pressure must be in 0..=1"
+                        .into(),
                 ));
                 return report;
             }
             if self
                 .capture
                 .as_ref()
-                .is_some_and(|c| c.pointer_id != pointer.pointer_id)
+                .is_some_and(|c| c.pointer_id != pointer.pointer_id || c.device != pointer.device)
             {
                 return report;
             }
@@ -556,6 +576,7 @@ impl PluginHost {
                     self.capture = Some(Capture {
                         owner: owner.into(),
                         pointer_id,
+                        device: self.event_device,
                         button: self.event_button,
                         selection: editor.selection.clone(),
                         viewport: editor.viewport,

@@ -516,3 +516,43 @@ fn native_outside_move_continues_owner_without_hovering_clipped_content() {
     r.release_outside(0, pointer(350.).button, &mut a);
     assert_eq!(a.layers[&id(2)].x(), 50.);
 }
+
+#[test]
+fn touch_contacts_route_to_independent_layers_and_scoped_cancel_preserves_mouse() {
+    let (mut r, mut a) = lab();
+    r.route(down(70.), &mut a);
+    let mut touch = pointer(20.);
+    touch.device = gpui_flow_interaction::PointerDevice::Touch;
+    touch.pointer_id = 0; // Same numeric ID as the mouse is a different contact.
+    touch.buttons = Some(1);
+    assert_eq!(
+        r.route(CanvasEvent::PointerDown(touch.clone()), &mut a),
+        Some(id(1))
+    );
+    assert_eq!(r.focused, Some(id(2)));
+    assert_eq!(r.pressed_layer(), Some(id(2)));
+    assert!(a.layers[&id(2)].host.has_capture());
+    r.route(CanvasEvent::PointerCancelFor(touch.identity()), &mut a);
+    assert!(!a.layers[&id(1)].host.has_capture());
+    assert!(a.layers[&id(2)].host.has_capture());
+    assert_eq!(r.route(up(70.), &mut a), Some(id(2)));
+}
+#[test]
+fn two_touches_in_one_layer_keep_first_capture_through_second_release() {
+    let (mut r, mut a) = lab();
+    let mut first = pointer(70.);
+    first.device = gpui_flow_interaction::PointerDevice::Touch;
+    first.pointer_id = 1;
+    first.buttons = Some(1);
+    let mut second = first.clone();
+    second.pointer_id = 2;
+    r.route(CanvasEvent::PointerDown(first.clone()), &mut a);
+    r.route(CanvasEvent::PointerDown(second.clone()), &mut a);
+    second.buttons = Some(0);
+    r.route(CanvasEvent::PointerUp(second), &mut a);
+    assert!(a.layers[&id(2)].host.has_capture());
+    assert_eq!(r.pressed_layer(), Some(id(2)));
+    first.buttons = Some(0);
+    r.route(CanvasEvent::PointerUp(first), &mut a);
+    assert!(!a.layers[&id(2)].host.has_capture());
+}

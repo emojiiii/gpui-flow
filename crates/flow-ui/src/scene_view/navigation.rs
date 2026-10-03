@@ -56,16 +56,18 @@ impl SceneView {
         valid
     }
     pub(super) fn prepare_navigation_frame(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.interactions.needs_navigation_frame() {
+        if !self.interactions.needs_navigation_frame() && !self.router.needs_gesture_frame() {
             self.navigation_frames.cancel();
             return;
         }
-        if !window.is_visible() || !window.is_window_active() || cx.reduce_motion() {
+        if !window.is_visible() || !window.is_window_active() {
             self.navigation_frames.cancel();
-            // An inactive/reduced-motion surface must not accumulate a delayed
-            // tail that jumps when it resumes. Existing cancellation owns cleanup.
+            // Inactive surfaces cancel pending motion and contact timers.
             self.cancel_input(cx);
             return;
+        }
+        if cx.reduce_motion() {
+            self.interactions.stop_navigation_tail();
         }
         let id = window.window_handle().window_id().as_u64();
         let generation = match self.navigation_frames.schedule(id) {
@@ -83,14 +85,34 @@ impl SceneView {
                 if !this.navigation_frames.take(id, generation) {
                     return;
                 }
-                if !this.interactions.needs_navigation_frame() {
+                if !this.interactions.needs_navigation_frame() && !this.router.needs_gesture_frame()
+                {
                     return;
                 }
-                if !window.is_visible() || !window.is_window_active() || cx.reduce_motion() {
+                if !window.is_visible() || !window.is_window_active() {
                     this.cancel_input(cx);
                     return;
                 }
-                this.advance_navigation_frame(this.state_clock.elapsed(), cx);
+                if cx.reduce_motion() {
+                    this.interactions.stop_navigation_tail();
+                }
+                if this.interactions.needs_navigation_frame() {
+                    this.advance_navigation_frame(this.state_clock.elapsed(), cx);
+                }
+                if this.router.needs_gesture_frame() {
+                    let now_millis = crate::pointer_timestamp_millis();
+                    let report = this.router.advance_time(
+                        &mut this.editor,
+                        &mut this.interactions,
+                        now_millis,
+                    );
+                    this.emit_input_trace(
+                        SceneInputOperation::GestureFrame { now_millis },
+                        &report,
+                        cx,
+                    );
+                    this.apply_routed_report(report, cx);
+                }
                 this.prepare_navigation_frame(window, cx);
             });
         });

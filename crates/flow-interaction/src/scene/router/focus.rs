@@ -30,6 +30,7 @@ impl SceneEventRouter {
         target: Option<ElementHandle>,
     ) -> Result<RoutedReport, EngineError> {
         Self::validate_focus_target(editor, target)?;
+        self.event_time = None;
         self.actions.begin_operation();
         let mut out = RoutedReport::default();
         if target.is_some() && target == self.focused(&editor.engine) {
@@ -70,21 +71,7 @@ impl SceneEventRouter {
             let old = self.focused(&editor.engine);
             let epoch = Self::epoch(&editor.engine, target);
             if cancel_pointer && (target != old || target.is_none()) {
-                self.emit(
-                    editor,
-                    self.pressed.map(|p| p.0),
-                    EventKind::PointerCancel,
-                    None,
-                    out,
-                );
-                let cancelled = host.dispatch(editor, CanvasEvent::PointerCancel);
-                out.default.effects.extend(cancelled.effects);
-                out.default.errors.extend(cancelled.errors);
-                out.default.handled |= cancelled.handled;
-                out.default.document_changed |= cancelled.document_changed;
-                out.default.selection_changed |= cancelled.selection_changed;
-                out.default.viewport_changed |= cancelled.viewport_changed;
-                self.pressed = None;
+                self.cancel_contacts(editor, host, None, out);
                 self.clear_keys();
             }
             if old != target {
@@ -141,6 +128,7 @@ impl SceneEventRouter {
         event.related_target = related;
         event.cancelable = false;
         event.sequence = self.sequence;
+        event.timestamp_millis = self.event_time;
         match editor.engine.dispatch(event) {
             Ok(result) => out.events.push(result.event),
             Err(error) => out.errors.push(error.to_string()),

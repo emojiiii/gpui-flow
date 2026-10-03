@@ -1,7 +1,10 @@
-//! One pointer stream and one keyboard owner across independent scene routers.
+//! Bounded pointer ownership across independent scene routers, one keyboard owner.
 use super::{LayerId, LayerOptions};
 use gpui_flow_core::Point;
-use gpui_flow_interaction::{CanvasEvent, HitTarget, PointerButton};
+use gpui_flow_interaction::{
+    CanvasEvent, HitTarget, PointerButton, PointerDevice, PointerIdentity,
+};
+use std::collections::BTreeMap;
 
 pub(super) trait LayerAccess {
     fn hit(&mut self, id: LayerId, position: Point) -> HitTarget;
@@ -10,7 +13,6 @@ pub(super) trait LayerAccess {
 #[derive(Clone, Copy)]
 struct Press {
     layer: LayerId,
-    pointer: u64,
     button: Option<PointerButton>,
 }
 #[derive(Default)]
@@ -18,12 +20,15 @@ pub(super) struct LayerRouting {
     pub entries: Vec<(LayerId, LayerOptions)>,
     pub focused: Option<LayerId>,
     pub hovered: Option<LayerId>,
-    press: Option<Press>,
-    suppressed: Option<(u64, Option<PointerButton>)>,
+    presses: BTreeMap<PointerIdentity, Press>,
+    owner: Option<PointerIdentity>,
+    suppressed: BTreeMap<PointerIdentity, Option<PointerButton>>,
 }
 impl LayerRouting {
     pub fn pressed_layer(&self) -> Option<LayerId> {
-        self.press.map(|p| p.layer)
+        self.owner
+            .and_then(|id| self.presses.get(&id))
+            .map(|p| p.layer)
     }
     fn eligible(&self, id: LayerId) -> bool {
         self.entries
@@ -55,13 +60,38 @@ impl LayerRouting {
             self.focused = target;
         }
     }
-    /// Lifecycle and stacking changes must not forward a stale release to a
-    /// newly exposed layer. Suppression lasts through the matching physical Up.
+    fn suppress(&mut self, identity: PointerIdentity, button: Option<PointerButton>) {
+        if self.suppressed.len() == 16 && !self.suppressed.contains_key(&identity) {
+            self.suppressed.pop_first();
+        }
+        self.suppressed.insert(identity, button);
+    }
+    fn remove_press(&mut self, identity: PointerIdentity) -> Option<Press> {
+        if self.owner == Some(identity) {
+            self.owner = None;
+        }
+        self.presses.remove(&identity)
+    }
+    fn cancel(
+        &mut self,
+        identity: PointerIdentity,
+        access: &mut impl LayerAccess,
+    ) -> Option<LayerId> {
+        let press = self.remove_press(identity)?;
+        self.suppress(identity, press.button);
+        access.send(press.layer, CanvasEvent::PointerCancelFor(identity));
+        Some(press.layer)
+    }
+    /// Lifecycle changes cannot forward a stale release to a newly exposed layer.
     pub fn invalidate(&mut self, id: LayerId, access: &mut impl LayerAccess) {
-        if self.press.is_some_and(|p| p.layer == id) {
-            let press = self.press.take().unwrap();
-            self.suppressed = Some((press.pointer, press.button));
-            access.send(id, CanvasEvent::PointerCancel);
+        let contacts: Vec<_> = self
+            .presses
+            .iter()
+            .filter(|(_, press)| press.layer == id)
+            .map(|(key, _)| *key)
+            .collect();
+        for key in contacts {
+            self.cancel(key, access);
         }
         if self.hovered == Some(id) {
             self.hover(None, access);
@@ -73,33 +103,31 @@ impl LayerRouting {
         }
     }
     pub fn reorder(&mut self, access: &mut impl LayerAccess) {
-        if let Some(press) = self.press.take() {
-            self.suppressed = Some((press.pointer, press.button));
-            access.send(press.layer, CanvasEvent::PointerCancel);
+        let contacts: Vec<_> = self.presses.keys().copied().collect();
+        for key in contacts {
+            self.cancel(key, access);
         }
         self.hover(None, access);
     }
-    /// Outside release has no target and must not cancel an unrelated button's
-    /// stream or clear keys in a layer with no pointer ownership.
     pub fn release_outside(
         &mut self,
         pointer: u64,
         button: Option<PointerButton>,
         access: &mut impl LayerAccess,
     ) -> Option<LayerId> {
-        if self.suppressed == Some((pointer, button)) {
-            self.suppressed = None;
+        let key = PointerIdentity {
+            pointer_id: pointer,
+            device: PointerDevice::Mouse,
+        };
+        if self.suppressed.get(&key) == Some(&button) {
+            self.suppressed.remove(&key);
         }
-        let press = self
-            .press
-            .filter(|p| p.pointer == pointer && p.button == button)?;
-        self.press = None;
-        access.send(press.layer, CanvasEvent::PointerCancel);
+        self.presses.get(&key).filter(|p| p.button == button)?;
+        let layer = self.cancel(key, access);
+        self.suppressed.remove(&key);
         self.hover(None, access);
-        Some(press.layer)
+        layer
     }
-    /// Window-level moves outside the painted rectangle retain the accepted
-    /// stream but cannot hover or pick content clipped beyond the app surface.
     pub fn move_outside(
         &mut self,
         mut pointer: gpui_flow_interaction::PointerInput,
@@ -108,12 +136,14 @@ impl LayerRouting {
         if !pointer.position.is_finite() {
             return None;
         }
-        let press = self.press.filter(|p| p.pointer == pointer.pointer_id)?;
-        self.hover(None, access);
-        if pointer.button.is_none() {
-            self.press = None;
-            self.suppressed = None;
-            access.send(press.layer, CanvasEvent::PointerCancel);
+        let key = pointer.identity();
+        let press = *self.presses.get(&key)?;
+        if pointer.device != PointerDevice::Touch {
+            self.hover(None, access);
+        }
+        if pointer.held_buttons(false) == 0 {
+            self.cancel(key, access);
+            self.suppressed.remove(&key);
         } else {
             pointer.hit = HitTarget::Background;
             access.send(press.layer, CanvasEvent::PointerMove(pointer));
@@ -129,48 +159,76 @@ impl LayerRouting {
             if !pointer.position.is_finite() {
                 return None;
             }
-            if let Some(press) = self.press {
-                if press.pointer != pointer.pointer_id {
-                    return None;
+            // The legacy mouse transport has one cursor. Distinct touch IDs
+            // are admitted independently without impersonating that cursor.
+            if pointer.device == PointerDevice::Mouse
+                && self
+                    .presses
+                    .keys()
+                    .any(|key| key.device == PointerDevice::Mouse && *key != pointer.identity())
+            {
+                return None;
+            }
+            if matches!(event, CanvasEvent::PointerUp(_))
+                && self
+                    .presses
+                    .get(&pointer.identity())
+                    .is_some_and(|p| p.button != pointer.button)
+            {
+                // Chord releases are observations for the same original layer.
+                if pointer.buttons.is_some() {
+                    let layer = self.presses[&pointer.identity()].layer;
+                    access.send(layer, event);
+                    return Some(layer);
                 }
-                if matches!(event, CanvasEvent::PointerUp(_)) && press.button != pointer.button {
-                    return None;
-                }
+                return None;
             }
         }
         match &mut event {
             CanvasEvent::PointerDown(pointer) => {
-                self.suppressed = None;
-                if let Some(old) = self.press.take() {
-                    access.send(old.layer, CanvasEvent::PointerCancel);
+                let key = pointer.identity();
+                self.suppressed.remove(&key);
+                if let Some(press) = self.presses.get(&key).copied() {
+                    pointer.hit = access.hit(press.layer, pointer.position);
+                    access.send(press.layer, event);
+                    return Some(press.layer);
+                }
+                if self.presses.len() >= 16 {
+                    return None;
                 }
                 let target = self.pick(pointer.position, access);
-                self.hover(target.as_ref().map(|(id, _)| *id), access);
-                self.activate(target.as_ref().map(|(id, _)| *id), access);
+                if pointer.device != PointerDevice::Touch {
+                    self.hover(target.as_ref().map(|(id, _)| *id), access);
+                }
+                if self.presses.is_empty() {
+                    self.activate(target.as_ref().map(|(id, _)| *id), access);
+                }
                 let (id, hit) = target?;
                 pointer.hit = hit;
-                self.press = Some(Press {
-                    layer: id,
-                    pointer: pointer.pointer_id,
-                    button: pointer.button,
-                });
+                if self.presses.is_empty() {
+                    self.owner = Some(key);
+                }
+                self.presses.insert(
+                    key,
+                    Press {
+                        layer: id,
+                        button: pointer.button,
+                    },
+                );
                 access.send(id, event);
                 Some(id)
             }
             CanvasEvent::PointerMove(_) | CanvasEvent::PointerUp(_) => {
-                // A move with no physical button ends an interrupted stream.
-                if matches!(event, CanvasEvent::PointerMove(_))
-                    && event.pointer().unwrap().button.is_none()
+                let pointer = event.pointer().unwrap();
+                let key = pointer.identity();
+                if matches!(event, CanvasEvent::PointerMove(_)) && pointer.held_buttons(false) == 0
                 {
-                    if let Some(old) = self.press.take() {
-                        access.send(old.layer, CanvasEvent::PointerCancel);
-                    }
-                    self.suppressed = None;
+                    self.cancel(key, access);
+                    self.suppressed.remove(&key);
                 }
-                if let Some((pointer_id, button)) = self.suppressed {
-                    if matches!(&event, CanvasEvent::PointerUp(p) if p.pointer_id == pointer_id && p.button == button)
-                    {
-                        self.suppressed = None;
+                if let Some(button) = self.suppressed.get(&key) {
+                    if matches!(&event, CanvasEvent::PointerUp(p) if p.button == *button) {
+                        self.suppressed.remove(&key);
                     }
                     return None;
                 }
@@ -179,23 +237,28 @@ impl LayerRouting {
                     CanvasEvent::PointerMove(p) | CanvasEvent::PointerUp(p) => p,
                     _ => unreachable!(),
                 };
-                let target = if let Some(press) = self.press {
+                let target = if let Some(press) = self.presses.get(&key) {
                     self.eligible(press.layer)
                         .then(|| (press.layer, access.hit(press.layer, pointer.position)))
-                } else if is_up {
-                    // Unpaired releases never create clicks or finish another layer's gesture.
+                } else if is_up || pointer.device == PointerDevice::Touch {
                     None
                 } else {
                     self.pick(pointer.position, access)
                 };
-                self.hover(target.as_ref().map(|(id, _)| *id), access);
+                if pointer.device != PointerDevice::Touch {
+                    self.hover(target.as_ref().map(|(id, _)| *id), access);
+                }
                 if is_up {
-                    self.press = None;
+                    self.remove_press(key);
                 }
                 let (id, hit) = target?;
                 pointer.hit = hit;
                 access.send(id, event);
                 Some(id)
+            }
+            CanvasEvent::PointerCancelFor(key) => {
+                let key = *key;
+                self.cancel(key, access)
             }
             CanvasEvent::Wheel {
                 position, delta, ..
@@ -204,8 +267,7 @@ impl LayerRouting {
                     return None;
                 }
                 let id = self
-                    .press
-                    .map(|p| p.layer)
+                    .pressed_layer()
                     .or_else(|| self.pick(*position, access).map(|t| t.0))?;
                 access.send(id, event);
                 Some(id)
@@ -221,14 +283,13 @@ impl LayerRouting {
             }
             CanvasEvent::PointerCancel | CanvasEvent::FocusLost => {
                 let focus_lost = matches!(event, CanvasEvent::FocusLost);
-                // Every router clears held keys even if its target was removed
-                // between native focus notifications and this operation.
                 for (id, _) in &self.entries {
                     access.send(*id, event.clone());
                 }
-                if let Some(press) = self.press.take() {
-                    self.suppressed = Some((press.pointer, press.button));
+                for (key, press) in std::mem::take(&mut self.presses) {
+                    self.suppress(key, press.button);
                 }
+                self.owner = None;
                 self.hovered = None;
                 if focus_lost {
                     self.focused = None;

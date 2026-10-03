@@ -1,21 +1,25 @@
 //! Tree listeners run before default behaviors. Gesture cleanup is mandatory even
 //! when pointer-up is prevented; callbacks cannot strand an editor transaction.
 mod focus;
+mod pointer;
 use super::{ScenePluginHost, action_queue::SceneAction};
-use crate::{CanvasEvent, DispatchReport, HitTarget, KeyCode, PointerButton};
+use crate::{CanvasEvent, DispatchReport, HitTarget, KeyCode, PointerIdentity};
 use gpui_flow_editor::SceneEditor;
 use gpui_flow_engine::{ElementHandle, EngineError, InstanceState, SceneEngine};
 use gpui_flow_scene::{
     DisplayId, EventInput, EventKind, InputModifiers, Point, PointerDevice, SceneEvent,
 };
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 #[derive(Default)]
 pub struct SceneEventRouter {
-    pressed: Option<(ElementHandle, Point, u64, Option<PointerButton>)>,
+    contacts: BTreeMap<PointerIdentity, pointer::Contact>,
+    default_pointer: Option<PointerIdentity>,
+    recent_taps: VecDeque<pointer::Tap>,
+    clock_millis: Option<u64>,
+    event_time: Option<u64>,
     hover: Option<ElementHandle>,
     focus: Option<ElementHandle>,
-    pressed_epoch: u64,
     hover_epoch: u64,
     focus_epoch: u64,
     position: Point,
@@ -59,8 +63,9 @@ impl SceneEventRouter {
             .map_or(0, |i| i.attachment_epoch)
     }
     pub fn has_pressed(&self, engine: &SceneEngine) -> bool {
-        self.pressed
-            .is_some_and(|p| Self::current(engine, p.0, self.pressed_epoch))
+        self.contacts
+            .values()
+            .any(|p| p.target.is_some_and(|h| Self::current(engine, h, p.epoch)))
     }
     pub fn state(&self, engine: &SceneEngine, handle: ElementHandle) -> SceneInteractionState {
         let Ok(instance) = engine.instance(handle) else {
@@ -78,7 +83,7 @@ impl SceneEventRouter {
         };
         SceneInteractionState {
             hover: contains(self.hover, self.hover_epoch),
-            press: contains(self.pressed.map(|p| p.0), self.pressed_epoch),
+            press: self.contacts.values().any(|p| contains(p.target, p.epoch)),
             focus: self.focus == Some(handle) && Self::current(engine, handle, self.focus_epoch),
         }
     }
@@ -115,6 +120,7 @@ impl SceneEventRouter {
             SceneEvent::new(kind, id).at(editor.viewport.screen_to_world(self.position));
         event.input = input;
         event.sequence = self.sequence;
+        event.timestamp_millis = self.event_time;
         match editor.engine.dispatch(event) {
             Ok(result) => {
                 let prevented = result.event.default_prevented();
@@ -180,241 +186,120 @@ impl SceneEventRouter {
         action_budget: &mut usize,
     ) -> RoutedReport {
         let mut out = RoutedReport::default();
-        // This runs only after dispatch_picked_wheel has validated its target.
-        // New input retires an inertial tail even when a tree listener prevents
-        // its default action; unrelated capture/edit ownership stays untouched.
+        self.event_time = event.pointer().and_then(|p| p.timestamp_millis);
+        if let Some(pointer) = event.pointer() {
+            if !pointer.position.is_finite() {
+                let identity = pointer.identity();
+                self.cancel_contacts(editor, host, Some(identity), &mut out);
+                out.errors
+                    .push("pointer position must be finite; matching contact cancelled".into());
+                self.finish_dispatch(editor, host, &mut out, action_budget, true);
+                return out;
+            }
+            if pointer
+                .pressure
+                .is_some_and(|p| !p.is_finite() || !(0.0..=1.0).contains(&p))
+            {
+                out.errors
+                    .push("pointer pressure must be finite and in 0..=1".into());
+                return out;
+            }
+            if let Some(now) = pointer.timestamp_millis
+                && !self.accept_time(now, &mut out)
+            {
+                return out;
+            }
+        }
         let navigation_stopped = matches!(
             event,
             CanvasEvent::PointerDown(_) | CanvasEvent::Wheel { .. } | CanvasEvent::KeyDown { .. }
         ) && host.stop_navigation_tail();
-        // Instance loss cannot leave keyboard defaults armed for a replacement
-        // object with the same public ID. A new click establishes fresh focus.
-        if self
-            .focus
-            .is_some_and(|handle| !Self::current(&editor.engine, handle, self.focus_epoch))
-        {
-            self.focus = None;
+        if editor.reconcile_external() && host.has_capture() {
+            self.cancel_contacts(editor, host, None, &mut out);
             self.clear_keys();
         }
-        if self
-            .hover
-            .is_some_and(|handle| !Self::current(&editor.engine, handle, self.hover_epoch))
-        {
-            self.hover = None;
-        }
-        let repeat = match &event {
-            CanvasEvent::KeyDown { key, .. } => !self.held_keys.insert(key.clone()),
-            CanvasEvent::KeyUp { key, .. } => {
-                self.held_keys.remove(key);
-                if *key == KeyCode::Space {
-                    self.space_pan = false;
-                }
-                false
-            }
-            CanvasEvent::PointerCancel | CanvasEvent::FocusLost => {
-                self.clear_keys();
-                false
-            }
-            _ => false,
-        };
-        // Native adapters need not maintain a competing Space latch. Direct
-        // host-provided pointer modifiers remain an explicit supported input.
+        self.retire_invalid(editor, host, &mut out);
         if let CanvasEvent::PointerDown(pointer)
         | CanvasEvent::PointerMove(pointer)
         | CanvasEvent::PointerUp(pointer) = &mut event
         {
             pointer.modifiers.space |= self.space_pan;
         }
-        if editor.reconcile_external() && host.has_capture() {
-            self.pressed = None;
+        if event.pointer().is_some() {
+            self.dispatch_pointer(editor, host, event.clone(), &mut out, action_budget);
+        } else if let CanvasEvent::PointerCancelFor(identity) = event {
+            self.cancel_contacts(editor, host, Some(identity), &mut out);
+        } else if matches!(event, CanvasEvent::PointerCancel | CanvasEvent::FocusLost) {
+            self.cancel_contacts(editor, host, None, &mut out);
+            self.update_hover(editor, None, None, &mut out);
             self.clear_keys();
-            out.default = host.dispatch(editor, CanvasEvent::PointerCancel);
-            return out;
-        }
-        if let Some((handle, _, pointer_id, _)) = self.pressed {
-            if !Self::current(&editor.engine, handle, self.pressed_epoch) {
-                self.pressed = None;
-                self.clear_keys();
-                out.default = host.dispatch(editor, CanvasEvent::PointerCancel);
-                return out;
+            if matches!(event, CanvasEvent::FocusLost) {
+                self.transfer_focus(editor, host, None, false, &mut out, action_budget);
             }
-            if matches!(&event,CanvasEvent::PointerDown(p)|CanvasEvent::PointerMove(p)|CanvasEvent::PointerUp(p) if p.pointer_id!=pointer_id)
-            {
-                return out;
-            }
-        }
-        let mut hit = None;
-        if let Some(pointer) = event.pointer() {
-            self.position = pointer.position;
-            if let HitTarget::Object(id)
-            | HitTarget::ObjectResize(id)
-            | HitTarget::ObjectResizeHandle { id, .. }
-            | HitTarget::LineEndpoint { id, .. }
-            | HitTarget::GeometryControl { id, .. }
-            | HitTarget::ImageCrop { id, .. } = &pointer.hit
-            {
-                hit = editor.engine.handle(&DisplayId::from(id.clone()));
-            }
-        }
-        if let CanvasEvent::Wheel { position, .. } = &event {
-            self.position = *position;
-            hit = wheel_target.unwrap_or_else(|| {
-                editor
-                    .engine
-                    .hit_test(
-                        editor.viewport.screen_to_world(*position),
-                        gpui_flow_scene::HitTestOptions {
-                            include_locked: true,
-                            ..Default::default()
-                        },
-                    )
-                    .ok()
-                    .flatten()
-                    .and_then(|h| editor.engine.handle(&h.id))
-            });
-        }
-        let input = metadata(&event, repeat);
-        if matches!(
-            event,
-            CanvasEvent::PointerMove(_)
-                | CanvasEvent::PointerLeave
-                | CanvasEvent::PointerCancel
-                | CanvasEvent::FocusLost
-        ) && self.hover != hit
-        {
-            self.emit(
-                editor,
-                self.hover,
-                EventKind::PointerOut,
-                input.clone(),
-                &mut out,
-            );
-            let path = |handle: Option<ElementHandle>| -> Vec<ElementHandle> {
-                handle
-                    .and_then(|h| Self::id(editor, h))
-                    .and_then(|id| editor.scene().ancestor_path(&id).ok())
-                    .unwrap_or_default()
-                    .iter()
-                    .filter_map(|id| editor.engine.handle(id))
-                    .collect()
-            };
-            let old_path = path(self.hover);
-            let new_path = path(hit);
-            for handle in old_path.iter().rev().filter(|h| !new_path.contains(h)) {
-                self.emit(
-                    editor,
-                    Some(*handle),
-                    EventKind::PointerLeave,
-                    input.clone(),
-                    &mut out,
-                );
-            }
-            self.emit(editor, hit, EventKind::PointerOver, input.clone(), &mut out);
-            for handle in new_path.iter().filter(|h| !old_path.contains(h)) {
-                self.emit(
-                    editor,
-                    Some(*handle),
-                    EventKind::PointerEnter,
-                    input.clone(),
-                    &mut out,
-                );
-            }
-            self.hover = hit;
-            self.hover_epoch = Self::epoch(&editor.engine, hit);
-        }
-        if matches!(event, CanvasEvent::PointerDown(_)) && self.pressed.is_some() {
-            let cancelled = self.dispatch_with_budget(
-                editor,
-                host,
-                CanvasEvent::PointerCancel,
-                None,
-                action_budget,
-            );
-            out.focus_requested |= cancelled.focus_requested;
-            out.events.extend(cancelled.events);
-            out.errors.extend(cancelled.errors);
-        }
-        let target = self.pressed.map(|p| p.0).or(hit);
-        let kind = match &event {
-            CanvasEvent::PointerDown(_) => EventKind::PointerDown,
-            CanvasEvent::PointerMove(_) => EventKind::PointerMove,
-            CanvasEvent::PointerUp(_) => EventKind::PointerUp,
-            CanvasEvent::PointerLeave => EventKind::PointerLeave,
-            CanvasEvent::PointerCancel | CanvasEvent::FocusLost => EventKind::PointerCancel,
-            CanvasEvent::Wheel { .. } => EventKind::Wheel,
-            CanvasEvent::KeyDown { .. } => EventKind::KeyDown,
-            CanvasEvent::KeyUp { .. } => EventKind::KeyUp,
-        };
-        let target = if matches!(event, CanvasEvent::PointerLeave) {
-            None // The complete leave path was emitted above; do not emit twice.
-        } else if matches!(
-            event,
-            CanvasEvent::KeyDown { .. } | CanvasEvent::KeyUp { .. }
-        ) {
-            self.focus
+        } else if matches!(event, CanvasEvent::PointerLeave) {
+            self.update_hover(editor, None, None, &mut out);
         } else {
-            target
-        };
-        let prevented = self.emit(editor, target, kind, input.clone(), &mut out);
-        if matches!(
-            event,
-            CanvasEvent::KeyDown {
-                key: KeyCode::Space,
-                ..
+            let repeat = match &event {
+                CanvasEvent::KeyDown { key, .. } => !self.held_keys.insert(key.clone()),
+                CanvasEvent::KeyUp { key, .. } => {
+                    self.held_keys.remove(key);
+                    if *key == KeyCode::Space {
+                        self.space_pan = false;
+                    }
+                    false
+                }
+                _ => false,
+            };
+            let (target, kind) = match &event {
+                CanvasEvent::Wheel { position, .. } => {
+                    self.position = *position;
+                    let hit = wheel_target.unwrap_or_else(|| {
+                        editor
+                            .engine
+                            .hit_test(
+                                editor.viewport.screen_to_world(*position),
+                                gpui_flow_scene::HitTestOptions {
+                                    include_locked: true,
+                                    ..Default::default()
+                                },
+                            )
+                            .ok()
+                            .flatten()
+                            .and_then(|h| editor.engine.handle(&h.id))
+                    });
+                    (self.primary_target().or(hit), EventKind::Wheel)
+                }
+                CanvasEvent::KeyDown { .. } => (self.focus, EventKind::KeyDown),
+                CanvasEvent::KeyUp { .. } => (self.focus, EventKind::KeyUp),
+                _ => unreachable!(),
+            };
+            let prevented = self.emit(editor, target, kind, metadata(&event, repeat), &mut out);
+            if matches!(
+                event,
+                CanvasEvent::KeyDown {
+                    key: KeyCode::Space,
+                    ..
+                }
+            ) && !repeat
+                && !prevented
+            {
+                self.space_pan = true;
             }
-        ) && !repeat
-            && !prevented
-        {
-            self.space_pan = true;
-        }
-        let escape = matches!(
-            event,
-            CanvasEvent::KeyDown {
-                key: KeyCode::Escape,
-                ..
+            if matches!(
+                event,
+                CanvasEvent::KeyDown {
+                    key: KeyCode::Escape,
+                    ..
+                }
+            ) {
+                self.cancel_contacts(editor, host, None, &mut out);
+                self.clear_keys();
+            } else if !prevented {
+                pointer::merge_report(&mut out.default, host.dispatch(editor, event.clone()));
             }
-        );
-        let terminal =
-            matches!(event, CanvasEvent::PointerCancel | CanvasEvent::FocusLost) || escape;
-        let matching_up = matches!(&event,CanvasEvent::PointerUp(p) if self.pressed.is_none_or(|old|old.2==p.pointer_id&&old.3==p.button));
-        if terminal || (matching_up && prevented) {
-            out.default = host.dispatch(editor, CanvasEvent::PointerCancel);
-        } else if !prevented {
-            out.default = host.dispatch(editor, event.clone());
+            out.default.default_prevented |= prevented;
         }
-        out.default.default_prevented |= prevented;
         out.default.handled |= navigation_stopped;
-        if let CanvasEvent::PointerDown(p) = &event
-            && !prevented
-        {
-            self.transfer_focus(editor, host, hit, false, &mut out, action_budget);
-            // A listener-requested focus transfer may have cancelled the new
-            // default capture. Do not re-arm its press/click after that transfer.
-            if !out.focus_requested {
-                self.pressed = hit.map(|h| (h, p.position, p.pointer_id, p.button));
-                self.pressed_epoch = Self::epoch(&editor.engine, hit);
-            }
-        }
-        if matching_up
-            && let Some((handle, start, _, button)) = self.pressed.take()
-            && !prevented
-            && button == Some(PointerButton::Left)
-            && hit == Some(handle)
-            && start.distance(self.position) < 4.
-        {
-            self.emit(editor, Some(handle), EventKind::Click, input, &mut out);
-        }
-        if terminal {
-            self.pressed = None;
-            self.clear_keys();
-        }
-        if matches!(event, CanvasEvent::PointerCancel) {
-            self.hover = None;
-        }
-        if matches!(event, CanvasEvent::FocusLost) {
-            self.transfer_focus(editor, host, None, false, &mut out, action_budget);
-            self.hover = None;
-        }
         self.finish_dispatch(
             editor,
             host,
@@ -520,21 +405,24 @@ impl SceneEventRouter {
         {
             self.hover = None;
         }
-        if self.pressed.is_some_and(|(handle, _, _, _)| {
-            !Self::current(&editor.engine, handle, self.pressed_epoch)
-        }) {
-            self.pressed = None;
-            self.clear_keys();
-            let cancelled = host.dispatch(editor, CanvasEvent::PointerCancel);
-            out.default.effects.extend(cancelled.effects);
-            out.default.errors.extend(cancelled.errors);
-            out.default.handled |= cancelled.handled;
-            out.default.document_changed |= cancelled.document_changed;
-            out.default.selection_changed |= cancelled.selection_changed;
-            out.default.viewport_changed |= cancelled.viewport_changed;
-            out.default.default_prevented |= cancelled.default_prevented;
-            out.default.propagation_stopped |= cancelled.propagation_stopped;
+        let stale: Vec<_> = self
+            .contacts
+            .iter()
+            .filter(|(id, p)| {
+                p.target
+                    .is_some_and(|h| !Self::current(&editor.engine, h, p.epoch))
+                    || (self.default_pointer == Some(**id)
+                        && p.capture_owner
+                            .as_deref()
+                            .is_some_and(|owner| host.capture_owner() != Some(owner)))
+            })
+            .map(|(id, _)| *id)
+            .collect();
+        for identity in stale {
+            self.cancel_contacts(editor, host, Some(identity), out);
         }
+        self.recent_taps
+            .retain(|tap| Self::current(&editor.engine, tap.target, tap.epoch));
     }
 }
 fn mods(m: crate::Modifiers) -> InputModifiers {
@@ -549,22 +437,14 @@ fn metadata(event: &CanvasEvent, repeat: bool) -> Option<EventInput> {
     if let Some(p) = event.pointer() {
         return Some(EventInput::Pointer {
             pointer_id: p.pointer_id,
-            device: PointerDevice::Mouse,
+            device: p.device,
             button: p.button.map(|b| match b {
-                PointerButton::Left => 0,
-                PointerButton::Middle => 1,
-                PointerButton::Right => 2,
+                crate::PointerButton::Left => 0,
+                crate::PointerButton::Middle => 1,
+                crate::PointerButton::Right => 2,
             }),
-            buttons: if matches!(event, CanvasEvent::PointerUp(_)) {
-                0
-            } else {
-                p.button.map_or(0, |b| match b {
-                    PointerButton::Left => 1,
-                    PointerButton::Right => 2,
-                    PointerButton::Middle => 4,
-                })
-            },
-            pressure: None,
+            buttons: p.held_buttons(matches!(event, CanvasEvent::PointerUp(_))),
+            pressure: p.pressure,
             modifiers: mods(p.modifiers),
             cancelled: false,
         });

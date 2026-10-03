@@ -115,6 +115,9 @@ fn configure(host: &mut ScenePluginHost, editor: &mut SceneEditor, mode: Mode) {
 fn operation_value(operation: &SceneInputOperation) -> Value {
     let modifiers = |m: gpui_flow::interaction::Modifiers| json!({"shift":m.shift,"control":m.control,"alt":m.alt,"meta":m.meta,"space":m.space});
     match operation {
+        SceneInputOperation::GestureFrame { now_millis } => {
+            json!({"kind":"GestureFrame", "now_millis":now_millis})
+        }
         SceneInputOperation::NavigationFrame { now } => {
             json!({"kind":"NavigationFrame","secs":now.as_secs(),"nanos":now.subsec_nanos()})
         }
@@ -133,7 +136,7 @@ fn operation_value(operation: &SceneInputOperation) -> Value {
             CanvasEvent::PointerDown(p)
             | CanvasEvent::PointerMove(p)
             | CanvasEvent::PointerUp(p) => {
-                json!({"kind":match event {CanvasEvent::PointerDown(_)=>"PointerDown",CanvasEvent::PointerMove(_)=>"PointerMove",_=>"PointerUp"},"position":p.position,"pointer_id":p.pointer_id,"button":format!("{:?}",p.button),"hit":format!("{:?}",p.hit),"modifiers":modifiers(p.modifiers)})
+                json!({"kind":match event {CanvasEvent::PointerDown(_)=>"PointerDown",CanvasEvent::PointerMove(_)=>"PointerMove",_=>"PointerUp"},"position":p.position,"pointer_id":p.pointer_id,"device":p.device,"buttons":p.buttons,"pressure":p.pressure,"timestamp_millis":p.timestamp_millis,"button":format!("{:?}",p.button),"hit":format!("{:?}",p.hit),"modifiers":modifiers(p.modifiers)})
             }
             CanvasEvent::Wheel {
                 position,
@@ -147,6 +150,9 @@ fn operation_value(operation: &SceneInputOperation) -> Value {
                 json!({"kind":if matches!(event,CanvasEvent::KeyDown {..}) {"KeyDown"} else {"KeyUp"},"key":format!("{key:?}"),"modifiers":modifiers(*m)})
             }
             CanvasEvent::PointerLeave => json!({"kind":"PointerLeave"}),
+            CanvasEvent::PointerCancelFor(identity) => {
+                json!({"kind":"PointerCancelFor", "pointer_id":identity.pointer_id, "device":identity.device})
+            }
             CanvasEvent::PointerCancel => json!({"kind":"PointerCancel"}),
             CanvasEvent::FocusLost => json!({"kind":"FocusLost"}),
         },

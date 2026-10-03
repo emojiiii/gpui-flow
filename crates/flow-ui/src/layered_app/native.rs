@@ -1,5 +1,5 @@
 use super::*;
-use gpui_flow_interaction::{KeyCode, Modifiers as InputModifiers, PointerButton, PointerInput};
+use gpui_flow_interaction::{KeyCode, Modifiers as InputModifiers, PointerButton};
 fn modifiers(m: gpui::Modifiers) -> InputModifiers {
     InputModifiers {
         shift: m.shift,
@@ -41,39 +41,48 @@ impl LayeredApp {
         if !self.focus.is_focused(window) {
             return;
         }
-        self.dispatch_input(
-            CanvasEvent::PointerDown(PointerInput {
-                position: self.local(event.position),
-                button: button(event.button),
-                modifiers: modifiers(event.modifiers),
-                ..Default::default()
-            }),
-            cx,
+        let pointer = self.native_pointer.down(
+            event,
+            self.local(event.position),
+            HitTarget::Background,
+            false,
         );
+        self.dispatch_input(CanvasEvent::PointerDown(pointer), cx);
     }
     fn moved(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
-        self.dispatch_input(
-            CanvasEvent::PointerMove(PointerInput {
-                position: self.local(event.position),
-                button: event.pressed_button.and_then(button),
-                modifiers: modifiers(event.modifiers),
-                ..Default::default()
-            }),
-            cx,
+        let pointer = self.native_pointer.moved(
+            event,
+            self.local(event.position),
+            HitTarget::Background,
+            false,
         );
+        self.dispatch_input(CanvasEvent::PointerMove(pointer), cx);
+    }
+    fn pressure(&mut self, event: &MousePressureEvent, _: &mut Window, cx: &mut Context<Self>) {
+        let pointer = self.native_pointer.pressure(
+            event,
+            self.local(event.position),
+            HitTarget::Background,
+            false,
+        );
+        self.dispatch_input(CanvasEvent::PointerMove(pointer), cx);
     }
     fn up(&mut self, event: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
-        self.dispatch_input(
-            CanvasEvent::PointerUp(PointerInput {
-                position: self.local(event.position),
-                button: button(event.button),
-                modifiers: modifiers(event.modifiers),
-                ..Default::default()
-            }),
-            cx,
+        let pointer = self.native_pointer.up(
+            event,
+            self.local(event.position),
+            HitTarget::Background,
+            false,
         );
+        self.dispatch_input(CanvasEvent::PointerUp(pointer), cx);
     }
     fn outside_up(&mut self, event: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
+        self.native_pointer.up(
+            event,
+            self.local(event.position),
+            HitTarget::Background,
+            false,
+        );
         let target = self.routing.release_outside(
             0,
             button(event.button),
@@ -91,12 +100,12 @@ impl LayeredApp {
         }
     }
     fn outside_move(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
-        let input = PointerInput {
-            position: self.local(event.position),
-            button: event.pressed_button.and_then(button),
-            modifiers: modifiers(event.modifiers),
-            ..Default::default()
-        };
+        let input = self.native_pointer.moved(
+            event,
+            self.local(event.position),
+            HitTarget::Background,
+            false,
+        );
         let target = self.routing.move_outside(
             input.clone(),
             &mut NativeAccess {
@@ -211,6 +220,7 @@ impl Render for LayeredApp {
             .on_mouse_down(MouseButton::Middle, cx.listener(Self::down))
             .on_mouse_down(MouseButton::Right, cx.listener(Self::down))
             .on_mouse_move(cx.listener(Self::moved))
+            .on_mouse_pressure(cx.listener(Self::pressure))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::up))
             .on_mouse_up(MouseButton::Middle, cx.listener(Self::up))
             .on_mouse_up(MouseButton::Right, cx.listener(Self::up))

@@ -11,14 +11,7 @@ fn modifiers(value: gpui::Modifiers) -> input::Modifiers {
         space: false,
     }
 }
-fn button(value: MouseButton) -> Option<input::PointerButton> {
-    match value {
-        MouseButton::Left => Some(input::PointerButton::Left),
-        MouseButton::Middle => Some(input::PointerButton::Middle),
-        MouseButton::Right => Some(input::PointerButton::Right),
-        _ => None,
-    }
-}
+
 impl FlowCanvas {
     pub(super) fn apply_interaction_report(
         &mut self,
@@ -87,6 +80,12 @@ impl FlowCanvas {
         cx.notify();
     }
     fn dispatch_input(&mut self, event: input::CanvasEvent, cx: &mut Context<Self>) {
+        if matches!(
+            event,
+            input::CanvasEvent::PointerCancel | input::CanvasEvent::FocusLost
+        ) {
+            self.native_pointer.reset();
+        }
         let was_connecting = self.interactions.connection().active();
         let report = self.interactions.dispatch(&mut self.editor, event);
         if self.interactions.connection().active() {
@@ -117,51 +116,32 @@ impl FlowCanvas {
     ) {
         cx.stop_propagation();
         window.focus(&self.focus, cx);
-        self.dispatch_input(
-            input::CanvasEvent::PointerDown(input::PointerInput {
-                position: self.local(event.position),
-                button: button(event.button),
-                modifiers: input::Modifiers {
-                    space: self.space_held,
-                    ..modifiers(event.modifiers)
-                },
-                hit,
-                pointer_id: 0,
-            }),
-            cx,
-        );
+        let pointer =
+            self.native_pointer
+                .down(event, self.local(event.position), hit, self.space_held);
+        self.dispatch_input(input::CanvasEvent::PointerDown(pointer), cx);
     }
     pub(super) fn move_pointer(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
         let position = self.local(event.position);
-        self.dispatch_input(
-            input::CanvasEvent::PointerMove(input::PointerInput {
-                position,
-                button: event.pressed_button.and_then(button),
-                modifiers: input::Modifiers {
-                    space: self.space_held,
-                    ..modifiers(event.modifiers)
-                },
-                hit: self.hit_at(position),
-                pointer_id: 0,
-            }),
-            cx,
-        );
+        let pointer =
+            self.native_pointer
+                .moved(event, position, self.hit_at(position), self.space_held);
+        self.dispatch_input(input::CanvasEvent::PointerMove(pointer), cx);
+    }
+    pub(super) fn pressure_pointer(&mut self, event: &MousePressureEvent, cx: &mut Context<Self>) {
+        let position = self.local(event.position);
+        let hit = self.hit_at(position);
+        let pointer = self
+            .native_pointer
+            .pressure(event, position, hit, self.space_held);
+        self.dispatch_input(input::CanvasEvent::PointerMove(pointer), cx);
     }
     pub(super) fn release_pointer(&mut self, event: &MouseUpEvent, cx: &mut Context<Self>) {
         let position = self.local(event.position);
-        self.dispatch_input(
-            input::CanvasEvent::PointerUp(input::PointerInput {
-                position,
-                button: button(event.button),
-                modifiers: input::Modifiers {
-                    space: self.space_held,
-                    ..modifiers(event.modifiers)
-                },
-                hit: self.hit_at(position),
-                pointer_id: 0,
-            }),
-            cx,
-        );
+        let pointer =
+            self.native_pointer
+                .up(event, position, self.hit_at(position), self.space_held);
+        self.dispatch_input(input::CanvasEvent::PointerUp(pointer), cx);
     }
     pub(super) fn cancel_interaction(&mut self, cx: &mut Context<Self>) {
         self.dispatch_input(input::CanvasEvent::PointerCancel, cx);

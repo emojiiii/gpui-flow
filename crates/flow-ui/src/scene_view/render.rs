@@ -681,13 +681,14 @@ impl Render for SceneView {
                 .on_mouse_down(MouseButton::Middle, cx.listener(Self::down))
                 .on_mouse_down(MouseButton::Right, cx.listener(Self::down))
                 .on_mouse_move(cx.listener(|this, event, _, cx| this.moved(event, cx)))
+                .on_mouse_pressure(cx.listener(|this, event, _, cx| this.pressure(event, cx)))
                 .on_mouse_up(
                     MouseButton::Left,
                     cx.listener(|this, event, _, cx| this.up(event, cx)),
                 )
                 .on_mouse_up_out(
                     MouseButton::Left,
-                    cx.listener(|this, _, _, cx| this.cancel_input(cx)),
+                    cx.listener(|this, event, _, cx| this.outside_up(event, cx)),
                 )
                 .on_mouse_up(
                     MouseButton::Middle,
@@ -695,7 +696,7 @@ impl Render for SceneView {
                 )
                 .on_mouse_up_out(
                     MouseButton::Middle,
-                    cx.listener(|this, _, _, cx| this.cancel_input(cx)),
+                    cx.listener(|this, event, _, cx| this.outside_up(event, cx)),
                 )
                 .on_mouse_up(
                     MouseButton::Right,
@@ -703,7 +704,7 @@ impl Render for SceneView {
                 )
                 .on_mouse_up_out(
                     MouseButton::Right,
-                    cx.listener(|this, _, _, cx| this.cancel_input(cx)),
+                    cx.listener(|this, event, _, cx| this.outside_up(event, cx)),
                 )
                 .on_scroll_wheel(cx.listener(|this, event, _, cx| this.scroll(event, cx)))
                 .on_key_down(cx.listener(|this, event, window, cx| {

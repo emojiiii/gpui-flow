@@ -10,15 +10,27 @@ fn modifiers(value: gpui::Modifiers, space: bool) -> input::Modifiers {
         space,
     }
 }
-fn button(value: MouseButton) -> Option<input::PointerButton> {
-    match value {
-        MouseButton::Left => Some(input::PointerButton::Left),
-        MouseButton::Middle => Some(input::PointerButton::Middle),
-        MouseButton::Right => Some(input::PointerButton::Right),
-        _ => None,
-    }
-}
 impl SceneView {
+    /// Route host-supplied canvas-local input through the same tree/default path
+    /// as the native adapter. Timed input must use pointer_timestamp_millis().
+    /// Managed views receive input through LayeredApp so layer picking stays authoritative.
+    pub fn dispatch_input(
+        &mut self,
+        mut event: input::CanvasEvent,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if self.is_layer_managed() {
+            return false;
+        }
+        if let input::CanvasEvent::PointerDown(pointer)
+        | input::CanvasEvent::PointerMove(pointer)
+        | input::CanvasEvent::PointerUp(pointer) = &mut event
+        {
+            pointer.hit = self.input_hit(pointer.position, pointer.modifiers.control);
+        }
+        self.plugin_event(event, cx)
+    }
+
     pub(super) fn input_hit(&self, local: WorldPoint, _control: bool) -> input::HitTarget {
         if let Some(hit) = self.image_crop_hit(local) {
             return hit;
@@ -62,6 +74,12 @@ impl SceneView {
         event: input::CanvasEvent,
         cx: &mut Context<Self>,
     ) -> bool {
+        if matches!(
+            event,
+            input::CanvasEvent::PointerCancel | input::CanvasEvent::FocusLost
+        ) {
+            self.native_pointer.reset();
+        }
         if !self.synchronize_navigation_input(cx) {
             return false;
         }
@@ -121,7 +139,7 @@ impl SceneView {
         }
         let allowed = report.errors.is_empty() && !report.default.default_prevented;
         self.apply_routed_report(report, cx);
-        if !self.interactions.needs_navigation_frame() {
+        if !self.interactions.needs_navigation_frame() && !self.router.needs_gesture_frame() {
             self.navigation_frames.cancel();
         }
         allowed
@@ -250,16 +268,10 @@ impl SceneView {
                 )
                 .then_some(handle)
             });
-        let allowed = self.plugin_event(
-            input::CanvasEvent::PointerDown(input::PointerInput {
-                position: local,
-                button: button(event.button),
-                modifiers: modifiers(event.modifiers, self.router.space_held()),
-                hit,
-                pointer_id: 0,
-            }),
-            cx,
-        );
+        let pointer = self
+            .native_pointer
+            .down(event, local, hit, self.router.space_held());
+        let allowed = self.plugin_event(input::CanvasEvent::PointerDown(pointer), cx);
         if allowed
             && self.text_editing_enabled()
             && let Some(handle) = text_target
@@ -274,38 +286,53 @@ impl SceneView {
             return;
         }
         let local = self.local(event.position);
-        if event.pressed_button.is_none()
-            && (self.interactions.has_capture() || self.router.has_pressed(&self.editor.engine))
-        {
-            self.cancel_input(cx);
+        let mouse = input::PointerIdentity {
+            device: input::PointerDevice::Mouse,
+            pointer_id: 0,
+        };
+        if event.pressed_button.is_none() && self.router.has_pointer(mouse) {
+            self.plugin_event(input::CanvasEvent::PointerCancelFor(mouse), cx);
         }
         let hit = self.input_hit(local, event.modifiers.control);
-        self.plugin_event(
-            input::CanvasEvent::PointerMove(input::PointerInput {
-                position: local,
-                button: event.pressed_button.and_then(button),
-                modifiers: modifiers(event.modifiers, self.router.space_held()),
-                hit,
-                pointer_id: 0,
-            }),
-            cx,
-        );
+        let pointer = self
+            .native_pointer
+            .moved(event, local, hit, self.router.space_held());
+        self.plugin_event(input::CanvasEvent::PointerMove(pointer), cx);
+    }
+    pub(super) fn pressure(&mut self, event: &MousePressureEvent, cx: &mut Context<Self>) {
+        if self.inner_tool_active() {
+            return;
+        }
+        let local = self.local(event.position);
+        let hit = self.input_hit(local, event.modifiers.control);
+        let pointer = self
+            .native_pointer
+            .pressure(event, local, hit, self.router.space_held());
+        self.plugin_event(input::CanvasEvent::PointerMove(pointer), cx);
     }
     pub(super) fn up(&mut self, event: &MouseUpEvent, cx: &mut Context<Self>) {
         if self.inner_tool_active() {
             return;
         }
         let local = self.local(event.position);
-        self.plugin_event(
-            input::CanvasEvent::PointerUp(input::PointerInput {
-                position: local,
-                button: button(event.button),
-                modifiers: modifiers(event.modifiers, self.router.space_held()),
-                hit: self.input_hit(local, event.modifiers.control),
-                pointer_id: 0,
-            }),
-            cx,
+        let pointer = self.native_pointer.up(
+            event,
+            local,
+            self.input_hit(local, event.modifiers.control),
+            self.router.space_held(),
         );
+        self.plugin_event(input::CanvasEvent::PointerUp(pointer), cx);
+    }
+    pub(super) fn outside_up(&mut self, event: &MouseUpEvent, cx: &mut Context<Self>) {
+        let pointer = self.native_pointer.up(
+            event,
+            self.local(event.position),
+            input::HitTarget::Background,
+            self.router.space_held(),
+        );
+        if self.router.matches_pointer_release(&pointer) {
+            self.plugin_event(input::CanvasEvent::PointerCancelFor(pointer.identity()), cx);
+        }
     }
     pub(super) fn cancel_input(&mut self, cx: &mut Context<Self>) {
         self.plugin_event(input::CanvasEvent::PointerCancel, cx);

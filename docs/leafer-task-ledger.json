@@ -177,8 +177,8 @@
       "title": "设备元数据与复合手势",
       "status": "partial",
       "acceptance": "pointer type/buttons/time/pressure、触摸多指、tap/double/longpress的稳定事件契约",
-      "boundary": "已有mouse/pointer_id、序号与原生Text双击；不是完整事件族",
-      "reference_doc": "docs/keyboard-routing.md",
+      "boundary": "已实现有界16-contact host路由、buttons/time/pressure、tap/double/longpress及取消；Linux鼠标原生已验，GPUI原始多指/pen硬件入口仍受限",
+      "reference_doc": "docs/pointer-gestures.md",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/interaction/interaction/src/Interaction.ts",
         "symbols_or_contract": "Interaction.pointerDown / pointerMoveReal / pointerUp / pointerCancel"

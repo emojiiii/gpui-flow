@@ -1,5 +1,7 @@
 //! A reusable native node canvas. Model and provider runtime are independent crates.
 mod canvas;
+mod native_pointer;
+pub use native_pointer::pointer_timestamp_millis;
 pub mod components;
 pub mod nodes;
 mod renderer;

@@ -141,6 +141,7 @@ impl Render for FlowCanvas {
                 }),
             )
             .on_mouse_move(cx.listener(|this, event, _, cx| this.move_pointer(event, cx)))
+            .on_mouse_pressure(cx.listener(|this, event, _, cx| this.pressure_pointer(event, cx)))
             .on_mouse_up(
                 MouseButton::Left,
                 cx.listener(|this, event, _, cx| this.release_pointer(event, cx)),

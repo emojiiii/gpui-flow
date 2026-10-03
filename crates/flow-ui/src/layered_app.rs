@@ -102,6 +102,7 @@ pub struct LayeredApp {
     pub background: u32,
     focus: FocusHandle,
     origin: ScenePoint,
+    native_pointer: crate::native_pointer::NativePointerState,
     subscriptions: Vec<Subscription>,
     input_window: Option<u64>,
 }
@@ -127,6 +128,7 @@ impl LayeredApp {
             background: 0x171b24,
             focus: cx.focus_handle(),
             origin: ScenePoint::ZERO,
+            native_pointer: Default::default(),
             subscriptions: vec![],
             input_window: None,
         }
@@ -374,6 +376,9 @@ impl LayeredApp {
         input: CanvasEvent,
         cx: &mut Context<Self>,
     ) -> Option<LayerId> {
+        if matches!(input, CanvasEvent::PointerCancel | CanvasEvent::FocusLost) {
+            self.native_pointer.reset();
+        }
         let target = self.routing.route(
             input.clone(),
             &mut NativeAccess {

@@ -12,6 +12,9 @@ pub enum EventKind {
     PointerCancel,
     Click,
     DoubleClick,
+    Tap,
+    DoubleTap,
+    LongPress,
     PointerEnter,
     PointerLeave,
     PointerOver,
@@ -32,7 +35,7 @@ pub struct InputModifiers {
     pub alt: bool,
     pub meta: bool,
 }
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum PointerDevice {
     #[default]
     Mouse,
