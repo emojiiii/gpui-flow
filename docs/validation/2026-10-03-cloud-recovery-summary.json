@@ -1,0 +1,99 @@
+{
+  "recorded_utc": "2026-10-03T09:39:19.738196+00:00",
+  "old_host": "0e15a1f8c187",
+  "new_host": "d2b65af346d2",
+  "workspace_replacement_observed_utc": "2026-10-03T08:51:48Z",
+  "remote_source_commit": "761b626b5c9c77de1c2fdf5fe4c3751114ffb1e7",
+  "remote_tree": "1e8a27f6fac93ac1c425b2cfa3ef0d93bbb7b5dd",
+  "local_matching_tree_checkpoint": "43d5061c3ec649be2d08fc50b41b7f0c38250fbf",
+  "source_restoration": {
+    "files": 679,
+    "bytes": 7882661,
+    "tree_objects": 77,
+    "missing_or_mismatched": 0,
+    "full_local_history_restored": false
+  },
+  "old_raw_QA_evidence_restored": false,
+  "interrupted_grayscale": {
+    "old_package": "20261003T0844Z",
+    "row6_reached": true,
+    "rows7_to15_complete": false,
+    "normal_exit_receipt": false,
+    "original_JPEG_or_trace_files_restored": 0,
+    "metadata_capture_entries": 17,
+    "metadata_clicks": 27,
+    "whole_tour_pass": false
+  },
+  "toolchain": {
+    "rust_cargo": "1.98.1",
+    "source": "official Rust vendor SHA and signed Debian package metadata",
+    "smoke": "compiler, native linking and libclang parsing passed"
+  },
+  "fresh_checks": {
+    "focused_ui_compositor_passed": 24,
+    "focused_model_passed": 7,
+    "headless_helper_exit": 0,
+    "CPU_helper_exit": 0,
+    "Pillow_passed": 115,
+    "Pillow_total": 115,
+    "new_binary": {
+      "host": "d2b65af346d2",
+      "recorded_utc": "2026-10-03T09:26:11.991233+00:00",
+      "path": "/workspace/shared/rust-target-native/debug/grayscale",
+      "bytes": 179993592,
+      "sha256": "b9a943e40e7bb6bc15258ca4165870fd0411fbc6ef381992e44cd318688dcc6c",
+      "mode": 493,
+      "mtime_ns": 1791019391236457937,
+      "built_from_remote_source": "761b626b5c9c77de1c2fdf5fe4c3751114ffb1e7",
+      "repository_snapshot_count": 679,
+      "scope": "New build on replacement host, not restoration of old frozen binary"
+    }
+  },
+  "historical_full_suites": {
+    "headless_passed": 1701,
+    "ignored": 10,
+    "UI_passed": 279,
+    "host": "old host; retained source-report history, not freshly rerun"
+  },
+  "new_native_package": "/workspace/shared/grayscale-native-validation-20261003T0927Z",
+  "new_native_verdict": "pending independent full tour",
+  "ledger_counts_unchanged": {
+    "bounded_verified": 33,
+    "partial": 9,
+    "not_started": 3
+  },
+  "receipts": {
+    "restore-receipt": {
+      "path": "/workspace/shared/flow-recovery-20261003T0853Z/restore-receipt.json",
+      "sha256": "442b0c703bb9ece2177c0554266ad6ba8a52c850fb236859e01378106580f658"
+    },
+    "cargo-fetch-receipt": {
+      "path": "/workspace/shared/flow-recovery-20261003T0853Z/cargo-fetch-receipt.json",
+      "sha256": "e0832c67043c3c3527885ed99e40ce15fe5423bc2bee2c22480f2fb2acc6ce30"
+    },
+    "grayscale-rebuild-receipt": {
+      "path": "/workspace/shared/flow-recovery-20261003T0853Z/grayscale-rebuild-receipt.json",
+      "sha256": "a909e233da615d7e80cbf1722c5ecdd69bc685b25fdaf388bb72511582ec23fb"
+    },
+    "grayscale-headless-receipt": {
+      "path": "/workspace/shared/flow-recovery-20261003T0853Z/grayscale-headless-receipt.json",
+      "sha256": "f12e13e1c3fb8fc60ca3f50a578d64b73aeef9143346c6b59201cac630367166"
+    },
+    "grayscale-cpu-receipt": {
+      "path": "/workspace/shared/flow-recovery-20261003T0853Z/grayscale-cpu-receipt.json",
+      "sha256": "23e1a04a98924ff2d8e5ec3ebdd801cc1eced70ca2ea0a8635d23996b51ea5a4"
+    },
+    "grayscale-ui-composite-focused-receipt": {
+      "path": "/workspace/shared/flow-recovery-20261003T0853Z/grayscale-ui-composite-focused-receipt.json",
+      "sha256": "718b420aecd4a8affcea8bbe21af3f05933ab2ab2022f95648a1bf1f1c786b71"
+    },
+    "grayscale-model-focused-receipt": {
+      "path": "/workspace/shared/flow-recovery-20261003T0853Z/grayscale-model-focused-receipt.json",
+      "sha256": "33c0c7a1128e6eaf1df310c8598043ec2c0864c4557d6b6737c1bd7f55a79890"
+    },
+    "new-grayscale-cpu-audit": {
+      "path": "/workspace/shared/flow-recovery-20261003T0853Z/new-grayscale-cpu-audit.json",
+      "sha256": "42268726e4dbca0ba71fd10f4daa8db164cbaa180d580f089e49e3a0f577411a"
+    }
+  }
+}

@@ -2,8 +2,8 @@
   "schema_version": 1,
   "ledger_version": "v1-review",
   "review": "已锁定45个能力单元和有限验收集合；审阅版，所有扩展/技术依赖显式记录",
-  "as_of": "2026-10-03T08:24:25.129187+00:00",
-  "source_snapshot": "369d250c29da388777d50045abdeebd434ad168c",
+  "as_of": "2026-10-03T09:39:19.738196+00:00",
+  "source_snapshot": "761b626b5c9c77de1c2fdf5fe4c3751114ffb1e7",
   "upstream": {
     "leafer_ui": "1e11641d3ea6b0211c83447268a90b8d58feec25",
     "leafer_core": "1d703303ff0759ce4973d54c87eeb8192dddc570",
@@ -1108,8 +1108,8 @@
     }
   },
   "publication_note": "Integrator verified remote main at the recorded source snapshot/tree. Native archives and original linked-build provenance remain separately qualified; this documentation update runs no new build or full-workspace suite.",
-  "source_publication_url": "https://github.com/emojiiii/gpui-flow/commit/369d250c29da388777d50045abdeebd434ad168c",
-  "published_source_tree": "4170cba8739353c1e54101db16e27daf0de81c99",
+  "source_publication_url": "https://github.com/emojiiii/gpui-flow/commit/761b626b5c9c77de1c2fdf5fe4c3751114ffb1e7",
+  "published_source_tree": "1e8a27f6fac93ac1c425b2cfa3ef0d93bbb7b5dd",
   "screenshot_evidence_format": {
     "erratum": "docs/screenshot-evidence-formats.md",
     "historical_desktop_captures": 327,
@@ -1119,5 +1119,13 @@
     "unaffected_actual_png_exports": 2,
     "unaffected_embedded_png_payloads": 24,
     "status_and_acceptance_unchanged": true
+  },
+  "workspace_recovery": {
+    "report": "docs/cloud-workspace-recovery-2026-10-03.md",
+    "summary": "docs/validation/2026-10-03-cloud-recovery-summary.json",
+    "published_source_restored_exactly": true,
+    "old_raw_QA_packages_restored": false,
+    "old_grayscale0844Z": "interrupted, no exit or full pass",
+    "new_grayscale0927Z": "independent tour pending; raw Library backups partial until sealed"
   }
 }
