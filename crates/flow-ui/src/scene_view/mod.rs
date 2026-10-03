@@ -385,16 +385,7 @@ impl SceneView {
         {
             return None;
         }
-        let geometry =
-            gpui_flow_interaction::scene::SceneLineGeometry::for_selection(&self.editor)?;
-        let id = self
-            .editor
-            .engine
-            .instance(geometry.target)
-            .ok()?
-            .id
-            .clone();
-        Some((id, geometry.screen_handles(&self.editor)?))
+        presentation::line_handles_for_presentation(&self.editor, self.presentation_hit_geometry())
     }
     fn resize_handles(
         &self,
@@ -413,21 +404,22 @@ impl SceneView {
         {
             return None;
         }
+        let presented = self.presentation_hit_geometry()?;
         if self.editor.selection.ids.len() > 1 {
             let geometry =
-                gpui_flow_interaction::scene::SceneSelectionResizeGeometry::for_selection_with_capabilities(
-                    &self.editor, self.interactions.transform_capabilities(),
+                gpui_flow_interaction::scene::SceneSelectionResizeGeometry::for_selection_with_geometry(
+                    &self.editor, self.interactions.transform_capabilities(), presented,
                 )?;
             return Some((None, geometry.screen_handles(&self.editor)?));
         }
         let id = self.editor.selection.ids.iter().next()?.clone();
-        let handles =
-            gpui_flow_interaction::scene::SceneResizeGeometry::for_target_with_capabilities(
-                &self.editor,
-                &id,
-                self.interactions.transform_capabilities(),
-            )?
-            .screen_handles(&self.editor)?;
+        let handles = gpui_flow_interaction::scene::SceneResizeGeometry::for_target_with_geometry(
+            &self.editor,
+            &id,
+            self.interactions.transform_capabilities(),
+            presented,
+        )?
+        .screen_handles(&self.editor)?;
         Some((Some(id), handles))
     }
     fn rotation_handle(&self) -> Option<gpui_flow_interaction::scene::SceneRotationHandle> {
@@ -442,15 +434,17 @@ impl SceneView {
         {
             return None;
         }
-        gpui_flow_interaction::scene::SceneRotationGeometry::for_selection_with_capabilities(
+        gpui_flow_interaction::scene::SceneRotationGeometry::for_selection_with_geometry(
             &self.editor,
             self.interactions.transform_capabilities(),
+            self.presentation_hit_geometry()?,
         )?
         .screen_handle(&self.editor)
     }
     fn selection_corners(&self, id: &DisplayId) -> Option<[WorldPoint; 4]> {
-        let bounds = self.editor.engine.local_bounds(id).ok()??;
-        let transform = self.editor.engine.world_transform(id).ok()?;
+        let engine = self.presentation_hit_geometry()?;
+        let bounds = engine.local_bounds(id).ok()??;
+        let transform = engine.world_transform(id).ok()?;
         Some(
             [
                 bounds.origin,

@@ -32,6 +32,8 @@ mod object;
 mod paint_phase;
 mod scene;
 mod stroke;
+mod stroke_scale;
+pub use stroke_scale::*;
 mod style;
 
 pub use affine::*;

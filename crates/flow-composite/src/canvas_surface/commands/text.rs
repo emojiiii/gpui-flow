@@ -25,6 +25,7 @@ pub(super) fn compile(
     object.validate().map_err(CompositeError::InvalidGeometry)?;
     Ok(clip::wrap(
         DomainNode {
+            stroke_scale: gpui_flow_scene::StrokeScaleData::IDENTITY,
             object,
             world_transform: world,
             children: vec![],

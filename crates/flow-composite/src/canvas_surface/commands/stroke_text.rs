@@ -85,6 +85,7 @@ pub(super) fn compile(
     Ok((
         clip::wrap(
             DomainNode {
+                stroke_scale: gpui_flow_scene::StrokeScaleData::IDENTITY,
                 object: placeholder,
                 world_transform: world,
                 children: vec![],

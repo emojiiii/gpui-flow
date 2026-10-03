@@ -89,6 +89,21 @@ impl SceneExportPlan {
         limits: CompositeLimits,
     ) -> Result<Self, CompositeError> {
         let limits = limits.bounded();
+        if scene.resolved_stroke_camera().is_some() || scene.has_transfer_context() {
+            return Err(CompositeError::UnsupportedScaleFixed(
+                "export requires authored scene geometry".into(),
+            ));
+        }
+        if request.format == SceneExportFormat::Svg
+            && scene.nodes().any(|n| {
+                n.object
+                    .style
+                    .strokes()
+                    .any(|s| !s.scale_fixed.is_disabled())
+            })
+        {
+            return Err(CompositeError::UnsupportedScaleFixed("SVG export".into()));
+        }
         let bounds = request.world_bounds;
         if !bounds.is_valid()
             || !bounds.size.is_positive()
@@ -144,14 +159,19 @@ impl SceneExportPlan {
         // backdrop checks. The public owned_canvas contract remains opaque.
         // This separate export-owned surface has an explicit alpha backdrop;
         // it never captures or relies on a host/native external backdrop.
+        // Resolve the logical export scale before DPR is folded into the matrix.
+        let resolved = scene
+            .resolved_for_view(request.scale)
+            .map_err(|e| CompositeError::InvalidGeometry(e.to_string()))?;
         let mut source = owned_canvas(
-            scene,
+            &resolved,
             CanvasBackdrop {
                 color: Color::WHITE,
                 grid: None,
             },
             limits,
         )?;
+        source.logical_camera = Some(request.scale);
         source.canvas = Some(CanvasBackdrop {
             color: request.background,
             grid: None,

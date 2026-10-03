@@ -7,6 +7,8 @@ pub enum UnsupportedFeature {
     CompositingDomain,
     /// Unsupported non-vector stroke, invalid geometry, or a stroke work limit.
     StrokeGeometry,
+    /// Raw struct literals have no local ancestry/camera provenance.
+    UnresolvedStrokeScale,
     TransformedText,
     TransformedImage,
     ClippedText,

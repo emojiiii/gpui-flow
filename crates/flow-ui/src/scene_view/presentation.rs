@@ -6,6 +6,30 @@ use crate::display::composite::RequestKey;
 use gpui_flow_engine::SceneEngine;
 use std::{rc::Rc, sync::Arc};
 
+/// Endpoint paint and hit routing share this gate. A pending or invalidated
+/// presentation supplies None, so invisible line handles cannot remain targets.
+pub(super) fn line_handles_for_presentation(
+    editor: &SceneEditor,
+    geometry: Option<&SceneEngine>,
+) -> Option<(
+    DisplayId,
+    [gpui_flow_interaction::scene::SceneLineHandle; 2],
+)> {
+    let geometry = gpui_flow_interaction::scene::SceneLineGeometry::for_selection_with_geometry(
+        editor,
+        geometry?.scene(),
+    )?;
+    let id = editor.engine.instance(geometry.target).ok()?.id.clone();
+    Some((id, geometry.screen_handles(editor)?))
+}
+
+fn unretained_hit_geometry<'a>(
+    canonical: &'a SceneEngine,
+    styled: Option<&'a SceneEngine>,
+) -> Option<&'a SceneEngine> {
+    (!render::fixed_presentation_required(canonical.scene())).then_some(styled.unwrap_or(canonical))
+}
+
 pub(super) fn view_matches(
     key: &RequestKey,
     actual: gpui_flow_composite::RasterViewport,
@@ -106,10 +130,9 @@ impl SceneView {
     /// would make an invisible moved/deleted subtree clickable.
     pub(super) fn presentation_hit_geometry(&self) -> Option<&SceneEngine> {
         if !self.presentations.active {
-            return Some(
-                self.state_styles
-                    .geometry_engine(&self.editor.engine)
-                    .unwrap_or(&self.editor.engine),
+            return unretained_hit_geometry(
+                &self.editor.engine,
+                self.state_styles.geometry_engine(&self.editor.engine),
             );
         }
         let snapshot = self.presentations.displayed.as_ref()?;
@@ -172,7 +195,15 @@ impl SceneView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> (render::StateFrame, Option<Arc<RequestKey>>, bool) {
-        if !self.presentations.active && self.state_styles.is_empty() {
+        let fixed = render::fixed_presentation_required(self.editor.scene())
+            || frame.resolved_scene.is_some();
+        if fixed && frame.resolved_scene.is_none() {
+            self.presentations.active = true;
+            self.presentations.displayed = None;
+            self.presentations.admitted = None;
+            return (Default::default(), None, true);
+        }
+        if !self.presentations.active && self.state_styles.is_empty() && !fixed {
             if let Some(key) = key {
                 self.request_composite_key(key, None, window, cx);
             }
@@ -211,15 +242,23 @@ impl SceneView {
             .presentations
             .needs_admission(&key, &frame, self.compositing.presentation_failed())
         {
-            let geometry = self
-                .state_styles
-                .geometry_engine(&self.editor.engine)
-                .map(|engine| {
-                    SceneEngine::with_registry(
-                        engine.scene().clone(),
-                        self.editor.engine.registry().clone(),
-                    )
-                    .expect("validated presentation geometry")
+            let geometry = frame
+                .resolved_scene
+                .as_ref()
+                .map(|scene| {
+                    SceneEngine::with_registry(scene.clone(), self.editor.engine.registry().clone())
+                        .expect("validated fixed-stroke presentation geometry")
+                })
+                .or_else(|| {
+                    self.state_styles
+                        .geometry_engine(&self.editor.engine)
+                        .map(|engine| {
+                            SceneEngine::with_registry(
+                                engine.scene().clone(),
+                                self.editor.engine.registry().clone(),
+                            )
+                            .expect("validated presentation geometry")
+                        })
                 });
             self.presentations.admitted = Some(Rc::new(Snapshot {
                 key: key.clone(),
@@ -732,5 +771,116 @@ mod tests {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod scale_fixed_tests {
+    use super::*;
+    use gpui_flow_scene::{Point, Style, display, *};
+    #[::core::prelude::v1::test]
+    fn scale_fixed_line_handles_follow_accepted_geometry_and_withhold_pending_or_invalid_views() {
+        let mut scene = Scene::new();
+        scene
+            .insert(
+                DisplayObject::new(
+                    "line",
+                    display::Line::new(Point::new(10., 10.), Point::new(40., 10.)),
+                )
+                .with_style(Style {
+                    fill: None,
+                    stroke: Some(
+                        Stroke::new(Color::BLACK, MIN_ALIGNED_STROKE_WIDTH)
+                            .with_scale_fixed(StrokeScaleFixed::Fixed)
+                            .with_alignment(StrokeAlignment::Outside),
+                    ),
+                    ..Default::default()
+                }),
+                None,
+                None,
+            )
+            .unwrap();
+        let mut editor = SceneEditor::new(scene).unwrap();
+        editor.selection.select("line".into(), false);
+        assert!(line_handles_for_presentation(&editor, None).is_none());
+        let geometry = editor.engine.resolved_for_view(1.).unwrap();
+        let handles = line_handles_for_presentation(&editor, Some(&geometry)).unwrap();
+        assert_eq!(handles.0, DisplayId::from("line"));
+        assert_eq!(handles.1[0].position, Point::new(10., 10.));
+        let mut changed = editor.scene().clone();
+        changed
+            .update_object(&"line".into(), |o| {
+                o.transform = Affine::translation(50., 0.)
+            })
+            .unwrap();
+        let accepted = SceneEngine::new(changed.resolved_for_view(1.).unwrap()).unwrap();
+        assert_eq!(
+            line_handles_for_presentation(&editor, Some(&accepted))
+                .unwrap()
+                .1[0]
+                .position,
+            Point::new(60., 10.)
+        );
+        editor.viewport.zoom = 2.;
+        assert!(editor.engine.resolved_for_view(2.).is_err());
+        assert!(line_handles_for_presentation(&editor, None).is_none());
+    }
+    #[::core::prelude::v1::test]
+    fn scale_fixed_derived_document_camera_mismatch_never_uses_unretained_hits_or_handles() {
+        let mut scene = Scene::new();
+        scene
+            .insert(
+                DisplayObject::new(
+                    "line",
+                    display::Line::new(Point::new(10., 10.), Point::new(40., 10.)),
+                )
+                .with_style(Style {
+                    fill: None,
+                    stroke: Some(
+                        Stroke::new(Color::BLACK, 8.).with_scale_fixed(StrokeScaleFixed::Fixed),
+                    ),
+                    ..Default::default()
+                }),
+                None,
+                None,
+            )
+            .unwrap();
+        let mut editor = SceneEditor::new(scene.resolved_for_view(2.).unwrap()).unwrap();
+        editor.selection.select("line".into(), false);
+        let mut styles = gpui_flow_interaction::scene::SceneStateStyles::new(&editor.engine);
+        let router = gpui_flow_interaction::scene::SceneEventRouter::new();
+        assert!(!editor.scene().has_scale_fixed_strokes());
+        assert!(render::fixed_presentation_required(editor.scene()));
+        let (frame, error) = render::state_render_frame_with_canvas(
+            &editor,
+            &router,
+            &mut styles,
+            std::time::Duration::ZERO,
+            None,
+            None,
+        );
+        assert!(error.is_some());
+        assert!(frame.objects.is_empty());
+        assert!(frame.resolved_scene.is_none());
+        let hit = unretained_hit_geometry(&editor.engine, None);
+        assert!(hit.is_none());
+        assert!(line_handles_for_presentation(&editor, hit).is_none());
+        editor.viewport.zoom = 2.;
+        let (frame, error) = render::state_render_frame_with_canvas(
+            &editor,
+            &router,
+            &mut styles,
+            std::time::Duration::ZERO,
+            None,
+            None,
+        );
+        assert!(error.is_none());
+        assert!(frame.resolved_scene.is_some());
+        assert_eq!(
+            frame.objects[0].object.style.stroke.as_ref().unwrap().width,
+            4.
+        );
+        // Even a matching context waits for publication before it becomes pickable.
+        assert!(unretained_hit_geometry(&editor.engine, None).is_none());
     }
 }

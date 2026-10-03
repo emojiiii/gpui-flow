@@ -212,8 +212,9 @@ impl DisplayObject {
             ) {
                 return Err("advanced strokes require vector geometry".into());
             }
-            if stroke.alignment != crate::StrokeAlignment::Center
-                || (stroke.width > 0.0 && stroke.paint.is_visible())
+            if !stroke.scale_fixed.is_active()
+                && (stroke.alignment != crate::StrokeAlignment::Center
+                    || (stroke.width > 0.0 && stroke.paint.is_visible()))
             {
                 // Scene insert/update/deserialization validate candidates before
                 // committing, including all geometry budgets and finite output.
@@ -221,7 +222,9 @@ impl DisplayObject {
                     .stroke_mesh_with_rule(stroke, self.style.fill_rule)?;
             }
         }
-        if self.effect_bounds().is_some_and(|b| !b.is_valid()) {
+        if !self.style.has_scale_fixed_strokes()
+            && self.effect_bounds().is_some_and(|b| !b.is_valid())
+        {
             return Err("paint bounds overflow".into());
         }
         Ok(())

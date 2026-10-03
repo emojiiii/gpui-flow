@@ -136,6 +136,9 @@ pub const MAX_STROKE_DASH_ENTRIES: usize = 256;
 pub struct Stroke {
     pub paint: Paint,
     pub width: f32,
+    /// Width compensation using logical camera and ancestry scale, never DPR.
+    #[serde(default, skip_serializing_if = "crate::StrokeScaleFixed::is_disabled")]
+    pub scale_fixed: crate::StrokeScaleFixed,
     #[serde(default)]
     pub alignment: StrokeAlignment,
     #[serde(default)]
@@ -162,6 +165,7 @@ impl Stroke {
         Self {
             paint: color.into(),
             width,
+            scale_fixed: crate::StrokeScaleFixed::Disabled,
             alignment: StrokeAlignment::Center,
             cap: StrokeCap::Round,
             join: StrokeJoin::Round,
@@ -169,6 +173,10 @@ impl Stroke {
             dash_pattern: Vec::new(),
             dash_offset: 0.0,
         }
+    }
+    pub fn with_scale_fixed(mut self, policy: crate::StrokeScaleFixed) -> Self {
+        self.scale_fixed = policy;
+        self
     }
     pub fn with_alignment(mut self, alignment: StrokeAlignment) -> Self {
         self.alignment = alignment;
@@ -194,7 +202,8 @@ impl Stroke {
     /// Whether rendering and picking require the shared advanced-stroke mesh.
     /// An unused miter limit or dash offset does not change solid round geometry.
     pub fn uses_advanced_geometry(&self) -> bool {
-        self.alignment != StrokeAlignment::Center
+        !self.scale_fixed.is_disabled()
+            || self.alignment != StrokeAlignment::Center
             || self.cap != StrokeCap::Round
             || self.join != StrokeJoin::Round
             || !self.dash_pattern.is_empty()
@@ -218,6 +227,7 @@ impl Stroke {
         (self.width as f64 * factor) as f32
     }
     pub(crate) fn validate(&self) -> Result<(), String> {
+        self.scale_fixed.validate()?;
         if !self.width.is_finite() || self.width < 0.0 {
             return Err("stroke width must be finite and non-negative".into());
         }
@@ -430,6 +440,9 @@ impl Style {
             .filter(|stroke| stroke.paint.is_visible())
             .map(Stroke::extent)
             .fold(0.0, f32::max)
+    }
+    pub fn has_scale_fixed_strokes(&self) -> bool {
+        self.strokes().any(|s| s.scale_fixed.is_active())
     }
     pub fn has_layers(&self) -> bool {
         !self.fill_layers.is_empty() || !self.stroke_layers.is_empty()

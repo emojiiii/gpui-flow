@@ -74,6 +74,8 @@ impl SceneEditor {
     }
     /// Replace a document while retaining registry configuration, never old instance identity.
     pub fn load_scene(&mut self, scene: Scene) -> Result<(), SceneError> {
+        scene.validate_view(Viewport::default().zoom)?;
+        self.engine.set_stroke_view_scale(Viewport::default().zoom);
         self.engine.reset_scene(scene)?;
         self.observed_revision = self.engine.revision();
         self.selection.clear();
@@ -112,6 +114,7 @@ impl SceneEditor {
         }
     }
     fn restore(&mut self, s: Snapshot) -> bool {
+        self.engine.set_stroke_view_scale(self.viewport.zoom);
         if self.engine.replace_scene(s.scene).is_err() {
             return false;
         }
@@ -460,6 +463,7 @@ impl SceneEditor {
     /// boundary. During ownership, preserve the last owned snapshot and external
     /// edit separately; cancellation can never overwrite the external write.
     pub fn reconcile_external(&mut self) -> bool {
+        self.engine.set_stroke_view_scale(self.viewport.zoom);
         // Engine replacement can reuse a revision number; identity is stronger
         // than revision equality. A document reset always drops old history.
         if self.edit_session.as_ref().is_some_and(|edit| {

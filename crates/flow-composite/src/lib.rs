@@ -101,6 +101,7 @@ pub enum CompositeError {
     /// Path erasure currently accepts only geometric vector leaves.
     UnsupportedPathEraser(DisplayId),
     UnsupportedTransform,
+    UnsupportedScaleFixed(String),
     UnsupportedShadow(DisplayId),
     /// Custom producers do not expose a supported inner-shadow alpha source.
     UnsupportedInnerShadow(DisplayId),
@@ -205,3 +206,6 @@ mod canvas_stroke_text_tests;
 
 #[cfg(test)]
 mod eraser_tests;
+
+#[cfg(test)]
+mod scale_fixed_tests;

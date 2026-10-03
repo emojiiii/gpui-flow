@@ -28,10 +28,14 @@ pub struct DomainSource {
     pub(crate) clips: Vec<ClipRegion>,
     pub(crate) canvas: Option<CanvasBackdrop>,
     pub(crate) lowered_geometry: Option<gpui_flow_scene::StrokeGeometryBudget>,
+    pub(crate) resolved_camera: Option<f32>,
+    /// Explicit logical scale when an export matrix already includes DPR.
+    pub(crate) logical_camera: Option<f32>,
 }
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DomainNode {
     pub object: DisplayObject,
+    pub stroke_scale: gpui_flow_scene::StrokeScaleData,
     pub world_transform: Affine,
     pub children: Vec<DomainNode>,
 }
@@ -53,6 +57,11 @@ pub enum SceneUnit {
 /// boundary too, so a nested Group cannot accidentally bypass its parent.
 /// Alpha masks use stable z-sorted direct Group siblings, never ID references.
 pub fn scene_units(scene: &Scene, limits: CompositeLimits) -> Result<Vec<SceneUnit>, SceneError> {
+    if scene.has_transfer_context() {
+        return Err(SceneError::InvalidGeometry(
+            "transient subtree context must be inserted before rendering".into(),
+        ));
+    }
     scene.validate()?;
     let limits = limits.bounded();
     let mut units = Vec::new();
@@ -79,6 +88,11 @@ pub fn owned_canvas(
     backdrop: CanvasBackdrop,
     limits: CompositeLimits,
 ) -> Result<DomainSource, CompositeError> {
+    if scene.has_transfer_context() {
+        return Err(CompositeError::UnsupportedScaleFixed(
+            "transient subtree context must be inserted before rendering".into(),
+        ));
+    }
     scene
         .validate()
         .map_err(|e| CompositeError::InvalidGeometry(e.to_string()))?;
@@ -107,6 +121,7 @@ pub fn owned_canvas(
     // identity therefore cannot collide with any canonical display object.
     Ok(DomainSource {
         root: DomainNode {
+            stroke_scale: gpui_flow_scene::StrokeScaleData::IDENTITY,
             object: DisplayObject::new("", Group::new()),
             world_transform: Affine::IDENTITY,
             children,
@@ -114,6 +129,8 @@ pub fn owned_canvas(
         clips: vec![],
         canvas: Some(backdrop),
         lowered_geometry: None,
+        resolved_camera: scene.resolved_stroke_camera(),
+        logical_camera: None,
     })
 }
 /// Capture a complete subtree for an imperative Canvas draw. Ancestors' clips,
@@ -123,12 +140,32 @@ pub fn capture_subtree(
     id: &DisplayId,
     limits: CompositeLimits,
 ) -> Result<DomainSource, CompositeError> {
+    if scene.has_transfer_context() {
+        return Err(CompositeError::UnsupportedScaleFixed(
+            "transient subtree context must be inserted before rendering".into(),
+        ));
+    }
     scene
         .validate()
         .map_err(|e| CompositeError::InvalidGeometry(e.to_string()))?;
     let node = scene
         .get(id)
         .ok_or_else(|| CompositeError::InvalidGeometry("missing Canvas draw source".into()))?;
+    let mut pending = vec![id];
+    while let Some(next) = pending.pop() {
+        let node = scene.get(next).expect("validated subtree");
+        if node
+            .object
+            .style
+            .strokes()
+            .any(|s| !s.scale_fixed.is_disabled())
+        {
+            return Err(CompositeError::UnsupportedScaleFixed(
+                "Canvas subtree capture".into(),
+            ));
+        }
+        pending.extend(&node.children);
+    }
     if node.object.eraser != EraserMode::None {
         return Err(CompositeError::UnsupportedExternalBackdrop);
     }
@@ -154,9 +191,18 @@ pub fn capture_subtree(
         clips: vec![],
         canvas: None,
         lowered_geometry: None,
+        resolved_camera: scene.resolved_stroke_camera(),
+        logical_camera: None,
     })
 }
 impl DomainSource {
+    pub(crate) fn has_scale_fixed_strokes(&self) -> bool {
+        fn visit(node: &DomainNode) -> bool {
+            node.object.style.has_scale_fixed_strokes() || node.children.iter().any(visit)
+        }
+        visit(&self.root)
+    }
+
     pub fn root_transform(&self) -> Affine {
         self.root.world_transform
     }
@@ -194,6 +240,7 @@ impl DomainSource {
             a.object.id == b.object.id
                 && a.object.shape == b.object.shape
                 && a.world_transform == b.world_transform
+                && a.stroke_scale == b.stroke_scale
                 && a.object.visible == b.object.visible
                 && a.object.mask == b.object.mask
                 && a.object.eraser == b.object.eraser
@@ -211,7 +258,11 @@ impl DomainSource {
                 && a.children.len() == b.children.len()
                 && a.children.iter().zip(&b.children).all(|(a, b)| same(a, b))
         }
-        self.canvas == other.canvas && self.clips == other.clips && same(&self.root, &other.root)
+        self.resolved_camera == other.resolved_camera
+            && self.logical_camera == other.logical_camera
+            && self.canvas == other.canvas
+            && self.clips == other.clips
+            && same(&self.root, &other.root)
     }
     pub fn images(&self) -> Vec<(&DisplayId, &gpui_flow_scene::display::Image)> {
         fn visit<'a>(
@@ -373,6 +424,8 @@ fn visit(
                 clips: clips.to_vec(),
                 canvas: None,
                 lowered_geometry: None,
+                resolved_camera: scene.resolved_stroke_camera(),
+                logical_camera: None,
             })),
             Err(error) => SceneUnit::Rejected(CompositeIssue {
                 object: id.clone(),
@@ -438,6 +491,13 @@ fn capture(
     // without demanding a producer for its invisible subtree.
     if !o.visible || o.style.opacity == 0. {
         return Ok(DomainNode {
+            stroke_scale: if o.style.has_scale_fixed_strokes() {
+                scene
+                    .stroke_scale(id)
+                    .map_err(|e| CompositeError::InvalidGeometry(e.to_string()))?
+            } else {
+                gpui_flow_scene::StrokeScaleData::IDENTITY
+            },
             object: o.clone(),
             world_transform: parent * o.transform,
             children: vec![],
@@ -498,6 +558,13 @@ fn capture(
         )?);
     }
     let captured = DomainNode {
+        stroke_scale: if o.style.has_scale_fixed_strokes() {
+            scene
+                .stroke_scale(id)
+                .map_err(|e| CompositeError::InvalidGeometry(e.to_string()))?
+        } else {
+            gpui_flow_scene::StrokeScaleData::IDENTITY
+        },
         object: o.clone(),
         world_transform,
         children,

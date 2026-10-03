@@ -116,7 +116,10 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneEdgeSnappingPlugin {
             {
                 continue;
             }
-            let Some(other) = scene.world_bounds(&id).map_err(|e| e.to_string())? else {
+            let Some(other) = scene
+                .world_bounds_for_view(&id, cx.editor.viewport.zoom)
+                .map_err(|e| e.to_string())?
+            else {
                 continue;
             };
             let count = if self.include_centers { 3 } else { 2 };

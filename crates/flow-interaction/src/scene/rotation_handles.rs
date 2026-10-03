@@ -29,7 +29,25 @@ impl SceneRotationGeometry {
         editor: &SceneEditor,
         capabilities: TransformCapabilities,
     ) -> Option<Self> {
-        let selection = SceneSelectionResizeGeometry::for_nonempty_selection(editor, capabilities)?;
+        let resolved;
+        let geometry = if editor.scene().has_scale_fixed_strokes() {
+            resolved = editor.engine.resolved_for_view(editor.viewport.zoom).ok()?;
+            &resolved
+        } else {
+            &editor.engine
+        };
+        Self::for_selection_with_geometry(editor, capabilities, geometry)
+    }
+    pub fn for_selection_with_geometry(
+        editor: &SceneEditor,
+        capabilities: TransformCapabilities,
+        geometry: &gpui_flow_engine::SceneEngine,
+    ) -> Option<Self> {
+        let selection = SceneSelectionResizeGeometry::for_nonempty_selection_with_geometry(
+            editor,
+            capabilities,
+            geometry,
+        )?;
         for id in editor.selection.roots(editor.scene()) {
             if !Self::accepts_subtree(editor.scene(), &id, capabilities) {
                 return None;
@@ -38,7 +56,7 @@ impl SceneRotationGeometry {
         let (pivot, stem) = if editor.selection.ids.len() == 1 {
             let id = editor.selection.ids.iter().next()?;
             let geometry =
-                SceneResizeGeometry::for_target_with_capabilities(editor, id, capabilities)?;
+                SceneResizeGeometry::for_target_with_geometry(editor, id, capabilities, geometry)?;
             (
                 geometry.world.transform_point(geometry.bounds.center()),
                 geometry

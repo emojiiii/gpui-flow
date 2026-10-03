@@ -80,6 +80,7 @@ impl Compiler<'_> {
         self.budget.draw(5, &clips, self.limits)?;
         Ok(clip::wrap(
             DomainNode {
+                stroke_scale: gpui_flow_scene::StrokeScaleData::IDENTITY,
                 object,
                 world_transform: transform,
                 children: vec![],

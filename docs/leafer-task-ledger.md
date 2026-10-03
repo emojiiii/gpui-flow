@@ -46,7 +46,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | INT-05 | 交互 / [路径与倾斜中心编辑工具](line-endpoints.md) | 未开始该能力 | Path控制点、skew和pivot交互须各有真实几何/取消/history验收 | 固定Leafer OSS通用点编辑器是stub，不把自建功能称上游已实现；Line端点现有独立基础 |
 | INT-06 | 交互 / [拖动约束与高级视口](drag-viewport-constraints.md) | 有界契约已验证 | 固定世界/父局部矩形drag bounds、可开关网格/边缘吸附、viewport min/max及惯性取消 | 固定AABB及有限惯性；多指归EVT-03，无自动寻路/物理碰撞；持鼠/guide物理覆盖与6文件来源限制单列 |
 | APP-01 | 外观 / [有序填充与渐变](appearance.md) | 有界契约已验证 | 多层矢量fill、实色/线性/径向、多stop、透明度与缓存/DPR预算 | Text/Image多paint不在此项支持子集 |
-| APP-02 | 外观 / [高级描边](stroke-alignment.md) | 部分实现 | cap/join/miter/dash、闭合及开放轮廓内外对齐、scale-fixed；bounds/hit/paint同源 | 居中及闭合/开放inside/outside已支持，开放仅隐式闭合mask；scale-fixed仍缺，Canvas命令仍center-only |
+| APP-02 | 外观 / [高级描边](stroke-alignment.md) | 部分实现 | cap/join/miter/dash、闭合及开放轮廓内外对齐、scale-fixed；bounds/hit/paint同源 | 居中及闭合/开放inside/outside已支持；有界scale-fixed已实现但新原生待验，数值/局部shear/consumer拒绝边界保留；Canvas命令仍center-only |
 | APP-03 | 外观 / [隔离混合与蒙版擦除](scene-erasers.md) | 部分实现 | 组透明度/多paint隔离、固定blend集合、mask/erase覆盖关系与hit规则 | Pixel及几何leaf Path、直接父隔离与固定alpha-mask相位已实现；Custom/外部backdrop、Path容器/Text等及完整mask布局/命中兼容仍缺 |
 | APP-04 | 外观 / [阴影与固定滤镜集合](multiple-shadows.md) | 部分实现 | 已有leaf/group inner/outer多影；必补spread/box/scale-fixed shadow、blur、backgroundBlur及grayscale并有像素/预算测试 | backgroundBlur仅可在拥有完整背景的有界surface执行；不承诺任意宿主backdrop |
 | APP-05 | 外观 / [状态样式与过渡](state-geometry.md) | 有界契约已验证 | hover/press/focus/selected/disabled、命名状态/继承、每态transition及geometry变化 | 固定实色/opacity、每态timing、x/y及六种size；任意属性/rotation/scale/skew等为边界；hard invalidation loading与canonical event-local坐标保留 |
@@ -98,8 +98,8 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | INT-05 | Line已验证；本项三类工具未开始 | 未实现/未验收 | 尚无独立完整验收提交 |
 | INT-06 | 28约束+7 wheel、2夹具+2导航focused及strict通过；较早334 interaction非最终全套 | 9224trace/58 JPEG截图/33审计通过；19实际衰减帧、6种tail中断、约束/吸附/只读/Undo，退出0 | `93ee7f7cabfb7979aeca93ec137ccf81644baeb5`；[原生证据与来源限制](validation/2026-10-02-drag-viewport-native-summary.json) |
 | APP-01 | appearance/gradient和CPU对应回归通过 | 历史渐变/多paint窗口及Canvas矢量窗口通过 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
-| APP-02 | 最终default1566/10既有ignored、UI252、fixture tour及strict通过 | 38按钮/39JSON/60 JPEG截图；23 trace+41 decoded-JPEG pixel通过，辅助bbox20/21及原始outlier保留 | 源码`a6639014ceb276d2b33c64e04ad3e73adc770b30`；[native证据](open-stroke-native.md)，scale-fixed仍缺 |
-| APP-03 | 受影响三crate778/3既有ignored、UI focused、strict通过；夹具7CPU+6真实App reset回归 | 修复轮15行/90按钮/18pointer/41receipt，456审计通过；旧reset失败及旧00截图缺失事故单列 | 核心`a46ae005`、夹具`4507492c`；[native证据](scene-eraser-native.md)，整项仍部分 |
+| APP-02 | 最终default1566/10既有ignored、UI252、fixture tour及strict通过 | 38按钮/39JSON/60 JPEG截图；23 trace+41 decoded-JPEG pixel通过，辅助bbox20/21及原始outlier保留 | 开放描边源码`a6639014ceb276d2b33c64e04ad3e73adc770b30`及[native证据](open-stroke-native.md)保留；[新fixed终验](validation/2026-10-03-scale-fixed-strokes-summary.json)，原生待验 |
+| APP-03 | 受影响三crate778/3既有ignored、UI focused、strict通过；夹具7CPU+6真实App reset回归 | 修复轮15行/90次点击(73控件+17画布)/18pointer/41receipt，456审计通过；旧reset失败及旧00截图缺失事故单列 | 核心`a46ae005`、夹具`4507492c`；[native证据](scene-eraser-native.md)，整项仍部分 |
 | APP-04 | 现有shadow/inner/group回归通过 | 历史受限视觉检查；缺失模式未验 | 尚无独立完整验收提交 |
 | APP-05 | 历史74 state；修订UI245含13coherent，最终hook后2导航/4镜像focused复验，strict/链接通过（重叠） | 新72记录/57 JPEG截图，33状态样本完整，7点击符合accepted geometry；12硬失效样本loading保留，退出0 | `93ee7f7cabfb7979aeca93ec137ccf81644baeb5`；[coherent复验](validation/2026-10-02-state-coherent-native-summary.json)，[原始失败证据](validation/2026-10-02-state-geometry-summary.json)保留 |
 | APP-06 | 无GPU damage消费测试 | 未实现/未验收 | 尚无独立完整验收提交 |
@@ -211,3 +211,5 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 - 2026-10-03 04:19：ELM-10按最初05c92dcf的同一操作清单逐条核对，stroke实际轮廓与预算/原子性及限定native补齐，更新为**32有界已验证/10部分/3未开始，总45不变**。未增加或删除必选操作；[范围依据](canvas-stroke-text-native.md#fixed-elm-10-acceptance-audit)说明mark只是额外host-shaper探测，pattern clipping仍有actual-RGBA测试与真实控件证据，两个JPEG外缘样本保持未定而非改写通过。原0338Z WorkLimit、两资源独立事务、受支持字体/平台集合及未实测时序边界保留。DAT-03不因tag范围未枚举而静默升级。
 
 - 2026-10-03 06:05：APP-03有界擦除增量完成真实窗口和独立审计，仍32已验证/10部分/3未开始。旧0518Z reset错误与后续截图目录事故明确保留；旧00原图被覆盖且无真实备份，其他7原图与失败核心记录独立核验。
+
+- 2026-10-03 07:29：APP-02 [scale-fixed有界实现](scale-fixed-strokes.md)完成headless终验：default1679/10既有ignored、UI275及strict和静态复审通过。新原生仍待验收，显式consumer/局部shear拒绝边界保留，状态与32/10/3计数不变。

@@ -31,6 +31,22 @@ impl SceneResizeGeometry {
         id: &DisplayId,
         capabilities: TransformCapabilities,
     ) -> Option<Self> {
+        let resolved;
+        let geometry = if editor.scene().has_scale_fixed_strokes() {
+            resolved = editor.engine.resolved_for_view(editor.viewport.zoom).ok()?;
+            &resolved
+        } else {
+            &editor.engine
+        };
+        Self::for_target_with_geometry(editor, id, capabilities, geometry)
+    }
+    /// Use accepted presentation bounds while keeping canonical instance IDs.
+    pub fn for_target_with_geometry(
+        editor: &SceneEditor,
+        id: &DisplayId,
+        capabilities: TransformCapabilities,
+        geometry: &gpui_flow_engine::SceneEngine,
+    ) -> Option<Self> {
         if !object_editable(editor.scene(), id) {
             return None;
         }
@@ -38,12 +54,12 @@ impl SceneResizeGeometry {
         if editor.engine.instance(handle).ok()?.state != InstanceState::Attached {
             return None;
         }
-        let node = editor.scene().get(id)?;
-        let bounds = editor.engine.local_bounds(id).ok()??;
+        let node = geometry.scene().get(id)?;
+        let bounds = geometry.local_bounds(id).ok()??;
         if !bounds.is_valid() || !bounds.size.is_positive() {
             return None;
         }
-        let world = editor.engine.world_transform(id).ok()?;
+        let world = geometry.world_transform(id).ok()?;
         let inverse = world.inverse()?;
         if !Self::accepts_scene_transform(editor.scene(), id, node.object.transform, capabilities) {
             return None;
@@ -265,6 +281,30 @@ impl SceneSelectionResizeGeometry {
         editor: &SceneEditor,
         capabilities: TransformCapabilities,
     ) -> Option<Self> {
+        let resolved;
+        let geometry = if editor.scene().has_scale_fixed_strokes() {
+            resolved = editor.engine.resolved_for_view(editor.viewport.zoom).ok()?;
+            &resolved
+        } else {
+            &editor.engine
+        };
+        Self::for_nonempty_selection_with_geometry(editor, capabilities, geometry)
+    }
+    pub fn for_selection_with_geometry(
+        editor: &SceneEditor,
+        capabilities: TransformCapabilities,
+        geometry: &gpui_flow_engine::SceneEngine,
+    ) -> Option<Self> {
+        if editor.selection.ids.len() < 2 {
+            return None;
+        }
+        Self::for_nonempty_selection_with_geometry(editor, capabilities, geometry)
+    }
+    pub(crate) fn for_nonempty_selection_with_geometry(
+        editor: &SceneEditor,
+        capabilities: TransformCapabilities,
+        presented: &gpui_flow_engine::SceneEngine,
+    ) -> Option<Self> {
         if editor.selection.ids.is_empty()
             || editor
                 .selection
@@ -278,8 +318,12 @@ impl SceneSelectionResizeGeometry {
         let mut uniform = false;
         let mut roots = Vec::new();
         for id in editor.selection.roots(editor.scene()) {
-            let geometry =
-                SceneResizeGeometry::for_target_with_capabilities(editor, &id, capabilities)?;
+            let geometry = SceneResizeGeometry::for_target_with_geometry(
+                editor,
+                &id,
+                capabilities,
+                presented,
+            )?;
             if !SceneResizeGeometry::accepts_scene_transform(
                 editor.scene(),
                 &id,
@@ -288,7 +332,7 @@ impl SceneSelectionResizeGeometry {
             ) {
                 return None;
             }
-            let world_bounds = editor.engine.world_bounds(&id).ok()??;
+            let world_bounds = geometry.world.transform_bounds(geometry.bounds);
             if !world_bounds.is_valid() || !world_bounds.size.is_positive() {
                 return None;
             }

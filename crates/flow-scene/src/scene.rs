@@ -76,6 +76,23 @@ pub struct Scene {
     roots: Vec<DisplayId>,
     #[serde(default)]
     pub data: Value,
+    #[serde(skip)]
+    resolved_stroke_camera: Option<f32>,
+    #[serde(
+        default,
+        skip_deserializing,
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_transfer_context"
+    )]
+    reference_stroke_scale: Option<crate::StrokeScaleData>,
+}
+fn serialize_transfer_context<S: serde::Serializer>(
+    _: &Option<crate::StrokeScaleData>,
+    _: S,
+) -> Result<S::Ok, S::Error> {
+    Err(serde::ser::Error::custom(
+        "subtree transfer context is not document data; insert it into its target scene first",
+    ))
 }
 impl Default for Scene {
     fn default() -> Self {
@@ -84,6 +101,8 @@ impl Default for Scene {
             nodes: BTreeMap::new(),
             roots: Vec::new(),
             data: Value::Null,
+            resolved_stroke_camera: None,
+            reference_stroke_scale: None,
         }
     }
 }
@@ -149,6 +168,9 @@ impl ClipRegion {
 pub struct PaintItem<'a> {
     pub object: &'a DisplayObject,
     pub world_transform: Affine,
+    /// Authored local ancestry scale for this fixed-stroke owner only.
+    pub stroke_scale: crate::StrokeScaleData,
+    pub stroke_camera: Option<f32>,
     pub opacity: f32,
     pub locked: bool,
     pub clips: Vec<ClipRegion>,
@@ -231,6 +253,7 @@ impl Scene {
         parent: Option<DisplayId>,
         index: Option<usize>,
     ) -> Result<(), SceneError> {
+        self.require_authored()?;
         if self.nodes.contains_key(&object.id) {
             return Err(SceneError::DuplicateId(object.id));
         }
@@ -261,6 +284,7 @@ impl Scene {
         id: &DisplayId,
         update: impl FnOnce(&mut DisplayObject),
     ) -> Result<(), SceneError> {
+        self.require_authored()?;
         let mut candidate = self.clone();
         let node = candidate
             .nodes
@@ -273,6 +297,7 @@ impl Scene {
     }
     /// Remove a complete subtree, returning objects in parent-first order.
     pub fn remove(&mut self, id: &DisplayId) -> Result<Vec<DisplayObject>, SceneError> {
+        self.require_authored()?;
         let node = self
             .nodes
             .get(id)
@@ -308,6 +333,7 @@ impl Scene {
         index: Option<usize>,
         preserve_world: bool,
     ) -> Result<(), SceneError> {
+        self.require_authored()?;
         let node = self
             .nodes
             .get(id)
@@ -371,6 +397,160 @@ impl Scene {
         path.reverse();
         Ok(path)
     }
+    /// Transient subtree transport retaining fixed-width reference provenance.
+    /// Its local transforms/widths stay authored; target insertion validates the
+    /// complete target ancestry. This contextual forest is not document JSON.
+    pub fn transfer_subtree(&self, root: &DisplayId) -> Result<Self, SceneError> {
+        self.require_authored()?;
+        self.validate()?;
+        let path = self.ancestor_path(root)?;
+        let mut result = Self::new();
+        let mut pending = vec![root.clone()];
+        while let Some(id) = pending.pop() {
+            let mut node = self.nodes[&id].clone();
+            pending.extend(node.children.iter().cloned());
+            if &id == root {
+                node.parent = None;
+            }
+            result.nodes.insert(id, node);
+        }
+        result.roots.push(root.clone());
+        if result.has_scale_fixed_strokes() {
+            let mut scale = self
+                .reference_stroke_scale
+                .unwrap_or(crate::StrokeScaleData::IDENTITY);
+            for id in path.iter().take(path.len() - 1) {
+                scale = scale
+                    .then(self.nodes[id].object.transform)
+                    .map_err(SceneError::InvalidGeometry)?;
+            }
+            result.reference_stroke_scale = Some(scale);
+        }
+        result.validate()?;
+        Ok(result)
+    }
+    /// Empty transient forest for remapping a transport's IDs before insertion.
+    pub fn empty_transfer(&self) -> Self {
+        Self {
+            reference_stroke_scale: self.reference_stroke_scale,
+            ..Self::new()
+        }
+    }
+    pub fn has_transfer_context(&self) -> bool {
+        self.reference_stroke_scale.is_some()
+    }
+    fn require_authored(&self) -> Result<(), SceneError> {
+        if self.resolved_stroke_camera.is_some() {
+            return Err(SceneError::InvalidGeometry("resolved stroke scenes are immutable presentation snapshots; edit the authored scene".into()));
+        }
+        Ok(())
+    }
+    /// A derived snapshot is bound to this logical camera and cannot be edited
+    /// or exported as a document. Re-resolve the original scene for another view.
+    pub fn resolved_stroke_camera(&self) -> Option<f32> {
+        self.resolved_stroke_camera
+    }
+    pub fn has_scale_fixed_strokes(&self) -> bool {
+        self.nodes
+            .values()
+            .any(|node| node.object.style.has_scale_fixed_strokes())
+    }
+    /// Scale provenance for an affected owner, including all local ancestors.
+    pub fn stroke_scale(&self, id: &DisplayId) -> Result<crate::StrokeScaleData, SceneError> {
+        let mut scale = self
+            .reference_stroke_scale
+            .unwrap_or(crate::StrokeScaleData::IDENTITY);
+        for id in self.ancestor_path(id)? {
+            scale = scale
+                .then(self.nodes[&id].object.transform)
+                .map_err(SceneError::InvalidGeometry)?;
+        }
+        Ok(scale)
+    }
+    pub fn resolved_object(
+        &self,
+        id: &DisplayId,
+        camera: f32,
+    ) -> Result<DisplayObject, SceneError> {
+        if self
+            .resolved_stroke_camera
+            .is_some_and(|bound| bound != camera)
+        {
+            return Err(SceneError::InvalidGeometry(
+                "resolved stroke camera mismatch".into(),
+            ));
+        }
+        let object = &self
+            .nodes
+            .get(id)
+            .ok_or_else(|| SceneError::MissingNode(id.clone()))?
+            .object;
+        let scale = if object.style.has_scale_fixed_strokes() {
+            self.stroke_scale(id)?
+        } else {
+            crate::StrokeScaleData::IDENTITY
+        };
+        object
+            .resolved_strokes(scale, camera)
+            .map_err(SceneError::InvalidGeometry)
+    }
+    /// Immutable derived presentation. Camera is positive logical zoom; DPR is
+    /// excluded. Resolved strokes cannot be serialized as authored documents.
+    pub fn resolved_for_view(&self, camera: f32) -> Result<Self, SceneError> {
+        if let Some(bound) = self.resolved_stroke_camera {
+            if bound != camera {
+                return Err(SceneError::InvalidGeometry(
+                    "resolved stroke camera mismatch; re-resolve the authored scene".into(),
+                ));
+            }
+            self.validate()?;
+            return Ok(self.clone());
+        }
+        crate::StrokeScaleData::IDENTITY
+            .with_camera(camera)
+            .map_err(SceneError::InvalidGeometry)?;
+        self.validate()?;
+        let mut result = self.clone();
+        for (id, node) in &mut result.nodes {
+            if node.object.style.has_scale_fixed_strokes() {
+                node.object = self.resolved_object(id, camera)?;
+            }
+        }
+        if self.has_scale_fixed_strokes() {
+            result.resolved_stroke_camera = Some(camera);
+        }
+        result.validate()?;
+        Ok(result)
+    }
+    /// Preflight actual geometry, including existing precision/work budgets.
+    pub fn validate_view(&self, camera: f32) -> Result<(), SceneError> {
+        if self.has_scale_fixed_strokes() || self.resolved_stroke_camera.is_some() {
+            self.resolved_for_view(camera).map(|_| ())
+        } else {
+            crate::StrokeScaleData::IDENTITY
+                .with_camera(camera)
+                .map(|_| ())
+                .map_err(SceneError::InvalidGeometry)
+        }
+    }
+    pub fn local_bounds_for_view(
+        &self,
+        id: &DisplayId,
+        camera: f32,
+    ) -> Result<Option<Bounds>, SceneError> {
+        self.resolved_for_view(camera)?.local_bounds(id)
+    }
+    pub fn visible_bounds_for_view(&self, camera: f32) -> Result<Option<Bounds>, SceneError> {
+        self.resolved_for_view(camera)?.visible_bounds()
+    }
+    pub fn hit_test_for_view(
+        &self,
+        world: Point,
+        options: HitTestOptions,
+        camera: f32,
+    ) -> Result<Option<HitTestResult>, SceneError> {
+        self.resolved_for_view(camera)?.hit_test(world, options)
+    }
     pub fn world_transform(&self, id: &DisplayId) -> Result<Affine, SceneError> {
         let mut transform = Affine::IDENTITY;
         for id in self.ancestor_path(id)? {
@@ -414,7 +594,9 @@ impl Scene {
             .nodes
             .get(id)
             .ok_or_else(|| SceneError::MissingNode(id.clone()))?;
-        let mut result = node.object.paint_bounds();
+        let mut result = self
+            .resolved_object(id, self.resolved_stroke_camera.unwrap_or(1.))?
+            .paint_bounds();
         let clip = node.object.shape.child_clip().map(|(bounds, _, _)| bounds);
         for child in &node.children {
             if let Some(bounds) = self.local_bounds_inner(child)? {
@@ -442,6 +624,13 @@ impl Scene {
         }
         Ok(result)
     }
+    pub fn world_bounds_for_view(
+        &self,
+        id: &DisplayId,
+        camera: f32,
+    ) -> Result<Option<Bounds>, SceneError> {
+        self.resolved_for_view(camera)?.world_bounds(id)
+    }
     pub fn world_bounds(&self, id: &DisplayId) -> Result<Option<Bounds>, SceneError> {
         let transform = self.world_transform(id)?;
         let bounds = self
@@ -468,6 +657,11 @@ impl Scene {
             .collect())
     }
     pub fn paint_list(&self) -> Result<Vec<PaintItem<'_>>, SceneError> {
+        if self.has_transfer_context() {
+            return Err(SceneError::InvalidGeometry(
+                "transient subtree context must be inserted before rendering".into(),
+            ));
+        }
         self.paint_list_inner(false)
     }
     fn paint_list_inner(&self, include_invisible: bool) -> Result<Vec<PaintItem<'_>>, SceneError> {
@@ -496,6 +690,12 @@ impl Scene {
             result.push(PaintItem {
                 object,
                 world_transform,
+                stroke_scale: if object.style.has_scale_fixed_strokes() {
+                    self.stroke_scale(id)?
+                } else {
+                    crate::StrokeScaleData::IDENTITY
+                },
+                stroke_camera: self.resolved_stroke_camera,
                 opacity,
                 locked,
                 clips: clips.clone(),
@@ -539,7 +739,10 @@ impl Scene {
                 eraser_subtrees.insert(item.object.id.clone());
                 continue;
             }
-            if let Some(bounds) = item.object.paint_bounds() {
+            if let Some(bounds) = self
+                .resolved_object(&item.object.id, self.resolved_stroke_camera.unwrap_or(1.))?
+                .paint_bounds()
+            {
                 let mut bounds = Some(item.world_transform.transform_bounds(bounds));
                 for clip in &item.clips {
                     bounds =
@@ -621,9 +824,11 @@ impl Scene {
                         )
                 }
                 HitPolicy::Painted => {
-                    item.object
-                        .shape
-                        .hit_test(local, &item.object.style, tolerance)
+                    let object = self.resolved_object(
+                        &item.object.id,
+                        self.resolved_stroke_camera.unwrap_or(1.),
+                    )?;
+                    object.shape.hit_test(local, &object.style, tolerance)
                 }
             };
             if hit {
@@ -663,6 +868,18 @@ impl Scene {
             let path = format!("nodes.{id}");
             if id != &node.object.id {
                 push(path.clone(), "map key and display id differ".into());
+            }
+            if self.resolved_stroke_camera.is_none()
+                && node
+                    .object
+                    .style
+                    .strokes()
+                    .any(|s| s.scale_fixed == crate::StrokeScaleFixed::Resolved)
+            {
+                push(
+                    path.clone(),
+                    "resolved stroke requires an immutable view context".into(),
+                );
             }
             if let Err(error) = node.object.validate() {
                 push(path.clone(), error);
@@ -745,7 +962,21 @@ impl Scene {
                     "accumulated world transform overflow".into(),
                 );
             }
-            if let Some(bounds) = node.object.paint_bounds() {
+            let resolved = if node.object.style.has_scale_fixed_strokes() {
+                match self.resolved_object(id, 1.).and_then(|o| {
+                    o.validate().map_err(SceneError::InvalidGeometry)?;
+                    Ok(o)
+                }) {
+                    Ok(object) => Some(object),
+                    Err(error) => {
+                        push(format!("nodes.{id}.stroke_scale"), error.to_string());
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+            if let Some(bounds) = resolved.as_ref().unwrap_or(&node.object).paint_bounds() {
                 let bounds = world.transform_bounds(bounds);
                 if !bounds.is_valid() {
                     push(

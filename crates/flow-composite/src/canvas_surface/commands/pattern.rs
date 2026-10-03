@@ -213,6 +213,7 @@ impl Compiler<'_> {
         }
         Ok(clip::wrap(
             DomainNode {
+                stroke_scale: gpui_flow_scene::StrokeScaleData::IDENTITY,
                 object,
                 world_transform: state.transform,
                 children: vec![],

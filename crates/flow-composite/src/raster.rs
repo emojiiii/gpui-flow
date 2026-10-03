@@ -982,6 +982,26 @@ fn rasterize_inner(
         }
     }
     let mut prep = Preparation::with_lowered_geometry(source.lowered_geometry.clone());
+    if source.has_scale_fixed_strokes() || source.resolved_camera.is_some() {
+        // A raw rotated camera matrix has the same lost f32 scale provenance
+        // as rotated local columns. The supported logical camera is explicit
+        // positive uniform pan/zoom; arbitrary element transforms remain valid.
+        if !viewport
+            .world_to_screen
+            .is_positive_uniform_scale_translation()
+        {
+            return Err(CompositeError::UnsupportedScaleFixed(
+                "fixed-stroke camera requires positive uniform scale and translation".into(),
+            ));
+        }
+        let camera = source.logical_camera.unwrap_or(viewport.world_to_screen.a);
+        if source.resolved_camera.is_some_and(|bound| bound != camera) {
+            return Err(CompositeError::UnsupportedScaleFixed(
+                "resolved stroke camera mismatch".into(),
+            ));
+        }
+        prep.logical_camera = Some(camera);
+    }
     let root = prep.node(&source.root, budget.limits, images, texts)?;
     let scale = viewport.device_scale as f64;
     let b = if source.canvas.is_some() {

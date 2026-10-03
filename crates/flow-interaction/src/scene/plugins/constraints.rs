@@ -78,7 +78,7 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneDragConstraintsPlugin {
                 if let Some(local) = cx
                     .editor
                     .scene()
-                    .local_bounds(&id)
+                    .local_bounds_for_view(&id, cx.editor.viewport.zoom)
                     .map_err(|e| e.to_string())?
                 {
                     let node = cx
@@ -256,19 +256,26 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneViewportConstraintsPlugin 
                 viewport = self.constraints.zoom(viewport, position, zoom)?;
             }
             SceneCommand::Fit { canvas, padding } => {
-                let Some(bounds) = cx
-                    .editor
-                    .scene()
-                    .visible_bounds()
-                    .map_err(|e| e.to_string())?
-                else {
-                    return Ok(());
-                };
-                if !viewport.fit(bounds, canvas, padding) {
-                    return Err("invalid fit".into());
-                }
-                let center = Point::new(canvas.width * 0.5, canvas.height * 0.5);
-                viewport = self.constraints.zoom(viewport, center, viewport.zoom)?;
+                self.constraints.constrain(viewport)?;
+                // Solve with the constraint's allowed range, not a later clamp
+                // that could enlarge a fixed-width fit beyond the canvas.
+                let original_limits = (viewport.min_zoom, viewport.max_zoom);
+                viewport.min_zoom = self
+                    .constraints
+                    .min_zoom
+                    .unwrap_or(viewport.min_zoom)
+                    .max(viewport.min_zoom);
+                viewport.max_zoom = self
+                    .constraints
+                    .max_zoom
+                    .unwrap_or(viewport.max_zoom)
+                    .min(viewport.max_zoom);
+                viewport.zoom = viewport.zoom.clamp(viewport.min_zoom, viewport.max_zoom);
+                viewport =
+                    crate::scene::fit_scene_viewport(cx.editor.scene(), viewport, canvas, padding)
+                        .map_err(|e| e.to_string())?;
+                viewport.min_zoom = original_limits.0;
+                viewport.max_zoom = original_limits.1;
             }
             SceneCommand::SetViewport {
                 viewport: candidate,

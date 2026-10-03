@@ -905,3 +905,118 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod scale_fixed_tests {
+    use super::*;
+    use gpui_flow_scene::{display, *};
+    #[::core::prelude::v1::test]
+    fn scale_fixed_native_uses_shared_resolved_triangles_and_rejects_raw_literals() {
+        let mut scene = Scene::new();
+        scene
+            .insert(
+                DisplayObject::new("g", display::Group::new())
+                    .with_transform(Affine::scale(2., 1.)),
+                None,
+                None,
+            )
+            .unwrap();
+        scene
+            .insert(
+                DisplayObject::new("r", display::Rect::new(40., 30.))
+                    .with_transform(Affine::rotation(90.))
+                    .with_style(Style {
+                        fill: None,
+                        stroke: Some(
+                            Stroke::new(Color::BLACK, 8.)
+                                .with_scale_fixed(StrokeScaleFixed::Fixed)
+                                .with_alignment(StrokeAlignment::Outside)
+                                .with_join(StrokeJoin::Miter),
+                        ),
+                        ..Default::default()
+                    }),
+                Some("g".into()),
+                None,
+            )
+            .unwrap();
+        for zoom in [0.5, 1., 2.] {
+            let viewport = gpui_flow_core::Viewport {
+                zoom,
+                ..Default::default()
+            };
+            let list = scene.paint_list().unwrap();
+            let item = list.iter().find(|i| i.object.id.as_str() == "r").unwrap();
+            let rendered = RenderObject::try_from_paint_item(item, viewport).unwrap();
+            assert!(rendered.native_renderable());
+            assert_eq!(
+                rendered.object.style.stroke.as_ref().unwrap().width,
+                4. / zoom
+            );
+            let resolved = scene.resolved_object(&"r".into(), zoom).unwrap();
+            let mesh = resolved
+                .shape
+                .stroke_mesh_with_rule(
+                    resolved.style.stroke.as_ref().unwrap(),
+                    resolved.style.fill_rule,
+                )
+                .unwrap();
+            for dpr in [1., 1.5, 2.] {
+                let paints = prepare_vector_paints(&rendered, point(px(0.), px(0.)), dpr);
+                assert_eq!(paints.len(), 1);
+                let expected = transformed_path(mesh_path(&mesh), rendered.screen_transform, &[]);
+                assert_eq!(
+                    paints[0]
+                        .path
+                        .vertices
+                        .iter()
+                        .map(|v| v.xy_position)
+                        .collect::<Vec<_>>(),
+                    expected
+                        .vertices
+                        .iter()
+                        .map(|v| v.xy_position)
+                        .collect::<Vec<_>>()
+                );
+            }
+            let mut raw = rendered.clone();
+            raw.object = item.object.clone();
+            assert!(!raw.native_renderable());
+            assert!(
+                raw.diagnostics().iter().any(|issue| issue.feature
+                    == crate::display::UnsupportedFeature::UnresolvedStrokeScale)
+            );
+        }
+    }
+    #[::core::prelude::v1::test]
+    fn scale_fixed_native_rejects_ambiguous_numeric_view_without_losing_scale_provenance() {
+        let mut scene = Scene::new();
+        scene
+            .insert(
+                DisplayObject::new("r", display::Rect::new(40., 30.))
+                    .with_transform(Affine::rotation(60.) * Affine::scale(0.5, 2.))
+                    .with_style(Style {
+                        fill: None,
+                        stroke: Some(
+                            Stroke::new(Color::BLACK, 8.)
+                                .with_scale_fixed(StrokeScaleFixed::Threshold(1.)),
+                        ),
+                        ..Default::default()
+                    }),
+                None,
+                None,
+            )
+            .unwrap();
+        let items = scene.paint_list().unwrap();
+        let view = gpui_flow_core::Viewport {
+            zoom: 0.5,
+            ..Default::default()
+        };
+        assert!(RenderObject::try_from_paint_item(&items[0], view).is_err());
+        let resolved = RenderObject::try_from_paint_item(
+            &items[0],
+            gpui_flow_core::Viewport { zoom: 0.49, ..view },
+        )
+        .unwrap();
+        assert_eq!(resolved.object.style.stroke.as_ref().unwrap().width, 8.);
+    }
+}

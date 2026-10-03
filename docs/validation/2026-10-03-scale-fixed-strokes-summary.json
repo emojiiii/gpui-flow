@@ -1,0 +1,165 @@
+{
+  "status": "implemented and headlessly verified; native acceptance remains pending",
+  "utc_date": "2026-10-03",
+  "head": "7d12f8baf778d88d647e591e49097ebb38874023",
+  "source_manifest": "/workspace/shared/app02-source-final-manifest.json",
+  "source_manifest_sha256": "949a80b137849244cd713aecbbb2bfd6e6775f488af904293f3fa59910623b45",
+  "source_files": 500,
+  "environment": {
+    "setup": "source /workspace/shared/gpui-flow-native-env.sh",
+    "CARGO_PROFILE_TEST_DEBUG": "0",
+    "CARGO_BUILD_JOBS": "1",
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_TARGET_DIR": "/workspace/shared/rust-target-native",
+    "network": "locked/offline"
+  },
+  "checks": {
+    "app02-numeric-final-default-tests.log": {
+      "command": "cargo test --locked --offline",
+      "exit_code": 0,
+      "path": "/workspace/shared/app02-numeric-final-default-tests.log",
+      "sha256": "8697aecfab13c1b4c4b77de4765d926d28a4d96a06f5bc59a290124ff8353c96",
+      "bytes": 170265,
+      "totals": {
+        "passed": 1679,
+        "failed": 0,
+        "ignored": 10,
+        "suites": 149
+      }
+    },
+    "app02-numeric-final-ui-tests.log": {
+      "command": "cargo test --locked --offline -p gpui-flow -p flow-studio --features gpui-flow/canvas-stroke-text,flow-studio/outline-font-binding-x11 --lib",
+      "exit_code": 0,
+      "path": "/workspace/shared/app02-numeric-final-ui-tests.log",
+      "sha256": "f6763ec5e3ff1931d0d9400f360b4a0e8e35dd9ce40e69b346e8ac23d8f44324",
+      "bytes": 30019,
+      "totals": {
+        "passed": 275,
+        "failed": 0,
+        "ignored": 0,
+        "suites": 1
+      }
+    },
+    "app02-numeric-final-clippy.log": {
+      "command": "cargo clippy --workspace --all-targets --locked --offline --features gpui-flow/canvas-stroke-text,flow-studio/outline-font-binding-x11 -- -D warnings",
+      "exit_code": 0,
+      "path": "/workspace/shared/app02-numeric-final-clippy.log",
+      "sha256": "a2f1f693cc8a9414f6c3e47bff6cbe4da946e48a1f21716749bee0c8cdb2951f",
+      "bytes": 306
+    },
+    "app02-numeric-precision-doc-clippy.log": {
+      "command": "cargo clippy --manifest-path docs/examples/Cargo.toml --all-targets --locked --offline -- -D warnings",
+      "exit_code": 0,
+      "path": "/workspace/shared/app02-numeric-precision-doc-clippy.log",
+      "sha256": "ab604b4c056870827acedb7c997d684c89f1d2a4e8b9233f3270571fef89efb4",
+      "bytes": 677,
+      "scope_note": "Passed after the numeric model change. The later raw-camera guard changed only Composite/UI-dependent inputs; docs-example dependency inputs were unchanged."
+    },
+    "app02-numeric-final-fmt.log": {
+      "command": "cargo fmt --all -- --check",
+      "exit_code": 0,
+      "path": "/workspace/shared/app02-numeric-final-fmt.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "app02-numeric-final-doc-fmt.log": {
+      "command": "cargo fmt --manifest-path docs/examples/Cargo.toml --all -- --check",
+      "exit_code": 0,
+      "path": "/workspace/shared/app02-numeric-final-doc-fmt.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "app02-numeric-final-whitespace.log": {
+      "command": "git diff --check",
+      "exit_code": 0,
+      "path": "/workspace/shared/app02-numeric-final-whitespace.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  "review_fixes": [
+    "camera-bound immutable derived scene and native/CPU source contexts; explicit resolved_object, fit and export guards",
+    "candidate-view fit with bounded admissible-probe search, including Y-only numeric threshold and invalid endpoint regression",
+    "context-preserving transient subtree clone/move/detach/reattach; target admission is atomic; transport snapshots cannot render or serialize",
+    "view-aware drag containment, edge snap, marquee and accepted selection/resize/rotation geometry",
+    "accepted line endpoint handle gate with pending/invalid presentation suppression",
+    "derived scenes supplied directly to SceneView use the same coherent admission and hit/handle gate",
+    "public Scene::paint_list and SceneEngine::paint_list reject transient transfer context before native paint items escape",
+    "numeric rotated-column precision is explicit: f32 local normalization, propagated ambiguity rejection, exact threshold behavior, and raw-camera provenance guard"
+  ],
+  "named_exclusions": [
+    "strict Leafer interchange of active or derived fixed styles",
+    "SVG fixed-stroke export",
+    "Canvas subtree capture containing fixed styles; Canvas commands remain centered local strokes",
+    "ItemBox::Stroke with active or derived fixed styles",
+    "sheared local affected chains; scalar-X ancestry domain only",
+    "Text/Image/Group styled fixed strokes; existing Custom CPU rejection remains",
+    "rotated numeric Y-threshold ambiguity band described in the precision contract",
+    "raw fixed-stroke CPU camera transforms other than positive uniform scale and translation"
+  ],
+  "native_evidence": "No native window was opened, no native acceptance recorded, no ledger status/count changed by this worker.",
+  "git_actions": "No staging, commits, Git writes or publication by this worker. Parent ledger modifications are outside this change.",
+  "cargo_slot": "released; all checks completed, no running Cargo process",
+  "free_bytes": 13150502912,
+  "previous_validation_report": {
+    "path": "/workspace/shared/app02-implementation-validation-before-numeric-precision.json",
+    "sha256": "98cf1b96b4f8210556eba6f7bcc4884916b608f9390a3fa686c8e2c25380ca3f"
+  },
+  "previous_source_manifest": {
+    "path": "/workspace/shared/app02-source-before-numeric-precision-manifest.json",
+    "sha256": "1d147119bb6fa13f99a85795969383f4fac0c333707fdf52ea429169caa4dca3"
+  },
+  "final_recheck_followup": {
+    "finding": "P2: transient fixed-stroke transfer scenes exposed incorrect native paint items through public scene and engine paint-list entrypoints",
+    "fix": "Both public entrypoints now reject transfer context before producing any PaintItem. Private hit traversal and reference bounds remain available.",
+    "changed_files": [
+      "crates/flow-scene/src/scene.rs",
+      "crates/flow-engine/src/query.rs",
+      "crates/flow-scene/tests/scale_fixed_strokes.rs",
+      "crates/flow-engine/tests/scale_fixed_strokes.rs"
+    ],
+    "regressions": "Parent scale2/Fixed10 transfer produces no native PaintItems; transport local bounds/private painted hits remain readable; detached engine rejects native items; clone/move/detach/reattach preserve final-context validation and identity.",
+    "source_hashes_verified_unchanged_after_checks": 500,
+    "prior_docs_checks": "Docs-example Clippy and formatting passed before this narrow follow-up; their source files and public signatures are unchanged. Previous record is preserved with its exact source/log hashes."
+  },
+  "numeric_precision_followup": {
+    "diagnostic_reproductions": [
+      {
+        "path": "/workspace/shared/app02-rotation-threshold-repro.log",
+        "exit_code": 101,
+        "sha256": "c7989a7117d3275f344188f2857e4e6cb0e34239972f81bed1b73ee9d653b933",
+        "outcome": "Actual Rust rotation60/threshold0.5 incorrectly resolved width32 instead of16 before the fix.",
+        "status": "Preserved expected failing pre-fix diagnostic, not a final-source failure"
+      },
+      {
+        "path": "/workspace/shared/app02-nonunit-rotation-threshold-repro.log",
+        "exit_code": 101,
+        "sha256": "71f447557a2cdff4dfb3af0f31a91aa48b9741e2e3b2fc4158f9564cb6552824",
+        "outcome": "Actual Rust rotation4 * scale(.5,1.25) still rounds Y magnitude to1.2500001; f32 magnitude rounding alone cannot recover declared TRS.",
+        "status": "Preserved expected failing pre-fix diagnostic, not a final-source failure"
+      }
+    ],
+    "resolution": "Local column magnitudes round once to f32 before f64 ancestry multiplication. A conservative rotated-Y uncertainty band propagates through ancestry and camera; numeric policies reject when X is below threshold and the Y band straddles threshold. Strict branch comparisons are unchanged.",
+    "supported_exact_cases": "Axis and quarter-turn one-ULP above/equal/below values, nonunit thresholds and nested exact f32 products retain strict semantics. Trusted low-level exact provenance is available through StrokeScaleData::exact.",
+    "explicit_new_boundaries": [
+      "Rotated numeric Y-threshold ambiguity band; no claim to recover arbitrary original TRS scale declarations from an f32 affine matrix",
+      "Raw CPU fixed-stroke cameras require positive uniform scale and translation; SceneView and ordinary owned export already use this camera domain"
+    ],
+    "new_regressions": "13 focused scene tests passed before aggregation. New coverage includes Rust60/90/nonunit examples, rotated ambiguity rejection, one-ULP preservation, nested/reflection propagation, sub-ULP true product crossing, atomic edit/zoom rejection and recovery, native/CPU uncertainty propagation, and raw rotated-camera rejection.",
+    "all_500_source_hashes_verified_unchanged_after_final_checks": true,
+    "docs": "/workspace/shared/gpui-flow/docs/scale-fixed-strokes.md"
+  },
+  "parent_verification": {
+    "recorded_utc": "2026-10-03T07:30:52.409709+00:00",
+    "source_hashes_matched": 500,
+    "check_log_hashes_matched": 7,
+    "independent_initial_findings": 5,
+    "independent_followup_findings": "Transient native producer bypass and raw rotated-camera uncertainty loss; both fixed and reviewed",
+    "final_independent_review_utc": "2026-10-03T07:25:36Z",
+    "final_independent_review_manifest_sha256": "949a80b137849244cd713aecbbb2bfd6e6775f488af904293f3fa59910623b45",
+    "remaining_reviewed_P1_P2": 0,
+    "review_scope": "Static scale-fixed source review, not a separate test execution or native acceptance",
+    "native_acceptance": false,
+    "ledger_counts_changed": false
+  }
+}

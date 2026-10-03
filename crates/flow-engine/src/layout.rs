@@ -147,12 +147,16 @@ impl Builder<'_> {
             child_bounds_changed |= self.visit(child, &child_parent, world_changed)?;
         }
         let bounds_changed = old.is_none()
+            || (world_changed && object.style.has_scale_fixed_strokes())
             || child_bounds_changed
             || flags.intersects(DirtyFlags::GEOMETRY | DirtyFlags::STRUCTURE);
         if bounds_changed {
             self.next.stats.bounds_recomputed += 1;
             entry.content_bounds = object.shape.local_bounds();
-            entry.local_bounds = object.paint_bounds();
+            entry.local_bounds = self
+                .scene
+                .resolved_object(id, self.scene.resolved_stroke_camera().unwrap_or(1.))?
+                .paint_bounds();
             for child in &children {
                 let child_object = &self.scene.get(child).expect("child").object;
                 if child_object.eraser != EraserMode::None {

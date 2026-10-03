@@ -443,6 +443,7 @@ fn source(
         // would clone/revalidate all preceding paths for every command.
         children.push(clip::wrap(
             DomainNode {
+                stroke_scale: gpui_flow_scene::StrokeScaleData::IDENTITY,
                 object,
                 world_transform: state.transform,
                 children: vec![],
@@ -477,6 +478,7 @@ fn source(
         drawing: Some((
             DomainSource {
                 root: DomainNode {
+                    stroke_scale: gpui_flow_scene::StrokeScaleData::IDENTITY,
                     object: DisplayObject::new("canvas-command-root", Group::new()),
                     world_transform: Affine::IDENTITY,
                     children,
@@ -484,6 +486,8 @@ fn source(
                 clips: vec![],
                 canvas: None,
                 lowered_geometry: None,
+                resolved_camera: None,
+                logical_camera: None,
             },
             images,
         )),

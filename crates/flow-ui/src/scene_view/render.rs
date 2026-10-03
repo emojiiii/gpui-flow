@@ -1,10 +1,14 @@
 use super::*;
 use crate::display::DisplayElement;
 use gpui_flow_composite::{CanvasBackdrop, CanvasGrid, CompositeLimits, SceneUnit};
+pub(super) fn fixed_presentation_required(scene: &Scene) -> bool {
+    scene.has_scale_fixed_strokes() || scene.resolved_stroke_camera().is_some()
+}
 #[derive(Clone, Default, PartialEq)]
 pub(super) struct StateFrame {
     pub(super) objects: Vec<RenderObject>,
     pub(super) units: Vec<SceneUnit>,
+    pub(super) resolved_scene: Option<Scene>,
 }
 fn animation_images(
     frame: &StateFrame,
@@ -47,6 +51,16 @@ pub(super) fn state_render_frame_with_canvas(
         } else {
             scene
         };
+        let resolved_scene = if fixed_presentation_required(scene) {
+            Some(
+                scene
+                    .resolved_for_view(editor.viewport.zoom)
+                    .map_err(|e| e.to_string())?,
+            )
+        } else {
+            None
+        };
+        let scene = resolved_scene.as_ref().unwrap_or(scene);
         let units = if let Some(backdrop) = backdrop {
             vec![match gpui_flow_composite::owned_canvas(
                 scene,
@@ -67,9 +81,13 @@ pub(super) fn state_render_frame_with_canvas(
             .paint_list()
             .map_err(|e| e.to_string())?
             .iter()
-            .map(|item| RenderObject::from_paint_item(item, editor.viewport))
-            .collect();
-        Ok(StateFrame { objects, units })
+            .map(|item| RenderObject::try_from_paint_item(item, editor.viewport))
+            .collect::<Result<_, _>>()?;
+        Ok(StateFrame {
+            objects,
+            units,
+            resolved_scene,
+        })
     };
     let presented = styles
         .presentation_at(editor, router, now)
@@ -85,6 +103,7 @@ pub(super) fn state_render_frame_with_canvas(
                     StateFrame {
                         objects: vec![],
                         units: vec![],
+                        resolved_scene: None,
                     },
                     Some(format!("{error}; canonical render: {fallback}")),
                 ),
@@ -175,6 +194,7 @@ impl Render for SceneView {
         });
         let theme = self.theme;
         let viewport = self.editor.viewport;
+        self.editor.engine.set_stroke_view_scale(viewport.zoom);
         let managed_layer = self.is_layer_managed();
         let show_grid = self.show_grid && !managed_layer;
         let owned_canvas = !managed_layer && self.compositing_mode == SceneCompositing::OwnedCanvas;
@@ -673,6 +693,7 @@ mod state_tests {
         };
         let controller = crate::display::composite::CompositeController::default();
         let mut frame = super::StateFrame {
+            resolved_scene: None,
             objects: vec![object.clone()],
             units: vec![gpui_flow_composite::SceneUnit::Native("image".into())],
         };
@@ -1463,5 +1484,84 @@ mod owned_canvas_tests {
                 ..
             })]
         ));
+    }
+}
+
+#[cfg(test)]
+mod scale_fixed_tests {
+    use super::*;
+    use gpui_flow_scene::{Point, Style, display, *};
+    #[::core::prelude::v1::test]
+    fn scale_fixed_without_state_styles_has_one_resolved_native_cpu_hit_snapshot() {
+        let mut scene = Scene::new();
+        for (id, mode, x) in [
+            ("native", BlendMode::PassThrough, 0.),
+            ("cpu", BlendMode::Normal, 80.),
+        ] {
+            scene
+                .insert(
+                    DisplayObject::new(id, display::Rect::new(40., 30.))
+                        .with_transform(Affine::translation(x, 0.))
+                        .with_style(Style {
+                            fill: None,
+                            blend_mode: mode,
+                            stroke: Some(
+                                Stroke::new(Color::BLACK, 8.)
+                                    .with_scale_fixed(StrokeScaleFixed::Fixed)
+                                    .with_alignment(StrokeAlignment::Outside),
+                            ),
+                            ..Default::default()
+                        }),
+                    None,
+                    None,
+                )
+                .unwrap();
+        }
+        let mut editor = SceneEditor::new(scene).unwrap();
+        let mut styles = gpui_flow_interaction::scene::SceneStateStyles::new(&editor.engine);
+        let router = gpui_flow_interaction::scene::SceneEventRouter::new();
+        assert!(styles.is_empty());
+        let original = editor.scene().to_json().unwrap();
+        for zoom in [0.5, 1., 2.] {
+            editor.viewport.zoom = zoom;
+            let (frame, error) =
+                state_render_frame(&editor, &router, &mut styles, std::time::Duration::ZERO);
+            assert!(error.is_none(), "{error:?}");
+            let resolved = frame
+                .resolved_scene
+                .as_ref()
+                .expect("fixed geometry even without state styles");
+            assert!(
+                frame
+                    .units
+                    .iter()
+                    .any(|u| matches!(u, SceneUnit::Domain(_)))
+            );
+            for rendered in &frame.objects {
+                assert_eq!(
+                    &rendered.object,
+                    &resolved.get(&rendered.object.id).unwrap().object
+                );
+                assert_eq!(
+                    rendered.object.style.stroke.as_ref().unwrap().width,
+                    8. / zoom
+                );
+            }
+            assert_eq!(
+                resolved
+                    .hit_test(Point::new(-6., 15.), HitTestOptions::default())
+                    .unwrap()
+                    .is_some(),
+                zoom <= 1.
+            );
+            assert_eq!(editor.scene().to_json().unwrap(), original);
+            assert_eq!(editor.engine.revision(), 0);
+        }
+        editor.viewport.zoom = f32::NAN;
+        let (frame, error) =
+            state_render_frame(&editor, &router, &mut styles, std::time::Duration::ZERO);
+        assert!(error.is_some());
+        assert!(frame.objects.is_empty());
+        assert!(frame.resolved_scene.is_none());
     }
 }

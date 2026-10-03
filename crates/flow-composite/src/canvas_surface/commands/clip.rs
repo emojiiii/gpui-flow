@@ -137,10 +137,12 @@ pub(super) fn wrap(mut draw: DomainNode, clips: &[Clip], index: usize) -> Domain
         });
         mask.mask = MaskMode::Alpha;
         draw = DomainNode {
+            stroke_scale: gpui_flow_scene::StrokeScaleData::IDENTITY,
             object: DisplayObject::new(format!("canvas-clip-scope-{index}-{depth}"), Group::new()),
             world_transform: Affine::IDENTITY,
             children: vec![
                 DomainNode {
+                    stroke_scale: gpui_flow_scene::StrokeScaleData::IDENTITY,
                     object: mask,
                     world_transform: clip.transform,
                     children: vec![],

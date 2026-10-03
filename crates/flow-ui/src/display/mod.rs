@@ -27,16 +27,39 @@ pub struct RenderObject {
     pub clips: Vec<ClipRegion>,
 }
 impl RenderObject {
+    /// Compatibility constructor. Use the fallible variant for unadmitted views.
     pub fn from_paint_item(item: &scene::PaintItem<'_>, viewport: Viewport) -> Self {
+        Self::try_from_paint_item(item, viewport)
+            .expect("stroke view must be admitted before native rendering")
+    }
+    pub fn try_from_paint_item(
+        item: &scene::PaintItem<'_>,
+        viewport: Viewport,
+    ) -> Result<Self, String> {
+        if item
+            .stroke_camera
+            .is_some_and(|camera| camera != viewport.zoom)
+        {
+            return Err("resolved native stroke camera mismatch".into());
+        }
         let view = scene::Affine::translation(viewport.pan.x, viewport.pan.y)
             * scene::Affine::scale(viewport.zoom, viewport.zoom);
-        Self {
-            object: item.object.clone(),
+        let object = if item.object.style.has_scale_fixed_strokes() {
+            let object = item
+                .object
+                .resolved_strokes(item.stroke_scale, viewport.zoom)?;
+            object.validate()?;
+            object
+        } else {
+            item.object.clone()
+        };
+        Ok(Self {
+            object,
             screen_transform: view * item.world_transform,
             viewport_transform: view,
             opacity: item.opacity,
             clips: item.clips.clone(),
-        }
+        })
     }
     pub(crate) fn native_renderable(&self) -> bool {
         !self
@@ -78,6 +101,9 @@ impl RenderObject {
             )
         {
             report(UnsupportedFeature::LayeredPaint);
+        }
+        if self.object.style.has_scale_fixed_strokes() {
+            report(UnsupportedFeature::UnresolvedStrokeScale);
         }
         if self.object.style.strokes().any(|stroke| {
             stroke.uses_advanced_geometry()
@@ -130,6 +156,7 @@ fn rejects_native(feature: &UnsupportedFeature) -> bool {
         UnsupportedFeature::LayeredPaint
             | UnsupportedFeature::CompositingDomain
             | UnsupportedFeature::StrokeGeometry
+            | UnsupportedFeature::UnresolvedStrokeScale
             | UnsupportedFeature::TransformedText
             | UnsupportedFeature::TransformedImage
             | UnsupportedFeature::ClippedText

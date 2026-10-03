@@ -33,6 +33,12 @@ fn has_visible_stroke(object: &DisplayObject) -> bool {
 }
 
 pub(crate) fn validate_item_box(object: &DisplayObject, mode: ItemBox) -> Result<(), FlowError> {
+    if mode == ItemBox::Stroke && object.style.strokes().any(|s| !s.scale_fixed.is_disabled()) {
+        return Err(invalid(
+            &object.id,
+            "scale-fixed strokes are unsupported in stroke item boxes",
+        ));
+    }
     if mode == ItemBox::Stroke
         && has_visible_stroke(object)
         && matches!(object.shape, Shape::Text(_) | Shape::Image(_))

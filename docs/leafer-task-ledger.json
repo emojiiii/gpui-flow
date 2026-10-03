@@ -404,7 +404,7 @@
       "title": "高级描边",
       "status": "partial",
       "acceptance": "cap/join/miter/dash、闭合及开放轮廓内外对齐、scale-fixed；bounds/hit/paint同源",
-      "boundary": "居中、闭合及开放inside/outside已支持；开放闭合仅用于fill mask；scale-fixed仍缺，Canvas命令仍center-only，native/CPU不承诺位等价",
+      "boundary": "居中、闭合及开放inside/outside已支持；有界scale-fixed已实现但新原生待验。local shear、模糊数值阈值及strictLeafer/SVG/Canvas subtree/stroke-box明确拒绝；Canvas命令仍center-only",
       "reference_doc": "docs/stroke-alignment.md",
       "implementation_snapshot": "a6639014ceb276d2b33c64e04ad3e73adc770b30",
       "evidence_commit": null,
@@ -427,7 +427,9 @@
         "Scale-fixed remains absent. Canvas command strokes remain centered-only."
       ],
       "evidence_publication_note": "本次文档修订新增native报告；实现源码a6639014不被描述为已包含后续报告。",
-      "screenshot_format_erratum": "docs/screenshot-evidence-formats.md"
+      "screenshot_format_erratum": "docs/screenshot-evidence-formats.md",
+      "progress": "有界scale-fixed完成headless终验(default1679/10既有ignored、UI275、strict)及独立静态复审；见docs/scale-fixed-strokes.md与验证摘要。新原生仍待验，local shear、rotated numeric Y阈值歧义与部分consumer明确拒绝。原开放描边native证据保留，整项仍partial",
+      "headless_increment_summary": "docs/validation/2026-10-03-scale-fixed-strokes-summary.json"
     },
     {
       "id": "APP-03",
@@ -440,7 +442,7 @@
       "implementation_snapshot": "a46ae005165453b90a7358f7b286af3dd94d69fc",
       "evidence_commit": null,
       "automatic": "新增30 headless及1 UI回归；受影响三crate778通过/3既有ignored、UI focused和strictClippy通过。夹具7CPU cases及6真实App/Entity reset回归通过",
-      "native": "修复轮0543Z05:46–05:54退出0，15行物理矩阵、90按钮、18pointer、41receipt；456审计通过。旧0518Z reset panic与旧00截图覆盖缺失事故分别保留",
+      "native": "修复轮0543Z05:46–05:54退出0，15行物理矩阵、90次点击(73控件+17画布)、18pointer、41receipt；456审计通过。旧0518Z reset panic与旧00截图覆盖缺失事故分别保留",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/mask/src/index.ts",
         "symbols_or_contract": "MaskModule及UIRender隔离/混合"

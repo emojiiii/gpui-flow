@@ -99,6 +99,7 @@ impl VectorSource {
 #[derive(Default)]
 pub(crate) struct Preparation {
     pub triangles: usize,
+    pub logical_camera: Option<f32>,
     pub lowered_geometry: Option<gpui_flow_scene::StrokeGeometryBudget>,
     pub has_shadows: bool,
     pub has_inner_shadows: bool,
@@ -314,7 +315,19 @@ impl Preparation {
         if depth > limits.max_depth {
             return Err(CompositeError::NestingLimit);
         }
-        let object = &source.object;
+        let resolved;
+        let object = if source.object.style.has_scale_fixed_strokes() {
+            resolved = source
+                .object
+                .resolved_strokes(source.stroke_scale, self.logical_camera.unwrap_or(1.))
+                .map_err(CompositeError::InvalidGeometry)?;
+            resolved
+                .validate()
+                .map_err(CompositeError::InvalidGeometry)?;
+            &resolved
+        } else {
+            &source.object
+        };
         crate::plan::validate_eraser(object)?;
         let has_eraser_children = source
             .children

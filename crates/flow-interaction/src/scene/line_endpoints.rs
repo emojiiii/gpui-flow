@@ -54,12 +54,26 @@ impl SceneLineGeometry {
         }
         Self::for_target(editor, editor.selection.ids.iter().next()?)
     }
+    pub fn for_selection_with_geometry(editor: &SceneEditor, geometry: &Scene) -> Option<Self> {
+        if editor.selection.ids.len() != 1 {
+            return None;
+        }
+        Self::for_target_with_geometry(editor, editor.selection.ids.iter().next()?, geometry)
+    }
     pub fn for_target(editor: &SceneEditor, id: &DisplayId) -> Option<Self> {
+        editor.scene().validate_view(editor.viewport.zoom).ok()?;
+        Self::for_target_with_geometry(editor, id, editor.scene())
+    }
+    fn for_target_with_geometry(
+        editor: &SceneEditor,
+        id: &DisplayId,
+        geometry: &Scene,
+    ) -> Option<Self> {
         let target = editor.engine.handle(id)?;
         if editor.engine.instance(target).ok()?.state != InstanceState::Attached {
             return None;
         }
-        let (line, world) = Self::scene_line(editor.scene(), id)?;
+        let (line, world) = Self::scene_line(geometry, id)?;
         let minimum_length = Self::world_length(&line, world)?.min(1.);
         Some(Self {
             target,

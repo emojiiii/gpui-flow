@@ -992,8 +992,9 @@ impl ScenePluginHost {
             }
             SceneCommand::ClearSelection => editor.selection.clear(),
             SceneCommand::SelectAll => {
-                editor.selection = if let Some(bounds) = editor.scene().visible_bounds()? {
-                    SceneSelection::in_rect(editor.scene(), bounds)?
+                let presented = editor.scene().resolved_for_view(editor.viewport.zoom)?;
+                editor.selection = if let Some(bounds) = presented.visible_bounds()? {
+                    SceneSelection::in_rect(&presented, bounds)?
                 } else {
                     SceneSelection::default()
                 };
@@ -1004,7 +1005,8 @@ impl ScenePluginHost {
                         "invalid marquee bounds".into(),
                     ));
                 }
-                let selected = SceneSelection::in_rect(editor.scene(), rect)?;
+                let presented = editor.scene().resolved_for_view(editor.viewport.zoom)?;
+                let selected = SceneSelection::in_rect(&presented, rect)?;
                 if additive {
                     editor.selection.ids.extend(selected.ids);
                 } else {
@@ -1464,26 +1466,34 @@ impl ScenePluginHost {
                 if !viewport.is_valid() {
                     return Err(InteractionError::InvalidInput("invalid viewport".into()));
                 }
+                editor.scene().validate_view(viewport.zoom)?;
+                editor.engine.set_stroke_view_scale(viewport.zoom);
                 editor.viewport = viewport;
             }
             SceneCommand::Pan { delta } => {
-                if !editor.viewport.pan_by(delta) {
+                let mut viewport = editor.viewport;
+                if !viewport.pan_by(delta) {
                     return Err(InteractionError::InvalidInput("invalid pan".into()));
                 }
+                editor.scene().validate_view(viewport.zoom)?;
+                editor.engine.set_stroke_view_scale(viewport.zoom);
+                editor.viewport = viewport;
             }
             SceneCommand::Zoom { position, zoom } => {
-                if !editor.viewport.zoom_at(position, zoom) {
+                let mut viewport = editor.viewport;
+                if !viewport.zoom_at(position, zoom) {
                     return Err(InteractionError::InvalidInput("invalid zoom".into()));
                 }
+                editor.scene().validate_view(viewport.zoom)?;
+                editor.engine.set_stroke_view_scale(viewport.zoom);
+                editor.viewport = viewport;
             }
             SceneCommand::Fit { canvas, padding } => {
-                if let Some(bounds) = editor.scene().visible_bounds()?
-                    && !editor.viewport.fit(bounds, canvas, padding)
-                {
-                    return Err(InteractionError::InvalidInput(
-                        "invalid fit viewport".into(),
-                    ));
-                }
+                let viewport =
+                    super::fit_scene_viewport(editor.scene(), editor.viewport, canvas, padding)?;
+                editor.scene().validate_view(viewport.zoom)?;
+                editor.engine.set_stroke_view_scale(viewport.zoom);
+                editor.viewport = viewport;
             }
         }
         Ok(())

@@ -284,6 +284,7 @@ fn style(f: &mut Fields, tag: &str) -> Result<Style> {
         out.stroke = Some(Stroke {
             paint,
             width: f.f32("strokeWidth", 1.)?,
+            scale_fixed: crate::StrokeScaleFixed::Disabled,
             alignment,
             cap,
             join,
@@ -776,6 +777,12 @@ fn admit_export(scene: &Scene) -> Result<()> {
             return Err(error(
                 o.id.to_string(),
                 "gradients and non-solid paints are unsupported",
+            ));
+        }
+        if s.strokes().any(|stroke| !stroke.scale_fixed.is_disabled()) {
+            return Err(error(
+                o.id.to_string(),
+                "scale-fixed strokes are unsupported by strict Leafer interchange",
             ));
         }
         if s.stroke

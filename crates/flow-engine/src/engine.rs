@@ -39,6 +39,7 @@ enum CommitMode {
 pub struct SceneEngine {
     id: u64,
     scene: Scene,
+    stroke_view_scale: f32,
     registry: ElementRegistry,
     revision: u64,
     document_epoch: u64,
@@ -81,6 +82,7 @@ impl SceneEngine {
         let mut engine = Self {
             id,
             scene,
+            stroke_view_scale: 1.,
             registry,
             revision: 0,
             document_epoch: 0,
@@ -104,6 +106,12 @@ impl SceneEngine {
             engine.allocate(id, InstanceState::Attached)?;
         }
         Ok(engine)
+    }
+    /// Set the logical presentation context for subsequent atomic commits.
+    /// This is derived state; queries without a view remain camera-1 queries.
+    /// Hosts validate navigation with Scene::validate_view before publishing it.
+    pub fn set_stroke_view_scale(&mut self, camera: f32) {
+        self.stroke_view_scale = camera;
     }
     pub fn scene(&self) -> &Scene {
         &self.scene
@@ -654,7 +662,7 @@ impl SceneEngine {
             };
             mapping.insert(old, id);
         }
-        let mut clone = Scene::new();
+        let mut clone = source.empty_transfer();
         for old in tree_ids(&source) {
             let node = source.get(&old).expect("source");
             let mut object = node.object.clone();
@@ -704,6 +712,7 @@ impl SceneEngine {
             next = self.derive_candidate(next, origin)?;
         }
         validate(&next)?;
+        next.validate_view(self.stroke_view_scale)?;
         // Detached IDs remain reserved. Only the matching attach operation may
         // reuse them; ordinary history/import cannot alias retained instances.
         let attaching = match &mode {

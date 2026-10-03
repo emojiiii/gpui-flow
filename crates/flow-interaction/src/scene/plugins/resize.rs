@@ -134,7 +134,11 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
                 let Some(node) = cx.editor.scene().get(&id) else {
                     return;
                 };
-                let Ok(Some(bounds)) = cx.editor.scene().local_bounds(&id) else {
+                let Ok(Some(bounds)) = cx
+                    .editor
+                    .scene()
+                    .local_bounds_for_view(&id, cx.editor.viewport.zoom)
+                else {
                     return;
                 };
                 let Some(inverse) = cx

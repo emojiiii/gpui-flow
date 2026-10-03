@@ -26,21 +26,7 @@ pub(crate) fn paint_ids(scene: &Scene) -> Vec<DisplayId> {
     out
 }
 pub(crate) fn extract_subtree(scene: &Scene, root: &DisplayId) -> Result<Scene, SceneError> {
-    if scene.get(root).is_none() {
-        return Err(SceneError::MissingNode(root.clone()));
-    }
-    let mut result = Scene::new();
-    let mut stack = vec![root.clone()];
-    while let Some(id) = stack.pop() {
-        let n = scene.get(&id).expect("subtree");
-        result.insert(
-            n.object.clone(),
-            if &id == root { None } else { n.parent.clone() },
-            None,
-        )?;
-        stack.extend(n.children.iter().rev().cloned());
-    }
-    Ok(result)
+    scene.transfer_subtree(root)
 }
 pub(crate) fn insert_forest(
     scene: &mut Scene,

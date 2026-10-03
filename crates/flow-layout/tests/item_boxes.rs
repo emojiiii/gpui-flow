@@ -1026,3 +1026,25 @@ fn aligned_open_path_stroke_boxes_reflow_and_restore_closure_in_one_undo() {
     assert_eq!(editor.scene(), &inside);
     assert_stable(&layout, editor.scene());
 }
+
+#[test]
+fn scale_fixed_stroke_item_box_is_rejected_atomically_but_box_mode_is_supported() {
+    let (mut scene, mut layout) = fixture(200., 100.);
+    add(&mut scene, "fixed", 40., 30., 4.);
+    scene
+        .update_object(&"fixed".into(), |o| {
+            o.style.stroke.as_mut().unwrap().scale_fixed = gpui_flow_scene::StrokeScaleFixed::Fixed
+        })
+        .unwrap();
+    let before = scene.clone();
+    assert!(
+        layout
+            .arranged(&scene)
+            .unwrap_err()
+            .to_string()
+            .contains("scale-fixed")
+    );
+    assert_eq!(scene, before);
+    style(&mut layout).item_box = ItemBox::Box;
+    assert!(layout.arranged(&scene).is_ok());
+}

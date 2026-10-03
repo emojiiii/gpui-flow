@@ -131,6 +131,9 @@ impl Shape {
         stroke.validate()?;
         check_source_budget(self)?;
         self.validate()?;
+        if !stroke.scale_fixed.is_disabled() {
+            return Err("bounded Canvas strokes do not support scale-fixed widths".into());
+        }
         if stroke.alignment != StrokeAlignment::Center {
             return Err("bounded strokes require centered geometry".into());
         }
@@ -218,6 +221,8 @@ impl Shape {
         stroke: &Stroke,
         fill_rule: FillRule,
     ) -> Result<StrokeMesh, String> {
+        let resolved = stroke.resolved(crate::StrokeScaleData::IDENTITY, 1.0)?;
+        let stroke = &resolved;
         stroke.validate()?;
         check_source_budget(self)?;
         self.validate()?;

@@ -318,6 +318,12 @@ impl SceneEngine {
     /// Uses committed cached matrices/opacity/clips; no layout or Scene::validate
     /// is repeated per frame. Flattening/tessellation remains a backend concern.
     pub fn paint_list(&self) -> Result<Vec<PaintItem<'_>>, EngineError> {
+        if self.scene().has_transfer_context() {
+            return Err(SceneError::InvalidGeometry(
+                "transient subtree context must be inserted before rendering".into(),
+            )
+            .into());
+        }
         let mut result = vec![];
         for id in &self.queries.paint {
             let object = &self.scene().get(id).expect("node").object;
@@ -328,6 +334,12 @@ impl SceneEngine {
             result.push(PaintItem {
                 object,
                 world_transform: e.world_transform,
+                stroke_scale: if object.style.has_scale_fixed_strokes() {
+                    self.scene().stroke_scale(id)?
+                } else {
+                    gpui_flow_scene::StrokeScaleData::IDENTITY
+                },
+                stroke_camera: self.scene().resolved_stroke_camera(),
                 opacity: e.opacity,
                 locked: e.locked,
                 clips: e.clips.clone(),
@@ -352,8 +364,12 @@ impl SceneEngine {
                 eraser_subtrees.insert(item.object.id.clone());
                 continue;
             }
-            let mut next = item
-                .object
+            let mut next = self
+                .scene()
+                .resolved_object(
+                    &item.object.id,
+                    self.scene().resolved_stroke_camera().unwrap_or(1.),
+                )?
                 .paint_bounds()
                 .map(|b| item.world_transform.transform_bounds(b));
             for clip in item.clips {
@@ -364,6 +380,23 @@ impl SceneEngine {
             }
         }
         Ok(bounds)
+    }
+    pub fn resolved_for_view(&self, camera: f32) -> Result<Self, EngineError> {
+        Self::with_registry(
+            self.scene().resolved_for_view(camera)?,
+            self.registry().clone(),
+        )
+    }
+    pub fn hit_test_for_view(
+        &self,
+        world: Point,
+        options: HitTestOptions,
+        camera: f32,
+    ) -> Result<Option<HitTestResult>, EngineError> {
+        self.resolved_for_view(camera)?.hit_test(world, options)
+    }
+    pub fn visible_bounds_for_view(&self, camera: f32) -> Result<Option<Bounds>, EngineError> {
+        self.resolved_for_view(camera)?.visible_bounds()
     }
     pub fn hit_test(
         &self,
@@ -439,6 +472,9 @@ impl SceneEngine {
                 }
                 _ => None,
             };
+            let resolved = self
+                .scene()
+                .resolved_object(id, self.scene().resolved_stroke_camera().unwrap_or(1.))?;
             let hit = custom.unwrap_or_else(|| match object.hit_policy {
                 HitPolicy::None => false,
                 HitPolicy::Bounds => e
@@ -450,7 +486,7 @@ impl SceneEngine {
                         .contains_geometry(local, object.style.fill_rule)
                         || near_contours(&object.shape, local, tolerance)
                 }
-                HitPolicy::Painted => object.shape.hit_test(local, &object.style, tolerance),
+                HitPolicy::Painted => resolved.shape.hit_test(local, &resolved.style, tolerance),
             });
             let image_candidate = image_ids.contains(id)
                 && matches!(&object.shape, Shape::Image(image) if image.contains(local));
