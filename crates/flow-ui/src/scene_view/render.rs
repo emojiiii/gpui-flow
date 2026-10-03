@@ -325,6 +325,11 @@ impl Render for SceneView {
         });
         let rotation_handle = self.rotation_handle();
         let line_handles = self.line_handles();
+        let geometry_handles = self.geometry_handles();
+        let geometry_segments = self
+            .geometry_tools()
+            .map(|g| g.screen_segments(&self.editor))
+            .unwrap_or_default();
         let crop_handles = self
             .image_crop_geometry()
             .and_then(|g| g.screen_handles(&self.editor));
@@ -375,6 +380,43 @@ impl Render for SceneView {
                             ),
                             rgb(theme.accent),
                         ));
+                    }
+                }
+                if let Some((_, handles)) = geometry_handles {
+                    use gpui_flow_interaction::scene::{GeometryControl, PathPointRole};
+                    let p = |p: WorldPoint| bounds.origin + point(px(p.x), px(p.y));
+                    for (a, b) in geometry_segments {
+                        let mut path = PathBuilder::stroke(px(1.));
+                        path.move_to(p(a));
+                        path.line_to(p(b));
+                        if let Ok(path) = path.build() {
+                            window.paint_path(path, rgb(theme.accent).alpha(0.6));
+                        }
+                    }
+                    for handle in handles {
+                        let color = match handle.control {
+                            GeometryControl::PathPoint(point)
+                                if point.role == PathPointRole::Endpoint =>
+                            {
+                                theme.accent
+                            }
+                            GeometryControl::PathPoint(_) => 0xffd166,
+                            GeometryControl::Skew(_) => 0x65dab0,
+                            GeometryControl::Pivot => 0xff7b9d,
+                        };
+                        let r = gpui_flow_interaction::scene::GEOMETRY_HANDLE_SIZE / 2.;
+                        let quad = fill(
+                            Bounds::new(
+                                p(handle.position) - point(px(r), px(r)),
+                                size(px(2. * r), px(2. * r)),
+                            ),
+                            rgb(color),
+                        );
+                        window.paint_quad(if handle.control == GeometryControl::Pivot {
+                            quad.corner_radii(px(r))
+                        } else {
+                            quad
+                        });
                     }
                 }
                 if let Some((_, handles)) = line_handles {

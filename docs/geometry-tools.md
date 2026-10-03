@@ -1,0 +1,19 @@
+# Geometry tools (Flow extension)
+
+INT-05 adds an opt-in `SceneGeometryToolsPlugin::new(GeometryToolMode::{Path, Skew, Pivot})`. Native hosts use `SceneView::set_geometry_tool(Some(mode), cx)`; `None` returns to ordinary outer handles. Mode changes cancel an unfinished drag. This is a **Flow extension**: the pinned Leafer OSS general point editor is a stub, not an upstream implementation of these controls.
+
+- **Path** edits one stored M/L/Q/C endpoint or Bezier control in a single Path or leaf Pen. It preserves command order, primitive identity and every other coordinate. Control polygons are overlays, never flattened document data. There is no point insertion/deletion, automatic smoothing, coupled handles, or control editing for Line/Polygon/Group containers.
+- **Skew** exposes X/Y local-shear levers for one supported selection, including supported vector groups. Each sample uses the frozen original transform and local pivot; its world position stays fixed. Shear magnitude is at most 16, singular poses are rejected, and native Text/Custom subtree restrictions match rotation. A lever coincident with the corresponding pivot coordinate is unavailable. Images and affine Text use the existing declared presentation capabilities.
+- **Pivot** moves the pink local editor anchor without changing the transform, shape, bounds or rendered geometry. `DisplayObject::pivot: Option<Point>` persists in native Flow JSON; `None` keeps existing rotation defaults. The explicit pivot affects subsequent single-selection pointer/keyboard rotation and skew. Multi-selection rotation behavior is unchanged. Pivot has no supported Leafer JSON mapping.
+
+Path editing admits at most 512 commands. Edited local points/pivots are finite and bounded to ±1,000,000 per axis. Handles have an 8px painted size and 10px hit radius; nearest wins, ties retain command order. Off-center presses use frozen inverse-linear pointer deltas through affine ancestors and zoom. Shift constrains Path/Pivot motion to the dominant local axis. Invalid bounded samples retain the last accepted geometry; nonfinite pointer input cancels.
+
+All modes use the same target-aware selection capture, read-only policy, typed command middleware and one editor gesture. Middleware may normalize a value, but cannot change target, point, axis or command kind. Final layout must preserve the requested field and all other target/subtree geometry. Escape, blur, pointer cancel, disabling/uninstalling/replacing the plugin roll back the gesture; changed document, attachment, selection or external revision expire capture without replaying stale state. One completed drag is one Undo; no-motion and exact return-to-start add none and preserve Redo. Inner editors and nondefault outer tools suppress the native overlays.
+
+Run `cargo run -p flow-studio --bin geometry_tools -- --trace` for the compact native tour: drag a yellow Q/C control, skew the curve, move its pink pivot and rotate, then Undo/Redo. Leaf Pen exercises reflected/rotated geometry; Box exercises transform-only modes. Escape and Read-only exercise cancellation.
+
+Focused regressions: `cargo test -p gpui-flow-editor --test geometry_tools`, `cargo test -p gpui-flow-interaction --test geometry_tools`, and `cargo test -p gpui-flow-scene --test editor_pivot`. Existing Line/rotation tests remain part of final integration validation.
+
+Local validation: 66 focused test functions cover geometry, history and the cancellation/lifecycle matrix. Four Linux native groups exercised Path, Skew, Pivot plus rotation, and reflected Leaf Pen, including separate Undo/Redo. A physical Escape attempt did not interrupt the drag and is not counted as native cancellation evidence; precise cancellation is covered by the typed-host regressions.
+
+Joint final integration with mask modes: 1,923 default tests (11 existing ignored), 304 UI tests, format and strict core/UI/Studio checks passed locally.

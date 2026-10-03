@@ -631,14 +631,25 @@ impl SceneEditor {
             Ok(())
         })
     }
-    /// Rotate around each selected object's local origin; hierarchy is preserved.
+    /// Rotate around each selected object's local origin, or the sole selected
+    /// object's explicit editor pivot. Hierarchy and multi-selection behavior
+    /// are preserved; pointer rotation supplies its separate world-space delta.
     pub fn rotate_selection(&mut self, degrees: f32) -> Result<(), SceneError> {
         let ids = self.selection.roots(self.scene());
+        let single = self.selection.ids.len() == 1;
         self.transaction(|scene| {
             for id in ids {
                 if !Self::locked(scene, &id) {
                     scene.update_object(&id, |object| {
-                        object.transform = object.transform * Affine::rotation(degrees)
+                        let rotation = Affine::rotation(degrees);
+                        object.transform = object.transform
+                            * if single {
+                                object
+                                    .pivot
+                                    .map_or(rotation, |pivot| rotation.around(pivot))
+                            } else {
+                                rotation
+                            };
                     })?;
                 }
             }

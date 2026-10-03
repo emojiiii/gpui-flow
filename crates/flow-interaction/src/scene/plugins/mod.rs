@@ -1,6 +1,7 @@
 //! Independently installed retained-scene behavior using CanvasPlugin<SceneEditor, SceneCommand>.
 mod constraints;
 mod drag;
+mod geometry;
 mod inertia;
 mod keyboard;
 mod line;
@@ -14,6 +15,7 @@ use super::ScenePluginHost;
 use crate::InteractionError;
 pub use constraints::*;
 pub use drag::SceneDragPlugin;
+pub use geometry::SceneGeometryToolsPlugin;
 pub use inertia::*;
 pub use keyboard::SceneKeyboardPlugin;
 pub use line::SceneLineEndpointPlugin;

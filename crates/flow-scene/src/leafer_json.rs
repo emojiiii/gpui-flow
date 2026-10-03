@@ -1033,6 +1033,12 @@ fn export_node(scene: &Scene, id: &DisplayId, depth: usize, geometry: &mut usize
         .ok_or_else(|| error(id.to_string(), "missing node"))?;
     let o = &node.object;
     let s = &o.style;
+    if o.pivot.is_some() {
+        return Err(error(
+            id.to_string(),
+            "Flow editor pivot has no supported Leafer JSON mapping",
+        ));
+    }
     if o.hit_policy != HitPolicy::Painted || !o.hit_children || o.mask != MaskMode::None {
         return Err(error(
             id.to_string(),

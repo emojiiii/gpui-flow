@@ -1,5 +1,7 @@
 //! Toolkit-independent editing controller for the retained display scene.
+mod geometry_tools;
 mod history;
+pub use geometry_tools::*;
 mod selection;
 pub use gpui_flow_core::Editor as GraphEditor;
 pub use history::*;

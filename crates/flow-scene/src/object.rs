@@ -1,4 +1,4 @@
-use crate::{Affine, Bounds, Shape, Style};
+use crate::{Affine, Bounds, Point, Shape, Style};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::BTreeSet, fmt};
@@ -73,6 +73,10 @@ pub struct DisplayObject {
     pub data: Value,
     #[serde(default)]
     pub transform: Affine,
+    /// Optional local editor anchor. Changing this does not move rendered
+    /// geometry; single-selection pointer rotation and skew use it thereafter.
+    #[serde(default)]
+    pub pivot: Option<Point>,
     #[serde(default)]
     pub style: Style,
     pub shape: Shape,
@@ -99,6 +103,7 @@ impl DisplayObject {
             classes: BTreeSet::new(),
             data: Value::Null,
             transform: Affine::IDENTITY,
+            pivot: None,
             style: Style::default(),
             shape: shape.into(),
             visible: true,
@@ -128,6 +133,10 @@ impl DisplayObject {
     }
     pub fn with_transform(mut self, transform: Affine) -> Self {
         self.transform = transform;
+        self
+    }
+    pub fn with_pivot(mut self, pivot: Point) -> Self {
+        self.pivot = Some(pivot);
         self
     }
     pub fn with_style(mut self, style: Style) -> Self {
@@ -190,6 +199,9 @@ impl DisplayObject {
         }
         if !self.transform.is_finite() {
             return Err("transform must be finite".into());
+        }
+        if self.pivot.is_some_and(|point| !point.is_finite()) {
+            return Err("pivot must be finite".into());
         }
         self.style.validate()?;
         if self.style.has_layers()

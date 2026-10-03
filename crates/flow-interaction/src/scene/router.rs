@@ -250,6 +250,7 @@ impl SceneEventRouter {
             | HitTarget::ObjectResize(id)
             | HitTarget::ObjectResizeHandle { id, .. }
             | HitTarget::LineEndpoint { id, .. }
+            | HitTarget::GeometryControl { id, .. }
             | HitTarget::ImageCrop { id, .. } = &pointer.hit
             {
                 hit = editor.engine.handle(&DisplayId::from(id.clone()));

@@ -23,6 +23,9 @@ impl SceneView {
         if let Some(hit) = self.image_crop_hit(local) {
             return hit;
         }
+        if let Some(hit) = self.geometry_hit(local) {
+            return hit;
+        }
         if let Some((id, handles)) = self.line_handles()
             && let Some(handle) = input::scene::hit_line_handle(&handles, local)
         {
@@ -74,6 +77,7 @@ impl SceneView {
                     | input::HitTarget::ObjectResize(id)
                     | input::HitTarget::ObjectResizeHandle { id, .. }
                     | input::HitTarget::LineEndpoint { id, .. }
+                    | input::HitTarget::GeometryControl { id, .. }
                     | input::HitTarget::ImageCrop { id, .. } => Some(DisplayId::from(id)),
                     _ => None,
                 };
@@ -513,6 +517,10 @@ mod tests {
             HitTarget::LineEndpoint {
                 id: "text".into(),
                 endpoint: gpui_flow_interaction::scene::LineEndpoint::Start,
+            },
+            HitTarget::GeometryControl {
+                id: "text".into(),
+                control: gpui_flow_interaction::scene::GeometryControl::Pivot,
             },
             HitTarget::ObjectResize("text".into()),
             HitTarget::SelectionRotateHandle,

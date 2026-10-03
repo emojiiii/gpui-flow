@@ -1,4 +1,4 @@
-//! Center-pivot pointer rotation reusing the existing frozen selection roots.
+//! Pointer rotation around the explicit local pivot or default selection center.
 use super::{SceneResizeGeometry, SceneSelectionResizeGeometry};
 use crate::TransformCapabilities;
 use gpui_flow_core::Point;
@@ -15,6 +15,9 @@ pub struct SceneRotationGeometry {
     pub pivot: Point,
     /// World-space top midpoint, before the constant screen-space stem offset.
     pub stem: Point,
+    /// Default box center keeps the handle outside the box even when a user
+    /// moves the rotation pivot onto the stem or beyond the selection.
+    pub stem_center: Point,
 }
 #[derive(Debug, Clone, Copy)]
 pub struct SceneRotationHandle {
@@ -53,24 +56,37 @@ impl SceneRotationGeometry {
                 return None;
             }
         }
-        let (pivot, stem) = if editor.selection.ids.len() == 1 {
+        let (pivot, stem, stem_center) = if editor.selection.ids.len() == 1 {
             let id = editor.selection.ids.iter().next()?;
             let geometry =
                 SceneResizeGeometry::for_target_with_geometry(editor, id, capabilities, geometry)?;
             (
-                geometry.world.transform_point(geometry.bounds.center()),
+                geometry.world.transform_point(
+                    editor
+                        .scene()
+                        .get(id)?
+                        .object
+                        .pivot
+                        .unwrap_or(geometry.bounds.center()),
+                ),
                 geometry
                     .world
                     .transform_point(ResizeHandle::Top.position(geometry.bounds)),
+                geometry.world.transform_point(geometry.bounds.center()),
             )
         } else {
             let bounds = selection.geometry.bounds;
-            (bounds.center(), ResizeHandle::Top.position(bounds))
+            (
+                bounds.center(),
+                ResizeHandle::Top.position(bounds),
+                bounds.center(),
+            )
         };
         (pivot.is_finite() && stem.is_finite()).then_some(Self {
             selection,
             pivot,
             stem,
+            stem_center,
         })
     }
     /// Text and custom producers still have no arbitrary-transform contract.
@@ -109,7 +125,7 @@ impl SceneRotationGeometry {
             return None;
         }
         let stem = editor.viewport.world_to_screen(self.stem);
-        let pivot = editor.viewport.world_to_screen(self.pivot);
+        let pivot = editor.viewport.world_to_screen(self.stem_center);
         let dx = stem.x as f64 - pivot.x as f64;
         let dy = stem.y as f64 - pivot.y as f64;
         let length = dx.hypot(dy);

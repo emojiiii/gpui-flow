@@ -7,9 +7,9 @@
     "leafer_in": "3eb445bf34debb638766615282224b77108bf610"
   },
   "counts": {
-    "bounded_verified": 39,
+    "bounded_verified": 40,
     "partial": 4,
-    "not_started": 2,
+    "not_started": 1,
     "needs_verification": 0,
     "in_progress": 0
   },
@@ -261,10 +261,10 @@
       "id": "INT-05",
       "category": "交互",
       "title": "路径与倾斜中心编辑工具",
-      "status": "not_started",
+      "status": "bounded_verified",
       "acceptance": "Path控制点、skew和pivot交互须各有真实几何/取消/history验收",
-      "boundary": "固定Leafer OSS通用点编辑器是stub，不把自建功能称上游已实现；Line端点现有独立基础",
-      "reference_doc": "docs/line-endpoints.md",
+      "boundary": "Flow扩展：有界Path/leaf Pen控制点、X/Y local shear、render-inert pivot及单选旋转；不是上游OSS既有实现，不含点增删/平滑或多选pivot",
+      "reference_doc": "docs/geometry-tools.md",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/editor/src/display/EditPoint.ts",
         "symbols_or_contract": "EditPoint / EditorSkewEvent / EditorRotateEvent；通用point工具stub单列扩展"

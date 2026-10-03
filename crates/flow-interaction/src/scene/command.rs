@@ -89,6 +89,12 @@ pub enum SceneCommand {
         endpoint: super::LineEndpoint,
         position: Point,
     },
+    /// A single typed geometry field. Middleware may normalize its value but
+    /// cannot retarget the instance or switch the control/axis/mode.
+    SetGeometry {
+        target: gpui_flow_engine::ElementHandle,
+        edit: super::GeometryEdit,
+    },
     /// Typed crop-only write, guarded against target changes through middleware.
     SetImageCrop {
         target: gpui_flow_engine::ElementHandle,

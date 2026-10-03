@@ -10,6 +10,7 @@ mod layer_host;
 pub use input_trace::*;
 mod custom_resource;
 mod custom_tool;
+mod geometry_tools;
 mod image_crop;
 pub(crate) mod image_hit;
 mod navigation;
@@ -404,7 +405,8 @@ impl SceneView {
         DisplayId,
         [gpui_flow_interaction::scene::SceneLineHandle; 2],
     )> {
-        if self.inner_tool_active()
+        if self.geometry_tool().is_some()
+            || self.inner_tool_active()
             || self.image_crop_editor_active()
             || !self.is_editable()
             || !self.interactions.is_enabled("line-endpoints")
@@ -422,7 +424,8 @@ impl SceneView {
         Option<DisplayId>,
         [gpui_flow_interaction::scene::SceneResizeHandle; 8],
     )> {
-        if self.inner_tool_active()
+        if self.geometry_tool().is_some()
+            || self.inner_tool_active()
             || self.image_crop_editor_active()
             || self.line_handles().is_some()
             || !self.is_editable()
@@ -449,7 +452,10 @@ impl SceneView {
         Some((Some(id), handles))
     }
     fn rotation_handle(&self) -> Option<gpui_flow_interaction::scene::SceneRotationHandle> {
-        if self.inner_tool_active()
+        if self
+            .geometry_tool()
+            .is_some_and(|mode| mode != gpui_flow_interaction::scene::GeometryToolMode::Pivot)
+            || self.inner_tool_active()
             || self.image_crop_editor_active()
             || self.line_handles().is_some()
             || !self.is_editable()

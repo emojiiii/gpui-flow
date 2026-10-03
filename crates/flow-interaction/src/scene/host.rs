@@ -1,3 +1,4 @@
+mod geometry_tools;
 mod image_crop;
 mod intrinsic_resize;
 mod text_resize;
@@ -35,6 +36,7 @@ struct SelectionCapture {
     accepted_revision: u64,
     // Frozen at pointer-down; short existing lines may grow and return exactly.
     minimum_line_length: Option<f64>,
+    geometry_baseline: Option<(Affine, gpui_flow_core::Point)>,
 }
 /// Plugin host deliberately does not expose mutable editor state to plugins.
 /// A trusted application can still access its own Editor directly; read-only
@@ -88,6 +90,13 @@ impl ScenePluginHost {
     }
     pub fn transform_capabilities(&self) -> TransformCapabilities {
         self.transforms
+    }
+    pub(super) fn enabled_geometry_tool_mode(&self) -> Option<super::GeometryToolMode> {
+        self.plugins
+            .iter()
+            .find(|p| p.enabled && p.id == super::GEOMETRY_TOOLS_PLUGIN)?
+            .plugin
+            .geometry_tool_mode()
     }
     /// Shared resize overlay/input geometry, including the installed plugin's
     /// intrinsic sizing box. Geometry is taken from the accepted presentation.
@@ -698,6 +707,10 @@ impl ScenePluginHost {
             } => Some((*target, *endpoint)),
             _ => None,
         };
+        let geometry_identity = match &command {
+            SceneCommand::SetGeometry { target, edit } => Some((*target, edit.control())),
+            _ => None,
+        };
         let text_box_identity = match &command {
             SceneCommand::SetTextBoxResize { target, .. } => Some(*target),
             _ => None,
@@ -810,6 +823,13 @@ impl ScenePluginHost {
         {
             return Err(InteractionError::InvalidInput(
                 "middleware cannot retarget a line endpoint command".into(),
+            ));
+        }
+        if let Some((target, control)) = geometry_identity
+            && !matches!(&command, SceneCommand::SetGeometry { target: actual, edit } if *actual == target && edit.control() == control)
+        {
+            return Err(InteractionError::InvalidInput(
+                "middleware cannot retarget a geometry control".into(),
             ));
         }
         if let Some(target) = text_box_identity
@@ -1005,6 +1025,12 @@ impl ScenePluginHost {
                         accepted_revision: editor.engine.revision(),
                         minimum_line_length: super::SceneLineGeometry::for_selection(editor)
                             .map(|geometry| geometry.minimum_length),
+                        geometry_baseline: super::SceneGeometryTools::for_selection(
+                            editor,
+                            super::GeometryToolMode::Skew,
+                            capabilities,
+                        )
+                        .map(|geometry| (geometry.original, geometry.pivot)),
                     }),
                 });
             }
@@ -1314,6 +1340,9 @@ impl ScenePluginHost {
             }
             SceneCommand::SetImageCrop { target, crop } => {
                 self.apply_image_crop(editor, target, crop)?
+            }
+            SceneCommand::SetGeometry { target, edit } => {
+                self.apply_geometry(editor, target, edit)?
             }
             SceneCommand::SetLineEndpoint {
                 target,

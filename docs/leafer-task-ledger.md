@@ -1,6 +1,6 @@
 # Leafer固定45项任务表
 
-状态：39项有界已验证、4项部分实现、2项未开始。固定ID、验收集合与边界保留；任务数不代表工时或全部上游API兼容。机器可读定义见[任务表JSON](leafer-task-ledger.json)。
+状态：40项有界已验证、4项部分实现、1项未开始。固定ID、验收集合与边界保留；任务数不代表工时或全部上游API兼容。机器可读定义见[任务表JSON](leafer-task-ledger.json)。
 
 功能实现、必要回归和简明契约按模块提交。逐次运行日志、截图、备份收据及历史验收JSON不进入源码仓库；既有提交历史不改写。测试方法见[本地验证](testing.md)。
 
@@ -23,7 +23,7 @@
 | INT-02 | 交互 / [内在尺寸编辑](intrinsic-resize.md) | 有界已验证 | 按组件定义尺寸/内容/字体resize策略，与布局所有权及单Undo一致 | 内置组件有界尺寸/坐标/Group内容策略及Text盒子/字体模式；布局拥有的覆盖原子拒绝，Text测量须精确相等；退化Line用端点工具，Custom另有正式协议 |
 | INT-03 | 交互 / [Text内容编辑会话](text-editing.md) | 有界已验证 | 可选内容panel、一次文档Undo、Done/Cancel/blur/target切换、身份和只读保护 | 不是WYSIWYG；IME专项归EVT-04 |
 | INT-04 | 交互 / [自定义内外工具协议](custom-tools.md) | 有界已验证 | registry、load/update/unload/destroy、策略门控与宿主自定义widget挂载和释放 | 宿主AnyElement/Entity及owned属性会话；outer输入插件由宿主提供，managed layer拒绝原生panel |
-| INT-05 | 交互 / [路径与倾斜中心编辑工具](line-endpoints.md) | 未开始 | Path控制点、skew和pivot交互须各有真实几何/取消/history验收 | 固定Leafer OSS通用点编辑器是stub，不把自建功能称上游已实现；Line端点现有独立基础 |
+| INT-05 | 交互 / [路径与倾斜中心编辑工具](geometry-tools.md) | 有界已验证 | Path控制点、skew和pivot交互须各有真实几何/取消/history验收 | Flow扩展：有界Path/leaf Pen控制点、X/Y local shear、render-inert pivot及单选旋转；不是上游OSS既有实现，不含点增删/平滑或多选pivot |
 | INT-06 | 交互 / [拖动约束与高级视口](drag-viewport-constraints.md) | 有界已验证 | 固定世界/父局部矩形drag bounds、可开关网格/边缘吸附、viewport min/max及惯性取消 | 固定矩形AABB及有限惯性；多指归EVT-03，无自动寻路/物理碰撞；持鼠Escape/guide像素仅模型覆盖，6个源文件仅mtime来源证据 |
 | APP-01 | 外观 / [有序填充与渐变](appearance.md) | 有界已验证 | 多层矢量fill、实色/线性/径向、多stop、透明度与缓存/DPR预算 | Text/Image多paint不在此项支持子集 |
 | APP-02 | 外观 / [高级描边](stroke-alignment.md) | 有界已验证 | cap/join/miter/dash、闭合及开放轮廓内外对齐、scale-fixed；bounds/hit/paint同源 | 有界共享mesh支持cap/join/miter/dash、闭合/开放对齐及每层scale-fixed；局部shear、模糊Y阈值、部分consumer明确拒绝，Canvas命令仍center-only；无全格式/位等价承诺 |

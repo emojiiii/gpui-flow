@@ -41,6 +41,11 @@ pub enum HitTarget {
         id: String,
         endpoint: crate::scene::LineEndpoint,
     },
+    /// A bounded Path control, local-shear lever or editor pivot.
+    GeometryControl {
+        id: String,
+        control: crate::scene::GeometryControl,
+    },
     /// One center-pivot rotation handle for the complete selection, including
     /// a sole object. No arbitrary root owns the shared tree-event target.
     SelectionRotateHandle,

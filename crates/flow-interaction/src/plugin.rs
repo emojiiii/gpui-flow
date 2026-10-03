@@ -70,6 +70,10 @@ pub trait CanvasPlugin<D = Editor, C = CanvasCommand> {
     fn is_default_action(&self) -> bool {
         false
     }
+    /// Optional retained-scene geometry overlay, shared by picking and input.
+    fn geometry_tool_mode(&self) -> Option<crate::scene::GeometryToolMode> {
+        None
+    }
     /// Optional sizing-box policy for the scene resize plugin. The host uses
     /// the same result for painted handles, picking and input. None hides an
     /// unsupported target; graph plugins retain their existing behavior.
