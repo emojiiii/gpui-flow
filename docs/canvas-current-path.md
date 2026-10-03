@@ -85,7 +85,9 @@ and upload failures leave the previously published path and pixels unchanged.
 Context clips own frozen path handles; later edits cannot mutate their snapshots.
 The UI commits a successful geometry-only candidate without creating an upload.
 
-Text outline stroking (`strokeText`), image patterns, the remaining browser path
+Text outline stroking and image patterns have later independent
+[stroke](canvas-stroke-text.md) and [pattern](canvas-patterns.md) contracts.
+The remaining browser path
 conveniences and full persistent-context state remain outside this increment.
 
 ## Standalone fixture
@@ -217,9 +219,10 @@ rejection, font failure, upload/OOM injection, safe A→B→A before preparation
 and all-frame behavior were not established by these controls. Automated
 coverage remains separately recorded above.
 
-The exact frozen ELM-10 current-path constructor set is covered. ELM-10 remains
-**partial** for required `strokeText` and `createPattern` repeat/no-repeat with
-transform. Arc/ellipse, arcTo, rect/roundRect conveniences and full browser
+The exact frozen ELM-10 current-path constructor set is covered. Later increments
+cover [outline strokes](canvas-stroke-text-native.md) and
+[createPattern repeat/no-repeat with transform](canvas-patterns.md).
+Arc/ellipse, arcTo, rect/roundRect conveniences and full browser
 context state remain exclusions, not additional closure criteria. Prior
 fillText/measureText evidence remains separate in [Canvas text](canvas-text-commands.md).
 Existing slices: [command batches](canvas-commands.md),

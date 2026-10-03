@@ -93,8 +93,10 @@ order, fully clipped candidates, unsupported decorations, wrong owner/style,
 stale/cancelled snapshots and aggregate capacity/work budgets.
 
 These tests do not establish native font identity or native GSUB/GPOS behavior.
-The separately sealed startup identity gate is independent. Native Canvas
-strokeText visual acceptance and end-to-end publication remain integration work.
+The separately sealed startup identity gate is independent. Subsequent native
+Canvas strokeText and publication evidence is recorded in the
+[combined native report](canvas-stroke-text-native.md), with its original
+failed run preserved.
 
 The focused registration-only unit graph passed all 68 tests (12 new consumer
 cases and two offset-admission helper tests) with no native platform construction:

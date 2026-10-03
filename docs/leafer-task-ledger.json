@@ -2,16 +2,16 @@
   "schema_version": 1,
   "ledger_version": "v1-review",
   "review": "已锁定45个能力单元和有限验收集合；审阅版，所有扩展/技术依赖显式记录",
-  "as_of": "2026-10-02T23:34:00Z",
-  "source_snapshot": "6e6af03495a67b78d18be604c9389b3cb1e18b0c",
+  "as_of": "2026-10-03T04:19:32.259646+00:00",
+  "source_snapshot": "747ecf5528429b722014b3c065f2690f4c56b41f",
   "upstream": {
     "leafer_ui": "1e11641d3ea6b0211c83447268a90b8d58feec25",
     "leafer_core": "1d703303ff0759ce4973d54c87eeb8192dddc570",
     "leafer_in": "3eb445bf34debb638766615282224b77108bf610"
   },
   "counts": {
-    "bounded_verified": 31,
-    "partial": 11,
+    "bounded_verified": 32,
+    "partial": 10,
     "not_started": 3,
     "needs_verification": 0,
     "in_progress": 0
@@ -767,14 +767,14 @@
       "id": "ELM-10",
       "category": "元素",
       "title": "Canvas文字与路径/图案状态",
-      "status": "partial",
+      "status": "bounded_verified",
       "acceptance": "必选fillText、measureText、strokeText；beginPath/moveTo/lineTo/quadraticCurveTo/bezierCurveTo/closePath；createPattern的repeat/no-repeat与transform",
-      "boundary": "不包含DOM focus控件、CSS字体parser、arc/ellipse/arcTo及rect/roundRect便利构造或全部浏览器context状态；这些排除项不是新增收口条件",
-      "reference_doc": "docs/canvas-patterns.md",
-      "implementation_snapshot": "6e6af03495a67b78d18be604c9389b3cb1e18b0c",
+      "boundary": "同App、host提供且startup绑定的有界静态TTF/CFF、实色top-left文字盒；任意系统字体/格式和跨平台不在支持集合。原DOM/CSS字体parser、arc/rect便利构造及完整browser状态排除不变；原失败与未定观察保留",
+      "reference_doc": "docs/canvas-stroke-text-native.md",
+      "implementation_snapshot": "84e016b04b8192015000bc0ab0de49bc5e83ad9e",
       "evidence_commit": null,
-      "automatic": "此前FillTextBox/同源measure与current-path证据独立保留；pattern repeat/no-repeat+transform新增36 composite/6 UI及1夹具测试，全默认1602通过/10既有忽略、UI258通过，strict Clippy/format/link通过；rustdoc仅在明确豁免既有bare_urls警告时通过。必选路径及pattern集合已覆盖，strokeText仍缺",
-      "native": "Pattern 22:45:50–22:51:04退出0，41物理按钮/44 JSON/34原始JPEG及6派生PNG，23/23独立trace，48/50解码截图检查；24完整Canvas ROI零差仅为有损截图一致性。两处外缘5×5差异保留，原因未定；479冻结构建输入逐项匹配已发布6e6af034。此前current-path及footer单独证据保留",
+      "automatic": "此前fill/measure、六current-path与pattern证据独立保留；stroke68文本、362 composite、12重叠focused、4 scene+52集成、UI46+10及feature-off40通过，严格Clippy；新fixture build/helper通过，不宣称新增全workspace测试",
+      "native": "原0338Z20按钮有1个DPR2 WorkLimit失败；其余成功子集保留。修复0357Z5按钮/31JSON，双DPR两批次成功、双非空8×2拒绝/再生；48对实际raw/PNG的589检查、31几何及21身份格式全过，14原JPEG仅可视；原失败/mark未证/pattern旧48/50及外缘观察保留",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/interface/src/canvas/ICanvas.ts",
         "symbols_or_contract": "CanvasText / CanvasPath / createPattern / CanvasPattern.setTransform"
@@ -782,11 +782,11 @@
       "technical_dependencies": [
         "同App字体bridge和字形预算；strokeText需要真实描边语义，不能以bbox替代"
       ],
-      "evidence_summary": "docs/validation/2026-10-02-canvas-pattern-native-summary.json",
-      "native_report": "docs/canvas-pattern-native.md",
-      "automated_summary": "docs/validation/2026-10-02-canvas-patterns-summary.json",
-      "source_tree": "d3d157491bc857570afb7bd7ee2954eadc9f30c4",
-      "source_publication_url": "https://github.com/emojiiii/gpui-flow/commit/6e6af03495a67b78d18be604c9389b3cb1e18b0c",
+      "evidence_summary": "docs/validation/2026-10-03-canvas-stroke-native-summary.json",
+      "native_report": "docs/canvas-stroke-text-native.md",
+      "automated_summary": "docs/validation/2026-10-03-canvas-stroke-fixture-summary.json",
+      "source_tree": "12d39279eb3efc637a1e3d56b9ec0ee814d44e78",
+      "source_publication_url": "https://github.com/emojiiii/gpui-flow/commit/84e016b04b8192015000bc0ab0de49bc5e83ad9e",
       "prior_fill_text_measure_text_evidence": {
         "reference_doc": "docs/canvas-text-commands.md",
         "implementation_snapshot": "99392f7c35f956f8765ed5730423df19e3d474cd",
@@ -802,9 +802,7 @@
         "bezierCurveTo",
         "closePath"
       ],
-      "remaining_frozen_scope": [
-        "strokeText"
-      ],
+      "remaining_frozen_scope": [],
       "footer_layout_follow_up": {
         "footer_only_source_commit": "8dd6f1104d2e134b8b15f83e64c8fdb336ee4044",
         "footer_only_source_tree": "3c25a050e5e01ad0be205377660dfdb76653f084",
@@ -817,9 +815,13 @@
         "Repository input manifests exclude external dependencies, compiler and system libraries; no full reproducible-build claim.",
         "Native controls do not establish resource-pool budget rejection, font failure, upload/OOM injection, every malformed command, safe A-to-B-to-A before preparation, or all renderer frames.",
         "Device display DPR was not separately queried; Canvas resource DPR comes from configuration receipts.",
-        "No browser/cross-platform pixel equivalence or new workspace-wide/CI result."
+        "No browser/cross-platform pixel equivalence or new workspace-wide/CI result.",
+        "Native stroke support is LinuxX11 with explicitly registered bounded static source fonts; positive bold/italic, arbitrary fonts/formats and other platforms were not physically accepted.",
+        "Original one-batch scene4 DPR2 WorkLimit remains failed; repaired artwork uses two deliberate balanced batches under unchanged limits.",
+        "Native mark anchoring not established; host glyph positions are preserved.",
+        "Cancellation was set on entry and late Restore fails admission; post-upload/mid-raster guards retain automated coverage only."
       ],
-      "evidence_publication_note": "Pattern implementation was published and independently verified at 6e6af034 before this native evidence documentation revision. Original sealed native report predates publication; a separate 479-input match receipt supplies the later source link.",
+      "evidence_publication_note": "Runtime84e016b and fixture747ecf55 were separately published and verified before this evidence revision; this revision adds combined native evidence, not another native run.",
       "screenshot_format_erratum": "docs/screenshot-evidence-formats.md",
       "prior_current_path_evidence": {
         "reference_doc": "docs/canvas-current-path.md",
@@ -842,8 +844,103 @@
         "Native tour covers one Linux fixture at Canvas DPR 1/2, not hardware-display DPR or a Cartesian repeat-mode/path-target/operation matrix.",
         "Two strict exterior screenshot patches remain unresolved; JPEG compression is a possible explanation, not a proven cause, and renderer leakage is not established.",
         "Tiny/singular affine transforms, resource and work budgets and missing resources have automated coverage, not physical controls in this run.",
-        "Actual outline strokeText remains unimplemented; bitmap dilation and bounding boxes are not substitutes."
-      ]
+        "Pattern source/native milestone did not test strokeText; later independent actual-outline evidence is linked above."
+      ],
+      "prior_pattern_evidence": {
+        "id": "ELM-10",
+        "category": "元素",
+        "title": "Canvas文字与路径/图案状态",
+        "status": "partial",
+        "acceptance": "必选fillText、measureText、strokeText；beginPath/moveTo/lineTo/quadraticCurveTo/bezierCurveTo/closePath；createPattern的repeat/no-repeat与transform",
+        "boundary": "不包含DOM focus控件、CSS字体parser、arc/ellipse/arcTo及rect/roundRect便利构造或全部浏览器context状态；这些排除项不是新增收口条件",
+        "reference_doc": "docs/canvas-patterns.md",
+        "implementation_snapshot": "6e6af03495a67b78d18be604c9389b3cb1e18b0c",
+        "evidence_commit": null,
+        "automatic": "此前FillTextBox/同源measure与current-path证据独立保留；pattern repeat/no-repeat+transform新增36 composite/6 UI及1夹具测试，全默认1602通过/10既有忽略、UI258通过，strict Clippy/format/link通过；rustdoc仅在明确豁免既有bare_urls警告时通过。必选路径及pattern集合已覆盖，strokeText仍缺",
+        "native": "Pattern 22:45:50–22:51:04退出0，41物理按钮/44 JSON/34原始JPEG及6派生PNG，23/23独立trace，48/50解码截图检查；24完整Canvas ROI零差仅为有损截图一致性。两处外缘5×5差异保留，原因未定；479冻结构建输入逐项匹配已发布6e6af034。此前current-path及footer单独证据保留",
+        "upstream_reference": {
+          "url": "https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/interface/src/canvas/ICanvas.ts",
+          "symbols_or_contract": "CanvasText / CanvasPath / createPattern / CanvasPattern.setTransform"
+        },
+        "technical_dependencies": [
+          "同App字体bridge和字形预算；strokeText需要真实描边语义，不能以bbox替代"
+        ],
+        "evidence_summary": "docs/validation/2026-10-02-canvas-pattern-native-summary.json",
+        "native_report": "docs/canvas-pattern-native.md",
+        "automated_summary": "docs/validation/2026-10-02-canvas-patterns-summary.json",
+        "source_tree": "d3d157491bc857570afb7bd7ee2954eadc9f30c4",
+        "source_publication_url": "https://github.com/emojiiii/gpui-flow/commit/6e6af03495a67b78d18be604c9389b3cb1e18b0c",
+        "prior_fill_text_measure_text_evidence": {
+          "reference_doc": "docs/canvas-text-commands.md",
+          "implementation_snapshot": "99392f7c35f956f8765ed5730423df19e3d474cd",
+          "evidence_commit": "003288b3a9b4178890c162a4f1271f3b8dd41f4f",
+          "automatic": "FillTextBox/同源measure已实现：8新回归、119不同受影响检查及严格Clippy通过；仅保留此前文字子集证据",
+          "native": "14:37–14:39双DPR真实字形/clip/bridge/measure/resize/Undo/Clear退出0，四组像素一致"
+        },
+        "required_current_path_constructors_covered": [
+          "beginPath",
+          "moveTo",
+          "lineTo",
+          "quadraticCurveTo",
+          "bezierCurveTo",
+          "closePath"
+        ],
+        "remaining_frozen_scope": [
+          "strokeText"
+        ],
+        "footer_layout_follow_up": {
+          "footer_only_source_commit": "8dd6f1104d2e134b8b15f83e64c8fdb336ee4044",
+          "footer_only_source_tree": "3c25a050e5e01ad0be205377660dfdb76653f084",
+          "tested_build_source_commit": null,
+          "provenance": "Frozen shared-tree build also contains unpublished-at-build open-stroke work; no single published commit is claimed to match all 475 inputs.",
+          "scope": "layout-only; does not replace the functional source39fc evidence or accept open-stroke work"
+        },
+        "verification_limits": [
+          "Per-surface transaction atomicity, not a two-surface distributed transaction.",
+          "Repository input manifests exclude external dependencies, compiler and system libraries; no full reproducible-build claim.",
+          "Native controls do not establish resource-pool budget rejection, font failure, upload/OOM injection, every malformed command, safe A-to-B-to-A before preparation, or all renderer frames.",
+          "Device display DPR was not separately queried; Canvas resource DPR comes from configuration receipts.",
+          "No browser/cross-platform pixel equivalence or new workspace-wide/CI result."
+        ],
+        "evidence_publication_note": "Pattern implementation was published and independently verified at 6e6af034 before this native evidence documentation revision. Original sealed native report predates publication; a separate 479-input match receipt supplies the later source link.",
+        "screenshot_format_erratum": "docs/screenshot-evidence-formats.md",
+        "prior_current_path_evidence": {
+          "reference_doc": "docs/canvas-current-path.md",
+          "implementation_snapshot": "39fcf56a2e91f59d5da7a04ee519cade66f8cb69",
+          "evidence_commit": null,
+          "automatic": "保留FillTextBox/同源measure原8新回归及119不同受影响检查；current-path新增15 composite+7 UI，全库309/252、focused88/29（重叠），strict Clippy/格式/链接通过；必选current-path构造集合已覆盖，strokeText和createPattern repeat/no-repeat+transform仍缺",
+          "native": "current-path 21:12:30–21:18:56退出0，55物理按钮/84 JSON/63 JPEG截图，27/27审计，20对decoded-JPEG双300×210区域零差；原footer裁切和Compositing过渡保留。21:26:06–21:27:04仅footer复验，两按钮/11 JSON/8 JPEG截图，1090×670双行可见；共享树含open-stroke WIP，不替代功能验收",
+          "evidence_summary": "docs/validation/2026-10-02-canvas-current-path-native-summary.json",
+          "native_report": "docs/canvas-current-path-native.md",
+          "automated_summary": "docs/validation/2026-10-02-canvas-current-path-summary.json",
+          "source_tree": "565b687a9392635ac9adfead5260a070358fbd78",
+          "source_publication_url": "https://github.com/emojiiii/gpui-flow/commit/39fcf56a2e91f59d5da7a04ee519cade66f8cb69"
+        },
+        "required_pattern_scope_covered": [
+          "repeat",
+          "no-repeat",
+          "setTransform"
+        ],
+        "pattern_verification_limits": [
+          "Native tour covers one Linux fixture at Canvas DPR 1/2, not hardware-display DPR or a Cartesian repeat-mode/path-target/operation matrix.",
+          "Two strict exterior screenshot patches remain unresolved; JPEG compression is a possible explanation, not a proven cause, and renderer leakage is not established.",
+          "Tiny/singular affine transforms, resource and work budgets and missing resources have automated coverage, not physical controls in this run.",
+          "Actual outline strokeText remains unimplemented; bitmap dilation and bounding boxes are not substitutes."
+        ]
+      },
+      "fixture_implementation_snapshot": "747ecf5528429b722014b3c065f2690f4c56b41f",
+      "required_text_scope_covered": [
+        "fillText",
+        "measureText",
+        "strokeText"
+      ],
+      "fixed_contract_audit": {
+        "original_commit": "05c92dcfea58c5bd914808e0b629662ea4fb1e28",
+        "acceptance_text_unchanged": true,
+        "mapping_doc": "docs/canvas-stroke-text-native.md#fixed-elm-10-acceptance-audit",
+        "native_mark_anchor": "Not a named frozen operation; additional diagnostic, host positions retained without mark-success claim",
+        "pattern_exterior_samples": "Required pattern clip behavior remains tested; JPEG-only precision samples are inconclusive and retained, not relabeled passed"
+      }
     },
     {
       "id": "ELM-11",
@@ -983,8 +1080,8 @@
     }
   },
   "publication_note": "Integrator verified remote main at the recorded source snapshot/tree. Native archives and original linked-build provenance remain separately qualified; this documentation update runs no new build or full-workspace suite.",
-  "source_publication_url": "https://github.com/emojiiii/gpui-flow/commit/6e6af03495a67b78d18be604c9389b3cb1e18b0c",
-  "published_source_tree": "d3d157491bc857570afb7bd7ee2954eadc9f30c4",
+  "source_publication_url": "https://github.com/emojiiii/gpui-flow/commit/747ecf5528429b722014b3c065f2690f4c56b41f",
+  "published_source_tree": "1eab380b34dc3498fabc4758893f02c25f7fe8f3",
   "screenshot_evidence_format": {
     "erratum": "docs/screenshot-evidence-formats.md",
     "historical_desktop_captures": 327,

@@ -47,8 +47,11 @@ enter document/history. Configuration Undo remains separate.
 Pinned reference: [CanvasText and CanvasTextDrawingStyles](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/interface/src/canvas/ICanvas.ts).
 Flow deliberately exposes an explicit Text box rather than parsing a CSS font
 string or pretending top-left coordinates are browser alphabetic baselines.
-StrokeText, baseline variants, persistent current paths and image patterns remain
-unimplemented; ELM-10 stays partial/in progress until its fixed table scope closes.
+Later increments provide [persistent current paths](canvas-current-path.md),
+[image patterns](canvas-patterns.md) and genuine
+[same-App outline StrokeTextBox](canvas-stroke-text.md). Their source and native
+evidence are separate from the fill/measure checkpoint below. Browser baseline
+variants remain outside the explicit top-left-box contract.
 
 
 ## Validation

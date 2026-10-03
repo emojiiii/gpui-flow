@@ -3,7 +3,8 @@
 Status: runtime implementation with automated validation and a completed bounded
 [Linux native control tour](canvas-pattern-native.md): 23/23 trace checks and
 48/50 decoded-JPEG screenshot checks, with two exterior samples unresolved.
-ELM-10 remains partial for actual outline `strokeText`.
+The later [outline-stroke route](canvas-stroke-text.md) and its
+[native evidence](canvas-stroke-text-native.md) are recorded separately.
 
 ## Fixed API and coordinate contract
 
@@ -88,9 +89,10 @@ and [image pattern placement](https://github.com/leaferjs/leafer/blob/1d703303ff
 Immutable capture, replacement transform, repetition and wrapped filtering follow
 the [Canvas pattern contract](https://html.spec.whatwg.org/multipage/canvas.html#dom-context-2d-createpattern).
 
-ELM-10 remains partial for actual outline `strokeText`. The same-App GPUI backend
-exposes glyph bitmaps and metrics, without glyph outlines or a stroke operation;
-bitmap dilation or bounding boxes are not substitutes. RepeatX/Y, pattern text,
+The generic same-App GPUI backend exposes glyph bitmaps and metrics. The later
+opt-in [static-font outline adapter](canvas-shaped-outline-adapter.md) adds true
+outline strokes under its explicit identity and format limits; a generic bridge
+still cannot substitute bitmaps or bounding boxes. RepeatX/Y, pattern text,
 arc/rect conveniences and persistent browser styles are exclusions, not added
 closure requirements. Earlier current-path, image and text validation remains
 separate in the respective Canvas documents.

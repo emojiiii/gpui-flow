@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "recorded_date_utc": "2026-10-03",
-  "scope": "Thirteen completed Linux acceptance-run executables reversibly archived; original failed APP05 and partial-failed Canvas stroke run remain failures; no source/capture/log/receipt/active target removed",
-  "binary_count": 13,
-  "net_reclaimed_bytes": 1925317726,
-  "protected_existing_files_verified": 1180,
-  "status": "First five and final three used actual temporary restoration before removing redundant raw copies. Middle five used full streamed SHA and byte comparison before raw removal and actual temporary restoration immediately after. Every recorded step stayed above3GiB.",
+  "scope": "Fourteen completed Linux acceptance-run executables reversibly archived; original failed APP05 and partial-failed Canvas stroke run remain failures; source/captures/logs/receipts/active target untouched",
+  "binary_count": 14,
+  "net_reclaimed_bytes": 2074587491,
+  "protected_existing_files_verified": 1365,
+  "status": "Eight archives had actual temporary restoration verified before redundant raw removal. Six used full streamed SHA and byte comparison before raw removal and actual temporary restoration immediately after. Each per-entry sequence records order and all steps remained above3GiB.",
   "historical_manifest_note": "Historical binary hash manifests are unchanged and validate after restore-binary.py restores the original executable path; a currently absent raw path is an intentional storage state, not missing executable bytes",
   "archive_location": "Same retained local evidence directory; archives themselves are not uploaded to this repository",
   "restore_limits": "Restore refuses a mismatching destination and requires3GiB remaining free disk after recovery; run.sh creates new timestamped recheck logs instead of overwriting historical receipts",
@@ -467,6 +467,51 @@
       "new_run_script_sha256": "6958ae21875eabacb06e04d76a2b9f93f8ef046d36e001ce68daffc81af781d0",
       "archive_receipt_sha256": "c7b2ab0cc095d24e7c9f06a7048b981a975d5d9f73b6eaa3278260146b94698b",
       "acceptance_note": "Run exited0 but scenario4 DPR2 WorkLimit failed; reversible storage does not change failed acceptance."
+    },
+    {
+      "original_path": "/workspace/shared/canvas-stroke-split-validation-20261003T0357Z/canvas_stroke_text",
+      "original_bytes": 179957336,
+      "original_sha256": "0a1ed508e120f71bea4b9364aae31acf5d4e5ca1a28994cc64c96f4dfd65dd6d",
+      "original_mode": 493,
+      "original_mtime_ns": 1790999707570535799,
+      "archive_name": "canvas_stroke_text.zst",
+      "archive_bytes": 30687571,
+      "archive_sha256": "bc96c37f6d6d094c20cbc0c3f448709fccf359fd65dc7509db4941d70e9840da",
+      "restore_command": "./restore-binary.py",
+      "run_command": "./run-archived.sh",
+      "restore_script_tested": true,
+      "restored_sha256_size_mode_mtime_verified": true,
+      "protected_existing_files_verified": 185,
+      "net_reclaimed_bytes": 149269765,
+      "completed_utc": "2026-10-03T04:14:30Z",
+      "native_application_launched": false,
+      "streamed_restore_sha_and_byte_equality_verified": true,
+      "sequence": [
+        {
+          "stage": "start",
+          "free_bytes": 3330691072
+        },
+        {
+          "stage": "compressed_original_still_present",
+          "free_bytes": 3299536896
+        },
+        {
+          "stage": "full_stream_decompression_SHA_and_byte_comparison_passed",
+          "free_bytes": 3298684928
+        },
+        {
+          "stage": "redundant_raw_removed_after_full_stream_verification",
+          "free_bytes": 3478634496
+        },
+        {
+          "stage": "temporary_restore_exists",
+          "free_bytes": 3298668544
+        }
+      ],
+      "restore_script_sha256": "2813aedc2c2b2c9146f05f6520a9b36f43e79c920f0cb9b512882d289610b627",
+      "new_run_script_sha256": "6958ae21875eabacb06e04d76a2b9f93f8ef046d36e001ce68daffc81af781d0",
+      "archive_receipt_sha256": "3f98f140815a9290338dd3164d980e1f2710bed8610504e435ec81c11699e8b0",
+      "acceptance_note": "Completed targeted two-batch scene4 acceptance; original0338Z failed run remains separately preserved."
     }
   ]
 }

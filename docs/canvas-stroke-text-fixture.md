@@ -13,9 +13,11 @@ not establish rollback of visible stroke ink.
 The current source deliberately separates scenario 4 into two balanced batches,
 records every public resource edit, saves failed partial states, and disallows an
 empty rejection baseline. Cached build, strict Clippy and the revised no-window
-helper tour passed. **Physical acceptance of the remedy remains pending.** This document is an acceptance contract, not evidence
-that the revised tour passed. Runtime/adapter and native font identity evidence
-remain separate.
+helper tour passed. The focused fourth-scenario, nonempty-rejection and
+regeneration native gate then passed; see the
+[combined native evidence](canvas-stroke-text-native.md). This document remains
+the fixture contract; runtime/adapter, original broader controls and native font
+identity have separately scoped evidence.
 
 ## Scope and opt-in
 
@@ -283,9 +285,9 @@ are diagnostic shaping, not the exact line objects painted by the Canvas adapter
 
 The revised source is ready for independent review. The source was
 parsed/formatted with the installed `rustfmt --edition 2024` and its `--check`
-form. Cached build, strict Clippy and the revised helper tour passed. Native
-startup and physical rechecking remain pending; no separate unit-test harness
-was linked for the two-batch remedy. The original partial native results remain separate
+form. Cached build, strict Clippy, the revised helper tour and the focused native
+recheck passed; no separate unit-test harness was linked for the two-batch remedy.
+The original partial native results remain separate
 evidence. Parent coordination owns the single build slot, free-space watchdog,
 native desktop slot, frozen copy, and any Git publication.
 

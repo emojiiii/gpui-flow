@@ -1,9 +1,9 @@
 # Reversible native evidence storage
 
-Recorded 2026-10-03. Thirteen completed acceptance-run executables are now stored as
+Recorded 2026-10-03. Fourteen completed acceptance-run executables are now stored as
 lossless zstd archives in their original evidence directories. Their executable
 bytes are fully retained; only verified redundant uncompressed copies were
-removed. This reclaimed **1,925,317,726 bytes (1,836.1 MiB)**. No source, captures,
+removed. This reclaimed **2,074,587,491 bytes (1,978.5 MiB)**. No source, captures,
 logs, historical receipts or active Cargo target was removed or rewritten.
 
 | Completed fixture | Original bytes | Archive bytes |
@@ -21,6 +21,7 @@ logs, historical receipts or active Cargo target was removed or rewritten.
 | `canvas_current_path` (functional acceptance) | 178,201,464 | 30,273,915 |
 | `canvas_current_path` (footer-only recheck) | 178,214,344 | 30,283,484 |
 | `canvas_stroke_text` (0338Z partial-failed run) | 179,893,496 | 30,671,032 |
+| `canvas_stroke_text` (0357Z focused recheck) | 179,957,336 | 30,687,571 |
 
 ## Recovery and rechecking
 
@@ -38,13 +39,13 @@ and records results in a new timestamped subdirectory. Original historical run
 scripts remain unchanged and do not automatically restore the executable.
 
 Every restoration script was exercised against an independent temporary path.
-For the first five and the final three, restored SHA-256, size, permissions and mtime matched before
-raw removal. Under tighter storage headroom, the middle five first passed full
+For eight archives, restored SHA-256, size, permissions and mtime matched before
+raw removal. Under tighter storage headroom, six archives first passed full
 streamed decompression SHA and byte-for-byte comparison against raw; only then
 was the redundant raw copy removed, immediately followed by the same actual
 temporary restoration/metadata verification. Every recorded step stayed above
 3 GiB. The original failed APP05 run and the 0338Z Canvas stroke DPR2 WorkLimit remain failures; its screenshots, logs
-and old run.sh are unchanged. Hashes of **1,180 existing evidence/source files**
+and old run.sh are unchanged. Hashes of **1,365 existing evidence/source files**
 remained unchanged. No native application was launched during this work.
 
 Historical binary manifests and reports are unchanged. Their raw paths become

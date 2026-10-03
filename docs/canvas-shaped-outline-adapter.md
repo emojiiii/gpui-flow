@@ -58,5 +58,5 @@ failure. Surface tests cover explicit unavailable capability for hidden/empty
 text, invalid content boxes, ordinary vectors/transparent fills and cancellation.
 They do not construct a native App or establish new native font identity or
 Canvas stroke visual acceptance. The shaped producer and native identity gate
-have separate evidence; end-to-end native Canvas stroke acceptance remains a
-later gate.
+have separate evidence; the subsequent [native Canvas stroke gate](canvas-stroke-text-native.md)
+records both its original failure and targeted successful follow-up.

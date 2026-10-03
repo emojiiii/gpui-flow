@@ -1,11 +1,11 @@
 # Leafer 对齐任务总表 v1（审阅版）
 
-固定45个去重能力单元，最新已验证远端源码 [`6e6af034`](https://github.com/emojiiii/gpui-flow/commit/6e6af03495a67b78d18be604c9389b3cb1e18b0c)，原生夹具工作区来源逐项单列。这是具体范围的开发台账，不是全部Leafer API兼容证明，不用任务数计算工时或百分比。旧39条A–E验收契约仅为交叉索引，不与本表相加；此前31/8快速审计不作为本表完成数。
+固定45个去重能力单元，最新已验证远端源码 [`747ecf55`](https://github.com/emojiiii/gpui-flow/commit/747ecf5528429b722014b3c065f2690f4c56b41f)，原生夹具工作区来源逐项单列。这是具体范围的开发台账，不是全部Leafer API兼容证明，不用任务数计算工时或百分比。旧39条A–E验收契约仅为交叉索引，不与本表相加；此前31/8快速审计不作为本表完成数。
 
 ## 状态计数
 
-- 有界契约已验证：31
-- 部分实现：11
+- 有界契约已验证：32
+- 部分实现：10
 - 未开始该能力：3
 - 待核实验收：0
 - 开发/验收中：0
@@ -64,7 +64,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | ELM-07 | 元素 / [Canvas拥有像素与生命周期](canvas-component.md) | 有界契约已验证 | 独立配置、运行时surface、DPR/smooth/safe-resize/clear/draw/snapshot、代际释放 | 像素不进文档/Undo；非整视图OwnedCanvas |
 | ELM-08 | 元素 / [Canvas矢量上下文批次](canvas-clips.md) | 有界契约已验证 | Path填充/描边、transform/alpha/save/restore/冻结clip栈；晚失败原子回滚 | 绘制状态仍batch-local；持久current path归ELM-10，图像归ELM-09 |
 | ELM-09 | 元素 / [Canvas图像批次](canvas-image-commands.md) | 有界契约已验证 | immutable image输入、source crop/destination/DPR、仿射/clip/alpha和单代际原子提交 | 不取URL；负尺寸拒绝；不保证浏览器精确filter边缘 |
-| ELM-10 | 元素 / [Canvas文字](canvas-text-commands.md)与[路径/图案状态](canvas-current-path.md) | 部分实现 | 必选fillText、measureText、strokeText；beginPath/moveTo/lineTo/quadraticCurveTo/bezierCurveTo/closePath；createPattern的repeat/no-repeat与transform | 必选current-path及[pattern](canvas-patterns.md)集合已覆盖；仍缺strokeText；DOM focus/CSS字体parser、arc/rect便利构造和全部浏览器context状态均排除，不增收口条件 |
+| ELM-10 | 元素 / [Canvas文字/路径/图案与真实描边](canvas-stroke-text-native.md) | 有界契约已验证 | 必选fillText、measureText、strokeText；beginPath/moveTo/lineTo/quadraticCurveTo/bezierCurveTo/closePath；createPattern的repeat/no-repeat与transform | 原DOM/CSS字体parser及完整browser状态排除不变；stroke限同App/host注册有界静态字体、实色top-left盒，保留Linux/mark/pattern截图与原失败边界 |
 | ELM-11 | 元素 / [Canvas与场景导出](scene-raster-export.md) | 有界契约已验证 | Canvas RGBA/PNG已实现；固定Scene区域PNG/JPEG/WebP和SVG，含背景/透明度/裁切范围及缺资源拒绝 | WebP为lossless；SVG保留vector并嵌每节点Image/Canvas/Text PNG，无editable text/outlines或SVG/PNG位等价；不含完整SVG导入 |
 | CUS-01 | 自定义元素 / [动态几何命中与宿主呈现](custom-geometry-validation.md) | 有界契约已验证 | custom属性驱动几何/bounds/hit、显式native renderer、实例隔离；拒绝不支持合成 | schema本身归DAT-01；不双计工厂 |
 | CUS-02 | 自定义元素 / [自定义resize和异步资源协议](custom-nodes.md) | 未开始该能力 | 自定义尺寸/编辑策略与测量、异步ready/cancel事件正式接入 | 任意宿主回调能实现不等于框架已提供协议 |
@@ -116,7 +116,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | ELM-07 | 24新回归及356受影响通过 | Canvas实际Draw/Clear/resize/Undo窗口通过 | `d365f5a9e533e823e43e09db5154935e01b68c49` |
 | ELM-08 | 11矢量+7clip新回归、360/367受影响记录通过 | 11:41和11:57窗口、DPR/回滚/重绘像素对照通过 | `e4f7d9455f7aaaf38d160951c330ae03249435d1` |
 | ELM-09 | 12新回归；63 composite+18 UI=81聚焦通过，strict Clippy/link通过 | 14:00:18–14:03:12 Linux窗口退出0；DPR1/2、crop/透明源/反射/clip/晚失败/resize/Undo/Clear；三组像素区域一致 | `0ab6ffbf8bdbdb837a30f6cbf193e5506cb0124d` |
-| ELM-10 | 此前文字/current-path证据保留；pattern新增36 composite/6 UI及1夹具测试，全默认1602通过/10既有忽略、UI258通过，strict Clippy/format/link通过；rustdoc明确豁免既有bare_urls警告。strokeText仍缺 | Pattern 22:45:50–22:51:04退出0，41按钮/44 JSON/34原JPEG+6派生PNG，23/23 trace，48/50解码截图；24 ROI零差仅为有损截图一致性，两外缘样本原因未定。479冻结构建输入匹配已发布源码 | pattern源码[`6e6af034`](https://github.com/emojiiii/gpui-flow/commit/6e6af03495a67b78d18be604c9389b3cb1e18b0c)；[原生报告](canvas-pattern-native.md)/[摘要](validation/2026-10-02-canvas-pattern-native-summary.json)；[此前current-path证据](canvas-current-path-native.md)及footer布局、文字证据独立保留 |
+| ELM-10 | 旧fill/measure、current-path、pattern独立保留；stroke68文本/362 composite/12重叠focused、scene4+52、UI46+10/feature-off40及strictClippy通过；无新增全workspace声明 | 原20按钮中DPR2 WorkLimit失败保留；修复5按钮/31JSON双DPR两批次成功，双非空8×2拒绝/再生；48对真实raw/PNG的589检查、31几何、21身份格式全过。mark未证、pattern旧48/50与外缘未定保留 | runtime[`84e016b0`](https://github.com/emojiiii/gpui-flow/commit/84e016b04b8192015000bc0ab0de49bc5e83ad9e)、fixture[`747ecf55`](https://github.com/emojiiii/gpui-flow/commit/747ecf5528429b722014b3c065f2690f4c56b41f)；[原生报告/固定范围核对](canvas-stroke-text-native.md)/[摘要](validation/2026-10-03-canvas-stroke-native-summary.json) |
 | ELM-11 | 先前栅格21核心+7 UI；SVG28 focused/294 composite/5夹具及strict通过（重叠） | 先前PNG/JPEG/WebP10文件4拒绝；新SVG13尝试8SVG+2PNG/3拒绝、真实resvg及独立审计，退出0 | `93ee7f7cabfb7979aeca93ec137ccf81644baeb5`；[SVG证据](validation/2026-10-02-scene-svg-native-summary.json)，[先前栅格](validation/2026-10-02-scene-export-summary.json) |
 | CUS-01 | 9项新回归、12既有registry与184 UI库检查通过；strict Clippy及链接通过 | 16:32–16:36八步真实点击/UndoRedo/双实例/renderer fallback/整域拒绝与恢复；49状态检查0失败、13 renderer输入；退出0 | `09bc537a551da09d4cb7c407e22ee10d49d3c667` |
 | CUS-02 | 无完整协议验收 | 未实现/未验收 | 尚无独立完整验收提交 |
@@ -207,3 +207,5 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 - 2026-10-02 21:59：APP-02开放轮廓mask-only closure完成源码及有界native矩阵，scale-fixed仍缺，计数保持31已验证/11部分/3未开始。辅助bbox20/21及原42检查中未满足的一项原始记录保留，不改写为全像素通过。ELM-08边界澄清持久current path归ELM-10，无新增能力或计数。
 
 - 2026-10-02 23:34：ELM-10固定repeat/no-repeat+transform已有真实源码、自动回归及Linux原生证据，仍缺实际outline strokeText，计数保持31已验证/11部分/3未开始。Pattern保留48/50截图检查及两外缘未定观察；327旧桌面截图JPEG勘误已发布db28b3d1，原始文件/哈希和历史失败不变。
+
+- 2026-10-03 04:19：ELM-10按最初05c92dcf的同一操作清单逐条核对，stroke实际轮廓与预算/原子性及限定native补齐，更新为**32有界已验证/10部分/3未开始，总45不变**。未增加或删除必选操作；[范围依据](canvas-stroke-text-native.md#fixed-elm-10-acceptance-audit)说明mark只是额外host-shaper探测，pattern clipping仍有actual-RGBA测试与真实控件证据，两个JPEG外缘样本保持未定而非改写通过。原0338Z WorkLimit、两资源独立事务、受支持字体/平台集合及未实测时序边界保留。DAT-03不因tag范围未枚举而静默升级。

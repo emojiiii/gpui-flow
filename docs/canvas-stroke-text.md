@@ -45,8 +45,9 @@ crates. UI adapter/resource checks and the producer have separate receipts.
 
 These tests use supplied outline geometry or a modeled text platform. The
 sealed native font-identity gate establishes the startup binding separately.
-End-to-end native Canvas stroke acceptance remains pending; this source
-checkpoint does not upgrade the fixed ELM-10 acceptance row.
+The later [native acceptance](canvas-stroke-text-native.md) records the original
+work-limit failure and the focused bounded-batch follow-up. That separate result
+supplies the physical evidence for the fixed ELM-10 operation collection.
 
 The [validation summary](validation/2026-10-03-canvas-stroke-lowering-summary.json)
 records commands, log hashes and this checkpoint's source hashes.
