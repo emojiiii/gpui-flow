@@ -321,7 +321,12 @@ impl CanvasSurface {
             .root_transform()
             .inverse()
             .ok_or(CompositeError::UnsupportedTransform)?;
+        let logical_camera = local_to_canvas * inverse;
         let matrix = self.scale() * local_to_canvas * inverse;
+        // Canvas raster coordinates already contain its actual device scale.
+        // Preserve the independent logical affine for scale-fixed effects.
+        let mut source = source.clone();
+        source.logical_effect_camera = Some(logical_camera);
         if matrix.inverse().is_none() {
             return Err(CompositeError::UnsupportedTransform);
         }
@@ -335,7 +340,7 @@ impl CanvasSurface {
         budget.charge_input_work(preparation_work)?;
         budget.charge_input_work(self.pixels.width() as u64 * self.pixels.height() as u64 * 3)?;
         let frame = rasterize_with_inputs(
-            source,
+            &source,
             images,
             texts,
             RasterViewport {

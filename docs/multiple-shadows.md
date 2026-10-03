@@ -16,9 +16,7 @@ atomically through Scene/engine/editor transactions and `Scene::from_json`.
 Unknown fields inside a Shadow still reject. `PropertyKey::ShadowLayers` exposes
 an array with default `[]` and PAINT-only invalidation. Adding, removing, editing
 or reordering layers supports the same serialization and Undo/Redo as the base.
-There are no inner, spread, box-only knockout, per-layer blend, scale-fixed or
-general filter semantics hidden behind this outer array. Inner layers use the
-separate [bounded inner-shadow API](inner-shadows.md).
+The ordered array now carries the bounded [spread, box and scale-fixed modes](shadow-modes.md). Per-layer blend and general filter graphs remain separate work. Inner layers use the separate [bounded inner-shadow API](inner-shadows.md); inner box is explicitly inert.
 
 ## Exact composition contract
 
@@ -150,3 +148,5 @@ Current [bounded container inner shadows](container-inner-shadows.md) extend the
 leaf slice to Group/Box/Frame, preserving explicit paint phases, actual subtree
 alpha, independent own effects and existing budgets. See that contract for the
 current validation scope; older slice receipts above remain historical.
+
+The subsequent [shadow-mode contract](shadow-modes.md) documents the exact A8 one-tap correction and added conservative positive-sigma work charge. Earlier validation counts and native observations above remain historical; new-mode source and native gates are separately recorded.

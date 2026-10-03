@@ -38,7 +38,7 @@ fn inner_layers_default_round_trip_and_reject_atomically() {
         assert_eq!(scene, before);
     }
     let mut value = serde_json::to_value(Shadow::new(0., 0., 0., Color::BLACK)).unwrap();
-    value["spread"] = serde_json::json!(2);
+    value["scale_fixed"] = serde_json::json!(2);
     assert!(
         serde_json::from_value::<Style>(serde_json::json!({"inner_shadow_layers":[value]}))
             .is_err()

@@ -172,6 +172,7 @@ impl SceneExportPlan {
             limits,
         )?;
         source.logical_camera = Some(request.scale);
+        source.logical_effect_camera = Some(Affine::scale(request.scale, request.scale));
         source.canvas = Some(CanvasBackdrop {
             color: request.background,
             grid: None,

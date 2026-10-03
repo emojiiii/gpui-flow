@@ -106,6 +106,8 @@ pub enum CompositeError {
     UnsupportedShadow(DisplayId),
     /// Custom producers do not expose a supported inner-shadow alpha source.
     UnsupportedInnerShadow(DisplayId),
+    /// Nonempty spread source has no finite positive geometric reference.
+    InvalidShadowReference,
     /// A shadow would isolate a pass-through container whose descendants need
     /// its external backdrop. Select Normal explicitly or isolate those blends.
     UnsupportedShadowBackdrop(DisplayId),
@@ -220,3 +222,9 @@ mod grayscale_tests;
 
 #[cfg(test)]
 mod blur_tests;
+
+#[cfg(test)]
+mod shadow_modes_tests;
+
+#[cfg(test)]
+mod shadow_mode_consumer_tests;

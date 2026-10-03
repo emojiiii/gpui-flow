@@ -166,7 +166,7 @@ Custom inside a required domain rejects the entire domain. Text requires the exp
 
 In the default `SceneCompositing::Domains` mode, a domain root that needs multiply/screen against external content returns `UnsupportedExternalBackdrop`. A mask alone does not isolate a pass-through opacity-1 Group: a blend escaping an opaque mask run is rejected too. Explicit Normal groups and opacity isolation are supported, as are translucent mask runs that genuinely isolate their content. Put a required vector background inside the same Normal Group. Native siblings, host background, grid and selection decorations are not captured by that default mode. The explicit owned-canvas mode below includes only pixels owned by SceneView; arbitrary host GPUI content remains unsupported.
 
-[Bounded scalar grayscale](grayscale.md), [foreground blur](foreground-blur.md), [scale-fixed strokes](scale-fixed-strokes.md) and [Image alpha hit](image-alpha-hit.md) now have their own explicit contracts. Beyond these and the [bounded scene erasers](scene-erasers.md), no unrestricted eraser, spread/box/scale-fixed shadows, general filter graph/background blur, luminance/path/clipping mask modes, automatic resolution reduction or tiling is claimed. The single leaf-shadow subset is described below and [bounded subtree shadows](group-shadows.md) extend it; supported text, artistic blends and closed aligned strokes are covered in their dedicated sections. The engine's hit testing and conservative selection/layout bounds still include geometry beyond transparent mask pixels. Alpha-mask bounds do not become Leafer-style layout bounds. Rounded contours and stroke expansion retain the existing 0.1 local-unit approximation; gradient/AA bytes need not match the older native renderer. There is no wide-gamut, ICC or linear-light guarantee.
+[Bounded scalar grayscale](grayscale.md), [foreground blur](foreground-blur.md), [scale-fixed strokes](scale-fixed-strokes.md) and [Image alpha hit](image-alpha-hit.md) now have their own explicit contracts. Beyond these and the [bounded scene erasers](scene-erasers.md), no unrestricted eraser, general filter graph/background blur, luminance/path/clipping mask modes, automatic resolution reduction or tiling is claimed. The single leaf-shadow subset is described below and [bounded subtree shadows](group-shadows.md) extend it; supported text, artistic blends and closed aligned strokes are covered in their dedicated sections. The engine's hit testing and conservative selection/layout bounds still include geometry beyond transparent mask pixels. Alpha-mask bounds do not become Leafer-style layout bounds. Rounded contours and stroke expansion retain the existing 0.1 local-unit approximation; gradient/AA bytes need not match the older native renderer. There is no wide-gamut, ICC or linear-light guarantee.
 
 ## Budget, invalidation and lifecycle
 
@@ -362,8 +362,7 @@ Group, Box and Frame now support [bounded composed-subtree shadows](group-shadow
 including child effects and explicit PassThrough rejection. Custom shadows remain
 `UnsupportedShadow`. The validation checkpoint below records the earlier leaf-only slice.
 [Bounded multiple outer shadows](multiple-shadows.md) now extend the base property.
-Spread, box-only knockout, per-shadow blend,
-scale-fixed shadows and general filter graphs remain unsupported; bounded [foreground blur](foreground-blur.md) and [grayscale](grayscale.md) are separate node effects. The native example
+[Spread, outer box and scale-fixed shadow modes](shadow-modes.md) now extend each layer. Per-shadow blend and general filter graphs remain unsupported; bounded [foreground blur](foreground-blur.md) and [grayscale](grayscale.md) are separate node effects. The native example
 is `cargo run --locked --offline -p flow-studio --bin outer_shadows`.
 
 ## Outer-shadow validation, 2026-10-01
@@ -477,3 +476,5 @@ and paint, covering native and custom children along with CPU domains. Accepted
 animated-image samples supply alpha hits while a newer CPU batch is pending.
 Upload preflight uses a zero-opacity Div scope with positive image bounds, rather
 than a zero-size clip which may round outwards to one device pixel.
+
+For shadow-mode source ownership, signed spread/collapse, logical DPR separation and the exact A8 tiny-sigma correction, see [shadow-modes.md](shadow-modes.md). Its positive-sigma quadratic work allowance applies to default shadows too and can reject earlier at the same fixed cap.

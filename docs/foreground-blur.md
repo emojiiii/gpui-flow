@@ -34,7 +34,7 @@ Engine analytic effect bounds remain distinct from raster device support. Geomet
 
 ## Work, memory and failure atomicity
 
-No global limit is raised: default 4096 pixels per axis, 4,194,304 pixels per surface, 128 MiB tracked live pixel storage, 32 million cumulative work units and depth16, plus existing input/producer limits. Positive-sigma range is only one admission condition. Highly nested effects, repeated ancestor-shadow captures or large full-source padding can exceed the existing budget.
+No global limit is raised: default 4096 pixels per axis, 4,194,304 pixels per surface, 128 MiB known working set, 32 million cumulative work units and depth16, plus existing input/producer limits. Positive-sigma range is only one admission condition. Highly nested effects, repeated ancestor-shadow captures or large full-source padding can exceed the existing budget.
 
 For the admitted sigma, let H=`ceil(4*sigma)+2`, K=`2*H+1`, P=the padded source pixel count and W=its width. The conservative four-channel filter allowance is `56P + 32WK + 32W + 128K` bytes and `P*(16K+96) + 64K²` work units. It covers byte source/output, f32 planes, ring or full-plane intermediates, padding, kernel copies and reference tables. These are bounded accounting estimates, not total process memory or measured wall time; backend-private, GPU, allocator and operating-system overhead retain their existing exclusions.
 
@@ -65,3 +65,5 @@ The first convolution tests exposed the locked one-tap defect above. Independent
 No native window was opened for that source checkpoint. The later [bounded 12-row native gate](foreground-blur-native.md) has since completed on its separately frozen fixture/binary, with exact scope and preserved intermediate states recorded there. APP-04 remains partial, with its original remaining effects and acceptance unchanged.
 
 The foreground physical evidence is preserved as private Library COMPLETE v5, including original JPEGs/events, normal exit, both audit drafts and source/rebuild provenance. This adds no exact native-pixel or private-generation claim and does not close APP-04.
+
+The later [shadow-mode increment](shadow-modes.md) now repairs the inherited A8 one-tap displacement and tightens its conservative work accounting. The earlier foreground1049Z binary and native report retain their original historical limitation; this is not a retroactive change to that frozen evidence.

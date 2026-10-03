@@ -1,0 +1,603 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-10-03T11:59:44.341320+00:00",
+  "task_id": "APP-04",
+  "task_status": "partial",
+  "increment": "spread,outerbox,scale-fixed shadows and exact A8 one-tap correction",
+  "base_commit": "a029dd62eab0ed9fca73e4514d64454ae4e6ad17",
+  "validation_directory": "/workspace/shared/shadow-modes-validation",
+  "owner_summary": {
+    "source": "201e73d2ace7b2d6f9a714f9c1aa79db14deb5c525d33de7d4ad4528205f2747",
+    "scope": "499 Rust/TOML/Cargo runtime and test files; conservative inventory, not complete compiler inputs/assets",
+    "checks": {
+      "10-headless-final": {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--",
+          "--test-threads=1"
+        ],
+        "started_utc": "2026-10-03T11:42:43.390730+00:00",
+        "finished_utc": "2026-10-03T11:43:09.405406+00:00",
+        "source_before": "da4a38dcdce45169046975b3d00e2d220ea9ea53d6eaedc39a659fe7f5949193",
+        "source_after": "da4a38dcdce45169046975b3d00e2d220ea9ea53d6eaedc39a659fe7f5949193",
+        "exit_code": 0,
+        "minimum_free_bytes": 23661694976
+      },
+      "12-ui-final": {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "-p",
+          "gpui-flow",
+          "-p",
+          "flow-studio",
+          "--features",
+          "gpui-flow/canvas-stroke-text,flow-studio/outline-font-binding-x11",
+          "--lib",
+          "--",
+          "--test-threads=1"
+        ],
+        "started_utc": "2026-10-03T11:43:09.484838+00:00",
+        "finished_utc": "2026-10-03T11:44:52.578666+00:00",
+        "source_before": "da4a38dcdce45169046975b3d00e2d220ea9ea53d6eaedc39a659fe7f5949193",
+        "source_after": "da4a38dcdce45169046975b3d00e2d220ea9ea53d6eaedc39a659fe7f5949193",
+        "exit_code": 0,
+        "minimum_free_bytes": 23640784896
+      },
+      "20-composite-final": {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "-p",
+          "gpui-flow-composite",
+          "--",
+          "--test-threads=1"
+        ],
+        "started_utc": "2026-10-03T11:45:45.857977+00:00",
+        "finished_utc": "2026-10-03T11:46:06.872237+00:00",
+        "source_before": "d9adbb322da123441c00e7ee0787a51b3c2cfdb24dcd92125687897b784780b2",
+        "source_after": "d9adbb322da123441c00e7ee0787a51b3c2cfdb24dcd92125687897b784780b2",
+        "exit_code": 0,
+        "minimum_free_bytes": 23646650368
+      },
+      "21-headless-strict-final": {
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--offline",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "started_utc": "2026-10-03T11:46:06.955267+00:00",
+        "finished_utc": "2026-10-03T11:46:35.974241+00:00",
+        "source_before": "d9adbb322da123441c00e7ee0787a51b3c2cfdb24dcd92125687897b784780b2",
+        "source_after": "d9adbb322da123441c00e7ee0787a51b3c2cfdb24dcd92125687897b784780b2",
+        "exit_code": 0,
+        "minimum_free_bytes": 23659204608
+      },
+      "22-ui-text-final": {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "-p",
+          "gpui-flow",
+          "-p",
+          "flow-studio",
+          "--features",
+          "gpui-flow/canvas-stroke-text,flow-studio/outline-font-binding-x11",
+          "--lib",
+          "shadow_complete_text_source_keeps_backend_epoch_and_capability_provenance",
+          "--",
+          "--test-threads=1"
+        ],
+        "started_utc": "2026-10-03T11:48:44.400436+00:00",
+        "finished_utc": "2026-10-03T11:48:59.408017+00:00",
+        "source_before": "201e73d2ace7b2d6f9a714f9c1aa79db14deb5c525d33de7d4ad4528205f2747",
+        "source_after": "201e73d2ace7b2d6f9a714f9c1aa79db14deb5c525d33de7d4ad4528205f2747",
+        "exit_code": 0,
+        "minimum_free_bytes": 23639707648
+      },
+      "23-ui-strict-final": {
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--offline",
+          "-p",
+          "gpui-flow",
+          "-p",
+          "flow-studio",
+          "--features",
+          "gpui-flow/canvas-stroke-text,flow-studio/outline-font-binding-x11",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "started_utc": "2026-10-03T11:48:59.517144+00:00",
+        "finished_utc": "2026-10-03T11:49:05.548343+00:00",
+        "source_before": "201e73d2ace7b2d6f9a714f9c1aa79db14deb5c525d33de7d4ad4528205f2747",
+        "source_after": "201e73d2ace7b2d6f9a714f9c1aa79db14deb5c525d33de7d4ad4528205f2747",
+        "exit_code": 0,
+        "minimum_free_bytes": 23658717184
+      },
+      "14-format-final": {
+        "command": [
+          "cargo",
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "started_utc": "2026-10-03T11:49:05.736214+00:00",
+        "finished_utc": "2026-10-03T11:49:09.746780+00:00",
+        "source_before": "201e73d2ace7b2d6f9a714f9c1aa79db14deb5c525d33de7d4ad4528205f2747",
+        "source_after": "201e73d2ace7b2d6f9a714f9c1aa79db14deb5c525d33de7d4ad4528205f2747",
+        "exit_code": 0,
+        "minimum_free_bytes": 23658651648
+      },
+      "15-diff-check-final": {
+        "command": [
+          "git",
+          "diff",
+          "--check"
+        ],
+        "started_utc": "2026-10-03T11:49:09.858884+00:00",
+        "finished_utc": "2026-10-03T11:49:10.860831+00:00",
+        "source_before": "201e73d2ace7b2d6f9a714f9c1aa79db14deb5c525d33de7d4ad4528205f2747",
+        "source_after": "201e73d2ace7b2d6f9a714f9c1aa79db14deb5c525d33de7d4ad4528205f2747",
+        "exit_code": 0,
+        "minimum_free_bytes": 23658590208
+      }
+    },
+    "counts": {
+      "headless_aggregate": {
+        "passed": 1788,
+        "ignored": 10,
+        "compositor_included": 455
+      },
+      "final_compositor": {
+        "passed": 456,
+        "new_cases_since_aggregate": 1
+      },
+      "ui_library": {
+        "passed": 287
+      },
+      "ui_post_lint_focused": {
+        "passed": 1,
+        "already_included_in_ui_library": true
+      }
+    },
+    "failures_preserved": [
+      "a8-prefixed-failure.log",
+      "review-prefixed-failures.log",
+      "modes-focused-1.log",
+      "modes-focused-2.log",
+      "modes-focused-4.log",
+      "modes-focused-5.log",
+      "11-headless-strict-final.log",
+      "13-ui-strict-final.log"
+    ],
+    "interpretation": "No repeated-run sum. Full headless aggregate plus one subsequently added compositor test cover1789 distinct headless tests/doctests. Final compositor and strict checks cover the final test delta; UI full result is reused with three test-only file deltas and focused rerun of the changed UI test. All production source is identical to the full successful headless/UI snapshot. Native and docs remain parent-owned."
+  },
+  "owner_summary_sha256": "06b01e9672b05bfede9f45568e217cbb15154d209980f39a3a3fec62bfe8ca27",
+  "owner_manifest_sha256": "470cd4d0f83e1e9acb3680c91e1d351b66dad159c9f7242cfe03202b532dd055",
+  "changed_source_files": [
+    {
+      "path": "crates/flow-composite/src/blur.rs",
+      "bytes": 9425,
+      "sha256": "eaad4b3b58728ae846d768076d66bdac4e798fc1e61230bb2eb51d1a3135b184"
+    },
+    {
+      "path": "crates/flow-composite/src/canvas_surface.rs",
+      "bytes": 16056,
+      "sha256": "3a4ce2dfbebe3a0932197a4d81bd94a107ad55a4807c2a1c818555e8e8f258de"
+    },
+    {
+      "path": "crates/flow-composite/src/canvas_surface/commands.rs",
+      "bytes": 24812,
+      "sha256": "89b722209cdf2d1cfe370d77b1e42dd3149ecab73a27f4cc351419b7449e1b16"
+    },
+    {
+      "path": "crates/flow-composite/src/lib.rs",
+      "bytes": 5950,
+      "sha256": "73c60bfe4b8204929412790b6909abab4d332235ec9a218a6f7a1244b84174f4"
+    },
+    {
+      "path": "crates/flow-composite/src/plan.rs",
+      "bytes": 27484,
+      "sha256": "cb44f0e8b62c31db477e7273c584cae96861910804860be1974e492ae6e414f4"
+    },
+    {
+      "path": "crates/flow-composite/src/raster.rs",
+      "bytes": 62591,
+      "sha256": "4c92478f321118f69058390305f78106e637e771eb0beb24919cae8fc0558291"
+    },
+    {
+      "path": "crates/flow-composite/src/raster/admission.rs",
+      "bytes": 8662,
+      "sha256": "92c61481258e265e8638bca54515ebeda44d53610a4d692e2a995c4e0d20df49"
+    },
+    {
+      "path": "crates/flow-composite/src/scene_export.rs",
+      "bytes": 19563,
+      "sha256": "834fe0d4c419388543bdc6e38c276fddaa8f97d4fd4092d168501349c078f655"
+    },
+    {
+      "path": "crates/flow-composite/src/shadow.rs",
+      "bytes": 14866,
+      "sha256": "330cae78caa5032a9a511fb0e6e6977d146b4e64431d7d87f6c75df6b29d45af"
+    },
+    {
+      "path": "crates/flow-composite/src/shadow_mode_consumer_tests.rs",
+      "bytes": 15427,
+      "sha256": "1dfa96ec7d5bc1b0966bb55c7c7ba487eafff35065d48c0ce35a3f062a4d6be6"
+    },
+    {
+      "path": "crates/flow-composite/src/shadow_modes_tests.rs",
+      "bytes": 44375,
+      "sha256": "fe730973aee13adc2417f056341cb1e9a565844a8147ad243ed2edefcdaa200e"
+    },
+    {
+      "path": "crates/flow-composite/src/vector.rs",
+      "bytes": 34490,
+      "sha256": "ba73135d5ce325b5108683a2591dad05c5f6f48e00713e813db897ed5348f4ad"
+    },
+    {
+      "path": "crates/flow-editor/tests/shadow_modes.rs",
+      "bytes": 7824,
+      "sha256": "24adcbf13329ea4ed91b3a04686213306b0da7654bb49d57d4b5baa8602812c7"
+    },
+    {
+      "path": "crates/flow-engine/src/layout.rs",
+      "bytes": 12178,
+      "sha256": "d6a6ad8490e61bcf87ee44c61e162fdce803f1640cc3315c6c653e4254ff73ff"
+    },
+    {
+      "path": "crates/flow-engine/tests/shadow_modes.rs",
+      "bytes": 8420,
+      "sha256": "b466e13b06e29aba3b3e87ec14dd09c3799641a3343af37945ca26b391e1c5f6"
+    },
+    {
+      "path": "crates/flow-engine/tests/shadows.rs",
+      "bytes": 9154,
+      "sha256": "cc25d6c44ad43b7de8cb1d095c57958d612a00360d4f608da09188f79b48010b"
+    },
+    {
+      "path": "crates/flow-scene/src/object.rs",
+      "bytes": 7821,
+      "sha256": "9b8ec24d11372cc244a34fee3af6d8936a64652750cba19652ca202d34d68fc0"
+    },
+    {
+      "path": "crates/flow-scene/src/scene.rs",
+      "bytes": 40350,
+      "sha256": "a52dfac52342616468eb934c0b70abdfc34531b3fef19b99f57ec2f4f1aed247"
+    },
+    {
+      "path": "crates/flow-scene/src/style.rs",
+      "bytes": 25890,
+      "sha256": "21c98045fcdb55af2aeb088c54c084b99afb41737920599a2294fcc3f4d61e3d"
+    },
+    {
+      "path": "crates/flow-scene/tests/inner_shadows.rs",
+      "bytes": 2059,
+      "sha256": "e3249f323451e75ee6c29b489f4116a100755c95baa1123870af6a75fe557832"
+    },
+    {
+      "path": "crates/flow-scene/tests/shadow_modes.rs",
+      "bytes": 15238,
+      "sha256": "eaa02ced38d56a4196ca5eb49b515c4bff1d44bcc86c36018c343c7afd8508dd"
+    },
+    {
+      "path": "crates/flow-scene/tests/shadows.rs",
+      "bytes": 5521,
+      "sha256": "2327deea8bff8882fc3dd7cc350046bb90262964727137c5bf88fd72c8c74693"
+    },
+    {
+      "path": "crates/flow-ui/src/display/composite/presentation_tests.rs",
+      "bytes": 39383,
+      "sha256": "332020e7f7e00f2dcbf130e27c2fe14dca01d71461cd7226eb9b1623b760213c"
+    }
+  ],
+  "integration_inventory": {
+    "observed_utc": "2026-10-03T11:57:04.359001+00:00",
+    "narrow_scope_files": 499,
+    "narrow_aggregate": "201e73d2ace7b2d6f9a714f9c1aa79db14deb5c525d33de7d4ad4528205f2747",
+    "broader_scope_files": 534,
+    "broader_aggregate": "45b564e154fac6d747d92b9bc92688579241b42e9302bcb3211a58bf34f414ea",
+    "extra_entries": [
+      {
+        "path": "crates/flow-animation/README.md",
+        "bytes": 3900,
+        "sha256": "6866747747d28fb3b216cbdac2e3bf6b28ab29bd1191b69df6066ad1f0ca3d5b"
+      },
+      {
+        "path": "crates/flow-composite/README.md",
+        "bytes": 11093,
+        "sha256": "256fc1d744b1711fcbe92618623fa04b986a2060183c64d9f5602ecfd9a49521"
+      },
+      {
+        "path": "crates/flow-core/README.md",
+        "bytes": 4581,
+        "sha256": "acbc0f57debf42783248b43c4935ca4a29c405f1ebadcee6e0694c27757f2736"
+      },
+      {
+        "path": "crates/flow-engine/README.md",
+        "bytes": 8889,
+        "sha256": "ab622090f941fffd11657939ac6a7522193deed8a58fc352e46b7c0e82601fa9"
+      },
+      {
+        "path": "crates/flow-interaction/README.md",
+        "bytes": 7420,
+        "sha256": "7adad7aa99f18a453828faf991cdcf8327164f1607ffc2f96eeb6449d3f84eae"
+      },
+      {
+        "path": "crates/flow-layout/README.md",
+        "bytes": 5393,
+        "sha256": "b86ef5d94d6c8d28964593d02afe7d266428b276628ed0e26031c0983c106304"
+      },
+      {
+        "path": "crates/flow-scene/README.md",
+        "bytes": 12926,
+        "sha256": "09694190c5a603bf0bebd4c10c97e22573f0926b84a5f1664f52086565366a0a"
+      },
+      {
+        "path": "crates/flow-text/README.md",
+        "bytes": 6334,
+        "sha256": "71829e0e921759ccfbddfd5399c315b01c680196f069266adbd74e688317f548"
+      },
+      {
+        "path": "crates/flow-text/tests/fixtures/generate_outline_fonts.py",
+        "bytes": 2843,
+        "sha256": "fd4962aff398df429afa9f373010287dd187ce3c6976e336806a7694d9e725a9"
+      },
+      {
+        "path": "crates/flow-text/tests/fixtures/generate_stroke_fonts.py",
+        "bytes": 5436,
+        "sha256": "65778acd038aa1b192d5898e6d7764c3e0cb20cc631b6c8d914156b6fe49c614"
+      },
+      {
+        "path": "crates/flow-text/tests/fixtures/outline-cubic.otf",
+        "bytes": 1576,
+        "sha256": "cfb44080e7dd0a928b1baf5e870e3b382a71ff43049b3e25c6b9e8bf31537b71"
+      },
+      {
+        "path": "crates/flow-text/tests/fixtures/outline-quadratic.ttf",
+        "bytes": 1540,
+        "sha256": "315383d2601dcd74cbbaa73d7b897e38997123668a12f5e664403ffde4af4429"
+      },
+      {
+        "path": "crates/flow-text/tests/fixtures/stroke-cubic.otf",
+        "bytes": 2724,
+        "sha256": "0d85275cdd5deb518954403700fdb76bd7ec9749c968e386694eee05e66889f1"
+      },
+      {
+        "path": "crates/flow-text/tests/fixtures/stroke-fixtures.md",
+        "bytes": 1832,
+        "sha256": "441648535082eb9ed10832828f6ab6166dff0c1d7623388e3365627b471d4e8f"
+      },
+      {
+        "path": "crates/flow-text/tests/fixtures/stroke-quadratic.ttf",
+        "bytes": 2900,
+        "sha256": "baa84cec7f5f8b51981063d8ce98ba04e166c6998b18595df063248cbc4f04e3"
+      },
+      {
+        "path": "docs/examples/.gitignore",
+        "bytes": 8,
+        "sha256": "44c92e3a70ad3307b7056871c2bdb096d8bfa9373f5bf06a79bb6324a20ff2fb"
+      },
+      {
+        "path": "docs/examples/Cargo.lock",
+        "bytes": 10306,
+        "sha256": "c611f1964da8cf1989408b1c253ad7cfaaa0538d90787fde38645d44fe112262"
+      },
+      {
+        "path": "docs/examples/Cargo.toml",
+        "bytes": 696,
+        "sha256": "8583c512b5f61cf0955cf7802f2b117a6763147cc9f41a6022b59c56ce9c9f5b"
+      },
+      {
+        "path": "docs/examples/src/bin/animation.rs",
+        "bytes": 3042,
+        "sha256": "fb4284aa0d3a1e83175bea8ac0a9884c2107befb11a6a29e5f73c3148a3e5f34"
+      },
+      {
+        "path": "docs/examples/src/bin/auto_size.rs",
+        "bytes": 2504,
+        "sha256": "afd998743d6f6e43a95b1ac0cca53107f7bf10a7687697ad4ee75b143b91023f"
+      },
+      {
+        "path": "docs/examples/src/bin/core.rs",
+        "bytes": 2346,
+        "sha256": "f06cb47051536cdb7985fd150a18027f06e5146707c55eaab8a0f52b302291d9"
+      },
+      {
+        "path": "docs/examples/src/bin/focus.rs",
+        "bytes": 2806,
+        "sha256": "5ac1543122c5ed150d81fb6ae73cc7a58ef1ca57f49b5e578269a6246efea6ea"
+      },
+      {
+        "path": "docs/examples/src/bin/layout.rs",
+        "bytes": 2764,
+        "sha256": "08e57d0dded7e61d57f50e454f5afe7b397fcb6af5d2711ab8f1ddc0fcce5a29"
+      },
+      {
+        "path": "docs/examples/src/bin/lock_ratio.rs",
+        "bytes": 2046,
+        "sha256": "3141b166e54c798ad213437c7173e1032e74db396fc61a256f37de7056f5957b"
+      },
+      {
+        "path": "docs/examples/src/bin/plugins.rs",
+        "bytes": 2065,
+        "sha256": "ccea58f52b7cd995b43df00cfcab3584cff8f3ca01c6467f9c98def13557e37c"
+      },
+      {
+        "path": "docs/examples/src/bin/reactive_layout.rs",
+        "bytes": 2553,
+        "sha256": "f60cbd8dff64ef1e779080a9fb10e5cf2d75c82e92bad7edbbd60a4ce92d2a27"
+      },
+      {
+        "path": "docs/examples/src/bin/runner.rs",
+        "bytes": 2373,
+        "sha256": "b99bf388949975ef50fc14e9fe656e8c82d6294ed7c09876097923bfc507403b"
+      },
+      {
+        "path": "docs/examples/src/bin/state_styles.rs",
+        "bytes": 4066,
+        "sha256": "cc598fb5eeb09d3ac8d6797d092b237238b06334842023cf5c57155b18d02dfe"
+      },
+      {
+        "path": "docs/examples/src/bin/text_editing.rs",
+        "bytes": 1565,
+        "sha256": "4e2ee8b47a465b4be388fa2ff291cde9eadea23080c0a80aa4b8e85c60f65510"
+      },
+      {
+        "path": "docs/examples/src/bin/workflow.rs",
+        "bytes": 2404,
+        "sha256": "9b68479be20b26c74ae4a4f19f7b2fd96604257a5da37494b98d1e1823f8aefc"
+      },
+      {
+        "path": "examples/studio/assets/README.md",
+        "bytes": 474,
+        "sha256": "0570ee11fab49e236abbfead12cc484a0e3a9d7a17b18444fb62589b6b8a585b"
+      },
+      {
+        "path": "examples/studio/assets/checker.png",
+        "bytes": 431,
+        "sha256": "fd2d58c20ddef2c40db983c2b4c02fd12efefed9506f2cf9b781b2dd4f3f54f3"
+      },
+      {
+        "path": "examples/studio/assets/composite-alpha.svg",
+        "bytes": 307,
+        "sha256": "44ed8104b5985448e7c79a51de06270f53df31e0d8712075d949f868ceb680bd"
+      },
+      {
+        "path": "examples/studio/assets/composite-animation.gif",
+        "bytes": 2850,
+        "sha256": "65b734da946a3fa51781773e4f6174ff21de8f7787abcbd71c57d7fa2429cc6e"
+      },
+      {
+        "path": "scripts/generate-media-fixtures.py",
+        "bytes": 1169,
+        "sha256": "57653ac7e3b18584606be7fa1968b102094a310dfbbae845142b409beaad5a33"
+      }
+    ],
+    "all_extra_match_published_723d_archive": true,
+    "timing": "Broader integration-time inventory, not retroactively asserted as captured by owner test runner; owner retained499 before/after records. Additional assets/docs/scripts match immutable published723d archive."
+  },
+  "test_only_delta": {
+    "ui_source": "da4a38dcdce45169046975b3d00e2d220ea9ea53d6eaedc39a659fe7f5949193",
+    "current_source": "201e73d2ace7b2d6f9a714f9c1aa79db14deb5c525d33de7d4ad4528205f2747",
+    "production_unchanged": true,
+    "delta": {
+      "crates/flow-composite/src/shadow_mode_consumer_tests.rs": {
+        "before": "b7f48bc6b86140d394385d8256ea46eaa5a72608f910f6d9ab9a1766abbba85a",
+        "after": "1dfa96ec7d5bc1b0966bb55c7c7ba487eafff35065d48c0ce35a3f062a4d6be6"
+      },
+      "crates/flow-composite/src/shadow_modes_tests.rs": {
+        "before": "b3ed4eb0f82ce7c4ea1d3b1be9073e9af9693d834ccacc6fb41157245a5d9b20",
+        "after": "fe730973aee13adc2417f056341cb1e9a565844a8147ad243ed2edefcdaa200e"
+      },
+      "crates/flow-ui/src/display/composite/presentation_tests.rs": {
+        "before": "75c329616536e61814c62e4916a603583f4bc2014c67f2b540c8dd6a242a3079",
+        "after": "332020e7f7e00f2dcbf130e27c2fe14dca01d71461cd7226eb9b1623b760213c"
+      }
+    },
+    "followup": "20-composite-final covers two compositor test changes/new cumulative case; 22-ui-text-final reruns the one UI text test after equivalent iterator lint fix"
+  },
+  "dependency_audit": {
+    "date": "2026-10-03T11:37:10.218578+00:00",
+    "locked_dependency": "image 0.25.10",
+    "source_files": {
+      "/workspace/shared/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/image-0.25.10/src/imageops/sample.rs": "f5dd7c0697010b8f5e8dd6d92b82294dd38ed364b8df6a575ca0b5fa8c212641",
+      "/workspace/shared/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/image-0.25.10/src/imageops/filter_1d.rs": "03074917710ef7c899d63e18f6249b6b389f721214e82d2d73ee0ca3cc695b66"
+    },
+    "kernel": "sample.rs get_gaussian_kernel_1d has exact adjacent exp_f32(-.5*powf_f32(1/sigma,2))*[1/(sqrt_f32(2*PI)*sigma)]. prepare_symmetric_kernel repeatedly removes zero ends; the exact one-tap ring still pads by max(radius,1), causing wrong first row and x displacement.",
+    "bytes": "For N original pixels, M transformed/filter pixels, Q tint pixels: 5N + FilterBytes(M,W) + 4Q. Positive-sigma FilterBytes=18M+16WK+128K+32W: original spare RGBA4M, A8 input/output2M, f32 in/out8M, full-plane4M; ring/padding/row arena, kernels/scanned copies/reference tables fit remaining allowance. Sigma-zero FilterBytes=5M. Original RGBA4N and A8 N stay live through tint. Collapsed outer skips capture/filter/output; collapsed inner retains 5N+4Q.",
+    "work": "FilterWork(M)=12M at zero sigma; otherwise M*(4K+24)+64K*K. New mode schedule=12N+FilterWork(M)+16M+16Q+destination_pixels, plus every recursively replayed source paint/mask/filter and ordinary isolation. Collapsed no-filter branches omit M and K terms. The 64K*K term explicitly bounds quadratic symmetric-kernel trimming. It also tightens admission for old positive-sigma shadows, without changing global limits.",
+    "caveats": [
+      "Budgets bound known raster visits and tracked pixel storage, not allocator/backend/OS memory or latency.",
+      "Gaussian remains bounded and non-interruptible internally; cancellation checks surround it and occur per extraction/resampling/tint row.",
+      "These are conservative schedule charges, not measured exact allocations or new global caps."
+    ],
+    "prefixed_failure": "a8-prefixed-failure.log",
+    "pending_review_repairs": [],
+    "review_repairs": "All four owner-run reproductions failed before fixes and passed after; multiple hidden sibling cumulative total6/5 regression passes in final compositor. Source review report /workspace/shared/shadow-modes-source-review.md."
+  },
+  "implementation_handoff_sha256": "78cefe9324bb138b9fac82c197cc270548b93019377e79a93819b1dbbe2e336f",
+  "independent_review": {
+    "path": "docs/shadow-modes-source-review.md",
+    "sha256": "1a9499798beafa1905e1f6b5118d74fcd7252e83de5b07f9fc806d7f5f2d28d9",
+    "final_runtime_files_checked": 499,
+    "no_unresolved_P1_P2": true,
+    "reviewer_ran_tests": false
+  },
+  "artifact_hashes": {
+    "01-headless.log": "de57bca0a29c9a6f341ea034c0da089613edd0c810cfa4914243d60f786c2df1",
+    "01-headless.receipt.json": "2ac9d5c0066ec69666d901087f5986367933f45e6411adf18665228c7df9478a",
+    "10-headless-final.log": "d18541d2782d23cc3c8bfa2567a629af83153fb379f4cee5cd1eeac2e2dc4799",
+    "10-headless-final.receipt.json": "2c810b517d03bb6cedaa47472ca465a618893c12e8ee8225dddb855a955d9062",
+    "11-headless-strict-final.log": "b1d67a884381e25577cb0d59cfc394d0aac79b39b122d33eb6388175852f43cf",
+    "11-headless-strict-final.receipt.json": "41b3eb8f4fadd858c72806185439075b74516b3686a31dc42948896bd4458393",
+    "12-ui-final.log": "85123ce5538554bea319ebe49159c429541ef00e95c906a5cb4299f2fbbab11e",
+    "12-ui-final.receipt.json": "be32810bb1e4a1d064b4f1301fd84adbc7ef321e8c6592da15afcf7f4bae39f4",
+    "13-ui-strict-final.log": "2ffbf0b40321563681dd4c986941f6fb2e61c06b8a544814ca3cdd11e513cab4",
+    "13-ui-strict-final.receipt.json": "55335bfae9cdc9748c5f57ef9ecef65fd46b8739289674a0140d17df6324fdf5",
+    "14-format-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "14-format-final.receipt.json": "6134d95f78c80063f38e6adf9f0c8600447e914b64d3099b7e2f6447945678a9",
+    "15-diff-check-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "15-diff-check-final.receipt.json": "7937f91f3c797bf52659bb6f2fff1644d58302108e5f6b0f5d62759135675da7",
+    "20-composite-final.log": "85e78b0868464fd6339093836d2f32504745f53f45e4f2cd4e9b0e41ad4e0564",
+    "20-composite-final.receipt.json": "4e2d40baab4c4b56358b64170c4921a11b44124e97d0b463d8f24601b4283c5c",
+    "21-headless-strict-final.log": "46c4308330be9984a5478afb890f70476c9027fe91cb3b6f0e9c8efb30fd6df6",
+    "21-headless-strict-final.receipt.json": "47610147b47cb2e77bbb6c725163e34564852d479c55e2b0a6c99eb041d3a30b",
+    "22-ui-text-final.log": "77f6fa36973016b5e502293437d7498a43f377098b75a2d2058c469e77eb5f7c",
+    "22-ui-text-final.receipt.json": "fcb8c2d8697178963ac9126f924840e7d732c493f62cab91fc7e956f5fad47d2",
+    "23-ui-strict-final.log": "0a8e867ed48a85af16e6eac71511f787e18853cf13cce0507816b0c89b39b620",
+    "23-ui-strict-final.receipt.json": "cd97e29597cc8fc5b561090430548324bc011752ddef2fef9149e7242abc84c7",
+    "a8-prefixed-failure.log": "9f0e0d1b88e372b151ece07e0cfe929edd21a246b1f0ced9f1a3549c69d318b5",
+    "changed-source-final.json": "85c0a173a84f848d235bcc3328a9a722b166b80c543833b269730a27d84b12a8",
+    "consumer-tests-handoff.md": "d15d4bb34683399831d1a7e73356cef16e2a15140e17fff32937f658906d352f",
+    "dependency-audit.json": "2fe0a95e7afd902b8aaebf535a5ac3bf934b850ba0fb0ebc6a5ecf01fda4392f",
+    "final-source-inputs.json": "470cd4d0f83e1e9acb3680c91e1d351b66dad159c9f7242cfe03202b532dd055",
+    "first-compile.log": "ff016b8b7e031e43fc9a85246d1b9363719afe2a0a0e8a816ee48539d9a76599",
+    "implementation-handoff.md": "78cefe9324bb138b9fac82c197cc270548b93019377e79a93819b1dbbe2e336f",
+    "integrator-additional-input-proof.json": "b9e4507e689939698c5b16976c03d92c9e1e94f4e9bd48e1d00c0e2ef4cf065e",
+    "integrator-source-assets-inventory.json": "11d71c968b2204878a1b5033918c0b03d1fe3a5b98b1bf59d040a884f0e9ddf5",
+    "modes-focused-1.log": "b18d3f1ffe11fb3d09dfc163fe259af9ca1237f3ce3bb8b7576b83c551fa4445",
+    "modes-focused-2.log": "e148302892c9143a2f7247f158de80603d80fc830961f1ae7bae17a90f78b422",
+    "modes-focused-3.log": "a6907c1fe4a13e4b82e9ad9c65eec9f83069cdebcf8e0b72f83ee0be15dd7341",
+    "modes-focused-4.log": "2b835f3846f6abfc322859c489b86396cf1f51ea17e2b884b0c4ecc379200e69",
+    "modes-focused-5.log": "e517b5fc90079cb91b488b4916ee96c2d595bac16358c383534489c084471f3f",
+    "modes-focused-6.log": "ad8f6e941909584485b0359aff08f76ea59dacc31d7bd8d9063602bf1154b746",
+    "post-ui-test-only-delta.json": "2fa46a4fe7d5801aa418d49c2ee973d649b07fe9059dd3fbb715a8dd24a93f57",
+    "review-fixed-source.json": "5a404162273ea5495bf162fe96724e59592b42ff4ec5e8b23029a025440b2238",
+    "review-fixed.log": "e325750211958a53444e0ff7a56fb7c2bfa7c7750a909d0a83b5733bc37c8a23",
+    "review-prefixed-failures.log": "c3f13ce26521963c210398f01af795ab8c022d5796525925c2af2dde962d4a41",
+    "scene-engine-handoff.md": "4724f6c0e5caee13031a9ea0267d94630a8e10598f0a7984033b70567310236b",
+    "summary.json": "06b01e9672b05bfede9f45568e217cbb15154d209980f39a3a3fec62bfe8ca27"
+  },
+  "breaking_Rust_source_change": "Three new public Shadow fields break external Rust struct literals; Shadow::new unchanged. Old native JSON missing fields defaults; old binaries not promised to accept new serialized fields.",
+  "legacy_budget_change": "Positive-sigma A8 work now includes64*K^2 for kernel trimming, including default shadows; near-cap old requests may reject earlier. All ceilings unchanged.",
+  "intentional_pixel_correction": "Exact-zero adjacent Gaussian weights choose identity for tiny positive A8 sigma; old x+1/first-row bug changes intentionally. Default mode matrix narrowing restored; actual-f32 support retained.",
+  "native_status": "not run for this increment; foreground1049Z native evidence belongs to its older separate source/binary",
+  "counts_unchanged": {
+    "bounded_verified": 33,
+    "partial": 9,
+    "not_started": 3
+  },
+  "actions_started": false,
+  "deployment_started": false
+}

@@ -717,3 +717,279 @@ fn blur_undo_restores_original_pixels_and_stale_placement_identity() {
     assert_eq!(original.screen_bounds, restored.screen_bounds);
     assert!(key(&editor.engine).compatible(&first, &"g".into()));
 }
+
+fn shadow_mode_value(
+    property: &gpui_flow_engine::PropertyKey,
+    effect: gpui_flow_scene::Shadow,
+) -> serde_json::Value {
+    if *property == gpui_flow_engine::PropertyKey::Shadow {
+        serde_json::to_value(effect).unwrap()
+    } else {
+        serde_json::to_value([effect]).unwrap()
+    }
+}
+
+#[test]
+fn shadow_mode_fields_withdraw_frames_and_reject_successful_stale_completions() {
+    use gpui_flow_engine::PropertyKey;
+    use gpui_flow_scene::{Paint, Shadow};
+
+    for owned in [false, true] {
+        for target in ["g", "r"] {
+            for property in [
+                PropertyKey::Shadow,
+                PropertyKey::ShadowLayers,
+                PropertyKey::InnerShadowLayers,
+            ] {
+                for field in ["spread", "box", "scale_fixed"] {
+                    let mut engine = engine();
+                    engine
+                        .transaction(|scene| {
+                            scene.update_object(&"g".into(), |o| {
+                                o.transform = Affine::translation(20., 20.) * Affine::scale(2., 2.)
+                            })?;
+                            scene.update_object(&"r".into(), |o| {
+                                o.shape = display::Rect::new(12., 8.).into();
+                                o.style.fill = Some(Color::rgba(0, 0, 255, 128).into());
+                            })
+                        })
+                        .unwrap();
+                    let effect = Shadow::new(5., 1., 0., Color::rgb(255, 0, 0));
+                    let handle = engine.handle(&target.into()).unwrap();
+                    engine
+                        .set_property(
+                            handle,
+                            property.clone(),
+                            shadow_mode_value(&property, effect),
+                        )
+                        .unwrap();
+                    let identity = engine.instance(handle).unwrap();
+                    let geometry = engine.world_bounds(&target.into()).unwrap();
+                    let make_key = |engine: &SceneEngine| {
+                        if !owned {
+                            return key(engine);
+                        }
+                        let base = key(engine);
+                        let domain = gpui_flow_composite::owned_canvas(
+                            engine.scene(),
+                            gpui_flow_composite::CanvasBackdrop {
+                                color: Color::WHITE,
+                                grid: None,
+                            },
+                            CompositeLimits::default(),
+                        )
+                        .unwrap();
+                        Arc::new(RequestKey::new(
+                            vec![domain],
+                            engine,
+                            base.viewport,
+                            base.window,
+                        ))
+                    };
+                    let domain: DisplayId = if owned { "" } else { "g" }.into();
+                    let first = make_key(&engine);
+                    let mut controller = CompositeController::default();
+                    controller.request(first.clone());
+                    finish(&mut controller);
+                    let old = controller.frame(&domain).unwrap().0;
+                    controller.accepted(&first, &domain, &old.image);
+                    assert_eq!(controller.accepted.len(), 1);
+                    engine
+                        .set_property(
+                            engine.handle(&"r".into()).unwrap(),
+                            PropertyKey::Fill,
+                            serde_json::to_value(Paint::solid(Color::rgba(0, 160, 255, 128)))
+                                .unwrap(),
+                        )
+                        .unwrap();
+                    let previous = make_key(&engine);
+                    assert!(previous.compatible(&first, &domain));
+                    controller.request(previous.clone());
+                    let late = controller.take_work().unwrap();
+                    let successful_result = late.run();
+                    assert!(
+                        matches!(successful_result.as_slice(), [(id, Ok(Some(_)))] if id == &domain)
+                    );
+                    let mut changed = effect;
+                    match field {
+                        "spread" => changed.spread = 3.,
+                        "box" => changed.r#box = true,
+                        _ => changed.scale_fixed = true,
+                    }
+                    engine
+                        .set_property(
+                            handle,
+                            property.clone(),
+                            shadow_mode_value(&property, changed),
+                        )
+                        .unwrap();
+                    let current = make_key(&engine);
+                    assert_eq!(engine.instance(handle).unwrap(), identity);
+                    assert_eq!(engine.world_bounds(&target.into()).unwrap(), geometry);
+                    assert_eq!(
+                        current.domains[0].identities,
+                        previous.domains[0].identities
+                    );
+                    assert!(
+                        !current.compatible(&previous, &domain),
+                        "{target} {property:?} {field}"
+                    );
+                    let retired = controller.request(current.clone());
+                    assert_eq!(retired.len(), 1);
+                    assert!(Arc::ptr_eq(&retired[0].image, &old.image));
+                    assert!(controller.frame(&domain).is_none());
+                    assert!(late.cancel.load(Ordering::Relaxed));
+                    controller.finish(late.key.clone(), successful_result);
+                    assert!(controller.candidates.is_empty());
+                    assert!(controller.frame(&domain).is_none());
+                    finish(&mut controller);
+                    let (frame, candidate) = controller.frame(&domain).unwrap();
+                    assert!(candidate);
+                    controller.accepted(&previous, &domain, &frame.image);
+                    assert!(controller.accepted.is_empty());
+                    controller.accepted(&current, &domain, &frame.image);
+                    assert_eq!(controller.accepted.len(), 1);
+                    assert!(!controller.pending());
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn shadow_mode_undo_restores_pixels_extent_and_semantic_placement() {
+    use gpui_flow_engine::PropertyKey;
+    use gpui_flow_scene::Shadow;
+
+    for property in [
+        PropertyKey::Shadow,
+        PropertyKey::ShadowLayers,
+        PropertyKey::InnerShadowLayers,
+    ] {
+        let mut editor = gpui_flow_editor::SceneEditor::new(engine().scene().clone()).unwrap();
+        editor
+            .engine
+            .transaction(|scene| {
+                scene.update_object(&"g".into(), |o| {
+                    o.transform = Affine::translation(20., 20.) * Affine::scale(2., 2.)
+                })?;
+                scene.update_object(&"r".into(), |o| {
+                    o.style.fill = Some(Color::rgba(0, 0, 255, 128).into())
+                })
+            })
+            .unwrap();
+        let handle = editor.engine.handle(&"g".into()).unwrap();
+        let effect = Shadow::new(8., 2., 0., Color::rgb(255, 0, 0));
+        editor
+            .set_property(
+                handle,
+                property.clone(),
+                shadow_mode_value(&property, effect),
+            )
+            .unwrap();
+        let render = |engine: &SceneEngine| {
+            let request = key(engine);
+            gpui_flow_composite::rasterize(
+                &request.domains[0].source,
+                request.viewport,
+                &mut gpui_flow_composite::PixelBudget::new(CompositeLimits::default(), 0).unwrap(),
+                &AtomicBool::new(false),
+            )
+            .unwrap()
+            .unwrap()
+        };
+        let before = render(&editor.engine);
+        let first = key(&editor.engine);
+        let changed = Shadow {
+            spread: 3.,
+            r#box: true,
+            scale_fixed: true,
+            ..effect
+        };
+        editor
+            .set_property(
+                handle,
+                property.clone(),
+                shadow_mode_value(&property, changed),
+            )
+            .unwrap();
+        let after = render(&editor.engine);
+        assert_ne!(before.premul_rgba, after.premul_rgba);
+        assert!(!key(&editor.engine).compatible(&first, &"g".into()));
+        assert!(editor.undo());
+        let restored = render(&editor.engine);
+        assert_eq!(before.premul_rgba, restored.premul_rgba);
+        assert_eq!(before.screen_bounds, restored.screen_bounds);
+        assert!(key(&editor.engine).compatible(&first, &"g".into()));
+        assert!(editor.redo());
+        let redone = render(&editor.engine);
+        assert_eq!(after.premul_rgba, redone.premul_rgba);
+        assert_eq!(after.screen_bounds, redone.screen_bounds);
+    }
+}
+
+#[test]
+fn shadow_complete_text_source_keeps_backend_epoch_and_capability_provenance() {
+    use gpui_flow_scene::{Shadow, Size};
+    let (_app, bridge) =
+        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let mut engine = engine();
+    engine
+        .transaction(|scene| {
+            scene.update_object(&"g".into(), |o| {
+                o.style.shadow = Some(Shadow {
+                    spread: 4.,
+                    r#box: true,
+                    scale_fixed: true,
+                    ..Shadow::new(70., 0., 0., Color::rgb(255, 0, 0))
+                })
+            })?;
+            scene.update_object(&"r".into(), |o| {
+                let mut text = display::Text::new("MMMM", Size::new(80., 30.));
+                text.font_family = "DejaVu Sans".into();
+                text.font_size = 20.;
+                o.shape = text.into();
+                o.transform = Affine::translation(-60., 20.);
+                o.style.fill = Some(Color::WHITE.into());
+            })
+        })
+        .unwrap();
+    let first = Arc::new((*key(&engine)).clone().with_text_backend(Some(&bridge)));
+    assert!(first.domains[0].source.text_sources()[0].2);
+    let mut controller = CompositeController::default();
+    controller.request(first.clone());
+    let work = controller.take_work().unwrap();
+    let result = work.run();
+    let frame = result[0].1.as_ref().unwrap().as_ref().unwrap();
+    assert!(
+        frame
+            .premul_rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .any(|pixel| pixel[0] > pixel[1])
+    );
+    bridge.invalidate();
+    assert!(!first.text_current());
+    controller.finish(first.clone(), result);
+    assert!(controller.candidates.is_empty());
+    let fresh = Arc::new((*key(&engine)).clone().with_text_backend(Some(&bridge)));
+    assert!(!fresh.compatible(&first, &"g".into()));
+    controller.request(fresh.clone());
+    finish(&mut controller);
+    let frame = controller.frame(&"g".into()).unwrap().0;
+    controller.accepted(&fresh, &"g".into(), &frame.image);
+    assert_eq!(controller.accepted.len(), 1);
+    let withdrawn = key(&engine);
+    assert!(!withdrawn.compatible(&fresh, &"g".into()));
+    assert_eq!(controller.request(withdrawn.clone()).len(), 1);
+    assert!(controller.frame(&"g".into()).is_none());
+    let work = controller.take_work().unwrap();
+    let result = work.run();
+    assert!(
+        matches!(&result[0].1, Err(CompositeError::TextBackendRequired(id)) if id == &DisplayId::from("r"))
+    );
+    controller.finish(withdrawn, result);
+    assert!(controller.frame(&"g".into()).is_none());
+    assert_eq!(controller.errors.len(), 1);
+}

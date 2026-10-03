@@ -540,6 +540,15 @@ impl Scene {
     ) -> Result<Option<Bounds>, SceneError> {
         self.resolved_for_view(camera)?.local_bounds(id)
     }
+    /// Owner-local pre-effect geometry used for shadow spread. Fixed strokes
+    /// are resolved at the logical camera scale, independently of device DPR.
+    pub fn shadow_reference_bounds_for_view(
+        &self,
+        id: &DisplayId,
+        camera: f32,
+    ) -> Result<Option<Bounds>, SceneError> {
+        self.resolved_for_view(camera)?.shadow_reference_bounds(id)
+    }
     pub fn visible_bounds_for_view(&self, camera: f32) -> Result<Option<Bounds>, SceneError> {
         self.resolved_for_view(camera)?.visible_bounds()
     }
@@ -588,6 +597,28 @@ impl Scene {
     pub fn local_bounds(&self, id: &DisplayId) -> Result<Option<Bounds>, SceneError> {
         self.validate()?;
         self.local_bounds_inner(id)
+    }
+    /// Owner-local geometric reference for shadow spread, independent from
+    /// actual source alpha and every own/descendant effect. Leaves and fixed
+    /// Box/Frame use their own paint/stroke geometry, including a paintless
+    /// declared box. Group uses the existing recursive geometric subtree bounds
+    /// with child clips and eraser exclusions. Hidden child geometry is retained
+    /// consistently with [`Self::local_bounds`]; masks do not trim the reference.
+    /// Authored scenes resolve fixed strokes at camera 1; presentation snapshots
+    /// use their bound camera. This does not redefine public geometric bounds.
+    pub fn shadow_reference_bounds(&self, id: &DisplayId) -> Result<Option<Bounds>, SceneError> {
+        self.validate()?;
+        let node = self
+            .nodes
+            .get(id)
+            .ok_or_else(|| SceneError::MissingNode(id.clone()))?;
+        if matches!(node.object.shape, crate::Shape::Group(_)) {
+            self.local_bounds_inner(id)
+        } else {
+            Ok(self
+                .resolved_object(id, self.resolved_stroke_camera.unwrap_or(1.))?
+                .paint_bounds())
+        }
     }
     fn local_bounds_inner(&self, id: &DisplayId) -> Result<Option<Bounds>, SceneError> {
         let node = self

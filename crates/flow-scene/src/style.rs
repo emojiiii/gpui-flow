@@ -294,8 +294,8 @@ impl BlendMode {
 }
 /// One alpha-derived shadow layer. Local-space `blur` maps to 2σ in
 /// the bounded CPU renderer; this is not a browser-pixel-equivalence promise.
-/// Its owning style array determines inner/outer placement. Spread, box,
-/// scale-fixed and per-shadow blend fields are unsupported.
+/// Its owning style array determines inner/outer placement. Spread scales the
+/// source alpha on canvas axes around its pre-effect geometric reference.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Shadow {
@@ -303,40 +303,152 @@ pub struct Shadow {
     pub y: f32,
     pub blur: f32,
     pub color: Color,
+    /// Signed spread in local units, finite within ±4096. Negative projected
+    /// factors reflect the source; an exactly collapsed axis projects no alpha.
+    #[serde(default)]
+    pub spread: f32,
+    /// Attenuate this outer layer by the original source's inverse alpha.
+    /// Preserved but inert for inner layers; this never substitutes box alpha.
+    #[serde(default)]
+    pub r#box: bool,
+    /// Cap effect parameters above logical scale 1; DPR never enters the cap.
+    #[serde(default)]
+    pub scale_fixed: bool,
 }
 impl Shadow {
     pub const fn new(x: f32, y: f32, blur: f32, color: Color) -> Self {
-        Self { x, y, blur, color }
+        Self {
+            x,
+            y,
+            blur,
+            color,
+            spread: 0.,
+            r#box: false,
+            scale_fixed: false,
+        }
     }
     pub fn is_visible(self) -> bool {
         self.color.a != 0
     }
-    /// Conservative visual extent, excluding the renderer's device-pixel AA
-    /// guard. Geometric paint/hit/layout/selection bounds remain unchanged.
+    /// Conservative visual extent for a source whose geometry is exactly
+    /// `bounds`. Containers and descendant effects require the explicit local
+    /// reference accepted by [`Self::expand_bounds_with_reference`]. Excludes
+    /// device-pixel support guards and never changes geometric bounds. Nonzero
+    /// spread with rotation also requires the explicit reference: an inverse
+    /// world AABB cannot recover the original local width and height.
     pub fn expand_bounds(self, bounds: crate::Bounds, transform: crate::Affine) -> crate::Bounds {
+        if self.is_visible()
+            && self.spread != 0.
+            && !transform.is_positive_uniform_scale_translation()
+        {
+            return crate::Bounds::new(crate::Point::new(f32::NAN, f32::NAN), bounds.size);
+        }
+        let reference = (self.spread != 0.)
+            .then(|| transform.inverse().map(|t| t.transform_bounds(bounds)))
+            .flatten();
+        self.expand_bounds_with_reference(bounds, reference, transform)
+    }
+    /// Camera-independent world-space envelope of one outer layer. `bounds`
+    /// includes the complete source and descendant effects; `reference` is
+    /// owner-local pre-effect geometry, resolved for any fixed-width strokes.
+    ///
+    /// Canvas-axis scaling can rotate relative to world axes. Its operator norm
+    /// is at most max(1 + 2*abs(spread)/W, 1 + 2*abs(spread)/H), for either sign
+    /// and every scale-fixed factor in (0,1]. A circle about the transformed
+    /// geometric center therefore contains all projections at every camera
+    /// orientation. The unattenuated offset and blur conservatively bound the
+    /// capped versions. This is deliberately wider than device render support.
+    pub fn expand_bounds_with_reference(
+        self,
+        bounds: crate::Bounds,
+        reference: Option<crate::Bounds>,
+        transform: crate::Affine,
+    ) -> crate::Bounds {
         if !self.is_visible() {
             return bounds;
+        }
+        let invalid = || crate::Bounds::new(crate::Point::new(f32::NAN, f32::NAN), bounds.size);
+        if !bounds.is_valid() || !transform.is_finite() || self.validate().is_err() {
+            return invalid();
+        }
+        if self.spread != 0. && bounds.size.is_positive() {
+            let Some(reference) = reference.filter(|r| r.is_valid() && r.size.is_positive()) else {
+                return invalid();
+            };
+            let local_x = reference.origin.x as f64 + reference.size.width as f64 * 0.5;
+            let local_y = reference.origin.y as f64 + reference.size.height as f64 * 0.5;
+            let cx =
+                transform.a as f64 * local_x + transform.c as f64 * local_y + transform.tx as f64;
+            let cy =
+                transform.b as f64 * local_x + transform.d as f64 * local_y + transform.ty as f64;
+            let radius = [
+                (bounds.min_x(), bounds.min_y()),
+                (bounds.max_x(), bounds.min_y()),
+                (bounds.max_x(), bounds.max_y()),
+                (bounds.min_x(), bounds.max_y()),
+            ]
+            .into_iter()
+            .map(|(x, y)| (x as f64 - cx).hypot(y as f64 - cy))
+            .fold(0., f64::max);
+            let kmax = 1.
+                + 2. * (self.spread as f64).abs()
+                    / reference.size.width.min(reference.size.height) as f64;
+            let dx = transform.a as f64 * self.x as f64 + transform.c as f64 * self.y as f64;
+            let dy = transform.b as f64 * self.x as f64 + transform.d as f64 * self.y as f64;
+            let halo = self.blur as f64 * 2. * transform.max_scale() as f64;
+            let extent = radius * kmax + dx.hypot(dy) + halo;
+            return outward_effect_bounds(cx - extent, cy - extent, cx + extent, cy + extent)
+                .unwrap_or_else(invalid);
         }
         let offset = transform.transform_vector(crate::Point::new(self.x, self.y));
         let halo = self.blur as f64 * 2. * transform.max_scale() as f64;
         if !halo.is_finite() || halo > f32::MAX as f64 {
-            return crate::Bounds::new(crate::Point::new(f32::NAN, f32::NAN), bounds.size);
+            return invalid();
         }
         let shadow = crate::Bounds::new(bounds.origin + offset, bounds.size).expanded(halo as f32);
+        if !shadow.is_valid() {
+            return invalid();
+        }
         bounds.union(shadow)
     }
     fn validate(self) -> Result<(), String> {
         if !self.x.is_finite()
             || !self.y.is_finite()
             || !self.blur.is_finite()
+            || !self.spread.is_finite()
             || self.x.abs() > 4096.
             || self.y.abs() > 4096.
             || !(0.0..=256.0).contains(&self.blur)
+            || self.spread.abs() > 4096.
         {
-            return Err("shadow requires finite offsets within ±4096 and blur in [0,256]".into());
+            return Err(
+                "shadow requires finite offsets/spread within ±4096 and blur in [0,256]".into(),
+            );
         }
         Ok(())
     }
+}
+
+// Round the analytic envelope outward rather than letting f64-to-f32 narrowing
+// drop a distant projected endpoint from broad-phase culling or paint damage.
+fn outward_effect_bounds(min_x: f64, min_y: f64, max_x: f64, max_y: f64) -> Option<crate::Bounds> {
+    let down = |v: f64| {
+        let n = v as f32;
+        if n as f64 > v { n.next_down() } else { n }
+    };
+    let up = |v: f64| {
+        let n = v as f32;
+        if (n as f64) < v { n.next_up() } else { n }
+    };
+    if ![min_x, min_y, max_x, max_y].into_iter().all(f64::is_finite) {
+        return None;
+    }
+    let (x, y, right, bottom) = (down(min_x), down(min_y), up(max_x), up(max_y));
+    let result = crate::Bounds::new(
+        crate::Point::new(x, y),
+        crate::Size::new(up(right as f64 - x as f64), up(bottom as f64 - y as f64)),
+    );
+    result.is_valid().then_some(result)
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -437,6 +549,25 @@ impl Style {
         }
         bounds
     }
+    /// As [`Self::expand_shadow_bounds`], with the separate geometric anchor
+    /// required by spread on subtrees or rotated sources. The world source can
+    /// contain descendant effects without moving the owner-local reference.
+    pub fn expand_shadow_bounds_with_reference(
+        &self,
+        source: crate::Bounds,
+        reference: Option<crate::Bounds>,
+        transform: crate::Affine,
+    ) -> crate::Bounds {
+        let mut bounds = source;
+        for shadow in self.shadows() {
+            let expanded = shadow.expand_bounds_with_reference(source, reference, transform);
+            if !expanded.is_valid() {
+                return expanded;
+            }
+            bounds = bounds.union(expanded);
+        }
+        bounds
+    }
     /// Analytic visual extent after own shadows and foreground blur. The
     /// renderer adds accumulated device-pixel support guards separately.
     /// `max_scale` equals the uniform magnitude on the supported similarity
@@ -447,6 +578,21 @@ impl Style {
         transform: crate::Affine,
     ) -> crate::Bounds {
         let bounds = self.expand_shadow_bounds(source, transform);
+        self.expand_blur_bounds(bounds, transform)
+    }
+    /// Conservative world effect envelope with a view-resolved geometric
+    /// reference. This is the subtree/culling counterpart of the renderer's
+    /// exact device support and does not affect layout, selection or picking.
+    pub fn expand_effect_bounds_with_reference(
+        &self,
+        source: crate::Bounds,
+        reference: Option<crate::Bounds>,
+        transform: crate::Affine,
+    ) -> crate::Bounds {
+        let bounds = self.expand_shadow_bounds_with_reference(source, reference, transform);
+        self.expand_blur_bounds(bounds, transform)
+    }
+    fn expand_blur_bounds(&self, bounds: crate::Bounds, transform: crate::Affine) -> crate::Bounds {
         if !bounds.is_valid() || !self.has_blur() {
             return bounds;
         }

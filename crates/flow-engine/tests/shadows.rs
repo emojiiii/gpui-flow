@@ -59,7 +59,7 @@ fn rejected_shadow_property_preserves_document_and_revision() {
     let revision = e.revision();
     for value in [
         serde_json::json!({"x":0,"y":0,"blur":-1,"color":{"r":0,"g":0,"b":0,"a":255}}),
-        serde_json::json!({"x":0,"y":0,"blur":1,"color":{"r":0,"g":0,"b":0,"a":255},"spread":1}),
+        serde_json::json!({"x":0,"y":0,"blur":1,"color":{"r":0,"g":0,"b":0,"a":255},"spread":4097}),
     ] {
         assert!(
             e.set_property(e.handle(&"r".into()).unwrap(), PropertyKey::Shadow, value)

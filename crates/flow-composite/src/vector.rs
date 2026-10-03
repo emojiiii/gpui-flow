@@ -132,6 +132,7 @@ pub(crate) struct Preparation {
     pub has_grayscale: bool,
     pub has_blur: bool,
     pub has_inner_shadows: bool,
+    pub has_shadow_modes: bool,
     pub has_image_clips: bool,
     pub has_erasers: bool,
     nodes: usize,
@@ -320,6 +321,40 @@ impl Preparation {
         });
         Ok(bounds)
     }
+    /// Reference-only hidden geometry is re-admitted against this raster
+    /// request's limits, which may be tighter than the original capture limits.
+    fn reference_geometry(
+        &mut self,
+        source: &DomainNode,
+        limits: CompositeLimits,
+        depth: usize,
+        root_counted: bool,
+    ) -> Result<(), CompositeError> {
+        if !root_counted {
+            self.nodes += 1;
+        }
+        if self.nodes > limits.max_nodes {
+            return Err(CompositeError::InputLimit);
+        }
+        if depth > limits.max_depth {
+            return Err(CompositeError::NestingLimit);
+        }
+        let count = match &source.object.shape {
+            Shape::Path(p) => p.commands.len(),
+            Shape::Pen(p) => p.path.commands.len(),
+            Shape::Polygon(p) => p.points.len(),
+            Shape::Star(p) => p.points.saturating_mul(2),
+            _ => 0,
+        };
+        self.source_points = self.source_points.saturating_add(count);
+        if count > limits.max_points || self.source_points > limits.max_total_points {
+            return Err(CompositeError::InputLimit);
+        }
+        for child in &source.children {
+            self.reference_geometry(child, limits, depth + 1, false)?;
+        }
+        Ok(())
+    }
     pub fn node(
         &mut self,
         source: &DomainNode,
@@ -327,7 +362,7 @@ impl Preparation {
         images: &ImageInputs,
         texts: &TextInputs,
     ) -> Result<PreparedNode, CompositeError> {
-        self.node_at(source, limits, images, texts, 0)
+        self.node_at(source, limits, images, texts, 0, false)
     }
     fn node_at(
         &mut self,
@@ -336,6 +371,7 @@ impl Preparation {
         images: &ImageInputs,
         texts: &TextInputs,
         depth: usize,
+        reference_required: bool,
     ) -> Result<PreparedNode, CompositeError> {
         self.nodes += 1;
         if self.nodes > limits.max_nodes {
@@ -366,6 +402,9 @@ impl Preparation {
         // Preserve mask-run markers even when their contents contribute zero.
         // Invisible/zero-opacity subtrees do not require loaded image pixels.
         if !object.visible || object.style.opacity == 0. {
+            if reference_required {
+                self.reference_geometry(source, limits, depth, true)?;
+            }
             return Ok(PreparedNode {
                 bounds: None,
                 world: source.world_transform,
@@ -637,10 +676,17 @@ impl Preparation {
                     corner_radius,
                     world_transform: source.world_transform,
                 });
+        let reference_required = reference_required
+            || (matches!(object.shape, Shape::Group(_))
+                && object
+                    .style
+                    .shadows()
+                    .chain(object.style.inner_shadow_layers.iter())
+                    .any(|s| s.is_visible() && s.spread != 0.));
         let children = source
             .children
             .iter()
-            .map(|child| self.node_at(child, limits, images, texts, depth + 1))
+            .map(|child| self.node_at(child, limits, images, texts, depth + 1, reference_required))
             .collect::<Result<_, _>>()?;
         let mut children_bounds = self.bounds.take();
         if child_clip.is_some() {
@@ -677,6 +723,29 @@ impl Preparation {
         // Every layer sees this immutable pre-effect extent. Do not feed an
         // earlier layer's expanded bounds or pixels into a later projection.
         let ink_bounds = node_bounds;
+        let needs_reference = object
+            .style
+            .shadows()
+            .chain(object.style.inner_shadow_layers.iter())
+            .any(|s| s.is_visible() && s.spread != 0.);
+        let reference = if needs_reference {
+            reference_bounds(
+                source,
+                self.logical_camera.unwrap_or(1.),
+                matches!(object.shape, Shape::Group(_)),
+            )?
+        } else {
+            None
+        };
+        self.has_shadow_modes |= object
+            .style
+            .shadows()
+            .any(|s| s.is_visible() && (s.spread != 0. || s.r#box || s.scale_fixed))
+            || object
+                .style
+                .inner_shadow_layers
+                .iter()
+                .any(|s| s.is_visible() && (s.spread != 0. || s.scale_fixed));
         let mut shadows = Vec::new();
         if object.style.has_shadows() {
             crate::shadow::validate_shape(&object.id, &object.shape)?;
@@ -702,6 +771,7 @@ impl Preparation {
                 effect,
                 world: source.world_transform,
                 ink_bounds,
+                reference,
             });
         }
         let mut inner_shadows = Vec::new();
@@ -719,6 +789,7 @@ impl Preparation {
                 effect,
                 world: source.world_transform,
                 ink_bounds,
+                reference,
             });
         }
         self.bounds = match (
@@ -771,4 +842,54 @@ fn lowered_geometry_error(reason: String) -> CompositeError {
     } else {
         CompositeError::InvalidGeometry(reason)
     }
+}
+
+/// Retained pre-effect geometry follows Scene::local_bounds, including hidden
+/// children and Box overflow. It is separate from actual composed-alpha support.
+fn reference_bounds(
+    source: &DomainNode,
+    camera: f32,
+    recursive: bool,
+) -> Result<Option<gpui_flow_scene::Bounds>, CompositeError> {
+    let resolved;
+    let object = if source.object.style.has_scale_fixed_strokes() {
+        resolved = source
+            .object
+            .resolved_strokes(source.stroke_scale, camera)
+            .map_err(CompositeError::InvalidGeometry)?;
+        &resolved
+    } else {
+        &source.object
+    };
+    let mut result = object.paint_bounds();
+    if recursive {
+        for child in &source.children {
+            if child.object.eraser != EraserMode::None {
+                continue;
+            }
+            if let Some(b) = reference_bounds(child, camera, true)? {
+                let b = child.object.transform.transform_bounds(b);
+                let b = if let Some((clip, _, _)) = object.shape.child_clip() {
+                    let x = b.min_x().max(clip.min_x());
+                    let y = b.min_y().max(clip.min_y());
+                    let w = b.max_x().min(clip.max_x()) - x;
+                    let h = b.max_y().min(clip.max_y()) - y;
+                    if w < 0. || h < 0. {
+                        continue;
+                    }
+                    gpui_flow_scene::Bounds::new(
+                        gpui_flow_scene::Point::new(x, y),
+                        gpui_flow_scene::Size::new(w, h),
+                    )
+                } else {
+                    b
+                };
+                result = Some(result.map_or(b, |r| r.union(b)));
+            }
+        }
+    }
+    if result.is_some_and(|b| !b.is_valid()) {
+        return Err(CompositeError::InvalidShadowReference);
+    }
+    Ok(result)
 }

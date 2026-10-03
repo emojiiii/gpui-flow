@@ -179,8 +179,10 @@ impl DisplayObject {
     /// blur. Raster support includes additional view-dependent pixel guards.
     /// Do not use these for picking, ItemBox::Stroke, layout or selection.
     pub fn effect_bounds(&self) -> Option<Bounds> {
-        self.paint_bounds()
-            .map(|b| self.style.expand_effect_bounds(b, Affine::IDENTITY))
+        self.paint_bounds().map(|b| {
+            self.style
+                .expand_effect_bounds_with_reference(b, Some(b), Affine::IDENTITY)
+        })
     }
     pub fn validate(&self) -> Result<(), String> {
         if self.id.as_str().trim().is_empty() {

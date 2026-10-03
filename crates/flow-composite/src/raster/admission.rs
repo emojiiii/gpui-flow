@@ -153,10 +153,12 @@ impl Admission<'_> {
             } else {
                 crate::shadow::SourcePlan::new(effect, self.world_to_layer, self.budget.limits)?
             };
-            let bytes = plan.filter.bytes(plan.pixels, plan.width);
+            if plan.mode.as_ref().is_some_and(|mode| mode.output.is_none()) {
+                continue;
+            }
+            let bytes = plan.bytes();
             self.budget.reserve(bytes)?;
-            self.budget
-                .write(plan.filter.work(plan.pixels) + if inner { plan.pixels * 2 } else { 0 })?;
+            self.budget.write(plan.work(inner))?;
             Admission {
                 width: plan.width,
                 height: plan.height,

@@ -127,15 +127,48 @@ fn grayscale_pixels(
 // incorrectly reads its forced one-pixel row padding as input. Specialize that
 // exact identity kernel; never clamp sigma, alter nonzero weights or change the
 // positive effect's source, isolation or conservative admission.
+fn one_tap_gaussian(sigma: f32) -> bool {
+    (-0.5f32 * (1f32 / sigma).powf(2.)).exp()
+        * (1f32 / ((2f32 * std::f32::consts::PI).sqrt() * sigma))
+        == 0.
+}
+fn blur_alpha(
+    source: image::GrayImage,
+    sigma: f32,
+    mut check: impl FnMut() -> Result<(), CompositeError>,
+) -> Result<image::GrayImage, CompositeError> {
+    check()?;
+    let output = if sigma == 0. || one_tap_gaussian(sigma) {
+        source
+    } else {
+        image::imageops::blur(&source, sigma)
+    };
+    check()?;
+    Ok(output)
+}
+
+/// image's A8 bilinear rule, with a finite f64 transparent-domain check before
+/// narrowing. Guards around complete ink keep edge clamping on transparent ink.
+fn sample_alpha(source: &image::GrayImage, x: f64, y: f64) -> u8 {
+    if !x.is_finite()
+        || !y.is_finite()
+        || x < 0.
+        || y < 0.
+        || x > f64::from(source.width() - 1)
+        || y > f64::from(source.height() - 1)
+    {
+        return 0;
+    }
+    image::imageops::interpolate_bilinear(source, x as f32, y as f32).map_or(0, |p| p[0])
+}
+
 fn blur_pixels(
     source: Pixmap,
     sigma: f32,
     mut check: impl FnMut() -> Result<(), CompositeError>,
 ) -> Result<Pixmap, CompositeError> {
     check()?;
-    let adjacent = (-0.5f32 * (1f32 / sigma).powf(2.)).exp()
-        * (1f32 / ((2f32 * std::f32::consts::PI).sqrt() * sigma));
-    if adjacent == 0. {
+    if one_tap_gaussian(sigma) {
         check()?;
         return Ok(source);
     }
@@ -740,6 +773,9 @@ impl Raster<'_> {
         } else {
             crate::shadow::SourcePlan::new(shadow, self.world_to_layer, self.budget.limits)?
         };
+        if plan.mode.is_some() {
+            return self.shadow_modes(node, shadow, target, depth, inner, &plan);
+        }
         let (width, height, pixels) = (plan.width, plan.height, plan.pixels);
         let [x0, y0] = if node.device.is_some() {
             [
@@ -750,8 +786,8 @@ impl Raster<'_> {
             plan.origin
         };
         let filter = &plan.filter;
-        let scratch_bytes = filter.bytes(pixels, width);
-        let filter_work = filter.work(pixels) + if inner { pixels * 2 } else { 0 };
+        let scratch_bytes = plan.bytes();
+        let filter_work = plan.work(inner);
         self.check()?;
         // Complete recursive scratch/work admission already succeeded before
         // the domain output allocation. Runtime accounting remains a backstop.
@@ -786,11 +822,7 @@ impl Raster<'_> {
         let alpha = image::GrayImage::from_raw(width, height, alpha)
             .ok_or(CompositeError::AllocationFailed)?;
         scratch.check()?;
-        let alpha = if filter.sigma == 0. {
-            alpha
-        } else {
-            image::imageops::blur(&alpha, filter.sigma)
-        };
+        let alpha = blur_alpha(alpha, filter.sigma, || scratch.check())?;
         scratch.check()?;
         let c = shadow.effect.color;
         let position = if inner {
@@ -856,6 +888,149 @@ impl Raster<'_> {
         self.check()?;
         drop(alpha);
         drop(source);
+        self.budget.in_use -= scratch_bytes;
+        Ok(())
+    }
+    fn shadow_modes(
+        &mut self,
+        node: &PreparedNode,
+        shadow: crate::shadow::PreparedShadow,
+        target: &mut Pixmap,
+        depth: usize,
+        inner: bool,
+        plan: &crate::shadow::SourcePlan,
+    ) -> Result<(), CompositeError> {
+        let mode = plan.mode.as_ref().expect("mode source plan");
+        let Some(output_plan) = &mode.output else {
+            return Ok(());
+        };
+        self.check()?;
+        let scratch_bytes = plan.bytes();
+        self.budget.reserve(scratch_bytes)?;
+        self.budget.write(plan.work(inner))?;
+        let mut source = Pixmap::from_vec(
+            bytes(plan.pixels * 4)?,
+            tiny_skia::IntSize::from_wh(plan.width, plan.height).ok_or(CompositeError::TooLarge)?,
+        )
+        .ok_or(CompositeError::AllocationFailed)?;
+        let mut scratch = Raster {
+            width: plan.width,
+            height: plan.height,
+            pixels: plan.pixels,
+            world_to_layer: plan.world_to_layer,
+            origin: plan.origin,
+            physical: self.physical,
+            budget: self.budget,
+            cancelled: self.cancelled,
+        };
+        scratch.contents(node, &mut source, depth, None, false)?;
+        let mut original = bytes(plan.pixels)?;
+        for (row, input) in original
+            .chunks_mut(plan.width as usize)
+            .zip(source.data().chunks(plan.width as usize * 4))
+        {
+            scratch.check()?;
+            for (a, p) in row.iter_mut().zip(input.as_chunks::<4>().0) {
+                *a = p[3];
+            }
+        }
+        let original = image::GrayImage::from_raw(plan.width, plan.height, original)
+            .ok_or(CompositeError::AllocationFailed)?;
+        let projected = if let Some(surface) = &mode.transformed {
+            let mut alpha = bytes(surface.pixels)?;
+            for (y, row) in alpha.chunks_mut(surface.width as usize).enumerate() {
+                scratch.check()?;
+                for (x, pixel) in row.iter_mut().enumerate() {
+                    let q = [
+                        surface.origin[0] + x as f64 + 0.5,
+                        surface.origin[1] + y as f64 + 0.5,
+                    ];
+                    let p = match mode.kind {
+                        crate::shadow::SpreadMode::Identity => q,
+                        crate::shadow::SpreadMode::Resample => [
+                            mode.center[0] + (q[0] - mode.center[0]) / mode.factors[0],
+                            mode.center[1] + (q[1] - mode.center[1]) / mode.factors[1],
+                        ],
+                        crate::shadow::SpreadMode::Collapsed => unreachable!("collapsed filter"),
+                    };
+                    *pixel = sample_alpha(
+                        &original,
+                        p[0] - plan.origin[0] - 0.5,
+                        p[1] - plan.origin[1] - 0.5,
+                    );
+                }
+            }
+            let alpha = image::GrayImage::from_raw(surface.width, surface.height, alpha)
+                .ok_or(CompositeError::AllocationFailed)?;
+            Some(blur_alpha(alpha, plan.filter.sigma, || scratch.check())?)
+        } else {
+            None
+        };
+        let mut output = Pixmap::from_vec(
+            bytes(output_plan.pixels * 4)?,
+            tiny_skia::IntSize::from_wh(output_plan.width, output_plan.height)
+                .ok_or(CompositeError::TooLarge)?,
+        )
+        .ok_or(CompositeError::AllocationFailed)?;
+        let c = shadow.effect.color;
+        for (y, row) in output
+            .data_mut()
+            .chunks_mut(output_plan.width as usize * 4)
+            .enumerate()
+        {
+            scratch.check()?;
+            for (x, pixel) in row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+                let q = [
+                    output_plan.origin[0] + x as f64,
+                    output_plan.origin[1] + y as f64,
+                ];
+                let b = projected.as_ref().zip(mode.transformed.as_ref()).map_or(
+                    0,
+                    |(alpha, surface)| {
+                        sample_alpha(
+                            alpha,
+                            q[0] - plan.filter.offset[0] - surface.origin[0],
+                            q[1] - plan.filter.offset[1] - surface.origin[1],
+                        )
+                    },
+                );
+                let coverage = if inner || shadow.effect.r#box {
+                    // Original untransformed, unoffset alpha at final q.
+                    let a = sample_alpha(&original, q[0] - plan.origin[0], q[1] - plan.origin[1]);
+                    if inner {
+                        (u32::from(a) * u32::from(255 - b) + 127) / 255
+                    } else {
+                        (u32::from(b) * u32::from(255 - a) + 127) / 255
+                    }
+                } else {
+                    u32::from(b)
+                };
+                let a = (coverage * u32::from(c.a) + 127) / 255;
+                *pixel = [
+                    ((u32::from(c.r) * a + 127) / 255) as u8,
+                    ((u32::from(c.g) * a + 127) / 255) as u8,
+                    ((u32::from(c.b) * a + 127) / 255) as u8,
+                    a as u8,
+                ];
+            }
+        }
+        self.budget.write(self.pixels)?;
+        target.draw_pixmap(
+            0,
+            0,
+            output.as_ref(),
+            &PixmapPaint::default(),
+            Transform::from_translate(
+                (output_plan.origin[0] - self.origin[0]) as f32,
+                (output_plan.origin[1] - self.origin[1]) as f32,
+            ),
+            None,
+        );
+        self.check()?;
+        drop(projected);
+        drop(original);
+        drop(source);
+        drop(output);
         self.budget.in_use -= scratch_bytes;
         Ok(())
     }
@@ -1176,14 +1351,18 @@ fn rasterize_inner(
     let physical = crate::blur::PhysicalSpace {
         camera: viewport.world_to_screen,
         scale: viewport.device_scale as f64,
+        logical_camera: source
+            .logical_effect_camera
+            .unwrap_or(viewport.world_to_screen),
     };
-    if prep.has_blur {
+    let physical_effects = prep.has_blur || prep.has_shadow_modes;
+    if physical_effects {
         crate::blur::resolve(&mut root, physical, budget.limits, cancelled)?;
     }
     let scale = viewport.device_scale as f64;
     let b = if source.canvas.is_some() {
         bounds(viewport.canvas_bounds)
-    } else if prep.has_blur {
+    } else if physical_effects {
         let Some(b) = root.device.as_ref().and_then(|d| d.completed) else {
             return Ok(None);
         };
@@ -1247,7 +1426,7 @@ fn rasterize_inner(
     let (width, height) = (w as u32, h as u32);
     let pixels = width as u64 * height as u64;
     let a = viewport.world_to_screen;
-    let world_to_layer = if prep.has_blur {
+    let world_to_layer = if physical_effects {
         physical.local(Affine::IDENTITY, [x0, y0])
     } else {
         Affine::new(
@@ -1265,7 +1444,7 @@ fn rasterize_inner(
         pixels,
         world_to_layer,
         origin: [x0, y0],
-        physical: prep.has_blur.then_some(physical),
+        physical: physical_effects.then_some(physical),
         budget,
         cancelled,
     };
@@ -1395,5 +1574,52 @@ mod blur_loop_tests {
             Err(CompositeError::Superseded)
         ));
         assert_eq!(count, 2);
+    }
+}
+
+#[cfg(test)]
+mod a8_shadow_transition_tests {
+    use super::*;
+    #[test]
+    fn a8_tiny_sigma_identity_regression() {
+        let input =
+            image::GrayImage::from_raw(8, 8, (0..64).map(|n| (n * 3 + 1) as u8).collect()).unwrap();
+        // Retain the locked dependency defect as a discriminating oracle.
+        let wrong = image::imageops::blur(&input, 0.001);
+        assert_eq!(wrong.get_pixel(3, 3)[0], input.get_pixel(2, 3)[0]);
+        assert_eq!(wrong.get_pixel(3, 0)[0], 0);
+        let output = blur_alpha(input.clone(), 0.001, || Ok(())).unwrap();
+        assert_eq!(output, input);
+        let (mut lo, mut hi) = (0.001f32.to_bits(), 0.5f32.to_bits());
+        while hi - lo > 1 {
+            let mid = lo + (hi - lo) / 2;
+            if one_tap_gaussian(f32::from_bits(mid)) {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        assert_eq!(hi, lo + 1);
+        assert_eq!(
+            blur_alpha(input.clone(), f32::from_bits(lo), || Ok(())).unwrap(),
+            input
+        );
+        assert_eq!(
+            blur_alpha(input.clone(), f32::from_bits(hi), || Ok(())).unwrap(),
+            image::imageops::blur(&input, f32::from_bits(hi))
+        );
+        let mut checks = 0;
+        assert!(matches!(
+            blur_alpha(input, 0.001, || {
+                checks += 1;
+                if checks == 2 {
+                    Err(CompositeError::Superseded)
+                } else {
+                    Ok(())
+                }
+            }),
+            Err(CompositeError::Superseded)
+        ));
+        assert_eq!(checks, 2);
     }
 }

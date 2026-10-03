@@ -202,9 +202,30 @@ impl Builder<'_> {
                 entry.effect_bounds = Some(entry.effect_bounds.map_or(b, |a| a.union(b)));
             }
         }
-        entry.effect_bounds = entry
-            .effect_bounds
-            .map(|b| object.style.expand_effect_bounds(b, entry.world_transform));
+        // A fixed Box/Frame keeps its own reference even when children overflow;
+        // Group uses the clipped retained geometric subtree. Neither reference
+        // includes descendant effects. The world envelope covers canvas-axis
+        // spread at every camera orientation and every scale-fixed cap factor.
+        let shadow_reference = if !object
+            .style
+            .shadows()
+            .any(|s| s.is_visible() && s.spread != 0.)
+        {
+            None
+        } else if matches!(object.shape, gpui_flow_scene::Shape::Group(_)) {
+            entry.local_bounds
+        } else {
+            self.scene
+                .resolved_object(id, self.scene.resolved_stroke_camera().unwrap_or(1.))?
+                .paint_bounds()
+        };
+        entry.effect_bounds = entry.effect_bounds.map(|b| {
+            object.style.expand_effect_bounds_with_reference(
+                b,
+                shadow_reference,
+                entry.world_transform,
+            )
+        });
         if entry.effect_bounds.is_some_and(|b| !b.is_valid()) {
             return Err(SceneError::InvalidGeometry(
                 "cached effect bounds overflow".into(),

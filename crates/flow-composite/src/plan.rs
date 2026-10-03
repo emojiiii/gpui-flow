@@ -31,6 +31,8 @@ pub struct DomainSource {
     pub(crate) resolved_camera: Option<f32>,
     /// Explicit logical scale when an export matrix already includes DPR.
     pub(crate) logical_camera: Option<f32>,
+    /// Logical affine before Canvas/export DPR is packed into the raster camera.
+    pub(crate) logical_effect_camera: Option<Affine>,
 }
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DomainNode {
@@ -115,7 +117,7 @@ pub fn owned_canvas(
     };
     let children = ordered(scene, scene.roots())
         .into_iter()
-        .map(|id| capture(scene, id, Affine::IDENTITY, &limits, &mut counts, 1))
+        .map(|id| capture(scene, id, Affine::IDENTITY, &limits, &mut counts, 1, false))
         .collect::<Result<_, _>>()?;
     // Empty IDs are forbidden in a validated Scene. This runtime-only cache
     // identity therefore cannot collide with any canonical display object.
@@ -131,6 +133,7 @@ pub fn owned_canvas(
         lowered_geometry: None,
         resolved_camera: scene.resolved_stroke_camera(),
         logical_camera: None,
+        logical_effect_camera: None,
     })
 }
 /// Capture a complete subtree for an imperative Canvas draw. Ancestors' clips,
@@ -185,6 +188,7 @@ pub fn capture_subtree(
         &limits.bounded(),
         &mut Counts::default(),
         0,
+        false,
     )?;
     Ok(DomainSource {
         root,
@@ -193,6 +197,7 @@ pub fn capture_subtree(
         lowered_geometry: None,
         resolved_camera: scene.resolved_stroke_camera(),
         logical_camera: None,
+        logical_effect_camera: None,
     })
 }
 impl DomainSource {
@@ -262,6 +267,7 @@ impl DomainSource {
         }
         self.resolved_camera == other.resolved_camera
             && self.logical_camera == other.logical_camera
+            && self.logical_effect_camera == other.logical_effect_camera
             && self.canvas == other.canvas
             && self.clips == other.clips
             && same(&self.root, &other.root)
@@ -417,7 +423,7 @@ fn visit(
         let result = if o.eraser != EraserMode::None || o.style.blend_mode.requires_backdrop() {
             Err(CompositeError::UnsupportedExternalBackdrop)
         } else {
-            capture(scene, id, parent, limits, &mut Counts::default(), 0)
+            capture(scene, id, parent, limits, &mut Counts::default(), 0, false)
         };
         out.push(match result {
             Ok(root) if requires_parent_backdrop(&root) => SceneUnit::Rejected(CompositeIssue {
@@ -431,6 +437,7 @@ fn visit(
                 lowered_geometry: None,
                 resolved_camera: scene.resolved_stroke_camera(),
                 logical_camera: None,
+                logical_effect_camera: None,
             })),
             Err(error) => SceneUnit::Rejected(CompositeIssue {
                 object: id.clone(),
@@ -479,6 +486,7 @@ fn capture(
     limits: &CompositeLimits,
     counts: &mut Counts,
     depth: usize,
+    retain_geometry: bool,
 ) -> Result<DomainNode, CompositeError> {
     let node = scene
         .get(id)
@@ -495,6 +503,9 @@ fn capture(
     // Keep the marker (a hidden alpha mask still starts a zero-coverage run),
     // without demanding a producer for its invisible subtree.
     if !o.visible || o.style.opacity == 0. {
+        if retain_geometry {
+            charge_reference_points(&o.shape, limits, counts)?;
+        }
         return Ok(DomainNode {
             stroke_scale: if o.style.has_scale_fixed_strokes() {
                 scene
@@ -505,7 +516,23 @@ fn capture(
             },
             object: o.clone(),
             world_transform: parent * o.transform,
-            children: vec![],
+            children: if retain_geometry {
+                node.children
+                    .iter()
+                    .map(|id| {
+                        capture_reference(
+                            scene,
+                            id,
+                            parent * o.transform,
+                            limits,
+                            counts,
+                            depth + 1,
+                        )
+                    })
+                    .collect::<Result<_, _>>()?
+            } else {
+                vec![]
+            },
         });
     }
     if o.style.has_shadows() && matches!(o.shape, Shape::Custom(_)) {
@@ -551,6 +578,12 @@ fn capture(
     if world_transform.inverse().is_none() {
         return Err(CompositeError::UnsupportedTransform);
     }
+    let retain_geometry = retain_geometry
+        || (matches!(o.shape, Shape::Group(_))
+            && o.style
+                .shadows()
+                .chain(o.style.inner_shadow_layers.iter())
+                .any(|s| s.is_visible() && s.spread != 0.));
     let mut children = Vec::new();
     for child in ordered(scene, &node.children) {
         children.push(capture(
@@ -560,6 +593,7 @@ fn capture(
             limits,
             counts,
             depth + 1,
+            retain_geometry,
         )?);
     }
     let captured = DomainNode {
@@ -652,6 +686,68 @@ pub(crate) fn validate_eraser(object: &DisplayObject) -> Result<(), CompositeErr
         )
     {
         return Err(CompositeError::UnsupportedPathEraser(object.id.clone()));
+    }
+    Ok(())
+}
+
+/// A hidden subtree can still set an ancestor Group's retained geometric
+/// reference. Keep geometry/identity without requiring dormant producers or
+/// validating their rendering capabilities. The same input/depth limits apply.
+fn capture_reference(
+    scene: &Scene,
+    id: &DisplayId,
+    parent: Affine,
+    limits: &CompositeLimits,
+    counts: &mut Counts,
+    depth: usize,
+) -> Result<DomainNode, CompositeError> {
+    counts.nodes += 1;
+    if counts.nodes > limits.max_nodes {
+        return Err(CompositeError::InputLimit);
+    }
+    if depth > limits.max_depth {
+        return Err(CompositeError::NestingLimit);
+    }
+    let node = scene
+        .get(id)
+        .ok_or_else(|| CompositeError::InvalidGeometry("missing reference geometry".into()))?;
+    let object = &node.object;
+    charge_reference_points(&object.shape, limits, counts)?;
+    let world_transform = parent * object.transform;
+    let children = node
+        .children
+        .iter()
+        .map(|id| capture_reference(scene, id, world_transform, limits, counts, depth + 1))
+        .collect::<Result<_, _>>()?;
+    Ok(DomainNode {
+        object: object.clone(),
+        world_transform,
+        children,
+        stroke_scale: if object.style.has_scale_fixed_strokes() {
+            scene
+                .stroke_scale(id)
+                .map_err(|e| CompositeError::InvalidGeometry(e.to_string()))?
+        } else {
+            gpui_flow_scene::StrokeScaleData::IDENTITY
+        },
+    })
+}
+
+fn charge_reference_points(
+    shape: &Shape,
+    limits: &CompositeLimits,
+    counts: &mut Counts,
+) -> Result<(), CompositeError> {
+    let points = match shape {
+        Shape::Path(p) => p.commands.len(),
+        Shape::Pen(p) => p.path.commands.len(),
+        Shape::Polygon(p) => p.points.len(),
+        Shape::Star(p) => p.points.saturating_mul(2),
+        _ => 0,
+    };
+    counts.points = counts.points.saturating_add(points);
+    if points > limits.max_points || counts.points > limits.max_total_points {
+        return Err(CompositeError::InputLimit);
     }
     Ok(())
 }

@@ -488,6 +488,7 @@ fn source(
                 lowered_geometry: None,
                 resolved_camera: None,
                 logical_camera: None,
+                logical_effect_camera: None,
             },
             images,
         )),

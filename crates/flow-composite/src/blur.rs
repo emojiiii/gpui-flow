@@ -13,8 +13,19 @@ pub(crate) type Rect = [f64; 4];
 pub(crate) struct PhysicalSpace {
     pub camera: Affine,
     pub scale: f64,
+    pub logical_camera: Affine,
 }
 impl PhysicalSpace {
+    /// Compose before narrowing, keeping logical camera and packed export DPR distinct.
+    pub fn linear(self, world: Affine) -> [f64; 4] {
+        let a = self.camera;
+        [
+            a.a as f64 * world.a as f64 + a.c as f64 * world.b as f64,
+            a.b as f64 * world.a as f64 + a.d as f64 * world.b as f64,
+            a.a as f64 * world.c as f64 + a.c as f64 * world.d as f64,
+            a.b as f64 * world.c as f64 + a.d as f64 * world.d as f64,
+        ]
+    }
     pub fn local(self, world: Affine, origin: [f64; 2]) -> Affine {
         let a = self.camera;
         let scale = self.scale;
@@ -211,19 +222,21 @@ pub(crate) fn resolve(
     let mut completed = original;
     if let Some(original) = original {
         for &effect in &node.shadows {
-            let plan = shadow::SourcePlan::physical(effect, a, original, limits)?;
-            let x = (plan.origin[0] + plan.filter.offset[0]).floor();
-            let y = (plan.origin[1] + plan.filter.offset[1]).floor();
-            completed = union(
-                completed,
-                Some([x, y, x + plan.width as f64, y + plan.height as f64]),
-            );
+            let plan = shadow::SourcePlan::physical(effect, a, original, limits, false)?;
+            let projected = if let Some(mode) = &plan.mode {
+                mode.output.as_ref().map(SurfacePlan::rect)
+            } else {
+                let x = (plan.origin[0] + plan.filter.offset[0]).floor();
+                let y = (plan.origin[1] + plan.filter.offset[1]).floor();
+                Some([x, y, x + plan.width as f64, y + plan.height as f64])
+            };
+            completed = union(completed, projected);
             device.shadows.push(plan);
         }
         for &effect in &node.inner_shadows {
-            device
-                .inner_shadows
-                .push(shadow::SourcePlan::physical(effect, a, original, limits)?);
+            device.inner_shadows.push(shadow::SourcePlan::physical(
+                effect, a, original, limits, true,
+            )?);
         }
     }
     if node.blur > 0. {

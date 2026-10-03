@@ -12,7 +12,7 @@ fn shadow_roundtrip_and_legacy_default_are_explicit() {
         serde_json::from_str::<Style>(&serde_json::to_string(&style).unwrap()).unwrap(),
         style
     );
-    for unsupported in ["spread", "box", "scaleFixed", "blendMode", "inner"] {
+    for unsupported in ["scaleFixed", "blendMode", "inner", "unknown"] {
         let mut value = serde_json::to_value(style.shadow.unwrap()).unwrap();
         value[unsupported] = serde_json::json!(true);
         assert!(serde_json::from_value::<Shadow>(value).is_err());
@@ -121,7 +121,7 @@ fn multiple_shadow_layers_preserve_legacy_shape_and_bound_the_combined_list() {
     assert_ne!(json, over);
     assert!(Scene::from_json(&over).is_err());
     let mut layer = serde_json::to_value(Shadow::new(0., 0., 0., Color::BLACK)).unwrap();
-    layer["spread"] = serde_json::json!(1);
+    layer["spread"] = serde_json::json!(true);
     assert!(serde_json::from_value::<Style>(serde_json::json!({"shadow_layers":[layer]})).is_err());
 }
 

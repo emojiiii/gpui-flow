@@ -104,7 +104,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | APP-01 | appearance/gradient和CPU对应回归通过 | 历史渐变/多paint窗口及Canvas矢量窗口通过 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | APP-02 | fixed最终1679/10既有ignored、UI275、strict；18helper组合及5PNG/45 Pillow通过；旧open证据保留 | 14行、99点击/32pointer/28live/38 JPEG；265审计，主窗/reopen退出0；stale footer/sticky error/未实抓取消保留 | 源码`981e9918`、夹具`369d250c`；[有界native](scale-fixed-native.md)、[不变原契约核对](scale-fixed-acceptance-audit.md)，旧open辅助20/21保留 |
 | APP-03 | 受影响三crate778/3既有ignored、UI focused、strict通过；夹具7CPU+6真实App reset回归 | 修复轮15行/90次点击(73控件+17画布)/18pointer/41receipt，456审计通过；旧reset失败及旧00截图缺失事故单列 | 核心`a46ae005`、夹具`4507492c`；[native证据](scene-eraser-native.md)，整项仍部分 |
-| APP-04 | foreground blur1741 headless/10既有ignored、UI284及strict；[同源与测试增量界限](validation/2026-10-03-foreground-blur-source-summary.json) | grayscale15行+reopen及foreground blur12行均已验；保留原审计初稿、StaleFrame/普通pending与诊断滞后 | [灰度](grayscale-native.md) / [foreground blur原生](foreground-blur-native.md)；其余固定效果仍缺，整项partial |
+| APP-04 | shadow modes1788 headless/10旧ignored、UI287；final compositor456及strict，含test-only增量说明 | grayscale15行+reopen及foreground blur12行均已验；保留原审计初稿、StaleFrame/普通pending与诊断滞后 | [灰度](grayscale-native.md) / [foreground blur原生](foreground-blur-native.md)；其余固定效果仍缺，整项partial |
 | APP-05 | 历史74 state；修订UI245含13coherent，最终hook后2导航/4镜像focused复验，strict/链接通过（重叠） | 新72记录/57 JPEG截图，33状态样本完整，7点击符合accepted geometry；12硬失效样本loading保留，退出0 | `93ee7f7cabfb7979aeca93ec137ccf81644baeb5`；[coherent复验](validation/2026-10-02-state-coherent-native-summary.json)，[原始失败证据](validation/2026-10-02-state-geometry-summary.json)保留 |
 | APP-06 | 无GPU damage消费测试 | 未实现/未验收 | 尚无独立完整验收提交 |
 | LAY-01 | flow/auto_size/reverse/item_boxes/gap/taffy对应全套通过 | 核心是纯measure/arrange契约；窗口专门矩阵仍未宣称 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
@@ -229,3 +229,5 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 - 2026-10-03 10:50：foreground blur源码已远端核到`5d735c76`；新增[12行有限原生夹具](foreground-blur-fixture.md)完成strict/链接及绑定冻结binary SHA的20组预算、8卷积、3crop、6PNG CPU预验，实际原生仍待做。初次未即时绑定binary的helper记录未追认，冻结复跑56文件全等并分开保留。33/9/3不变。
 
 - 2026-10-03 11:32：foreground blur独立12行原生已完成，11:15:10正常exit0；79点击/82事件/46原JPEG、210/210同operator工件审计。209/210初稿与两次解析中断、普通pending/E即时诊断滞后保留。私有Library同身份COMPLETE v5保存全部原始证据（binary可重建副本除外）。其余必选shadow modes/backgroundBlur仍未完成，33/9/3不变；[范围与证据](foreground-blur-native.md)。
+
+- 2026-10-03 11:59：新增[shadow modes](shadow-modes.md)的spread/outer box/scale-fixed与A8极小sigma精确修复。源码1788 headless/10旧ignored、UI287；final compositor456包含后加1例，Text1为lint复验，不叠加计数。独立审阅修复hidden geometry在capture/更紧raster限额遗漏、sigma正数下溢与default参数舍入。原生未做、backgroundBlur仍缺；33/9/3不变。
