@@ -225,3 +225,5 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 - 2026-10-03 10:00：APP-04 grayscale新主机独立15必做行+一次reopen完成，两窗exit0，286/286工件审计；原278/286审计器假设初稿与StaleFrame截图保留，后续同revision状态清理。46原JPEG/73事件/源码与重建来源已保存私有Library v4 COMPLETE。旧0844Z未恢复或拼接；geometry availability不代表上传generation。其余原固定效果仍缺，**33/9/3不变**；[详细范围](grayscale-native.md)。
 
 - 2026-10-03 10:31：APP-04新增[有界foreground blur](foreground-blur.md)：完整padded源、premul RGBA Gaussian、递归预算与consumer拒绝已实现；1741 headless/10既有ignored、UI284、两图strict通过，原生待验。独立审阅修复offscreen child halo父shadow丢失与大坐标origin精度，旧A8小sigma偏移明确保留。后加仅一个composite测试有527输入不变证明，非重复UI声明。spread/box/scale-fixed shadow及backgroundBlur仍缺，**33/9/3不变**。
+
+- 2026-10-03 10:50：foreground blur源码已远端核到`5d735c76`；新增[12行有限原生夹具](foreground-blur-fixture.md)完成strict/链接及绑定冻结binary SHA的20组预算、8卷积、3crop、6PNG CPU预验，实际原生仍待做。初次未即时绑定binary的helper记录未追认，冻结复跑56文件全等并分开保留。33/9/3不变。
