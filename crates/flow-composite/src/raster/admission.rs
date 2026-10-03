@@ -90,6 +90,9 @@ impl Admission<'_> {
             }
             self.budget.reserve(self.pixels * 4)?;
             self.contents(node, depth + 1, false, true)?;
+            if node.grayscale > 0. {
+                self.budget.write(self.pixels)?;
+            }
             self.budget.write(self.pixels)?;
             self.budget.in_use -= self.pixels * 4;
         } else {

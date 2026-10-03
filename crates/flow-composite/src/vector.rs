@@ -12,6 +12,7 @@ pub(crate) struct PreparedNode {
     pub inner_shadows: Vec<crate::shadow::PreparedShadow>,
     pub visible: bool,
     pub opacity: f32,
+    pub grayscale: f32,
     pub blend: BlendMode,
     pub mask: MaskMode,
     pub eraser: EraserMode,
@@ -49,6 +50,7 @@ impl PreparedNode {
             || self.has_eraser_children
             || !self.shadows.is_empty()
             || !self.inner_shadows.is_empty()
+            || self.grayscale > 0.
             || self.opacity < 1.
             || self.blend != BlendMode::PassThrough
     }
@@ -102,6 +104,7 @@ pub(crate) struct Preparation {
     pub logical_camera: Option<f32>,
     pub lowered_geometry: Option<gpui_flow_scene::StrokeGeometryBudget>,
     pub has_shadows: bool,
+    pub has_grayscale: bool,
     pub has_inner_shadows: bool,
     pub has_image_clips: bool,
     pub has_erasers: bool,
@@ -343,6 +346,7 @@ impl Preparation {
                 inner_shadows: Vec::new(),
                 visible: object.visible,
                 opacity: object.style.opacity,
+                grayscale: 0.,
                 blend: object.style.blend_mode,
                 mask: object.mask,
                 eraser: object.eraser,
@@ -399,6 +403,7 @@ impl Preparation {
                 inner_shadows: vec![],
                 visible: object.visible,
                 opacity: object.style.opacity,
+                grayscale: 0.,
                 blend: object.style.blend_mode,
                 mask: object.mask,
                 eraser: object.eraser,
@@ -412,6 +417,7 @@ impl Preparation {
                 child_clip: None,
             });
         }
+        self.has_grayscale |= object.style.has_grayscale();
         let mut paints = Vec::new();
         let mut fill_count = 0;
         let mut image_paint = None;
@@ -704,6 +710,7 @@ impl Preparation {
             inner_shadows,
             visible: object.visible,
             opacity: object.style.opacity,
+            grayscale: object.style.grayscale,
             blend: object.style.blend_mode,
             mask: object.mask,
             eraser: object.eraser,

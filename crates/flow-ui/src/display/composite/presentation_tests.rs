@@ -361,3 +361,181 @@ fn eraser_mode_changes_hide_incompatible_frames_cancel_late_work_and_wait_for_up
         assert_eq!(controller.accepted.len(), 1);
     }
 }
+
+#[test]
+fn grayscale_amount_changes_withdraw_frames_cancel_late_success_and_require_current_upload() {
+    use gpui_flow_engine::PropertyKey;
+    for owned in [false, true] {
+        let mut engine = engine();
+        engine
+            .set_property(
+                engine.handle(&"r".into()).unwrap(),
+                PropertyKey::Fill,
+                serde_json::to_value(gpui_flow_scene::Paint::solid(Color::rgb(255, 0, 0))).unwrap(),
+            )
+            .unwrap();
+        let make_key = |engine: &SceneEngine| {
+            if !owned {
+                return key(engine);
+            }
+            let base = key(engine);
+            let domain = gpui_flow_composite::owned_canvas(
+                engine.scene(),
+                gpui_flow_composite::CanvasBackdrop {
+                    color: Color::WHITE,
+                    grid: None,
+                },
+                CompositeLimits::default(),
+            )
+            .unwrap();
+            Arc::new(RequestKey::new(
+                vec![domain],
+                engine,
+                base.viewport,
+                base.window,
+            ))
+        };
+        let domain: DisplayId = if owned { "" } else { "g" }.into();
+        let mut controller = CompositeController::default();
+        let first = make_key(&engine);
+        controller.request(first.clone());
+        finish(&mut controller);
+        let frame = controller.frame(&domain).unwrap().0;
+        controller.accepted(&first, &domain, &frame.image);
+        for (index, amount) in [0.25, 0.75, 0.].into_iter().enumerate() {
+            engine
+                .set_property(
+                    engine.handle(&"r".into()).unwrap(),
+                    PropertyKey::Fill,
+                    serde_json::to_value(gpui_flow_scene::Paint::solid(Color::rgb(
+                        200 + index as u8,
+                        20,
+                        30,
+                    )))
+                    .unwrap(),
+                )
+                .unwrap();
+            let previous = make_key(&engine);
+            controller.request(previous.clone());
+            let late = controller.take_work().unwrap();
+            let result = late.run();
+            engine
+                .set_property(
+                    engine.handle(&"g".into()).unwrap(),
+                    PropertyKey::Grayscale,
+                    serde_json::json!(amount),
+                )
+                .unwrap();
+            let current = make_key(&engine);
+            assert!(!current.compatible(&previous, &domain));
+            controller.request(current.clone());
+            assert!(controller.frame(&domain).is_none());
+            assert!(late.cancel.load(Ordering::Relaxed));
+            controller.finish(late.key.clone(), result);
+            assert!(controller.candidates.is_empty());
+            finish(&mut controller);
+            assert!(controller.accepted.is_empty());
+            let (frame, candidate) = controller.frame(&domain).unwrap();
+            assert!(candidate);
+            controller.accepted(&previous, &domain, &frame.image);
+            assert!(controller.accepted.is_empty());
+            controller.accepted(&current, &domain, &frame.image);
+            assert_eq!(controller.accepted.len(), 1);
+        }
+    }
+}
+
+#[test]
+fn grayscale_domain_appearance_disappearance_rejects_late_results() {
+    use gpui_flow_engine::PropertyKey;
+    let mut engine = engine();
+    engine
+        .set_property(
+            engine.handle(&"g".into()).unwrap(),
+            PropertyKey::BlendMode,
+            serde_json::json!("pass_through"),
+        )
+        .unwrap();
+    assert!(key(&engine).domains.is_empty());
+    engine
+        .set_property(
+            engine.handle(&"g".into()).unwrap(),
+            PropertyKey::Grayscale,
+            serde_json::json!(1.),
+        )
+        .unwrap();
+    let first = key(&engine);
+    assert_eq!(first.domains.len(), 1);
+    let mut controller = CompositeController::default();
+    controller.request(first.clone());
+    let late = controller.take_work().unwrap();
+    let result = late.run();
+    engine
+        .set_property(
+            engine.handle(&"g".into()).unwrap(),
+            PropertyKey::Grayscale,
+            serde_json::json!(0.),
+        )
+        .unwrap();
+    let zero = key(&engine);
+    assert!(zero.domains.is_empty());
+    controller.request(zero);
+    assert!(late.cancel.load(Ordering::Relaxed));
+    controller.finish(late.key.clone(), result);
+    assert!(controller.frame(&"g".into()).is_none());
+    assert!(controller.candidates.is_empty());
+    engine
+        .set_property(
+            engine.handle(&"g".into()).unwrap(),
+            PropertyKey::Grayscale,
+            serde_json::json!(1.),
+        )
+        .unwrap();
+    let current = key(&engine);
+    controller.request(current.clone());
+    finish(&mut controller);
+    let frame = controller.frame(&"g".into()).unwrap().0;
+    controller.accepted(&current, &"g".into(), &frame.image);
+    assert_eq!(controller.accepted.len(), 1);
+}
+
+#[test]
+fn grayscale_undo_restores_original_pixels_and_stale_placement_identity() {
+    use gpui_flow_engine::PropertyKey;
+    let mut editor = gpui_flow_editor::SceneEditor::new(engine().scene().clone()).unwrap();
+    editor
+        .set_property(
+            editor.engine.handle(&"r".into()).unwrap(),
+            PropertyKey::Fill,
+            serde_json::to_value(gpui_flow_scene::Paint::solid(Color::rgb(255, 0, 0))).unwrap(),
+        )
+        .unwrap();
+    let render = |engine: &SceneEngine| {
+        let request = key(engine);
+        let source = &request.domains[0].source;
+        gpui_flow_composite::rasterize(
+            source,
+            request.viewport,
+            &mut gpui_flow_composite::PixelBudget::new(CompositeLimits::default(), 0).unwrap(),
+            &AtomicBool::new(false),
+        )
+        .unwrap()
+        .unwrap()
+    };
+    let original = render(&editor.engine);
+    let first = key(&editor.engine);
+    editor
+        .set_property(
+            editor.engine.handle(&"g".into()).unwrap(),
+            PropertyKey::Grayscale,
+            serde_json::json!(1.),
+        )
+        .unwrap();
+    assert_ne!(original.premul_rgba, render(&editor.engine).premul_rgba);
+    assert!(!key(&editor.engine).compatible(&first, &"g".into()));
+    assert!(editor.undo());
+    let restored = render(&editor.engine);
+    assert_eq!(original.premul_rgba, restored.premul_rgba);
+    assert_eq!(original.screen_bounds, restored.screen_bounds);
+    assert!(key(&editor.engine).compatible(&first, &"g".into()));
+}

@@ -760,6 +760,7 @@ fn admit_export(scene: &Scene) -> Result<()> {
         if s.has_layers()
             || s.has_shadows()
             || s.has_inner_shadows()
+            || s.has_grayscale()
             || s.blend_mode != BlendMode::PassThrough
         {
             return Err(error(
@@ -960,6 +961,7 @@ fn export_node(scene: &Scene, id: &DisplayId, depth: usize, geometry: &mut usize
     if s.has_layers()
         || s.has_shadows()
         || s.has_inner_shadows()
+        || s.has_grayscale()
         || s.blend_mode != BlendMode::PassThrough
     {
         return Err(error(

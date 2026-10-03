@@ -98,6 +98,31 @@ fn bytes(n: u64) -> Result<Vec<u8>, CompositeError> {
     data.resize(n, 0);
     Ok(data)
 }
+// The caller owns admission and charges the entire pass before this loop.
+// A row checkpoint also makes bounded cancellation independent of pixel count.
+fn grayscale_pixels(
+    layer: &mut Pixmap,
+    amount: f32,
+    mut check: impl FnMut() -> Result<(), CompositeError>,
+) -> Result<(), CompositeError> {
+    let width = layer.width();
+    for row in layer.data_mut().chunks_exact_mut(width as usize * 4) {
+        check()?;
+        for pixel in row.as_chunks_mut::<4>().0 {
+            let y = (2126. * pixel[0] as f64 + 7152. * pixel[1] as f64 + 722. * pixel[2] as f64)
+                / 10000.;
+            let alpha = pixel[3] as f64;
+            for channel in &mut pixel[..3] {
+                let value = *channel as f64;
+                *channel = (value + amount as f64 * (y - value))
+                    .round()
+                    .clamp(0., alpha) as u8;
+            }
+        }
+    }
+    Ok(())
+}
+
 struct Raster<'a> {
     width: u32,
     height: u32,
@@ -334,12 +359,21 @@ impl Raster<'_> {
             }
             let mut layer = self.surface()?;
             self.contents(node, &mut layer, depth + 1, None, true)?;
+            if node.grayscale > 0. {
+                self.grayscale(&mut layer, node.grayscale)?;
+            }
             self.composite(target, &layer, node.opacity, node.operation(), clip)?;
             self.release(layer);
         } else {
             self.contents(node, target, depth, clip, true)?;
         }
         Ok(())
+    }
+    /// Homogeneous sRGB matrix on premultiplied bytes: alpha commutes with
+    /// this matrix, so avoid a lossy straight-alpha byte roundtrip.
+    fn grayscale(&mut self, layer: &mut Pixmap, amount: f32) -> Result<(), CompositeError> {
+        self.budget.write(self.pixels)?;
+        grayscale_pixels(layer, amount, || self.check())
     }
     fn erase_path(
         &mut self,
@@ -1081,7 +1115,12 @@ fn rasterize_inner(
         budget,
         cancelled,
     };
-    if prep.has_shadows || prep.has_inner_shadows || prep.has_image_clips || prep.has_erasers {
+    if prep.has_shadows
+        || prep.has_inner_shadows
+        || prep.has_image_clips
+        || prep.has_erasers
+        || prep.has_grayscale
+    {
         // No domain RGBA, mask, or filter scratch has been allocated yet.
         admission::admit(&raster, &root, source)?;
     }
@@ -1101,4 +1140,34 @@ fn rasterize_inner(
         height,
         premul_rgba: output.take(),
     }))
+}
+
+#[cfg(test)]
+mod grayscale_loop_tests {
+    use super::*;
+    #[test]
+    fn grayscale_row_cancellation_stops_before_touching_the_next_row() {
+        let mut layer = Pixmap::new(5, 4).unwrap();
+        layer.fill(tiny_skia::Color::from_rgba8(255, 0, 0, 128));
+        let original = layer.data().to_vec();
+        let cancelled = AtomicBool::new(false);
+        let mut row = 0;
+        let result = grayscale_pixels(&mut layer, 1., || {
+            row += 1;
+            if row == 3 {
+                cancelled.store(true, Ordering::Relaxed);
+            }
+            if cancelled.load(Ordering::Relaxed) {
+                Err(CompositeError::Superseded)
+            } else {
+                Ok(())
+            }
+        });
+        assert_eq!(result, Err(CompositeError::Superseded));
+        assert_eq!(row, 3);
+        for pixel in layer.data()[..40].as_chunks::<4>().0 {
+            assert_eq!(*pixel, [27, 27, 27, 128]);
+        }
+        assert_eq!(&layer.data()[40..], &original[40..]);
+    }
 }

@@ -384,6 +384,7 @@ pub enum PropertyKey {
     FillLayers,
     StrokeLayers,
     Opacity,
+    Grayscale,
     FillRule,
     BlendMode,
     Shadow,
@@ -418,6 +419,7 @@ impl PropertyKey {
             Self::FillLayers => "style.fill_layers".into(),
             Self::StrokeLayers => "style.stroke_layers".into(),
             Self::Opacity => "style.opacity".into(),
+            Self::Grayscale => "style.grayscale".into(),
             Self::FillRule => "style.fill_rule".into(),
             Self::BlendMode => "style.blend_mode".into(),
             Self::Shadow => "style.shadow".into(),
@@ -515,7 +517,8 @@ pub(crate) fn apply_property(
 }
 pub(crate) fn property_dirty(name: &str) -> DirtyFlags {
     match name {
-        "style.blend_mode"
+        "style.grayscale"
+        | "style.blend_mode"
         | "style.shadow"
         | "style.shadow_layers"
         | "style.inner_shadow_layers" => DirtyFlags::PAINT,
@@ -555,6 +558,13 @@ impl PropertyKey {
                     max: Some(1.),
                 },
                 Some(json!(1.)),
+            ),
+            Self::Grayscale => (
+                PropertyType::Number {
+                    min: Some(0.),
+                    max: Some(1.),
+                },
+                Some(json!(0.)),
             ),
             Self::ZIndex => (
                 PropertyType::Number {

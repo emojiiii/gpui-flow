@@ -108,6 +108,8 @@ pub enum CompositeError {
     /// A shadow would isolate a pass-through container whose descendants need
     /// its external backdrop. Select Normal explicitly or isolate those blends.
     UnsupportedShadowBackdrop(DisplayId),
+    /// Grayscale would sever a PassThrough descendant from its backdrop.
+    UnsupportedGrayscaleBackdrop(DisplayId),
     InvalidGeometry(String),
     TooLarge,
     WorkingSetLimit,
@@ -209,3 +211,6 @@ mod eraser_tests;
 
 #[cfg(test)]
 mod scale_fixed_tests;
+
+#[cfg(test)]
+mod grayscale_tests;

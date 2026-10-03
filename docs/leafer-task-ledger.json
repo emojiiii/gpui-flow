@@ -490,7 +490,10 @@
       },
       "technical_dependencies": [
         "background blur须读取拥有的backdrop，不能读取任意外部宿主画面"
-      ]
+      ],
+      "progress": "有界scalar grayscale已实现；1701 headless/10既有ignored、UI279、strict及format通过，原生待验。alpha保留/隔离与预算/consumer拒绝有回归，spread/box/scale-fixed shadow和blur/backgroundBlur仍缺，整项partial",
+      "headless_increment_summary": "docs/validation/2026-10-03-grayscale-source-summary.json",
+      "grayscale_contract": "docs/grayscale.md"
     },
     {
       "id": "APP-05",

@@ -350,6 +350,8 @@ pub struct Style {
     /// Additional centered vector strokes in back-to-front order.
     pub stroke_layers: Vec<Stroke>,
     pub opacity: f32,
+    /// Alpha-preserving sRGB grayscale amount, finite and in [0, 1].
+    pub grayscale: f32,
     pub fill_rule: FillRule,
     pub blend_mode: BlendMode,
     /// Legacy/base outer shadow, painted before `shadow_layers`.
@@ -370,6 +372,7 @@ impl Default for Style {
             fill_layers: Vec::new(),
             stroke_layers: Vec::new(),
             opacity: 1.0,
+            grayscale: 0.0,
             fill_rule: FillRule::NonZero,
             blend_mode: BlendMode::PassThrough,
             shadow: None,
@@ -388,6 +391,9 @@ pub const MAX_SHADOW_LAYERS: usize = 8;
 pub const MAX_INNER_SHADOW_LAYERS: usize = 8;
 
 impl Style {
+    pub fn has_grayscale(&self) -> bool {
+        self.grayscale > 0.0
+    }
     /// Base shadow followed by additional shadows, in painter order. Every layer
     /// samples the same source; earlier shadows never feed later shadows.
     pub fn shadows(&self) -> impl Iterator<Item = &Shadow> {
@@ -463,6 +469,9 @@ impl Style {
     pub(crate) fn validate(&self) -> Result<(), String> {
         if !self.opacity.is_finite() || self.opacity < 0.0 || self.opacity > 1.0 {
             return Err("opacity must be in [0,1]".into());
+        }
+        if !self.grayscale.is_finite() || !(0.0..=1.0).contains(&self.grayscale) {
+            return Err("grayscale must be finite and in [0,1]".into());
         }
         if self.fills().count() + self.strokes().count() > MAX_PAINT_LAYERS {
             return Err(format!(

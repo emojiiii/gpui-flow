@@ -247,6 +247,7 @@ impl DomainSource {
                 && a.object.style.stroke == b.object.style.stroke
                 && a.object.style.stroke_layers == b.object.style.stroke_layers
                 && a.object.style.fill_rule == b.object.style.fill_rule
+                && a.object.style.grayscale == b.object.style.grayscale
                 && a.object.style.shadow == b.object.style.shadow
                 && a.object.style.shadow_layers == b.object.style.shadow_layers
                 && a.object.style.inner_shadow_layers == b.object.style.inner_shadow_layers
@@ -356,6 +357,7 @@ fn boundary(scene: &Scene, id: &DisplayId) -> bool {
             && o.style
                 .fills()
                 .any(|p| matches!(p,gpui_flow_scene::Paint::Solid{color} if color.a<255)))
+        || o.style.has_grayscale()
         || o.style.has_shadows()
         || o.style.has_inner_shadows()
         || o.style.blend_mode != BlendMode::PassThrough
@@ -579,6 +581,15 @@ fn capture(
         && requires_parent_backdrop(&captured)
     {
         return Err(CompositeError::UnsupportedShadowBackdrop(o.id.clone()));
+    }
+    if o.shape.allows_children()
+        && o.eraser == EraserMode::None
+        && o.style.has_grayscale()
+        && o.style.blend_mode == BlendMode::PassThrough
+        && o.style.opacity == 1.
+        && requires_parent_backdrop(&captured)
+    {
+        return Err(CompositeError::UnsupportedGrayscaleBackdrop(o.id.clone()));
     }
     Ok(captured)
 }

@@ -215,3 +215,5 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 - 2026-10-03 07:29：APP-02 [scale-fixed有界实现](scale-fixed-strokes.md)完成headless终验：default1679/10既有ignored、UI275及strict和静态复审通过。新原生仍待验收，显式consumer/局部shear拒绝边界保留，状态与32/10/3计数不变。
 
 - 2026-10-03 08:24：APP-02原必选验收字符串不变，scale-fixed源码/自动/14行限定原生与265审计通过后升级有界已验证，计数33/9/3，总45。拒绝域、旧JPEG辅助20/21、sticky错误条/初始stale footer及未物理验证queued callback取消均保留；[范围核对](scale-fixed-acceptance-audit.md)。APP-04 grayscale仍在独立开发，不改状态。
+
+- 2026-10-03 08:38：APP-04增加[有界scalar grayscale](grayscale.md)，1701 headless/10既有ignored、279 UI、strict及format通过；限定原生尚待验收。其余固定效果缺口保留，状态与33/9/3计数不变。
