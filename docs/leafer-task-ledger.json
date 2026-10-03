@@ -435,17 +435,20 @@
       "title": "隔离混合与蒙版擦除",
       "status": "partial",
       "acceptance": "组透明度/多paint隔离、固定blend集合、mask/erase覆盖关系与hit规则",
-      "boundary": "已有有界CPU及owned backdrop；Custom/外部任意backdrop与erase缺",
-      "reference_doc": "docs/compositing.md",
-      "implementation_snapshot": "99392f7c35f956f8765ed5730423df19e3d474cd",
+      "boundary": "有界Pixel及几何leaf Path擦除、直接父隔离、固定alpha-mask相位已实现；Custom/外部任意backdrop、Path容器/Text等及完整mask布局/命中兼容仍缺",
+      "reference_doc": "docs/scene-erasers.md",
+      "implementation_snapshot": "a46ae005165453b90a7358f7b286af3dd94d69fc",
       "evidence_commit": null,
-      "automatic": "现有多种blend/alpha mask CPU与UI通过",
-      "native": "已有真实合成窗口；全固定源码契约未齐",
+      "automatic": "新增30 headless及1 UI回归；受影响三crate778通过/3既有ignored、UI focused和strictClippy通过。夹具7CPU cases及6真实App/Entity reset回归通过",
+      "native": "修复轮0543Z05:46–05:54退出0，15行物理矩阵、90按钮、18pointer、41receipt；456审计通过。旧0518Z reset panic与旧00截图覆盖缺失事故分别保留",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/mask/src/index.ts",
         "symbols_or_contract": "MaskModule及UIRender隔离/混合"
       },
-      "technical_dependencies": []
+      "technical_dependencies": [],
+      "evidence_summary": "docs/validation/2026-10-03-scene-eraser-fixture-summary.json",
+      "native_report": "docs/scene-eraser-native.md",
+      "progress": "源码a46ae005、readonly新会话夹具4507492c均已远端核验。几何有界增量通过，不把APP03升级；截图有损与独立CPU出口分开"
     },
     {
       "id": "APP-04",

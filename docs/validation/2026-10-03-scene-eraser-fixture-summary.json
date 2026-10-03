@@ -1,7 +1,7 @@
 {
-  "schema_version": 2,
-  "recorded_utc": "2026-10-03T05:46:27.037814+00:00",
-  "scope": "Native fixture lifecycle repair; original native failure retained; repaired native matrix pending",
+  "schema_version": 3,
+  "recorded_utc": "2026-10-03T06:07:03.180151+00:00",
+  "scope": "Bounded geometric eraser native fixture accepted after readonly-session repair; original failed run and capture-integrity incident retained separately",
   "runtime_source_commit": "a46ae005165453b90a7358f7b286af3dd94d69fc",
   "initial_fixture_build_and_cpu_tour": {
     "schema_version": 1,
@@ -131,7 +131,17 @@
     "cpu_encoding_pairs": 2,
     "original_jpegs": 8,
     "report_sha256": "856cf5032a823a2a65c893821b6d78948e3834bc82b62a5db12bdc7fe1976376",
-    "manifest_sha256": "83267d877a12cc38f0bc254fb3b1123fe8499b877de38cb42743fe6761aab801"
+    "manifest_sha256": "83267d877a12cc38f0bc254fb3b1123fe8499b877de38cb42743fe6761aab801",
+    "capture_integrity_after_later_run": {
+      "original_captures_at_initial_seal": 8,
+      "remaining_original_captures": 7,
+      "missing_capture": "00-desktop-before.jpg",
+      "expected_sha256": "0ae72feca5a7afeddc1fed2374a7cbfa1a9677f63162a833c60d1aa54a639f20",
+      "expected_bytes": 99961,
+      "original_full_package_integrity": false,
+      "original_action_json_restored_exactly": true,
+      "backup_search": "No matching-size copy in current shared/tmp/scratch search; no replacement image generated"
+    }
   },
   "repair": {
     "behavior": "Create a new readonly host-owned SceneView for each preset, replace subscriptions, invalidate queued callback token, reset history and viewport. No capability override. Footer enlarged to205px.",
@@ -274,12 +284,107 @@
       "Second App helper exited1 because release assertion preceded effect flush. Assertion now runs after real App update flush; no native data altered."
     ]
   },
-  "native_acceptance": false,
+  "native_acceptance": true,
   "fixed_ledger_change": false,
   "limits": [
     "CPU-tour creates no Application/SceneView/Window and does not simulate callbacks or read accepted framebuffer bytes.",
     "Physical SceneView rendering, typed live diagnostics, real pointer targets and supported shown geometry require the separate native tour.",
     "Independent CPU PNG/WebP results have fixed1000x430/scale1/default32M limits; they do not establish native GPU pixels.",
     "APP03 remains partial; external backdrop, path containers/Text/Image/Canvas/Custom, SVG erase encoding and full mask/picking parity remain unsupported."
-  ]
+  ],
+  "native_acceptance_scope": "Repaired fifteen-row geometric fixture only; APP03 remains partial",
+  "repaired_native": {
+    "directory": "/workspace/shared/scene-eraser-reset-native-validation-20261003T0543Z",
+    "source_commit": "4507492cb65e044e3841751414dfabe3849c4f51",
+    "start_utc": "2026-10-03T05:46:26Z",
+    "end_utc": "2026-10-03T05:54:33Z",
+    "exit_code": 0,
+    "matrix_rows_executed": 15,
+    "trace_counts": {
+      "total": 72,
+      "numbered_receipts": 41,
+      "pointer_downs": 18,
+      "preset_resets": 9,
+      "undos": 3
+    },
+    "physical_actions": {
+      "click": 90,
+      "window_restore": 1,
+      "scroll": 2,
+      "drag": 1,
+      "normal_close": 1
+    },
+    "independent_audit": {
+      "passed": 456,
+      "total": 456,
+      "sha256": "fa569d437921679e3047ba6b7253108cf0d083ffe83f9bf6933255475944ed68"
+    },
+    "independent_png_webp_pairs": 5,
+    "original_jpegs": 40,
+    "source_input_matches": 494,
+    "capture_integrity": {
+      "recorded_utc": "2026-10-03T05:58:06.392733+00:00",
+      "cause": "CUA erShot/erClick closures retained original0518Z bindings after apparent REPL variable reassignment. New capture bytes and click calls were real, but written to the old package.",
+      "new_captures_copied_without_reencoding": 40,
+      "new_actions_recovered": 95,
+      "old_json_exactly_restored": [
+        {
+          "file": "physical-actions.json",
+          "restored_sha256": "12073f0da39cfa6c231c14d10c4ba18c224858d288a9b72c151cf6ba3a4d92cc",
+          "matches_original_seal": true
+        },
+        {
+          "file": "capture-timeline.json",
+          "restored_sha256": "8f925499b2374de79f7d4134e04701e690c81e4edff2d7a778a626dcdf240e4e",
+          "matches_original_seal": true
+        }
+      ],
+      "old_capture_overwrites": [
+        {
+          "file": "00-desktop-before.jpg",
+          "expected_sha256": "0ae72feca5a7afeddc1fed2374a7cbfa1a9677f63162a833c60d1aa54a639f20",
+          "actual_sha256": "c91f0e03ae10f4301e4390ae4c33f38e12a317a9ec031ac49386302aeeb3c25a"
+        }
+      ],
+      "other_original_desktop_captures_unchanged": 7,
+      "wrong_directory_new_files_retained": true,
+      "old_full_package_image_integrity_complete": false,
+      "backup_status": "No original backup found by integrator; original00 desktop-before bytes unavailable. Search receipt: /workspace/shared/scene-eraser-before-capture-copy-search.json",
+      "corrected_timeline_limit": "All new captured stdout line counts actually read the old trace and cannot be attributed to the new run. Preserved with explicit invalid flag. Capture timestamps, action labels and image bytes remain original.",
+      "current_free_bytes": 14355140608,
+      "old_overwritten_capture_original_bytes": 99961
+    },
+    "limits": [
+      "Repeated burst final states are observed, but physical pending obsolete callback cancellation timing is not independently proven.",
+      "Source snapshot and native observations do not expose GPU allocation/fence identity.",
+      "JPEG screenshots establish qualitative visible pixels only; CPU color arithmetic is separate.",
+      "New capture helper read the old stdout count; those fields are retained explicitly invalid, not repaired with guessed timing."
+    ],
+    "report_sha256": "061f9547249975f31b35c04b69b9c85b1ecb159ec841a1a39e8ad06be382f51c",
+    "native_evidence_manifest_sha256": "31319df78203c41217436093ee41ca59fb02a7c5aea00135b6e4cd07fc1286cd",
+    "screenshots_manifest_sha256": "87c1aa0521baf2d6a18850c56f60cc4ee23cc6b16f8dc9bd18825c304752d0c4",
+    "session_manifest_sha256": "4441ef92d8efae2a9b58be592c07188420bc4a4939fb3722947bcfa3e57bf1e6",
+    "incident_manifest_sha256": "a9fb40d4c3fbfc67ced1c8193a862aa1a09e0931617e97309f121dc04bc1aa39",
+    "capture_integrity_audit": {
+      "audited_utc": "2026-10-03T06:05:20.886527+00:00",
+      "old_package_original_hash_entries": 40,
+      "old_package_matching_entries": 39,
+      "old_package_mismatch": [
+        {
+          "manifest": "screenshots.sha256",
+          "file": "00-desktop-before.jpg",
+          "expected_sha256": "0ae72feca5a7afeddc1fed2374a7cbfa1a9677f63162a833c60d1aa54a639f20",
+          "actual_sha256": "c91f0e03ae10f4301e4390ae4c33f38e12a317a9ec031ac49386302aeeb3c25a",
+          "matches": false
+        }
+      ],
+      "old_package_full_integrity": false,
+      "old_source_crash_reports_cpu_exports_unchanged": true,
+      "current40capture_bytes_match_preserved_misrouted_originals": true,
+      "old_json_restoration_verified_exact": true
+    },
+    "parent_hash_verification_entries": 176,
+    "capture_routing_incident_sha256": "e44d9562354ce9ae2e28ea578a5e3d512e774efe36d552844131fcadb05f2caa",
+    "capture_integrity_audit_sha256": "90b679d8489a8d339a2963fe3da6dd7ad79eef4c171f37c45a4a773de5a89608"
+  }
 }

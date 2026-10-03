@@ -2,7 +2,7 @@
 
 ## Delivery and verification state
 
-The native fixture lives at `examples/studio/src/bin/scene_erasers.rs`. This document defines its behavior and acceptance matrix; build, helper and native results are recorded separately in `docs/validation/2026-10-03-scene-eraser-fixture-summary.json`. A successful syntax/type check is not native acceptance.
+The native fixture lives at `examples/studio/src/bin/scene_erasers.rs`. This document defines its behavior and acceptance matrix; build, helper and native results are recorded separately in `docs/validation/2026-10-03-scene-eraser-fixture-summary.json`. A successful syntax/type check is not native acceptance. The repaired fifteen-row physical run and its separate capture-integrity incident are recorded in [native evidence](scene-eraser-native.md); the first reset crash remains in the [historical failed report](scene-eraser-native-failed-reset.md).
 
 The source uses the public APIs exercised by the existing compositing/export fixtures. Ordinary Studio auto-bin discovery finds it, and existing `gpui`, `gpui-kit`, `gpui-flow`, `serde_json` and `image` dependencies suffice. No new dependency or runtime-only test hook is required.
 
@@ -27,7 +27,7 @@ Every actual tour execution creates one exclusive `gpui-scene-erasers-cpu-tour-<
 
 `--session-reset-tour` runs the same production preset and queued-burst callbacks in a real GPUI Application, without opening a window or rendering a frame. It uses the existing native dependency graph. It first confirms that LoadScene on the readonly entity is denied and preserves canonical JSON, then cycles A/B/C/D/A/A after host edits and a queued burst. Each cycle verifies a different readonly entity, exact initial document, fresh Undo/Redo history, default viewport, discarded old burst token, and functioning host edit plus exact Undo. Retired entity weak handles must no longer upgrade. This does not simulate physical input or establish compositing/pixel acceptance.
 
-The first native 0518Z run failed with exit 101 when its old reset callback unwrapped the correct CapabilityDenied(Edit) response. Its original source, reports and partial matrix evidence remain separate. The revised callback and footer layout require a new frozen native run; the seven CPU export cases do not cover this lifecycle regression.
+The first native 0518Z run failed with exit 101 when its old reset callback unwrapped the correct CapabilityDenied(Edit) response. Its original source, reports and partial matrix evidence remain separate. The revised callback and footer layout were subsequently exercised in the separate 0543Z native run; the seven CPU export cases do not cover this lifecycle regression. The later capture-integrity incident is documented independently of the functional result.
 
 ## Scope and evidence boundary
 
