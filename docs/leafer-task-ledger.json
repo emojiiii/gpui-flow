@@ -483,7 +483,7 @@
       "implementation_snapshot": "99392f7c35f956f8765ed5730423df19e3d474cd",
       "evidence_commit": null,
       "automatic": "shadow modes完整headless1788/10旧ignored、UI287；后增1个case的final compositor456及受影响Text1通过（不叠加计数），两图strict/fmt通过；3个test-only delta，production一致",
-      "native": "grayscale15行+reopen已验且保留StaleFrame；foreground blur1049Z12行、79点击/82事件/46原JPEG、exit0与210/210审计通过，原209/210及解析中断、pending/E即时诊断滞后保留，Library COMPLETE v5",
+      "native": "grayscale15行+reopen已验且保留StaleFrame；foreground blur1049Z12行、79点击/82事件/46原JPEG、exit0与210/210审计通过，原209/210及解析中断、pending/E即时诊断滞后保留，Library COMPLETE v5；shadow modes1243Z15行、108点击/112事件/54原JPEG、exit0与298/298同operator数据核对通过，原297/298假设初稿、pending/即时诊断滞后与未观测burst取消保留",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/effect/src/index.ts",
         "symbols_or_contract": "EffectModule；Shadow / InnerShadow / Blur / BackgroundBlur；ICommonAttr grayscale"
@@ -491,7 +491,7 @@
       "technical_dependencies": [
         "background blur须读取拥有的backdrop，不能读取任意外部宿主画面"
       ],
-      "progress": "grayscale/foreground blur已过限定原生；spread/box/scale-fixed shadow与A8精确one-tap修复源码已验，新原生待做。正sigma工作计费收紧、Rust字段兼容与完整源/预算拒绝明确；backgroundBlur仍待实现，整项partial，33/9/3不变",
+      "progress": "grayscale/foreground blur及spread/box/scale-fixed shadow均已过各自限定原生；A8精确one-tap修复另有CPU原数组/真PNG证据。正sigma工作计费、Rust字段兼容及完整源/预算拒绝明确；owned backgroundBlur仍待完成，整项partial，33/9/3不变",
       "headless_increment_summary": "docs/validation/2026-10-03-grayscale-source-summary.json",
       "grayscale_contract": "docs/grayscale.md",
       "grayscale_native_report": "docs/grayscale-native.md",
@@ -505,7 +505,19 @@
       "foreground_blur_native_report": "docs/foreground-blur-native.md",
       "foreground_blur_native_summary": "docs/validation/2026-10-03-foreground-blur-native-summary.json",
       "shadow_modes_contract": "docs/shadow-modes.md",
-      "shadow_modes_source_summary": "docs/validation/2026-10-03-shadow-modes-source-summary.json"
+      "shadow_modes_source_summary": "docs/validation/2026-10-03-shadow-modes-source-summary.json",
+      "shadow_modes_source_commit": "b3dd45cc7fbfffc6585478e97177923e00f998d5",
+      "shadow_modes_fixture_commit": "585e4d4e2c4a93123b59f9dc8a2a30ebc50fbc9c",
+      "shadow_modes_fixture": "docs/shadow-modes-fixture.md",
+      "shadow_modes_native_report": "docs/shadow-modes-native.md",
+      "shadow_modes_native_summary": "docs/validation/2026-10-03-shadow-modes-native-summary.json",
+      "shadow_modes_library": {
+        "identity": "libfile_1de0930bc6c88191871df89835011229",
+        "version": 4,
+        "status": "COMPLETE",
+        "zip_sha256": "040daa0f7f3bf2f1f1d09216630770b573dbcf5da7828796177ebb04488250bc",
+        "remote_byte_download": "HTTP502;未核，非通过"
+      }
     },
     {
       "id": "APP-05",

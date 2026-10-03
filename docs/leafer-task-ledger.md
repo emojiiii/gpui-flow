@@ -1,6 +1,6 @@
 # Leafer 对齐任务总表 v1（审阅版）
 
-固定45个去重能力单元，最新已验证远端源码 [`761b626b`](https://github.com/emojiiii/gpui-flow/commit/761b626b5c9c77de1c2fdf5fe4c3751114ffb1e7)，原生夹具工作区来源逐项单列。这是具体范围的开发台账，不是全部Leafer API兼容证明，不用任务数计算工时或百分比。旧39条A–E验收契约仅为交叉索引，不与本表相加；此前31/8快速审计不作为本表完成数。
+固定45个去重能力单元，各能力的已验证源码和原生来源逐项单列；本轮阴影夹具为 [`585e4d4e`](https://github.com/emojiiii/gpui-flow/commit/585e4d4e2c4a93123b59f9dc8a2a30ebc50fbc9c)。这是具体范围的开发台账，不是全部Leafer API兼容证明，不用任务数计算工时或百分比。旧39条A–E验收契约仅为交叉索引，不与本表相加；此前31/8快速审计不作为本表完成数。
 
 ## 2026-10-03 云环境更换与证据位置
 
@@ -104,7 +104,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | APP-01 | appearance/gradient和CPU对应回归通过 | 历史渐变/多paint窗口及Canvas矢量窗口通过 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | APP-02 | fixed最终1679/10既有ignored、UI275、strict；18helper组合及5PNG/45 Pillow通过；旧open证据保留 | 14行、99点击/32pointer/28live/38 JPEG；265审计，主窗/reopen退出0；stale footer/sticky error/未实抓取消保留 | 源码`981e9918`、夹具`369d250c`；[有界native](scale-fixed-native.md)、[不变原契约核对](scale-fixed-acceptance-audit.md)，旧open辅助20/21保留 |
 | APP-03 | 受影响三crate778/3既有ignored、UI focused、strict通过；夹具7CPU+6真实App reset回归 | 修复轮15行/90次点击(73控件+17画布)/18pointer/41receipt，456审计通过；旧reset失败及旧00截图缺失事故单列 | 核心`a46ae005`、夹具`4507492c`；[native证据](scene-eraser-native.md)，整项仍部分 |
-| APP-04 | shadow modes1788 headless/10旧ignored、UI287；final compositor456及strict，含test-only增量说明 | grayscale15行+reopen及foreground blur12行均已验；保留原审计初稿、StaleFrame/普通pending与诊断滞后 | [灰度](grayscale-native.md) / [foreground blur原生](foreground-blur-native.md)；其余固定效果仍缺，整项partial |
+| APP-04 | shadow modes1788 headless/10旧ignored、UI287；final compositor456；另270默认预算请求/28数学raw与真PNG，计数不混加 | grayscale15行+reopen、foreground blur12行及shadow modes15行均已验；各自原初稿/pending/诊断/时序边界保留 | [灰度](grayscale-native.md) / [foreground blur](foreground-blur-native.md) / [shadow modes](shadow-modes-native.md)；owned backgroundBlur仍缺，整项partial |
 | APP-05 | 历史74 state；修订UI245含13coherent，最终hook后2导航/4镜像focused复验，strict/链接通过（重叠） | 新72记录/57 JPEG截图，33状态样本完整，7点击符合accepted geometry；12硬失效样本loading保留，退出0 | `93ee7f7cabfb7979aeca93ec137ccf81644baeb5`；[coherent复验](validation/2026-10-02-state-coherent-native-summary.json)，[原始失败证据](validation/2026-10-02-state-geometry-summary.json)保留 |
 | APP-06 | 无GPU damage消费测试 | 未实现/未验收 | 尚无独立完整验收提交 |
 | LAY-01 | flow/auto_size/reverse/item_boxes/gap/taffy对应全套通过 | 核心是纯measure/arrange契约；窗口专门矩阵仍未宣称 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
@@ -231,3 +231,5 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 - 2026-10-03 11:32：foreground blur独立12行原生已完成，11:15:10正常exit0；79点击/82事件/46原JPEG、210/210同operator工件审计。209/210初稿与两次解析中断、普通pending/E即时诊断滞后保留。私有Library同身份COMPLETE v5保存全部原始证据（binary可重建副本除外）。其余必选shadow modes/backgroundBlur仍未完成，33/9/3不变；[范围与证据](foreground-blur-native.md)。
 
 - 2026-10-03 11:59：新增[shadow modes](shadow-modes.md)的spread/outer box/scale-fixed与A8极小sigma精确修复。源码1788 headless/10旧ignored、UI287；final compositor456包含后加1例，Text1为lint复验，不叠加计数。独立审阅修复hidden geometry在capture/更紧raster限额遗漏、sigma正数下溢与default参数舍入。原生未做、backgroundBlur仍缺；33/9/3不变。
+
+- 2026-10-03 13:19：shadow modes1243Z独立15行原生完成，13:05:31正常exit0/stderr空；108点击、112事件、45 settled、10真实PointerDown、54原JPEG及298/298同operator离线数据核对。297/298旧审计的f32/JSON假设错误保留；两burst均完成，取消时序未观测，普通pending与即时诊断滞后未隐去。独立CPU974实际buffer+29expected/33真PNG不冒充GPU读回。backgroundBlur仍待完成，33/9/3不变；[完整证据](shadow-modes-native.md)。
