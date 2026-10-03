@@ -2,6 +2,7 @@
 //! GPUI's public asset subscription/cache and the existing shared text shaper.
 //! It does not fetch, decode, or poll private cache state itself.
 mod canvas;
+mod owned_image;
 use gpui::{AnyImageCache, App, ImgResourceLoader, RenderImage, Resource, Window};
 use gpui_flow_engine::{
     ElementHandle, ResourceCancellation, ResourceCompletion, ResourceError, ResourceEvent,
@@ -10,6 +11,7 @@ use gpui_flow_engine::{
 };
 use gpui_flow_scene::{Shape, display::Text};
 use gpui_flow_text::TextMeasureRequest;
+pub use owned_image::SceneOwnedImageLoader;
 use std::{
     collections::{BTreeMap, BTreeSet},
     panic::{AssertUnwindSafe, catch_unwind},
@@ -63,6 +65,7 @@ impl std::fmt::Display for CanvasEditError {
 impl std::error::Error for CanvasEditError {}
 
 pub struct SceneResourceAdapter {
+    owned_images: owned_image::OwnedImages,
     canvases: canvas::CanvasResources,
     tracker: SceneResources,
     resolver: SceneImageResolver,
@@ -86,6 +89,7 @@ impl SceneResourceAdapter {
             }
         };
         Ok(Self {
+            owned_images: Default::default(),
             tracker,
             canvases,
             resolver: Rc::new(local_image_resource),
@@ -224,6 +228,45 @@ impl SceneResourceAdapter {
     pub fn tracker(&self) -> &SceneResources {
         &self.tracker
     }
+    pub fn image_load_event(
+        &self,
+        engine: &SceneEngine,
+        handle: ElementHandle,
+    ) -> Option<gpui_flow_media::ResourceLoadEvent> {
+        self.owned_images
+            .event(self.tracker.ticket(engine, handle)?)
+    }
+    /// Opt into owned, shared-budget image jobs. Replacing the loader releases
+    /// old consumers; the final consumer kills and reaps an unfinished worker.
+    pub fn set_owned_image_loader(
+        &mut self,
+        engine: &SceneEngine,
+        loader: Option<SceneOwnedImageLoader>,
+    ) -> Result<(), ResourceError> {
+        self.tracker.invalidate(engine, ResourceKind::Image)?;
+        self.images.clear();
+        self.owned_images.clear();
+        self.owned_images.loader = loader;
+        self.cache = None;
+        self.resolved.clear();
+        self.playbacks.clear();
+        self.timelines.clear();
+        Ok(())
+    }
+    /// Explicit file-content reload. Old shared consumers retain their own
+    /// generation; this adapter will acquire fresh pool and engine tickets.
+    pub fn reload_owned_images(&mut self, engine: &SceneEngine) -> Result<(), ResourceError> {
+        self.tracker.invalidate(engine, ResourceKind::Image)?;
+        if let Some(loader) = &self.owned_images.loader {
+            loader.invalidate();
+        }
+        self.images.clear();
+        self.owned_images.clear();
+        self.resolved.clear();
+        self.playbacks.clear();
+        self.timelines.clear();
+        Ok(())
+    }
     /// Applies only to this view; invalidates previous image observations.
     pub fn set_image_resolver(
         &mut self,
@@ -234,6 +277,7 @@ impl SceneResourceAdapter {
         self.resolver = resolver;
         self.resolved.clear();
         self.images.clear();
+        self.owned_images.clear();
         self.playbacks.clear();
         self.timelines.clear();
         Ok(())
@@ -249,6 +293,8 @@ impl SceneResourceAdapter {
         self.cache = cache;
         self.resolved.clear();
         self.images.clear();
+        self.owned_images.clear();
+        self.owned_images.loader = None;
         self.playbacks.clear();
         self.timelines.clear();
         Ok(())
@@ -269,6 +315,12 @@ impl SceneResourceAdapter {
             .retain(|ticket, _| self.tracker.state(engine, *ticket).is_some());
         self.images
             .retain(|ticket, _| self.tracker.state(engine, *ticket).is_some());
+        self.owned_images.retain(|ticket| {
+            matches!(
+                self.tracker.state(engine, ticket),
+                Some(ResourceState::Pending | ResourceState::Loaded | ResourceState::Failed(_))
+            )
+        });
         // Clone canonical resource requests before invoking host/GPUI code.
         // State-style placeholders are intentionally not canonical font inputs.
         let requests = engine
@@ -320,7 +372,23 @@ impl SceneResourceAdapter {
                         continue;
                     }
                     let resource = self.resolved.get(&ticket).expect("authorized resource");
-                    let result = if let Some(cache) = &self.cache {
+                    let result = if self.owned_images.loader.is_some() {
+                        match self.owned_images.prepare(ticket, resource, window, cx) {
+                            Ok(None) => None,
+                            Ok(Some(image)) => Some(Ok(image)),
+                            Err(error) => {
+                                let error = error.to_string();
+                                self.settle(
+                                    engine,
+                                    ticket,
+                                    ResourceOutcome::Failed(error.clone()),
+                                    Some(SceneImagePresentation::Failed(error)),
+                                    &mut events,
+                                )?;
+                                continue;
+                            }
+                        }
+                    } else if let Some(cache) = &self.cache {
                         cache.load(resource, window, cx)
                     } else {
                         // Public subscription: GPUI invalidates this view on
@@ -638,6 +706,8 @@ impl SceneResourceAdapter {
         self.canvases.dispose(engine);
         self.resolved.clear();
         self.images.clear();
+        self.owned_images.clear();
+        self.owned_images.loader = None;
         self.playbacks.clear();
         self.timelines.clear();
         self.tracker.dispose(engine)

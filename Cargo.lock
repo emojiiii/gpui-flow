@@ -2514,6 +2514,7 @@ dependencies = [
 name = "gpui-flow-media"
 version = "0.1.0"
 dependencies = [
+ "image",
  "serde_json",
 ]
 

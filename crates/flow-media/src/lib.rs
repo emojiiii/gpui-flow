@@ -8,11 +8,17 @@
 mod backend;
 mod decoder;
 mod engine;
+mod image_loader;
+mod loading;
 mod player;
+mod pooled_backend;
 mod probe;
 mod process;
 mod types;
 
 pub use backend::*;
+pub use image_loader::*;
+pub use loading::*;
 pub use player::*;
+pub use pooled_backend::*;
 pub use types::*;

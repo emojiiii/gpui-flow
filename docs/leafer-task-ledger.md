@@ -1,6 +1,6 @@
 # Leafer固定45项任务表
 
-状态：35项有界已验证、7项部分实现、3项未开始。固定ID、验收集合与边界保留；任务数不代表工时或全部上游API兼容。机器可读定义见[任务表JSON](leafer-task-ledger.json)。
+状态：36项有界已验证、6项部分实现、3项未开始。固定ID、验收集合与边界保留；任务数不代表工时或全部上游API兼容。机器可读定义见[任务表JSON](leafer-task-ledger.json)。
 
 功能实现、必要回归和简明契约按模块提交。逐次运行日志、截图、备份收据及历史验收JSON不进入源码仓库；既有提交历史不改写。测试方法见[本地验证](testing.md)。
 
@@ -14,7 +14,7 @@
 | INS-02 | 实例 / [多层App实例组合](layered-app.md) | 有界已验证 | 多层画布树、跨层事件/坐标转发、独立生命周期与销毁 | 多个普通SceneView并排不等于App分层 |
 | LIF-01 | 生命周期 / [订阅与拥有资源销毁](resource-lifecycle.md) | 有界已验证 | once/off/scoped disposal、destroy exactly once、旧token和迟到job不重定向 | 不包含后台加载器硬取消 |
 | LIF-02 | 生命周期 / [资源就绪与呈现回执](resource-lifecycle-validation.md) | 有界已验证 | Ready/ViewReady/Complete含失败取消，真实加载/替换/销毁/paint事件顺序 | ViewReady是paint回执，不是GPU fence |
-| LIF-03 | 生命周期 / [加载取消与媒体资源桥](resource-lifecycle.md) | 部分实现 | 共享加载字节预算、无引用任务硬取消、媒体统一代际票据和错误传播 | 现有GPUI image及有界本地媒体路径不是完整资源服务 |
+| LIF-03 | 生命周期 / [加载取消与媒体资源桥](owned-resource-loading.md) | 有界已验证 | 共享加载字节预算、无引用任务硬取消、媒体统一代际票据和错误传播 | 显式owned本地PNG/JPEG/GIF/WebP worker与FFmpeg媒体共享池；外部GPUI cache、URI和GPU内存不在硬取消/字节保证内 |
 | EVT-01 | 事件 / [树路由与默认动作顺序](focus-keyboard-validation.md) | 有界已验证 | capture/target/bubble、once/off、监听队列和prevent-default；原生适配器trace与纯路由一致 | 限定现有鼠标/默认动作与精确trace；设备扩展归EVT-03，不声称全浏览器事件兼容 |
 | EVT-02 | 事件 / [键盘与程序焦点](focus-keyboard-validation.md) | 有界已验证 | KeyDown/Up、重复/Space、Focus/Blur重定向、窗口失焦清理及实例隔离 | 不把Kit文本输入当完整IME/a11y |
 | EVT-03 | 事件 / [设备元数据与复合手势](keyboard-routing.md) | 部分实现 | pointer type/buttons/time/pressure、触摸多指、tap/double/longpress的稳定事件契约 | 已有mouse/pointer_id、序号与原生Text双击；不是完整事件族 |

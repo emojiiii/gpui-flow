@@ -6,3 +6,12 @@ publish.workspace = true
 
 [dependencies]
 serde_json.workspace = true
+image = { workspace = true, optional = true, features = ["png", "jpeg", "gif", "webp"] }
+
+[features]
+image-loader-worker = ["dep:image"]
+
+[[bin]]
+name = "flow-image-worker"
+path = "src/bin/image_worker.rs"
+required-features = ["image-loader-worker"]

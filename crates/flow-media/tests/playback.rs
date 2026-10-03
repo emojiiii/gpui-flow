@@ -145,6 +145,49 @@ fn rejects_network_directory_empty_and_invalid_options_before_spawning() {
     };
     assert!(backend.open(&fixture.wav(), options).is_err());
 }
+
+#[test]
+#[ignore = "requires ffmpeg/ffprobe; validates pooled real decoder release without audio"]
+fn pooled_video_has_generational_events_and_reaps_before_releasing_budget() {
+    use gpui_flow_media::{LoadKind, LoadUsage, ResourceLoadPool, ResourceLoadStatus};
+    let fixture = Fixture::new();
+    let source = fixture.video();
+    let pool = ResourceLoadPool::default();
+    let backend = FfmpegBackend::default().with_load_pool(pool.clone());
+    let options = PlaybackOptions {
+        audio: AudioOutput::Disabled,
+        autoplay: true,
+        max_width: 96,
+        max_height: 64,
+        ..Default::default()
+    };
+    let player = backend.open(&source, options.clone()).unwrap();
+    let first = player.resource_event().unwrap().ticket;
+    assert_eq!(first.kind(), LoadKind::Media);
+    let ready = wait(&player, |s| s.frame.is_some());
+    assert!(!ready.process_ids.is_empty());
+    assert_eq!(
+        player.resource_event().unwrap().status,
+        ResourceLoadStatus::Ready
+    );
+    assert_eq!(pool.usage().in_flight, 1);
+    assert!(pool.usage().reserved_bytes > 0);
+    player.shutdown();
+    assert!(player.snapshot().process_ids.is_empty());
+    #[cfg(target_os = "linux")]
+    for pid in ready.process_ids {
+        assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists());
+    }
+    assert_eq!(pool.usage(), LoadUsage::default());
+    assert_eq!(
+        player.resource_event().unwrap().status,
+        ResourceLoadStatus::Cancelled
+    );
+    let second = backend.open(&source, options).unwrap();
+    assert_ne!(first, second.resource_event().unwrap().ticket);
+    drop(second);
+    assert_eq!(pool.usage(), LoadUsage::default());
+}
 #[test]
 fn rejects_missing_source_and_caps_input_size() {
     let fixture = Fixture::new();

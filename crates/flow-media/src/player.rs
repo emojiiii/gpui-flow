@@ -21,6 +21,10 @@ pub(crate) enum Command {
 /// Backend-independent control surface consumed by native UI adapters.
 pub trait MediaController: Send + Sync {
     fn snapshot(&self) -> PlaybackSnapshot;
+    /// Owned backends expose the same pool-generation protocol as image jobs.
+    fn resource_event(&self) -> Option<crate::ResourceLoadEvent> {
+        None
+    }
     fn play(&self) -> Result<(), MediaError>;
     fn pause(&self) -> Result<(), MediaError>;
     fn stop(&self) -> Result<(), MediaError>;

@@ -221,6 +221,29 @@ impl SceneView {
         cx.notify();
         Ok(())
     }
+    pub fn set_owned_image_loader(
+        &mut self,
+        loader: Option<crate::resources::SceneOwnedImageLoader>,
+        cx: &mut Context<Self>,
+    ) -> Result<(), gpui_flow_engine::ResourceError> {
+        self.resources
+            .as_mut()
+            .ok_or(gpui_flow_engine::ResourceError::Disposed)?
+            .set_owned_image_loader(&self.editor.engine, loader)?;
+        cx.notify();
+        Ok(())
+    }
+    pub fn reload_owned_images(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> Result<(), gpui_flow_engine::ResourceError> {
+        self.resources
+            .as_mut()
+            .ok_or(gpui_flow_engine::ResourceError::Disposed)?
+            .reload_owned_images(&self.editor.engine)?;
+        cx.notify();
+        Ok(())
+    }
     /// Pause/resume this loaded image instance on both native and composited
     /// routes. Returns false for a stale handle or a not-yet-loaded generation.
     /// Runtime state is not serialized or linked to the editor animation timeline.

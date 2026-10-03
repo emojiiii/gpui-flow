@@ -69,6 +69,9 @@ impl MediaView {
     pub fn snapshot(&self) -> &PlaybackSnapshot {
         &self.snapshot
     }
+    pub fn resource_event(&self) -> Option<gpui_flow_media::ResourceLoadEvent> {
+        self.controller.resource_event()
+    }
     fn refresh(&mut self, cx: &mut Context<Self>) {
         let snapshot = self.controller.snapshot();
         let sequence = snapshot.frame.as_ref().map(|frame| frame.sequence);

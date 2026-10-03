@@ -6,6 +6,11 @@ for exact coverage; CI and real-window interaction remain unverified.
 This adds lifecycle wiring for the existing GPUI text and image backends;
 it is not full Leafer resource parity.
 
+The sections below describe the original GPUI-owned asset route. The later
+[explicit owned image/media service](owned-resource-loading.md) adds shared byte
+admission, cancellable local decoding and common load-generation events. It does
+not change ownership or promise cancellation of external GPUI cache jobs.
+
 ## Reuse and evidence
 
 The checked GPUI checkout is

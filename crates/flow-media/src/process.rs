@@ -96,7 +96,20 @@ pub(crate) fn capture(
     cancel: &Arc<AtomicBool>,
     max_bytes: usize,
 ) -> Result<Vec<u8>, MediaError> {
+    capture_observed(command, timeout, cancel, max_bytes, |_| {})
+}
+pub(crate) fn capture_observed(
+    command: &mut Command,
+    timeout: Duration,
+    cancel: &Arc<AtomicBool>,
+    max_bytes: usize,
+    started: impl FnOnce(u32),
+) -> Result<Vec<u8>, MediaError> {
+    if cancel.load(Ordering::Acquire) {
+        return Err(MediaError::Cancelled);
+    }
     let mut process = Process::new(spawn(command)?);
+    started(process.child.id());
     let stdout = process
         .child
         .stdout

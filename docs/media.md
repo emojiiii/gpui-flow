@@ -95,7 +95,7 @@ cargo run --locked -p flow-studio --bin media -- --muted
 
 只接受可 canonicalize 的普通本地文件；允许的封装为 mov/mp4、matroska/webm、avi、wav、flac、mp3、ogg、aac、flv、mpeg、mpegts。协议白名单禁用网络，封装白名单排除播放列表。错误日志和探测输出有大小上限。FFmpeg 仍是处理不可信二进制的外部解析器，应保持安全更新。
 
-队列和预览尺寸是每个播放器的限制；宿主仍需限制同时打开的播放器总数，避免大量节点同时消耗资源。
+队列和预览尺寸是每个播放器的限制。可用 `FfmpegBackend::with_load_pool(pool)` 与图片加载共享字节和任务预算，并取得统一代际票据；见[拥有的资源加载](owned-resource-loading.md)。未选用共享池的后端仍由宿主限制总数。
 
 ## 检查与验收
 
