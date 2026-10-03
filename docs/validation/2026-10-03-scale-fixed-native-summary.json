@@ -1,0 +1,123 @@
+{
+  "utc": "2026-10-03T08:18:44.023180+00:00",
+  "physical_rows_executed": 14,
+  "bounded_physical_verdict": "passed with explicitly retained diagnostic/timing/measurement limitations",
+  "native_audit_checks": 265,
+  "native_audit_passed": 265,
+  "native_audit_failed": 0,
+  "main_run": "START=2026-10-03T08:05:18Z\n3124b384ac8a56f6c43472a7eddc53eeea2e571c881459e76b40db21dd129a0e  scale_fixed_strokes\nMODE=native\nSESSION_ROOT=/workspace/shared/scale-fixed-native-validation-20261003T0802Z/session-data\nEND=2026-10-03T08:09:22Z\nEXIT=0\n",
+  "reopen_run": "START=2026-10-03T08:09:53Z\n3124b384ac8a56f6c43472a7eddc53eeea2e571c881459e76b40db21dd129a0e  scale_fixed_strokes\nMODE=native-reopen\nSESSION_ROOT=/workspace/shared/scale-fixed-native-validation-20261003T0802Z/session-data\nEND=2026-10-03T08:10:20Z\nEXIT=0\n",
+  "session_paths": [
+    "session-data/scale-fixed-physical-597684-1791014718572738628",
+    "session-data/scale-fixed-physical-599980-1791014993032247768"
+  ],
+  "main_json_receipts": 26,
+  "reopen_json_receipts": 2,
+  "documented_physical_clicks": 99,
+  "host_control_clicks": 63,
+  "canvas_clicks": 32,
+  "window_restore_clicks": 2,
+  "normal_close_clicks": 2,
+  "original_jpeg_count": 38,
+  "original_jpeg_bytes": 5579607,
+  "screenshot_capture": "Original image/jpeg data-url bytes, JFIF magic, exclusive create with fresh literal0802Z root; main/reopen names differ; no conversion/re-encoding.",
+  "desktop_pixels": [
+    1364,
+    1024
+  ],
+  "natural_client_rect": [
+    92,
+    142,
+    1152,
+    932
+  ],
+  "natural_client_size": [
+    1060,
+    790
+  ],
+  "canvas_rect": [
+    100,
+    250,
+    1140,
+    670
+  ],
+  "canvas_size": [
+    1040,
+    420
+  ],
+  "actual_window_dpr": 1,
+  "initial_host_restored_client_size": [
+    1180,
+    812
+  ],
+  "platform": "cloud Linux desktop, native window through supported CUA. Exact GPU driver/device/backend was not captured by this fixture.",
+  "published_source_commit": "369d250c29da388777d50045abdeebd434ad168c",
+  "published_tree": "4170cba8739353c1e54101db16e27daf0de81c99",
+  "published_receipt_inputs_equal_frozen_inputs": true,
+  "frozen_manifest_entries_checked": 70,
+  "frozen_manifest_mismatches": [],
+  "remaining_free_bytes": 12691402752,
+  "limits": [
+    "Both bursts completed before preset click; pending callback cancellation not physically established.",
+    "Home accepted and settled after rejection; historical diagnostic remained visible.",
+    "Initial parent footer displayed presented=false with visible content until normal resize notified it; first recorded live receipt true.",
+    "Native/CPU labels are intended routes; no backend pixel identity or framebuffer capture."
+  ],
+  "recorded_publication_preparation_utc": "2026-10-03T08:24:25.129187+00:00",
+  "original_report_sha256": "a7c9ddb4fa7a1275e2f9f37a024fd0425e95db53500a0caa659dddf314c9546f",
+  "evidence_directory": "/workspace/shared/scale-fixed-native-validation-20261003T0802Z",
+  "binary": {
+    "path": "scale_fixed_strokes",
+    "bytes": 179838032,
+    "sha256": "3124b384ac8a56f6c43472a7eddc53eeea2e571c881459e76b40db21dd129a0e",
+    "mode": 493,
+    "mtime_ns": 1791014440456167409,
+    "actual_link_inputs": 502
+  },
+  "source_archive_sha256": "774b2f77cdb257552d7a7babf2d7aea30be3ed84e648543c26275320d5b2314b",
+  "parent_integrity_checks": [
+    {
+      "manifest": "freeze.sha256",
+      "sha256": "f584ecf4938ea5bc26ce288bd7edf2b574b35784f208e77b4b5f31506fb27d52",
+      "entries_checked": 70
+    },
+    {
+      "manifest": "native-evidence.sha256",
+      "sha256": "dbe85fb82fdb3849e1a6d6dd8cd7f58ee2b7467f52c5f180e7ce6cb46669b464",
+      "entries_checked": 31
+    },
+    {
+      "manifest": "session-evidence.sha256",
+      "sha256": "e7cc949b1292467c94e8e8430924afd8df5d37a75b52a93e0a1340d6fd88ebde",
+      "entries_checked": 30
+    },
+    {
+      "manifest": "screenshots.sha256",
+      "sha256": "07f56dea460c9ce5775e9aee6beca90fbf020cd00d815c9972ff1c87ee2ac1f5",
+      "entries_checked": 38
+    }
+  ],
+  "parent_integrity_total": 169,
+  "operator_audit_sha256": "76dfda8b983f82abbf0b2e496d395526e19df65aed21547997097aa4db31273f",
+  "published_source_receipt_sha256": "b26148a527038ad33a9a75654d9f90595587b83fb9c5579a268716280bc86b45",
+  "physical_row_record_sha256": "a9fcdb5d9d6f90b82f7e50137222602f9ab7db3681247d960e78177ee6b35917",
+  "cpu_prevalidation": {
+    "exports": 5,
+    "independent_pillow_passed": 45,
+    "not_native_framebuffer": true,
+    "initial_audit_44_of_45_retained": "Wrong opaque-final-row expectation corrected to exact fractional crop; no output bytes changed"
+  },
+  "fixed_acceptance": {
+    "original_commit": "05c92dcfea58c5bd914808e0b629662ea4fb1e28",
+    "original_tree": "312b308f2bd97031f31cb4e3da2775b099f86304",
+    "acceptance_text_unchanged": true,
+    "status": "bounded_verified",
+    "mapping_doc": "docs/scale-fixed-acceptance-audit.md"
+  },
+  "older_open_stroke": {
+    "native_report": "docs/open-stroke-native.md",
+    "auxiliary_decoded_jpeg_bounds_passed": 20,
+    "auxiliary_total": 21,
+    "outlier_cause": "unknown; lossy capture may affect sample, not a proved renderer defect"
+  }
+}

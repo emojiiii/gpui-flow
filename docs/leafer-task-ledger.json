@@ -2,16 +2,16 @@
   "schema_version": 1,
   "ledger_version": "v1-review",
   "review": "已锁定45个能力单元和有限验收集合；审阅版，所有扩展/技术依赖显式记录",
-  "as_of": "2026-10-03T04:19:32.259646+00:00",
-  "source_snapshot": "747ecf5528429b722014b3c065f2690f4c56b41f",
+  "as_of": "2026-10-03T08:24:25.129187+00:00",
+  "source_snapshot": "369d250c29da388777d50045abdeebd434ad168c",
   "upstream": {
     "leafer_ui": "1e11641d3ea6b0211c83447268a90b8d58feec25",
     "leafer_core": "1d703303ff0759ce4973d54c87eeb8192dddc570",
     "leafer_in": "3eb445bf34debb638766615282224b77108bf610"
   },
   "counts": {
-    "bounded_verified": 32,
-    "partial": 10,
+    "bounded_verified": 33,
+    "partial": 9,
     "not_started": 3,
     "needs_verification": 0,
     "in_progress": 0
@@ -402,34 +402,54 @@
       "id": "APP-02",
       "category": "外观",
       "title": "高级描边",
-      "status": "partial",
+      "status": "bounded_verified",
       "acceptance": "cap/join/miter/dash、闭合及开放轮廓内外对齐、scale-fixed；bounds/hit/paint同源",
-      "boundary": "居中、闭合及开放inside/outside已支持；有界scale-fixed已实现但新原生待验。local shear、模糊数值阈值及strictLeafer/SVG/Canvas subtree/stroke-box明确拒绝；Canvas命令仍center-only",
+      "boundary": "有界共享mesh支持cap/join/miter/dash、闭合/开放对齐及每层scale-fixed；局部shear、模糊Y阈值、部分consumer明确拒绝，Canvas命令仍center-only；无全格式/位等价承诺",
       "reference_doc": "docs/stroke-alignment.md",
-      "implementation_snapshot": "a6639014ceb276d2b33c64e04ad3e73adc770b30",
+      "implementation_snapshot": "981e991817b4465112341b2d2b7ad680bea24920",
       "evidence_commit": null,
-      "automatic": "最终default1566通过/10既有ignored，UI252及七场景fixture tour通过；strict workspace/docs、格式和链接通过；shared mesh与数值拒绝覆盖",
-      "native": "21:40:50–21:47:54退出0；38按钮/39JSON/60 JPEG截图，23 trace及41 decoded-JPEG pixel断言通过；五decoded-JPEG history ROI零差、Line12/0/24px。辅助bbox20/21，孤立低对比像素保留",
+      "automatic": "fixed最终default1679通过/10既有ignored、UI275、strict及静态复审通过；最终fixture headless18组合/5CPU PNG/45 Pillow通过。旧open-stroke自动记录单列",
+      "native": "08:05–08:10主窗和reopen均exit0；14行有界通过，99点击/32真实PointerDown/28live/38 JPEG，265审计。初始footer stale、Home sticky error及未实抓queued callback取消保留",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/interface/src/ICommonAttr.ts",
         "symbols_or_contract": "IStrokeAttrData / IStrokeInputData；strokeAlign、cap/join/dash/scale-fixed语义"
       },
       "technical_dependencies": [],
-      "evidence_summary": "docs/validation/2026-10-02-open-stroke-native-summary.json",
-      "native_report": "docs/open-stroke-native.md",
-      "remaining_frozen_scope": [
-        "scale-fixed stroke"
-      ],
+      "evidence_summary": "docs/validation/2026-10-03-scale-fixed-native-summary.json",
+      "native_report": "docs/scale-fixed-native.md",
+      "remaining_frozen_scope": [],
       "verification_limits": [
-        "Auxiliary native/CPU-panel decoded-JPEG boxes are20/21 within one pixel; JPEG may affect the isolated sample, whose cause is unknown.",
-        "Physical controls do not cover every Cartesian combination, memory/precision rejection, zero-length/empty geometry or every supported shape type.",
-        "No device-level DPR measurement, browser/cross-platform equivalence or performance claim.",
-        "Scale-fixed remains absent. Canvas command strokes remain centered-only."
+        "Original open-stroke auxiliary decoded-JPEG bbox20/21 and low-contrast outlier retained; no renderer cause or lossless pixel parity claim.",
+        "Fixed supports locally orthogonal TRS/reflection/independent-axis ancestry and resulting world shear; material local shear and ambiguous rotated numeric Y threshold reject.",
+        "Raw fixed CPU cameras require positive uniform pan/zoom. SVG, strict Leafer, Canvas subtree fixed capture and Stroke ItemBox reject; imperative Canvas commands remain centered.",
+        "Actual Linux window DPR1 only; synthetic CPU DPR1/2 is separate. No framebuffer readback, exact graphics backend, cross-platform or full Cartesian matrix claim.",
+        "Initial parent footer was stale until normal resize. Home recovered accepted geometry but retained an existing interaction error banner.",
+        "Both physical bursts finished before preset; this run proves later fresh-session input only, not cancellation of a pending callback."
       ],
-      "evidence_publication_note": "本次文档修订新增native报告；实现源码a6639014不被描述为已包含后续报告。",
+      "evidence_publication_note": "本报告为后续文档提交；369d250c包含夹具但不冒称当时已含后续native报告。",
       "screenshot_format_erratum": "docs/screenshot-evidence-formats.md",
-      "progress": "有界scale-fixed完成headless终验(default1679/10既有ignored、UI275、strict)及独立静态复审；见docs/scale-fixed-strokes.md与验证摘要。新原生仍待验，local shear、rotated numeric Y阈值歧义与部分consumer明确拒绝。原开放描边native证据保留，整项仍partial",
-      "headless_increment_summary": "docs/validation/2026-10-03-scale-fixed-strokes-summary.json"
+      "progress": "原APP02必选字符串逐字保持，最后命名缺口scale-fixed已有源码/自动/限定原生证据，升级有界已验证；支持集合与数值/consumer拒绝不隐去",
+      "headless_increment_summary": "docs/validation/2026-10-03-scale-fixed-strokes-summary.json",
+      "prior_open_stroke_evidence": {
+        "implementation_snapshot": "a6639014ceb276d2b33c64e04ad3e73adc770b30",
+        "automatic": "最终default1566通过/10既有ignored，UI252及七场景fixture tour通过；strict workspace/docs、格式和链接通过；shared mesh与数值拒绝覆盖",
+        "native": "21:40:50–21:47:54退出0；38按钮/39JSON/60 JPEG截图，23 trace及41 decoded-JPEG pixel断言通过；五decoded-JPEG history ROI零差、Line12/0/24px。辅助bbox20/21，孤立低对比像素保留",
+        "evidence_summary": "docs/validation/2026-10-02-open-stroke-native-summary.json",
+        "native_report": "docs/open-stroke-native.md",
+        "verification_limits": [
+          "Auxiliary native/CPU-panel decoded-JPEG boxes are20/21 within one pixel; JPEG may affect the isolated sample, whose cause is unknown.",
+          "Physical controls do not cover every Cartesian combination, memory/precision rejection, zero-length/empty geometry or every supported shape type.",
+          "No device-level DPR measurement, browser/cross-platform equivalence or performance claim.",
+          "Scale-fixed remains absent. Canvas command strokes remain centered-only."
+        ],
+        "evidence_publication_note": "本次文档修订新增native报告；实现源码a6639014不被描述为已包含后续报告。"
+      },
+      "fixture_implementation_snapshot": "369d250c29da388777d50045abdeebd434ad168c",
+      "fixed_contract_audit": {
+        "original_commit": "05c92dcfea58c5bd914808e0b629662ea4fb1e28",
+        "acceptance_text_unchanged": true,
+        "mapping_doc": "docs/scale-fixed-acceptance-audit.md"
+      }
     },
     {
       "id": "APP-03",
@@ -1085,8 +1105,8 @@
     }
   },
   "publication_note": "Integrator verified remote main at the recorded source snapshot/tree. Native archives and original linked-build provenance remain separately qualified; this documentation update runs no new build or full-workspace suite.",
-  "source_publication_url": "https://github.com/emojiiii/gpui-flow/commit/747ecf5528429b722014b3c065f2690f4c56b41f",
-  "published_source_tree": "1eab380b34dc3498fabc4758893f02c25f7fe8f3",
+  "source_publication_url": "https://github.com/emojiiii/gpui-flow/commit/369d250c29da388777d50045abdeebd434ad168c",
+  "published_source_tree": "4170cba8739353c1e54101db16e27daf0de81c99",
   "screenshot_evidence_format": {
     "erratum": "docs/screenshot-evidence-formats.md",
     "historical_desktop_captures": 327,

@@ -76,8 +76,8 @@ paint is transparent or zero-width. Explicitly closed contours still require non
 collinear closed inputs retain their rejection boundary. Open non-collinear contours are checked by
 non-collinearity, not signed area: a self-intersecting bow tie remains meaningful.
 Custom fallback native geometry is supported; Custom CPU producers remain
-unsupported by the existing compositing contract. Scale-fixed strokes remain
-separate and absent, so APP-02 remains partial.
+unsupported by the existing compositing contract. [Bounded scale-fixed strokes](scale-fixed-strokes.md) now resolve width before
+this same mesh; their transform, precision and consumer gates are separate.
 
 Empty and move-only paths yield empty meshes. A zero-length open segment follows
 the shared Lyon cap contract: Butt has no ink; Round/Square Outside has its doubled
@@ -203,5 +203,7 @@ budgets. The later [open-contour native acceptance](open-stroke-native.md) recor
 seven scenarios, history and navigation,23 trace assertions and41 focused pixel
 assertions. Its auxiliary native/CPU box comparison is20/21 within one pixel;
 the isolated outlier is preserved, with no backend pixel-equivalence claim.
-APP-02 remains partial for scale-fixed. The historical 2026-10-01 result above
-applies only to its earlier source.
+At that 2026-10-02 checkpoint APP-02 remained partial for scale-fixed.
+The later [fixed-stroke acceptance](scale-fixed-native.md) closes that bounded
+requirement; the historical 2026-10-01 and open-stroke results above retain their
+original source, measurements and limits.
