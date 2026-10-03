@@ -30,6 +30,34 @@ impl Default for Budget {
     }
 }
 impl Budget {
+    pub fn remaining_points(&self, limits: CompositeLimits) -> usize {
+        limits
+            .max_total_points
+            .saturating_sub(self.input_points.max(self.rendered_points))
+    }
+    pub fn remaining_path_bytes(&self, limits: CompositeLimits) -> u64 {
+        limits.max_path_bytes.saturating_sub(self.path_bytes)
+    }
+    pub fn lowered_path(
+        &mut self,
+        path: &Path,
+        limits: CompositeLimits,
+    ) -> Result<(), CompositeError> {
+        self.input(path, limits)?;
+        self.rendered_points = self.rendered_points.saturating_add(path.commands.len());
+        if self.rendered_points > limits.max_total_points {
+            return Err(CompositeError::InputLimit);
+        }
+        self.path_allocation(path.commands.capacity(), limits)?;
+        // Path validation computes analytic curve bounds into temporary points.
+        // At most four extrema points per command, including Vec growth.
+        self.retained_path_bytes(
+            (path.commands.len() as u64)
+                .saturating_mul(8 * size_of::<gpui_flow_scene::Point>() as u64)
+                .saturating_add(3 * size_of::<gpui_flow_scene::Point>() as u64),
+            limits,
+        )
+    }
     pub fn input(&mut self, path: &Path, limits: CompositeLimits) -> Result<(), CompositeError> {
         self.input_count(path.commands.len(), limits)
     }

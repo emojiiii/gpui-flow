@@ -163,13 +163,26 @@ impl SceneView {
         ) -> Result<(), gpui_flow_composite::CompositeError>,
         cx: &mut Context<Self>,
     ) -> Result<(), crate::resources::CanvasEditError> {
+        self.edit_canvas_guarded(handle, edit, || Ok(()), cx)
+    }
+    fn edit_canvas_guarded(
+        &mut self,
+        handle: gpui_flow_engine::ElementHandle,
+        edit: impl FnOnce(
+            &mut gpui_flow_composite::CanvasSurface,
+        ) -> Result<(), gpui_flow_composite::CompositeError>,
+        validate: impl Fn() -> Result<(), gpui_flow_composite::CompositeError>,
+        cx: &mut Context<Self>,
+    ) -> Result<(), crate::resources::CanvasEditError> {
         let resources =
             self.resources
                 .as_mut()
                 .ok_or(crate::resources::CanvasEditError::Resource(
                     gpui_flow_engine::ResourceError::Disposed,
                 ))?;
-        for event in resources.edit_canvas(&mut self.editor.engine, handle, edit)? {
+        for event in
+            resources.edit_canvas_guarded(&mut self.editor.engine, handle, edit, validate)?
+        {
             cx.emit(SceneViewEvent::Resource(event));
         }
         cx.notify();

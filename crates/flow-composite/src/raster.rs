@@ -890,7 +890,7 @@ fn rasterize_inner(
             return Err(CompositeError::UnsupportedTransform);
         }
     }
-    let mut prep = Preparation::default();
+    let mut prep = Preparation::with_lowered_geometry(source.lowered_geometry.clone());
     let root = prep.node(&source.root, budget.limits, images, texts)?;
     let scale = viewport.device_scale as f64;
     let b = if source.canvas.is_some() {

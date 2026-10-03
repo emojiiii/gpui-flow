@@ -69,6 +69,7 @@ impl VectorSource {
 #[derive(Default)]
 pub(crate) struct Preparation {
     pub triangles: usize,
+    pub lowered_geometry: Option<gpui_flow_scene::StrokeGeometryBudget>,
     pub has_shadows: bool,
     pub has_inner_shadows: bool,
     pub has_image_clips: bool,
@@ -203,6 +204,12 @@ pub(crate) fn path(shape: &Shape) -> Result<Option<Path>, CompositeError> {
     Ok(b.finish())
 }
 impl Preparation {
+    pub fn with_lowered_geometry(budget: Option<gpui_flow_scene::StrokeGeometryBudget>) -> Self {
+        Self {
+            lowered_geometry: budget,
+            ..Default::default()
+        }
+    }
     fn add_path(
         &mut self,
         path: &Path,
@@ -401,7 +408,11 @@ impl Preparation {
                 });
             }
         } else if !matches!(object.shape, Shape::Group(_)) {
-            if let Some(path) = path(&object.shape)? {
+            // Stroke-only geometry goes straight into the bounded shared mesh;
+            // avoid a duplicate unused scan-converter curve path allocation.
+            if object.style.fills().any(|paint| paint.is_visible())
+                && let Some(path) = path(&object.shape)?
+            {
                 for fill in object.style.fills().filter(|p| p.is_visible()) {
                     self.add_path(&path, source.world_transform, limits)?;
                     paints.push(VectorPaint {
@@ -438,10 +449,21 @@ impl Preparation {
                 .strokes()
                 .filter(|s| s.width > 0. && s.paint.is_visible())
             {
-                let mesh = object
-                    .shape
-                    .stroke_mesh_with_rule(stroke, object.style.fill_rule)
-                    .map_err(CompositeError::InvalidGeometry)?;
+                let mesh = if let Some(budget) = &mut self.lowered_geometry {
+                    let mesh = object
+                        .shape
+                        .stroke_mesh_with_rule_bounded(stroke, object.style.fill_rule, budget)
+                        .map_err(lowered_geometry_error)?;
+                    budget
+                        .charge_render_path(mesh.triangles().len())
+                        .map_err(lowered_geometry_error)?;
+                    mesh
+                } else {
+                    object
+                        .shape
+                        .stroke_mesh_with_rule(stroke, object.style.fill_rule)
+                        .map_err(CompositeError::InvalidGeometry)?
+                };
                 self.triangles = self.triangles.saturating_add(mesh.triangles().len());
                 if self.triangles > limits.max_triangles {
                     return Err(CompositeError::InputLimit);
@@ -594,5 +616,15 @@ impl Preparation {
             children,
             child_clip,
         })
+    }
+}
+
+fn lowered_geometry_error(reason: String) -> CompositeError {
+    if reason.contains("allocation budget") {
+        CompositeError::WorkingSetLimit
+    } else if reason.contains("budget") || reason.contains("TooManyVertices") {
+        CompositeError::InputLimit
+    } else {
+        CompositeError::InvalidGeometry(reason)
     }
 }

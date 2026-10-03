@@ -44,6 +44,42 @@ pub const MAX_ALIGNED_STROKE_COORDINATE: f32 = 65_536.0;
 pub const MIN_ALIGNED_STROKE_WIDTH: f32 = 1.0 / 64.0;
 const ALIGNED_STROKE_GRID_SCALE: f64 = 4096.0;
 
+/// Shared allocation/work allowance for Canvas-lowered strokes. One instance
+/// spans all commands; geometry-only failures never return a partial mesh.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StrokeGeometryBudget {
+    per_path_points: usize,
+    points: usize,
+    events: usize,
+    triangles: usize,
+    bytes: u64,
+}
+impl StrokeGeometryBudget {
+    pub fn new(per_path_points: usize, total_points: usize, triangles: usize, bytes: u64) -> Self {
+        Self {
+            per_path_points: per_path_points.min(MAX_STROKE_POINTS),
+            points: total_points,
+            events: total_points.saturating_mul(4),
+            triangles,
+            bytes,
+        }
+    }
+    fn charge_bytes(&mut self, bytes: u64) -> Result<(), String> {
+        self.bytes = self
+            .bytes
+            .checked_sub(bytes)
+            .ok_or("stroke allocation budget exceeded")?;
+        Ok(())
+    }
+    /// Reserve the scan-converter's triangle-union path before building it.
+    /// Includes geometric growth and temporary old/new vector allocations.
+    pub fn charge_render_path(&mut self, triangles: usize) -> Result<(), String> {
+        self.charge_bytes(
+            (triangles as u64).saturating_mul(4 * (3 * size_of::<Point>() as u64 + 4)),
+        )
+    }
+}
+
 /// Complete local-space triangle union, shared by picking and vector rendering.
 /// Geometry exceeding the source, dash, or tessellation limits returns an error;
 /// partial geometry is never returned. Shape/Style validation at scene commit
@@ -83,6 +119,96 @@ impl Shape {
     /// consumers must use `stroke_mesh_with_rule` with their Style's fill rule.
     pub fn stroke_mesh(&self, stroke: &Stroke) -> Result<StrokeMesh, String> {
         self.stroke_mesh_with_rule(stroke, FillRule::NonZero)
+    }
+    /// Centered Canvas lowering with a shared batch budget. Reduced caller
+    /// limits apply before flattening, dash generation and mesh growth.
+    pub fn stroke_mesh_with_rule_bounded(
+        &self,
+        stroke: &Stroke,
+        _fill_rule: FillRule,
+        budget: &mut StrokeGeometryBudget,
+    ) -> Result<StrokeMesh, String> {
+        stroke.validate()?;
+        check_source_budget(self)?;
+        self.validate()?;
+        if stroke.alignment != StrokeAlignment::Center {
+            return Err("bounded strokes require centered geometry".into());
+        }
+        if stroke.width == 0. || !stroke.paint.is_visible() {
+            return Ok(StrokeMesh::default());
+        }
+        // Four times point+contour storage bounds geometric Vec growth and a
+        // temporary allocation during growth, even for one-point subpaths.
+        let point_bytes = 4 * (size_of::<Point>() + size_of::<Contour>()) as u64;
+        let cap = budget
+            .per_path_points
+            .min(budget.points)
+            .min((budget.bytes / point_bytes) as usize);
+        let options = FlattenOptions {
+            tolerance: STROKE_GEOMETRY_TOLERANCE,
+            ..Default::default()
+        };
+        let contours = match self {
+            Shape::Path(path) => path.flatten_bounded(options, cap)?,
+            Shape::Pen(pen) => pen.path.flatten_bounded(options, cap)?,
+            _ => return Err("bounded strokes require path geometry".into()),
+        };
+        let count: usize = contours.iter().map(|c| c.points.len()).sum();
+        budget.points = budget
+            .points
+            .checked_sub(count)
+            .ok_or("stroke flattened point budget exceeded")?;
+        let bytes = contours.capacity() as u64 * size_of::<Contour>() as u64
+            + contours
+                .iter()
+                .map(|c| c.points.capacity() as u64 * size_of::<Point>() as u64)
+                .sum::<u64>();
+        budget.charge_bytes(bytes)?;
+        if contours
+            .iter()
+            .flat_map(|c| &c.points)
+            .any(|p| !p.is_finite())
+        {
+            return Err("stroke centerline overflow".into());
+        }
+        let (path, _) = stroke_path_impl(&contours, stroke, Some(budget))?;
+        let options = StrokeOptions::default()
+            .with_line_width(stroke.width)
+            .with_line_cap(match stroke.cap {
+                StrokeCap::Butt => LineCap::Butt,
+                StrokeCap::Square => LineCap::Square,
+                StrokeCap::Round => LineCap::Round,
+            })
+            .with_line_join(match stroke.join {
+                StrokeJoin::Bevel => LineJoin::Bevel,
+                StrokeJoin::Miter => LineJoin::Miter,
+                StrokeJoin::Round => LineJoin::Round,
+            })
+            .with_miter_limit(stroke.miter_limit)
+            .with_tolerance(STROKE_GEOMETRY_TOLERANCE);
+        let mut output = MeshBuilder {
+            max_triangles: budget.triangles.min(MAX_STROKE_MESH_ITEMS),
+            max_bytes: budget.bytes,
+            ..Default::default()
+        };
+        StrokeTessellator::new()
+            .tessellate(path.iter(), &options, &mut output)
+            .map_err(|error| format!("stroke tessellation failed: {error}"))?;
+        if output.exceeded {
+            return Err("stroke mesh budget exceeded".into());
+        }
+        budget.triangles = budget
+            .triangles
+            .checked_sub(output.triangles.len())
+            .ok_or("stroke mesh budget exceeded")?;
+        budget.charge_bytes(output.allocated_bytes)?;
+        let mesh = StrokeMesh {
+            triangles: output.triangles,
+        };
+        if mesh.bounds().is_some_and(|bounds| !bounds.is_valid()) {
+            return Err("stroke mesh bounds overflow".into());
+        }
+        Ok(mesh)
     }
     /// Build the shared local stroke triangle union. Inside/Outside clip a
     /// doubled centered stroke against the geometry's filled region, regardless
@@ -217,6 +343,68 @@ fn lyon_point(p: kurbo::Point) -> Result<lyon_tessellation::math::Point, String>
     Ok(p)
 }
 fn stroke_path(contours: &[Contour], stroke: &Stroke) -> Result<(Path, bool), String> {
+    stroke_path_impl(contours, stroke, None)
+}
+fn stroke_path_impl(
+    contours: &[Contour],
+    stroke: &Stroke,
+    budget: Option<&mut StrokeGeometryBudget>,
+) -> Result<(Path, bool), String> {
+    // Compute the same dash work bound before allocating its input or asking
+    // Kurbo for output. The reservation also covers Lyon path-builder storage.
+    if let Some(budget) = budget {
+        let count: usize = contours
+            .iter()
+            .map(|c| c.points.len() + usize::from(c.closed))
+            .sum();
+        let length: f64 = contours
+            .iter()
+            .map(|c| {
+                let lines: f64 = c
+                    .points
+                    .windows(2)
+                    .map(|p| kurbo_point(p[0]).distance(kurbo_point(p[1])))
+                    .sum();
+                lines
+                    + if c.closed && !c.points.is_empty() {
+                        kurbo_point(c.points[0]).distance(kurbo_point(*c.points.last().unwrap()))
+                    } else {
+                        0.
+                    }
+            })
+            .sum();
+        let events = if stroke.dash_pattern.is_empty() {
+            count
+        } else {
+            let minimum = stroke
+                .dash_pattern
+                .iter()
+                .map(|v| *v as f64)
+                .fold(f64::INFINITY, f64::min);
+            let work = 2. * (length / minimum).ceil() + 4. * count as f64;
+            if !work.is_finite() || work > MAX_STROKE_EVENTS as f64 {
+                return Err("stroke dash work budget exceeded".into());
+            }
+            work as usize
+        };
+        if events > MAX_STROKE_EVENTS {
+            return Err("stroke dash event budget exceeded".into());
+        }
+        budget.events = budget
+            .events
+            .checked_sub(events)
+            .ok_or("stroke dash work budget exceeded")?;
+        // Four-times growth allowance covers input/output/event and point Vecs,
+        // including Kurbo's first-dash stash and Lyon's owned path copy.
+        let bytes = (count as u64)
+            .saturating_mul(4 * size_of::<PathEl>() as u64)
+            .saturating_add((events as u64).saturating_mul(
+                4 * (2 * size_of::<PathEl>() as u64 + size_of::<Point>() as u64 + 16),
+            ));
+        budget.charge_bytes(bytes.saturating_add(
+            (stroke.dash_pattern.len() as u64).saturating_mul(4 * size_of::<f64>() as u64),
+        ))?;
+    }
     let mut input = Vec::new();
     let mut length = 0.0f64;
     for contour in contours {
@@ -312,15 +500,58 @@ fn stroke_path(contours: &[Contour], stroke: &Stroke) -> Result<(Path, bool), St
     Ok((builder.build(), expects_ink))
 }
 
-#[derive(Default)]
 struct MeshBuilder {
     vertices: Vec<Point>,
     triangles: Vec<[Point; 3]>,
     exceeded: bool,
+    max_triangles: usize,
+    max_bytes: u64,
+    allocated_bytes: u64,
+}
+impl Default for MeshBuilder {
+    fn default() -> Self {
+        Self {
+            vertices: vec![],
+            triangles: vec![],
+            exceeded: false,
+            max_triangles: MAX_STROKE_MESH_ITEMS,
+            max_bytes: u64::MAX,
+            allocated_bytes: 0,
+        }
+    }
+}
+fn reserve_mesh<T>(
+    values: &mut Vec<T>,
+    allocated: &mut u64,
+    max_bytes: u64,
+    max_items: usize,
+) -> bool {
+    if values.len() >= max_items {
+        return false;
+    }
+    if values.len() == values.capacity() {
+        let capacity = values.capacity().saturating_mul(2).max(4).min(max_items);
+        let bytes = (capacity as u64).saturating_mul(size_of::<T>() as u64);
+        if allocated.saturating_add(bytes) > max_bytes {
+            return false;
+        }
+        *allocated += bytes;
+        if values.try_reserve_exact(capacity - values.len()).is_err() {
+            return false;
+        }
+    }
+    true
 }
 impl GeometryBuilder for MeshBuilder {
     fn add_triangle(&mut self, a: VertexId, b: VertexId, c: VertexId) {
-        if self.triangles.len() == MAX_STROKE_MESH_ITEMS {
+        if self.exceeded
+            || !reserve_mesh(
+                &mut self.triangles,
+                &mut self.allocated_bytes,
+                self.max_bytes,
+                self.max_triangles,
+            )
+        {
             self.exceeded = true;
             return;
         }
@@ -340,7 +571,14 @@ impl StrokeGeometryBuilder for MeshBuilder {
         &mut self,
         vertex: StrokeVertex,
     ) -> Result<VertexId, GeometryBuilderError> {
-        if self.exceeded || self.vertices.len() == MAX_STROKE_MESH_ITEMS {
+        if self.exceeded
+            || !reserve_mesh(
+                &mut self.vertices,
+                &mut self.allocated_bytes,
+                self.max_bytes,
+                MAX_STROKE_MESH_ITEMS,
+            )
+        {
             self.exceeded = true;
             return Err(GeometryBuilderError::TooManyVertices);
         }
@@ -357,7 +595,14 @@ impl StrokeGeometryBuilder for MeshBuilder {
 
 impl FillGeometryBuilder for MeshBuilder {
     fn add_fill_vertex(&mut self, vertex: FillVertex) -> Result<VertexId, GeometryBuilderError> {
-        if self.exceeded || self.vertices.len() == MAX_STROKE_MESH_ITEMS {
+        if self.exceeded
+            || !reserve_mesh(
+                &mut self.vertices,
+                &mut self.allocated_bytes,
+                self.max_bytes,
+                MAX_STROKE_MESH_ITEMS,
+            )
+        {
             self.exceeded = true;
             return Err(GeometryBuilderError::TooManyVertices);
         }
@@ -676,6 +921,76 @@ fn check_fill_precision(contours: &[Contour], quantized: &IntContours) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn canvas_lowered_stroke_matches_unbounded_curved_dash_mesh() {
+        let shape = Shape::Path(
+            crate::display::Path::from_svg("M 0 0 Q 10 20 20 0 C 30 -5 30 15 20 20 Z").unwrap(),
+        );
+        let stroke = Stroke::new(crate::Color::WHITE, 2.)
+            .with_dashes(vec![3., 2., 1.], -2.)
+            .with_cap(StrokeCap::Square)
+            .with_join(StrokeJoin::Miter);
+        let expected = shape.stroke_mesh(&stroke).unwrap();
+        let mut budget = StrokeGeometryBudget::new(65536, 262144, 262144, 16 * 1024 * 1024);
+        let actual = shape
+            .stroke_mesh_with_rule_bounded(&stroke, FillRule::NonZero, &mut budget)
+            .unwrap();
+        assert_eq!(actual, expected);
+        assert!(
+            budget.points < 262144 && budget.events < 262144 * 4 && budget.bytes < 16 * 1024 * 1024
+        );
+    }
+    #[test]
+    fn canvas_lowered_stroke_shared_triangle_budget_never_resets_between_jobs() {
+        let shape = Shape::Path(crate::display::Path::from_svg("M 1 1 L 9 1").unwrap());
+        let stroke = Stroke::new(crate::Color::WHITE, 2.);
+        let count = shape.stroke_mesh(&stroke).unwrap().triangles().len();
+        let mut budget = StrokeGeometryBudget::new(100, 100, count, 1_000_000);
+        shape
+            .stroke_mesh_with_rule_bounded(&stroke, FillRule::NonZero, &mut budget)
+            .unwrap();
+        assert_eq!(budget.triangles, 0);
+        assert!(
+            shape
+                .stroke_mesh_with_rule_bounded(&stroke, FillRule::NonZero, &mut budget)
+                .is_err()
+        );
+    }
+    #[test]
+    fn canvas_lowered_stroke_reduced_flatten_dash_and_allocation_budgets_fail_closed() {
+        let curved =
+            Shape::Path(crate::display::Path::from_svg("M 0 0 C 100 100 -100 100 0 0").unwrap());
+        let stroke = Stroke::new(crate::Color::WHITE, 2.);
+        assert!(
+            curved
+                .stroke_mesh_with_rule_bounded(
+                    &stroke,
+                    FillRule::NonZero,
+                    &mut StrokeGeometryBudget::new(4, 4, 100, 1_000_000)
+                )
+                .is_err()
+        );
+        assert!(
+            curved
+                .stroke_mesh_with_rule_bounded(
+                    &stroke,
+                    FillRule::NonZero,
+                    &mut StrokeGeometryBudget::new(1000, 1000, 1000, 16)
+                )
+                .is_err()
+        );
+        let path = Shape::Path(crate::display::Path::from_svg("M 0 0 L 100 0").unwrap());
+        let dashed = stroke.with_dashes(vec![0.001, 0.001], 0.);
+        assert!(
+            path.stroke_mesh_with_rule_bounded(
+                &dashed,
+                FillRule::NonZero,
+                &mut StrokeGeometryBudget::new(100, 100, 1000, 1_000_000)
+            )
+            .is_err()
+        );
+    }
 
     #[test]
     fn lost_ink_is_rejected_for_empty_and_all_degenerate_extrusion() {

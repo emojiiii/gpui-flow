@@ -148,6 +148,19 @@ impl SceneResourceAdapter {
             &mut gpui_flow_composite::CanvasSurface,
         ) -> Result<(), gpui_flow_composite::CompositeError>,
     ) -> Result<Vec<ResourceEvent>, CanvasEditError> {
+        self.edit_canvas_guarded(engine, handle, edit, || Ok(()))
+    }
+    /// Validate after candidate upload and immediately before making its pixels
+    /// and context current. The host supplies cancellation/font-epoch validation.
+    pub fn edit_canvas_guarded(
+        &mut self,
+        engine: &mut SceneEngine,
+        handle: ElementHandle,
+        edit: impl FnOnce(
+            &mut gpui_flow_composite::CanvasSurface,
+        ) -> Result<(), gpui_flow_composite::CompositeError>,
+        validate: impl Fn() -> Result<(), gpui_flow_composite::CompositeError>,
+    ) -> Result<Vec<ResourceEvent>, CanvasEditError> {
         let events = self
             .prepare_canvases(engine)
             .map_err(CanvasEditError::Resource)?;
@@ -159,7 +172,7 @@ impl SceneResourceAdapter {
                 gpui_flow_composite::CompositeError::Superseded,
             ))?;
         self.canvases
-            .edit(ticket, edit)
+            .edit_guarded(ticket, edit, validate)
             .map_err(CanvasEditError::Pixels)?;
         Ok(events)
     }

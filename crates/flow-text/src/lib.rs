@@ -10,6 +10,8 @@ pub mod gpui_overflow;
 #[cfg(feature = "gpui")]
 pub use gpui_backend::GpuiTextMeasurer;
 #[cfg(feature = "gpui")]
+mod gpui_placement;
+#[cfg(feature = "gpui")]
 pub mod gpui_raster;
 #[cfg(feature = "gpui")]
 pub use gpui_raster::{GpuiTextRasterizer, RasterizedText, TextRasterRequest};
@@ -18,7 +20,11 @@ pub use gpui_raster::{GpuiTextRasterizer, RasterizedText, TextRasterRequest};
 pub mod static_outlines;
 
 #[cfg(feature = "static-outline-registration")]
+pub mod gpui_outlines;
+#[cfg(feature = "static-outline-registration")]
 pub mod outline_registration;
+#[cfg(feature = "static-outline-registration")]
+pub use gpui_outlines::{OutlinedText, PositionedGlyphOutline, TextOutlineError};
 
 mod text_case;
 pub use text_case::{MAX_TEXT_BYTES, TextCase};

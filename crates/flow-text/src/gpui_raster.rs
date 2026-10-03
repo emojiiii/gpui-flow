@@ -14,7 +14,6 @@ use std::{
     },
 };
 
-const MAX_GLYPHS: usize = 8192;
 const MAX_CACHE_ENTRIES: usize = 256;
 const MAX_CACHE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_BYTES: usize = 32 * 1024 * 1024;
@@ -110,6 +109,11 @@ impl GpuiTextRasterizer {
         }
     }
 
+    #[cfg(feature = "static-outline-registration")]
+    pub(crate) fn has_static_outline_bindings(&self) -> bool {
+        self.outlines.is_some()
+    }
+
     /// Exact admitted descriptors, in startup order. Generic `application` bridges
     /// remain unsupported, even if supplied a platform that happens to be Linux.
     #[cfg(feature = "static-outline-registration")]
@@ -175,7 +179,7 @@ impl GpuiTextRasterizer {
         }))
         .map_err(|_| "native text rasterization panicked".to_string())?
     }
-    fn check(&self, epoch: u64, cancelled: &AtomicBool) -> Result<(), String> {
+    pub(crate) fn check(&self, epoch: u64, cancelled: &AtomicBool) -> Result<(), String> {
         if self.epoch() != epoch || cancelled.load(Ordering::Relaxed) {
             Err("text snapshot superseded".into())
         } else {
@@ -271,132 +275,84 @@ impl GpuiTextRasterizer {
         )?;
         let base_bytes = shape_bytes + decorations.allocated_bytes;
         out.peak_bytes = base_bytes;
-        let line_offsets = shaped.line_offsets;
-        let lines = shaped.lines;
-        let count: usize = lines
-            .iter()
-            .flat_map(|l| &l.unwrapped_layout.runs)
-            .map(|run| run.glyphs.len())
-            .sum();
-        if count > MAX_GLYPHS {
-            return Err("text glyph limit (8192)".into());
-        }
         let mut cache: HashMap<RenderGlyphParams, Arc<GlyphBitmap>> = HashMap::new();
         let mut cache_bytes = 0;
-        let block_height = shaped.block_height;
-        let block_y = r.bounds[1] + r.vertical_align.offset(r.bounds[3], block_height);
-        for (line, offset) in lines.into_iter().zip(line_offsets) {
-            let line_y = block_y + offset;
-            let layout = &line.unwrapped_layout;
-            let baseline =
-                (r.text.line_height - f32::from(layout.ascent) - f32::from(layout.descent)) / 2.
-                    + f32::from(layout.ascent);
-            let mut wraps = line.wrap_boundaries.iter().peekable();
-            let aligned = |start: f32, next: Option<&&gpui::WrapBoundary>| {
-                let end = next.map_or(f32::from(layout.width), |w| {
-                    f32::from(layout.runs[w.run_ix].glyphs[w.glyph_ix].position.x)
-                });
-                aligned_x(r.bounds[0], r.bounds[2], end - start, r.align)
-            };
-            let mut x = aligned(0., wraps.peek());
-            let mut y = line_y;
-            let mut previous_x = 0.;
-            for (run_ix, run) in layout.runs.iter().enumerate() {
-                for (glyph_ix, glyph) in run.glyphs.iter().enumerate() {
-                    self.check(epoch, cancelled)?;
-                    let glyph_x = f32::from(glyph.position.x);
-                    x += glyph_x - previous_x;
-                    if wraps.peek() == Some(&&gpui::WrapBoundary { run_ix, glyph_ix }) {
-                        wraps.next();
-                        x = aligned(glyph_x, wraps.peek());
-                        y += r.text.line_height;
-                    }
-                    previous_x = glyph_x;
-                    let origin = [
-                        x * r.device_scale,
-                        (y + baseline + f32::from(glyph.position.y)) * r.device_scale,
-                    ];
-                    if origin
-                        .iter()
-                        .any(|v| !v.is_finite() || v.abs() > 1_000_000.)
-                    {
-                        return Err("invalid native glyph position".into());
-                    }
-                    let (integer, variant) = quantize(origin, glyph.is_emoji);
-                    let params = RenderGlyphParams {
-                        font_id: run.font_id,
-                        glyph_id: glyph.id,
-                        font_size: layout.font_size,
-                        subpixel_variant: point(variant[0], variant[1]),
-                        scale_factor: r.device_scale,
-                        is_emoji: glyph.is_emoji,
-                        subpixel_rendering: false,
-                        dilation: if glyph.is_emoji {
-                            0
-                        } else {
-                            self.raster.glyph_dilation_for_color(color)
-                        },
-                    };
-                    let bitmap = if let Some(found) = cache.get(&params) {
-                        found.clone()
-                    } else {
-                        let bounds = self
-                            .raster
-                            .glyph_raster_bounds(&params)
-                            .map_err(|e| e.to_string())?;
-                        let estimate = glyph_capacity(bounds)?;
-                        if cache.len() >= MAX_CACHE_ENTRIES
-                            || cache_bytes + estimate > MAX_CACHE_BYTES
-                            || base_bytes + cache_bytes + estimate > max_bytes
-                        {
-                            cache.clear();
-                            cache_bytes = 0;
-                        }
-                        if base_bytes + estimate > max_bytes {
-                            return Err("text working-set limit".into());
-                        }
-                        out.peak_bytes = out.peak_bytes.max(base_bytes + cache_bytes + estimate);
-                        let raster_work = if bounds.is_zero() {
-                            0
-                        } else {
-                            (estimate / 4) as u64
-                        };
-                        charge_work(remaining_work, raster_work)?;
-                        out.pixel_writes = out.pixel_writes.saturating_add(raster_work);
-                        let bitmap = Arc::new(if bounds.is_zero() {
-                            GlyphBitmap::empty(bounds)
-                        } else {
-                            let (size, data) = self
-                                .raster
-                                .rasterize_glyph(&params, bounds)
-                                .map_err(|e| e.to_string())?;
-                            GlyphBitmap::new(
-                                bounds,
-                                size.width.0,
-                                size.height.0,
-                                data,
-                                glyph.is_emoji,
-                            )?
-                        });
-                        if bitmap.data.len() > estimate {
-                            return Err("native glyph exceeded admitted bounds".into());
-                        }
-                        if bitmap.data.len() <= MAX_CACHE_BYTES {
-                            cache_bytes += bitmap.data.len();
-                            cache.insert(params, bitmap.clone());
-                        }
-                        bitmap
-                    };
-                    out.glyphs += 1;
-                    if bitmap.color {
-                        out.color_glyphs += 1;
-                    }
-                    paint_bitmap(&mut out, &bitmap, integer, r.color, remaining_work)?;
-                }
+        let stats = crate::gpui_placement::visit_glyphs(&shaped, r, |glyph| {
+            self.check(epoch, cancelled)?;
+            let origin = glyph.origin.map(|v| v * r.device_scale);
+            if origin
+                .iter()
+                .any(|v| !v.is_finite() || v.abs() > 1_000_000.)
+            {
+                return Err(String::from("invalid native glyph position"));
             }
-            let rows = line.wrap_boundaries.len() + 1;
-            out.rows += rows;
-        }
+            let (integer, variant) = quantize(origin, glyph.is_emoji);
+            let params = RenderGlyphParams {
+                font_id: glyph.font_id,
+                glyph_id: glyph.glyph_id,
+                font_size: glyph.font_size,
+                subpixel_variant: point(variant[0], variant[1]),
+                scale_factor: r.device_scale,
+                is_emoji: glyph.is_emoji,
+                subpixel_rendering: false,
+                dilation: if glyph.is_emoji {
+                    0
+                } else {
+                    self.raster.glyph_dilation_for_color(color)
+                },
+            };
+            let bitmap = if let Some(found) = cache.get(&params) {
+                found.clone()
+            } else {
+                let bounds = self
+                    .raster
+                    .glyph_raster_bounds(&params)
+                    .map_err(|e| e.to_string())?;
+                let estimate = glyph_capacity(bounds)?;
+                if cache.len() >= MAX_CACHE_ENTRIES
+                    || cache_bytes + estimate > MAX_CACHE_BYTES
+                    || base_bytes + cache_bytes + estimate > max_bytes
+                {
+                    cache.clear();
+                    cache_bytes = 0;
+                }
+                if base_bytes + estimate > max_bytes {
+                    return Err("text working-set limit".into());
+                }
+                out.peak_bytes = out.peak_bytes.max(base_bytes + cache_bytes + estimate);
+                let raster_work = if bounds.is_zero() {
+                    0
+                } else {
+                    (estimate / 4) as u64
+                };
+                charge_work(remaining_work, raster_work)?;
+                out.pixel_writes = out.pixel_writes.saturating_add(raster_work);
+                let bitmap = Arc::new(if bounds.is_zero() {
+                    GlyphBitmap::empty(bounds)
+                } else {
+                    let (size, data) = self
+                        .raster
+                        .rasterize_glyph(&params, bounds)
+                        .map_err(|e| e.to_string())?;
+                    GlyphBitmap::new(bounds, size.width.0, size.height.0, data, glyph.is_emoji)?
+                });
+                if bitmap.data.len() > estimate {
+                    return Err("native glyph exceeded admitted bounds".into());
+                }
+                if bitmap.data.len() <= MAX_CACHE_BYTES {
+                    cache_bytes += bitmap.data.len();
+                    cache.insert(params, bitmap.clone());
+                }
+                bitmap
+            };
+            out.glyphs += 1;
+            if bitmap.color {
+                out.color_glyphs += 1;
+            }
+            paint_bitmap(&mut out, &bitmap, integer, r.color, remaining_work)?;
+            Ok(())
+        })?;
+        out.rows = stats.rows;
         for rect in decorations.rects {
             self.check(epoch, cancelled)?;
             paint_decoration(&mut out, rect, r.device_scale, r.color, remaining_work)?;
@@ -429,13 +385,7 @@ fn quantize(origin: [f32; 2], emoji: bool) -> ([i32; 2], [u8; 2]) {
         [(q[0].fract() * 4.) as u8, q[1].fract() as u8],
     )
 }
-pub(crate) fn aligned_x(x: f32, width: f32, line: f32, align: TextAlign) -> f32 {
-    match align {
-        TextAlign::Left => x,
-        TextAlign::Center => (x * 2. + width - line) / 2.,
-        TextAlign::Right => x + width - line,
-    }
-}
+pub(crate) use crate::gpui_placement::aligned_x;
 fn clipped_box(r: &TextRasterRequest) -> Result<Option<[i32; 4]>, String> {
     let a = r.bounds;
     let b = r.clip;

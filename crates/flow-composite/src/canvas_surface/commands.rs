@@ -5,6 +5,7 @@ pub(crate) use current_path::CurrentPath;
 mod image;
 mod pattern;
 pub use pattern::{CanvasPathTarget, CanvasPattern, CanvasPatternRepeat, CanvasStrokeOptions};
+mod stroke_text;
 mod text;
 use super::CanvasSurface;
 use crate::{CompositeError, CompositeLimits, DomainNode, DomainSource, ImageInputs, TextInputs};
@@ -14,7 +15,13 @@ use gpui_flow_scene::{
     StrokeAlignment, Style,
     display::{Group, Path, Text},
 };
-use std::{borrow::Cow, sync::Arc};
+use std::{
+    borrow::Cow,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 
 /// Maximum operations, including state operations, in one atomic batch.
 pub const MAX_CANVAS_COMMANDS: usize = 256;
@@ -103,6 +110,14 @@ pub enum CanvasCommand {
         position: Point,
         color: Color,
     },
+    /// Actual host-supplied glyph outlines, stroked once as a local triangle union.
+    /// Uses the same top-left text box and content clip as FillTextBox.
+    StrokeTextBox {
+        text: Text,
+        position: Point,
+        color: Color,
+        options: CanvasStrokeOptions,
+    },
 }
 #[derive(Clone)]
 struct State {
@@ -141,6 +156,8 @@ fn paint_budget(paint: &Paint) -> Result<(), CompositeError> {
 struct Compilation {
     drawing: Option<(DomainSource, ImageInputs)>,
     current_path: CurrentPath,
+    strokes: Vec<stroke_text::PendingStroke>,
+    budget: Budget,
 }
 fn source(
     commands: &[CanvasCommand],
@@ -174,6 +191,7 @@ fn source(
     let mut changed_path = false;
     let mut images = ImageInputs::default();
     let mut text_bytes = 0usize;
+    let mut strokes = Vec::new();
     for command in commands {
         if current_path.command(command, state.transform, reserve, &mut budget, limits)? {
             changed_path = true;
@@ -209,6 +227,28 @@ fn source(
         }
         let mut path_input_admitted = false;
         let (path, style) = match command {
+            CanvasCommand::StrokeTextBox {
+                text,
+                position,
+                color,
+                options,
+            } => {
+                draws += 1;
+                let (node, pending) = stroke_text::compile(
+                    text,
+                    *position,
+                    *color,
+                    options,
+                    &state,
+                    &mut budget,
+                    &mut text_bytes,
+                    draws,
+                    limits,
+                )?;
+                children.push(node);
+                strokes.push(pending);
+                continue;
+            }
             CanvasCommand::FillTextBox {
                 text,
                 position,
@@ -426,10 +466,14 @@ fn source(
         return Ok(Compilation {
             drawing: None,
             current_path,
+            strokes,
+            budget,
         });
     }
     Ok(Compilation {
         current_path,
+        strokes,
+        budget,
         drawing: Some((
             DomainSource {
                 root: DomainNode {
@@ -439,6 +483,7 @@ fn source(
                 },
                 clips: vec![],
                 canvas: None,
+                lowered_geometry: None,
             },
             images,
         )),
@@ -473,6 +518,60 @@ impl CanvasSurface {
         inputs: &ImageInputs,
         prepare: impl FnOnce(CanvasTextRequest<'_>) -> Result<CanvasTextOutput, CompositeError>,
     ) -> Result<bool, CompositeError> {
+        if commands
+            .iter()
+            .any(|command| matches!(command, CanvasCommand::StrokeTextBox { .. }))
+        {
+            return Err(CompositeError::UnsupportedTextStyle(
+                "canvas-stroke-text".into(),
+            ));
+        }
+        self.draw_commands_with_fonts(commands, inputs, |request| {
+            Ok(CanvasFontOutput {
+                fills: prepare(request.fills)?,
+                strokes: vec![],
+                outline_work: 0,
+            })
+        })
+    }
+    /// Prepare raster fill text and real glyph outline paths in one bounded batch.
+    pub fn draw_commands_with_fonts(
+        &mut self,
+        commands: &[CanvasCommand],
+        inputs: &ImageInputs,
+        prepare: impl FnOnce(CanvasFontRequest<'_>) -> Result<CanvasFontOutput, CompositeError>,
+    ) -> Result<bool, CompositeError> {
+        self.draw_commands_with_fonts_guarded(
+            commands,
+            inputs,
+            &AtomicBool::new(false),
+            prepare,
+            || Ok(()),
+        )
+    }
+    /// Guarded publication. The validator runs before host preparation, before
+    /// rasterization, and immediately before pixels, generation and current path
+    /// become current together. Cancellation is checked at each boundary and by
+    /// the rasterizer. This is a commit validation point, not a synchronization
+    /// primitive for concurrent changes after the validator returns.
+    pub fn draw_commands_with_fonts_guarded(
+        &mut self,
+        commands: &[CanvasCommand],
+        inputs: &ImageInputs,
+        cancelled: &AtomicBool,
+        prepare: impl FnOnce(CanvasFontRequest<'_>) -> Result<CanvasFontOutput, CompositeError>,
+        validate: impl Fn() -> Result<(), CompositeError>,
+    ) -> Result<bool, CompositeError> {
+        let check = || {
+            if cancelled.load(Ordering::Acquire) {
+                return Err(CompositeError::Superseded);
+            }
+            validate()?;
+            if cancelled.load(Ordering::Acquire) {
+                return Err(CompositeError::Superseded);
+            }
+            Ok(())
+        };
         let scopes: Vec<_> = self
             .path_budget_scopes
             .iter()
@@ -482,7 +581,7 @@ impl CanvasSurface {
         for scope in &scopes {
             limits.max_path_bytes = limits.max_path_bytes.min(scope.max_bytes);
         }
-        let compiled = source(
+        let mut compiled = source(
             commands,
             limits,
             inputs,
@@ -490,29 +589,62 @@ impl CanvasSurface {
             &self.current_path,
             &scopes,
         )?;
-        let Some((source, images)) = compiled.drawing else {
+        check()?;
+        let Some((mut source, images)) = compiled.drawing else {
+            check()?;
             self.current_path = compiled.current_path;
             return Ok(false);
         };
-        let texts = prepare(CanvasTextRequest {
-            source: &source,
-            viewport: self.raster_viewport(),
-            limits,
-            retained_bytes: self
-                .byte_len()
-                .saturating_mul(2)
-                .saturating_add(images.byte_len()),
+        let jobs: Vec<_> = compiled
+            .strokes
+            .iter()
+            .map(|pending| pending.job.clone())
+            .collect();
+        let output = prepare(CanvasFontRequest {
+            fills: CanvasTextRequest {
+                source: &source,
+                viewport: self.raster_viewport(),
+                limits,
+                retained_bytes: self
+                    .byte_len()
+                    .saturating_mul(2)
+                    .saturating_add(images.byte_len()),
+            },
+            strokes: &jobs,
+            max_outline_commands: compiled.budget.remaining_points(limits),
+            max_outline_path_bytes: compiled.budget.remaining_path_bytes(limits),
         })?;
-        let before = self.generation();
-        self.draw_with_preparation_work(
+        stroke_text::lower(
+            &mut source,
+            compiled.strokes,
+            output.strokes,
+            &mut compiled.budget,
+            limits,
+        )?;
+        check()?;
+        // A private cheap clone receives every intermediate write. A late host
+        // epoch change or cancellation cannot alter the live context or pixels.
+        let mut candidate = self.clone();
+        candidate.draw_with_preparation_work_guarded(
             &source,
             Affine::IDENTITY,
             &images,
-            &texts.inputs,
-            texts.pixel_work,
+            &output.fills.inputs,
+            output
+                .fills
+                .pixel_work
+                .checked_add(output.outline_work)
+                .ok_or(CompositeError::WorkLimit)?,
+            cancelled,
+            limits,
         )?;
-        self.current_path = compiled.current_path;
-        Ok(self.generation() != before)
+        candidate.current_path = compiled.current_path;
+        check()?;
+        let published = candidate.generation != self.generation;
+        self.pixels = candidate.pixels;
+        self.generation = candidate.generation;
+        self.current_path = candidate.current_path;
+        Ok(published)
     }
 }
 
@@ -528,4 +660,35 @@ pub struct CanvasTextOutput {
     pub inputs: TextInputs,
     /// Actual glyph raster writes, charged before compositing can publish.
     pub pixel_work: u64,
+}
+
+/// Canvas-only host font work. Generic scene Text and export contracts stay unchanged.
+pub struct CanvasFontRequest<'a> {
+    pub fills: CanvasTextRequest<'a>,
+    pub strokes: &'a [CanvasStrokeTextJob],
+    /// Shared remaining allowance for all returned Path command counts.
+    pub max_outline_commands: usize,
+    /// Shared remaining allowance for all returned Path vector capacities.
+    /// The host must also account its shaping/conversion scratch before allocation.
+    pub max_outline_path_bytes: u64,
+}
+#[derive(Clone, Debug)]
+pub struct CanvasStrokeTextJob {
+    pub id: DisplayId,
+    pub text: Text,
+    pub world_transform: Affine,
+}
+#[derive(Default)]
+pub struct CanvasFontOutput {
+    pub fills: CanvasTextOutput,
+    pub strokes: Vec<CanvasStrokeTextOutput>,
+    /// Outline extraction, validation and conversion work, shared by the whole
+    /// batch and charged together with fill raster writes before publication.
+    pub outline_work: u64,
+}
+/// Exactly one result per job, including empty text. All glyph contours belong
+/// to one path in text-box local logical coordinates, before world/DPR mapping.
+pub struct CanvasStrokeTextOutput {
+    pub id: DisplayId,
+    pub path: Path,
 }

@@ -30,7 +30,8 @@ pub struct CompositeLimits {
     pub max_dimension: u32,
     pub max_pixels: u64,
     pub max_surface_bytes: u64,
-    /// Canvas path storage/candidates/snapshots, separate from pixel memory.
+    /// Canvas path storage/candidates/snapshots and bounded lowered stroke
+    /// geometry, separate from pixel memory.
     pub max_path_bytes: u64,
     pub max_surface_writes: u64,
     pub max_nodes: usize,
@@ -196,3 +197,6 @@ mod canvas_current_path_tests;
 
 #[cfg(test)]
 mod canvas_pattern_command_tests;
+
+#[cfg(test)]
+mod canvas_stroke_text_tests;

@@ -1,0 +1,69 @@
+{
+  "date": "2026-10-03",
+  "scope": "Canvas same-App GPUI shaped-outline adapter and guarded SceneView publication",
+  "feature": "gpui-flow/canvas-stroke-text",
+  "feature_graph": [
+    "gpui-flow/canvas-stroke-text",
+    "flow-studio/outline-font-binding-x11"
+  ],
+  "environment": {
+    "CARGO_TARGET_DIR": "/workspace/shared/rust-target-native",
+    "CARGO_BUILD_JOBS": 1,
+    "CARGO_INCREMENTAL": 0,
+    "CARGO_PROFILE_DEV_DEBUG": 0,
+    "CARGO_PROFILE_TEST_DEBUG": 0,
+    "watchdog_stop_bytes": 3355443200
+  },
+  "checks": [
+    {
+      "command": "cargo tree --locked --offline -p gpui-flow -p flow-studio --features gpui-flow/canvas-stroke-text,flow-studio/outline-font-binding-x11",
+      "result": "passed; cached Studio/native feature unification; only workspace crates subsequently rebuilt"
+    },
+    {
+      "command": "cargo test --locked --offline -p gpui-flow -p flow-studio --features gpui-flow/canvas-stroke-text,flow-studio/outline-font-binding-x11 --lib -- canvas_",
+      "passed": 46,
+      "failed": 0,
+      "filtered": 223
+    },
+    {
+      "command": "cargo test --locked --offline -p gpui-flow -p flow-studio --features gpui-flow/canvas-stroke-text,flow-studio/outline-font-binding-x11 --lib -- display::composite_text",
+      "passed": 10,
+      "failed": 0,
+      "filtered": 259
+    },
+    {
+      "command": "rustfmt --edition 2024 crates/flow-ui/src/display/composite_text.rs crates/flow-ui/src/scene_view/canvas_commands.rs crates/flow-ui/src/scene_view/mod.rs",
+      "result": "passed"
+    },
+    {
+      "command": "cargo clippy --locked --offline -p gpui-flow -p flow-studio --features gpui-flow/canvas-stroke-text,flow-studio/outline-font-binding-x11 --all-targets -- -D warnings",
+      "result": "passed"
+    },
+    {
+      "command": "cargo test --locked --offline -p gpui-flow -p flow-studio --features flow-studio/outline-font-binding-x11 --lib -- canvas_",
+      "passed": 40,
+      "failed": 0,
+      "filtered": 223,
+      "note": "gpui-flow canvas-stroke-text disabled; same Studio/x11 dependency graph retained"
+    }
+  ],
+  "source_hashes_stable_across_tests": true,
+  "source_sha256": {
+    "crates/flow-ui/Cargo.toml": "a9b02e2861569211d9dcb7b78ed1b4634ebbc0b1dbfa9a8950507cd903b22099",
+    "crates/flow-ui/src/display/composite_text.rs": "a7861fcd5c70edffadfbc63aae1e16fb82c74a5e430d13160f974099b735279d",
+    "crates/flow-ui/src/display/composite_text/canvas.rs": "3b36ea00b99c561d2bcdb7a6041ebe5496cfee5110ed3ff4cc92379f4d34ff38",
+    "crates/flow-ui/src/display/composite_text/canvas/outlines.rs": "8de38c370dd48ecfbebcfcab06c1c54d7509e64c8b081a4690b07437d9ad924b",
+    "crates/flow-ui/src/display/composite_text/canvas/outlines/tests.rs": "3cecea894fbb0694534c0a6d9b76689b5a6be1f2ccfdaf04baaf21c7172ae6b9",
+    "crates/flow-ui/src/scene_view/canvas_commands.rs": "3a703974517525953382f632bc052cc2318f9924ca5b308373dff7c1ecc3c99f",
+    "crates/flow-ui/src/scene_view/mod.rs": "2bec209f59f092b125acbd14986eb2fd1cb6e7961ff0c96a2aed8280fa1c34d2",
+    "docs/canvas-shaped-outline-adapter.md": "ee2110411f39530754ce36b6fedaf6377c36f6ec08e5122aa4af3594e3b6b6b5"
+  },
+  "free_bytes_after_tests": 3454205952,
+  "limitations": [
+    "Existing native App export/decoration/overflow runtime tests were excluded by inspected headless filters; all UI library test code compiled.",
+    "No native platform/window was constructed. Pure conversion fixtures do not establish native font identity or native Canvas stroke visual acceptance."
+  ],
+  "free_bytes_after_feature_checks": 3448901632,
+  "free_bytes_after_default_tests": 3301666816,
+  "storage_note": "The final default-test linking artifact reduced free space below the 3.125 GiB stop threshold before the one-second watchdog observed it; Cargo exited successfully, free space remained above the 3 GiB hard floor, and no further Cargo command was run. Parent notified immediately for build-artifact cleanup."
+}

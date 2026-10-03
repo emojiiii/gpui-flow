@@ -1,8 +1,8 @@
 # Startup-only static font registration
 
-Status: an opt-in registration/binding checkpoint, with state-machine tests and
-Linux backend compilation. Native registration and shaped-run acceptance are
-still unverified. This does **not** enable Canvas `strokeText`, stroke rasterization,
+Status: an opt-in registration/binding checkpoint with state-machine tests,
+Linux backend compilation and [bounded X11 native acceptance](static-font-binding-native.md):
+28 physical actions, 21/21 trace checks and independent font-byte audits passed. This does **not** enable Canvas `strokeText`, stroke rasterization,
 new shaping, or cross-platform outline support. The CPU parser/outline foundation
 is documented separately in [static-font-outlines.md](static-font-outlines.md).
 
@@ -85,8 +85,8 @@ new epoch without mutating the original bindings.
 A later outline consumer must use the existing same-App GPUI shaped runs and their
 positions, check **every actual run FontId**, and reject an entire candidate on
 any unbound fallback. The primary descriptor resolving successfully is insufficient:
-shaping can choose another face for individual glyphs. This checkpoint does not
-claim that a shaped native ID has been exercised. Cancellation and epoch must be
+shaping can choose another face for individual glyphs. The separate native fixture exercises actual shaped IDs for its two regular
+first-party faces; that evidence does not establish every possible font or run. Cancellation and epoch must be
 rechecked while doing work and before any atomic publication; a successful lookup
 is only a moment-in-time check. Stroke geometry, placement, transforms/DPR, clips,
 alpha, allocation/work budgets and Canvas transaction publication remain separate
@@ -125,8 +125,10 @@ wrong-App numerical IDs, unbound IDs, immutable bindings after unrelated
 registration, generic/no-backend rejection, epochs and cancellation.
 
 They do not register a real native font, exercise a native window or prove an
-actual shaped-run FontId. Native single/multifont and fallback fixtures remain
-required before enabling any outline consumer. Cross-platform builds are untested.
+actual shaped-run FontId. The separate [native fixture](static-font-binding-native.md) has exercised two
+registered faces and actual fallback/mixed-run rejection. An outline consumer
+still requires its own placement, geometry and publication acceptance.
+Cross-platform builds are untested.
 
 ### Local receipt (2026-10-03)
 

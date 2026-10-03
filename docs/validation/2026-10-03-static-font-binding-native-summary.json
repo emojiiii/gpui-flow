@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "date_utc": "2026-10-03",
+  "scope": "Bounded Linux X11 native static-font startup registration and binding-level candidate acceptance; no Canvas strokeText acceptance",
+  "source_commit": "452ebe679e3f68becc9d9b97976d32c55037b782",
+  "source_tree": "7eb282d758f312abc2020eeb7210eb7fae97cf4a",
+  "run": {
+    "start": "2026-10-03T00:44:56Z",
+    "end": "2026-10-03T00:47:51Z",
+    "exit": 0,
+    "physical_actions": 28,
+    "buttons": 11,
+    "json_records": 29,
+    "original_jpeg_captures": 12,
+    "capture_bytes": 1783468,
+    "trace_passed": 21,
+    "trace_total": 21,
+    "general_provenance_checks": 17,
+    "font_checks": 34,
+    "candidate_decisions": 36,
+    "run_observations": 42,
+    "glyph_observations": 720,
+    "glyph_observations_are_not_distinct_glyphs": true,
+    "app_font_ids": [
+      0,
+      1
+    ],
+    "fallback_id": 5,
+    "mixed_run_ids": [
+      0,
+      5,
+      0
+    ],
+    "unrelated_unbound_id": 6,
+    "all_actions_passed": true,
+    "stderr_bytes": 0,
+    "final_client_size": [
+      1000,
+      800
+    ],
+    "all_status_rows_visible": true
+  },
+  "fonts": [
+    {
+      "private_family": "FlowOutline67d31982fea9ab39e41fe18cb9d8068f",
+      "source_sha256": "315383d2601dcd74cbbaa73d7b897e38997123668a12f5e664403ffde4af4429",
+      "registration_sha256": "80d301cd4192888c2f771e111948fe192ecf783c5ec02649c6aa4bfdf7c622e5",
+      "face_index": 0,
+      "weight": 400,
+      "italic": false,
+      "units_per_em": 1000,
+      "glyph_count": 5,
+      "registration_bytes": 2048
+    },
+    {
+      "private_family": "FlowOutline6248a7df12d930fe0af64ec11cc7925c",
+      "source_sha256": "cfb44080e7dd0a928b1baf5e870e3b382a71ff43049b3e25c6b9e8bf31537b71",
+      "registration_sha256": "465d8266261636edca72725be58e23611f50292718064fe048d92d3bd0f953bf",
+      "face_index": 0,
+      "weight": 400,
+      "italic": false,
+      "units_per_em": 1000,
+      "glyph_count": 5,
+      "registration_bytes": 2084
+    }
+  ],
+  "source_provenance": {
+    "actual_link_pre_post_inputs": 17,
+    "focused_archive_inputs": 16,
+    "separate_focused_doc": "fixture-contract.md",
+    "freshness_archive_files": 476,
+    "freshness_check_reused_linked_binary": true,
+    "all_frozen_source_files_match_published_tree": true,
+    "limits": "The476 freshness hashes do not expand contemporaneous actual-link input proof beyond17. External dependencies/compiler/system libraries excluded; no full rebuild/reproducibility claim."
+  },
+  "evidence_root": "/workspace/shared/outline-binding-native-validation-20261003T0041Z",
+  "checksums": {
+    "native-qa.md": "10630c51f9ade494e3345192aa5bbc1ef1a3cd199d18d7e66e4e94190e55fce6",
+    "native-evidence.sha256": "767cb27f404c04b7046e488febbb11b5c4d980dc0642c9dbde4dbcf17c6d64c0",
+    "native-trace-audit.json": "1785186a7dedc201c4eba1f75e2838d01cf6e1a5c8a7d468fa47541909341612",
+    "native-font-provenance-audit.json": "a58140007faf4fb873bc0a9953bb3a41cb63e768f6d2c51863daee5a9676d15f",
+    "native.stdout": "4f3d88a27b5edf06a2cef5a986339124470003c062d6c3af399b031359c9f317",
+    "native.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native.receipt": "cd8d5189dd11e8e1093cbc90b758a1f6d86cdcf7ab8a98f2c8527aa72ff143a5",
+    "native.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "source-inputs.tar.gz": "99ad76cea56d6787ac888cc089946ab1b355024fd20a23803bb919323ec55a88",
+    "binary.sha256": "6410d0ff968502866545b1ea70478026aee1e45d3e2e734dacc131cdf2f7bd2f",
+    "published-source-match.json": "afbd73998d330e895ee6303315bfb71ee86ab339f6b29f5e3a9d6556b61a6c9f"
+  },
+  "limits": [
+    "Direct-native IDs are private; direct/App equality is checked by the factory, while this fixture independently observes App and shaped IDs.",
+    "The same-alias test appends identical registered bytes; it does not test hostile conflicting bytes.",
+    "Wrong owner uses a separate Noop TextSystem, not a second native application.",
+    "Later fresh shaped lines are compared in receipts while panels continue painting initial WrappedLines.",
+    "Both admitted faces are first-party geometric regular400 fixtures; ambient fallback bytes were not extracted.",
+    "JPEGs establish visual presence/layout only, not lossless glyph/Canvas/GPU pixel identity.",
+    "No Wayland, other-platform, Canvas stroke geometry, transform/DPR, clip/alpha, resource budget or Canvas publication acceptance in this run."
+  ],
+  "remaining": "ELM-10 remains partial; actual Canvas strokeText integration and acceptance are separate."
+}

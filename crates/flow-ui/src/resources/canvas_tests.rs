@@ -824,3 +824,89 @@ fn canvas_current_path_aggregate_budget_checks_final_replacement_before_publicat
     })
     .unwrap();
 }
+
+#[test]
+fn canvas_guarded_resource_rejection_after_upload_keeps_pixels_generation_and_current_path() {
+    use gpui_flow_composite::{CanvasCommand, CompositeError};
+    let (mut e, mut r, h) = setup();
+    r.edit_canvas(&mut e, h, |s| {
+        s.draw_commands(&current_path_rectangle()).map(|_| ())
+    })
+    .unwrap();
+    let ticket = r.tracker.ticket(&e, h).unwrap();
+    let before = r.canvas_snapshot(&e, h).unwrap();
+    let (upload, generation) = r.canvases.image(ticket).unwrap();
+    let checked = std::cell::Cell::new(false);
+    let result = r.edit_canvas_guarded(
+        &mut e,
+        h,
+        |s| {
+            s.draw_commands(&[fill_current_path(), CanvasCommand::BeginPath])
+                .map(|_| ())
+        },
+        || {
+            checked.set(true);
+            Err(CompositeError::Superseded)
+        },
+    );
+    assert!(matches!(
+        result,
+        Err(CanvasEditError::Pixels(CompositeError::Superseded))
+    ));
+    assert!(checked.get());
+    let (after_upload, after_generation) = r.canvases.image(ticket).unwrap();
+    assert!(Arc::ptr_eq(&upload, &after_upload));
+    assert_eq!(generation, after_generation);
+    assert!(Arc::ptr_eq(&before, &r.canvas_snapshot(&e, h).unwrap()));
+    assert_eq!(
+        before.premultiplied_rgba(),
+        r.canvas_snapshot(&e, h).unwrap().premultiplied_rgba()
+    );
+    r.edit_canvas(&mut e, h, |s| {
+        s.draw_commands(&[fill_current_path()]).map(|_| ())
+    })
+    .unwrap();
+    assert!(
+        r.canvas_snapshot(&e, h)
+            .unwrap()
+            .premultiplied_rgba()
+            .iter()
+            .any(|b| *b != 0)
+    );
+}
+#[test]
+fn canvas_guarded_resource_geometry_only_rejection_preserves_upload_and_path() {
+    use gpui_flow_composite::{CanvasCommand, CompositeError};
+    let (mut e, mut r, h) = setup();
+    r.edit_canvas(&mut e, h, |s| {
+        s.draw_commands(&current_path_rectangle()).map(|_| ())
+    })
+    .unwrap();
+    let ticket = r.tracker.ticket(&e, h).unwrap();
+    let before = r.canvas_snapshot(&e, h).unwrap();
+    let (upload, generation) = r.canvases.image(ticket).unwrap();
+    assert!(
+        r.edit_canvas_guarded(
+            &mut e,
+            h,
+            |s| s.draw_commands(&[CanvasCommand::BeginPath]).map(|_| ()),
+            || Err(CompositeError::Superseded)
+        )
+        .is_err()
+    );
+    let (after_upload, after_generation) = r.canvases.image(ticket).unwrap();
+    assert!(Arc::ptr_eq(&upload, &after_upload));
+    assert_eq!(generation, after_generation);
+    assert!(Arc::ptr_eq(&before, &r.canvas_snapshot(&e, h).unwrap()));
+    r.edit_canvas(&mut e, h, |s| {
+        s.draw_commands(&[fill_current_path()]).map(|_| ())
+    })
+    .unwrap();
+    assert!(
+        r.canvas_snapshot(&e, h)
+            .unwrap()
+            .premultiplied_rgba()
+            .iter()
+            .any(|b| *b != 0)
+    );
+}

@@ -27,6 +27,7 @@ pub struct DomainSource {
     pub(crate) root: DomainNode,
     pub(crate) clips: Vec<ClipRegion>,
     pub(crate) canvas: Option<CanvasBackdrop>,
+    pub(crate) lowered_geometry: Option<gpui_flow_scene::StrokeGeometryBudget>,
 }
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DomainNode {
@@ -112,6 +113,7 @@ pub fn owned_canvas(
         },
         clips: vec![],
         canvas: Some(backdrop),
+        lowered_geometry: None,
     })
 }
 /// Capture a complete subtree for an imperative Canvas draw. Ancestors' clips,
@@ -148,6 +150,7 @@ pub fn capture_subtree(
         root,
         clips: vec![],
         canvas: None,
+        lowered_geometry: None,
     })
 }
 impl DomainSource {
@@ -364,6 +367,7 @@ fn visit(
                 root,
                 clips: clips.to_vec(),
                 canvas: None,
+                lowered_geometry: None,
             })),
             Err(error) => SceneUnit::Rejected(CompositeIssue {
                 object: id.clone(),

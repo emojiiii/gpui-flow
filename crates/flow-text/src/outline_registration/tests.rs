@@ -508,3 +508,6 @@ fn bound_bridge_checks_current_epoch_and_cancellation_before_outlines() {
     );
     assert_eq!(bridge.static_outline_descriptors().unwrap().len(), 1);
 }
+
+#[path = "shaped_outlines_tests.rs"]
+mod shaped_outlines;

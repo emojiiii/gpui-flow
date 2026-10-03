@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-10-03T03:22:51.605076+00:00",
+  "scope": "Same-App GPUI shaped glyph outline producer and shared unsnapped placement; native Canvas acceptance remains separate",
+  "unit_tests": 68,
+  "new_consumer_tests": 12,
+  "failed": 0,
+  "ignored": 0,
+  "test_command": "cargo test --locked --offline -p gpui-flow-text --no-default-features --features static-outline-registration --lib",
+  "strict_all_targets_clippy": "cargo clippy --locked --offline -p gpui-flow-text --no-default-features --features static-outline-registration --all-targets -- -D warnings",
+  "format": "passed",
+  "source_stable": "Final offset-admission fix passed 68 tests and strict Clippy with identical pre/post flow-text source hashes; prior sub-unit-DPR fill regression remains covered",
+  "source_files": {
+    "crates/flow-text/src/gpui_placement.rs": {
+      "sha256": "f2e05531e826fcd0879e9bfb0a7567a5d6ea0c9fa4452563ce524000e6c5574d",
+      "bytes": 4669
+    },
+    "crates/flow-text/src/gpui_outlines.rs": {
+      "sha256": "ff4a7c56340ba9325839050d5ebaff0d59735b837006e1fe13d17ebdc549df7f",
+      "bytes": 13688
+    },
+    "crates/flow-text/src/gpui_raster.rs": {
+      "sha256": "304dc447816da9d4ef0e834960184aa08d7d8281032c1b91ba61a50fc9aab017",
+      "bytes": 26264
+    },
+    "crates/flow-text/src/gpui_overflow.rs": {
+      "sha256": "dc5afdffd9477e88f8f27a1e89b62687b1dd01a0399f398400bfb0adac196be0",
+      "bytes": 12241
+    },
+    "crates/flow-text/src/outline_registration/shaped_outlines_tests.rs": {
+      "sha256": "70b35d4eca22583bb30960452b1d00dcba320577296000fc077062b2c1856b19",
+      "bytes": 22303
+    },
+    "crates/flow-text/src/outline_registration/tests.rs": {
+      "sha256": "7ea9ab9580996f24c698f3b442f84c8c2f778a91296b44b7b7c56b2619fa0173",
+      "bytes": 17813
+    },
+    "crates/flow-text/src/lib.rs": {
+      "sha256": "0bd15be5d503548109b4b4c5edffc73c831939436acdea503a21e6a9edf53938",
+      "bytes": 6107
+    },
+    "docs/shaped-text-outlines.md": {
+      "sha256": "f1cf45e207c4f5935a74a8710f698751135712883162b401745947edab6d1748",
+      "bytes": 6915
+    }
+  },
+  "validation_kind": "Headless modeled PlatformTextSystem with genuine prepared TTF/CFF geometry; no platform/application construction",
+  "native_canvas_acceptance": "pending integration",
+  "resource_notes": [
+    "First isolated X11 graph was stopped by3.125GiB watchdog before flow-text compilation; no test result from that attempt",
+    "Successful unit/Clippy commands reused the cached no-default-feature static-outline-registration graph, jobs1, DEBUG0, incremental0",
+    "No new target directory, dependency, cache deletion or native platform was created by this change"
+  ],
+  "evidence_root": "/workspace/shared/outline-placement-validation",
+  "logs": {
+    "tests.log": "55475e55f980176182cd64c9d2e1095917bfd787a7b014ed31760b3f4ed7f8fb",
+    "tests-cached.log": "6b7d06ceef7491ca52af2d2213db073818abe6660c523a023120f21afdce9742",
+    "tests-cached-first.log": "2cf33b35d734d2fb1b286dbc8fb077bb4e14ad7d0f8f904b9d5196c478aab8d6",
+    "clippy-cached.log": "5015d75ca5969bedc874656a544c914f3b682aaf3129ced444b4d5859ab2a6f8",
+    "format.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "parent-final-tests.log": "9d8a2a001ac998d9b44f1ed425647d8ecf1ff13da1d8edcd5a771229e68dc7a2",
+    "parent-final-clippy.log": "077623d9d79db895852001528ffc13f4670e6adf4772f8be3ee3156b4fa07976",
+    "offset-final-tests.log": "3d2faebe65207ba14719db6b702cb341436f819b283493330b63a96001206150",
+    "offset-final-clippy.log": "7828f36fe9e800f3755e442c3181fab8b8957c184dc7b7feb22c8aaa53135b60",
+    "offset-final-tests-receipt.json": "f368e867c59c23534be94b870fe12ae7c30a4940b41e5ed228d353cf8140aeb7",
+    "offset-final-clippy-receipt.json": "f5b770df57b9a68a87e3cb87b596bc63686a629e7435367a33c1e6b3ae4e2a33"
+  },
+  "limits": [
+    "Unhinted outlines do not promise pixel identity with hinted native bitmap fill",
+    "Identity checks include original/ellipsis probe/final runs but native ligature/kerning/mark behavior must be exercised by the separate native fixture",
+    "OutlineBudget accounts output vector capacities, live line offsets, parser and validation/conversion work; host caches, immutable font bytes and other shared shaping helper temporaries are separately scoped",
+    "Whole-batch Canvas publication and any final epoch check remain caller responsibilities"
+  ],
+  "parent_review_fix": "Preserve fill device-space origin bound at sub-unit DPR; logical cap is outline-only",
+  "new_offset_helper_tests": 2,
+  "review_fix": "Pre-admit original and simultaneous final ellipsis offset Vec storage before allocation; checked byte arithmetic and actual capacity checks; preserve fill sub-unit-DPR device-space cap"
+}

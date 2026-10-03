@@ -170,10 +170,11 @@ impl CanvasResources {
             .filter(|e| e.ticket == ticket)
             .map(|e| e.surface.snapshot())
     }
-    pub fn edit(
+    pub fn edit_guarded(
         &self,
         ticket: ResourceTicket,
         edit: impl FnOnce(&mut CanvasSurface) -> Result<(), CompositeError>,
+        validate: impl Fn() -> Result<(), CompositeError>,
     ) -> Result<(), CompositeError> {
         let mut entries = self.entries.borrow_mut();
         let retained: u64 = entries.values().map(|e| e.surface.byte_len() * 2).sum();
@@ -215,10 +216,14 @@ impl CanvasResources {
         {
             // A valid path-only edit publishes context state, not pixel content.
             // Keep the existing immutable snapshot generation and GPUI upload.
+            validate()?;
             entry.surface = surface;
             return Ok(());
         }
         let image = upload(&surface)?;
+        // Upload creates a private immutable candidate. A rejected validator
+        // drops it without changing the live resource or its current path.
+        validate()?;
         entry.surface = surface;
         entry.image = image;
         Ok(())

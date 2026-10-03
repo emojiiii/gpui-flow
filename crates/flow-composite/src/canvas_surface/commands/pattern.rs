@@ -118,7 +118,7 @@ impl Default for CanvasStrokeOptions {
     }
 }
 impl CanvasStrokeOptions {
-    fn stroke(&self) -> Result<Stroke, CompositeError> {
+    pub(super) fn stroke(&self) -> Result<Stroke, CompositeError> {
         if self.dash_pattern.len() > gpui_flow_scene::MAX_STROKE_DASH_ENTRIES {
             return Err(CompositeError::InputLimit);
         }

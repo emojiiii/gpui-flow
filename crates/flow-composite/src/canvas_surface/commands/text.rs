@@ -13,20 +13,7 @@ pub(super) fn compile(
     index: usize,
     limits: CompositeLimits,
 ) -> Result<DomainNode, CompositeError> {
-    *total_bytes = total_bytes
-        .saturating_add(text.content.len())
-        .saturating_add(text.font_family.len());
-    if text.content.len() > 65_536 || text.font_family.len() > 512 || *total_bytes > 262_144 {
-        return Err(CompositeError::InputLimit);
-    }
-    text.validate().map_err(CompositeError::InvalidGeometry)?;
-    if [position.x, position.y, text.size.width, text.size.height]
-        .iter()
-        .any(|v| !v.is_finite() || v.abs() > 1_000_000.)
-    {
-        return Err(CompositeError::UnsupportedTransform);
-    }
-    let world = matrix(state.transform * Affine::translation(position.x, position.y))?;
+    let world = admit(text, position, state, total_bytes)?;
     budget.draw(5, &state.clips, limits)?;
     let object = DisplayObject::new(format!("canvas-text-{index}"), text.clone())
         .with_transform(world)
@@ -45,4 +32,27 @@ pub(super) fn compile(
         &state.clips,
         index,
     ))
+}
+
+pub(super) fn admit(
+    text: &Text,
+    position: Point,
+    state: &State,
+    total_bytes: &mut usize,
+) -> Result<Affine, CompositeError> {
+    *total_bytes = total_bytes
+        .saturating_add(text.content.len())
+        .saturating_add(text.font_family.len());
+    if text.content.len() > 65_536 || text.font_family.len() > 512 || *total_bytes > 262_144 {
+        return Err(CompositeError::InputLimit);
+    }
+    text.validate().map_err(CompositeError::InvalidGeometry)?;
+    if [position.x, position.y, text.size.width, text.size.height]
+        .iter()
+        .any(|v| !v.is_finite() || v.abs() > 1_000_000.)
+    {
+        return Err(CompositeError::UnsupportedTransform);
+    }
+    let world = matrix(state.transform * Affine::translation(position.x, position.y))?;
+    Ok(world)
 }

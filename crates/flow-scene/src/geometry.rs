@@ -200,17 +200,19 @@ pub(crate) fn flatten_quadratic(
     o: FlattenOptions,
     depth: u8,
     out: &mut Vec<Point>,
-) {
+    max_points: usize,
+) -> Result<(), String> {
     if depth >= o.max_depth || distance_to_segment(b, a, c) <= o.tolerance {
-        out.push(c);
-        return;
+        bounded_flatten_push(out, c, max_points)?;
+        return Ok(());
     }
     let ab = lerp(a, b, 0.5);
     let bc = lerp(b, c, 0.5);
     let mid = lerp(ab, bc, 0.5);
-    flatten_quadratic(a, ab, mid, o, depth + 1, out);
-    flatten_quadratic(mid, bc, c, o, depth + 1, out);
+    flatten_quadratic(a, ab, mid, o, depth + 1, out, max_points)?;
+    flatten_quadratic(mid, bc, c, o, depth + 1, out, max_points)
 }
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn flatten_cubic(
     a: Point,
     b: Point,
@@ -219,12 +221,13 @@ pub(crate) fn flatten_cubic(
     o: FlattenOptions,
     depth: u8,
     out: &mut Vec<Point>,
-) {
+    max_points: usize,
+) -> Result<(), String> {
     if depth >= o.max_depth
         || distance_to_segment(b, a, d).max(distance_to_segment(c, a, d)) <= o.tolerance
     {
-        out.push(d);
-        return;
+        bounded_flatten_push(out, d, max_points)?;
+        return Ok(());
     }
     let ab = lerp(a, b, 0.5);
     let bc = lerp(b, c, 0.5);
@@ -232,6 +235,18 @@ pub(crate) fn flatten_cubic(
     let abc = lerp(ab, bc, 0.5);
     let bcd = lerp(bc, cd, 0.5);
     let mid = lerp(abc, bcd, 0.5);
-    flatten_cubic(a, ab, abc, mid, o, depth + 1, out);
-    flatten_cubic(mid, bcd, cd, d, o, depth + 1, out);
+    flatten_cubic(a, ab, abc, mid, o, depth + 1, out, max_points)?;
+    flatten_cubic(mid, bcd, cd, d, o, depth + 1, out, max_points)
+}
+
+fn bounded_flatten_push(
+    out: &mut Vec<Point>,
+    point: Point,
+    max_points: usize,
+) -> Result<(), String> {
+    if out.len() >= max_points {
+        return Err("stroke flattened point budget exceeded".into());
+    }
+    out.push(point);
+    Ok(())
 }

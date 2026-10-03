@@ -3,6 +3,10 @@ name = "gpui-flow"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+[features]
+# Canvas glyph outlines require an explicitly registered same-App static backend.
+canvas-stroke-text = ["gpui-flow-text/static-outline-registration"]
+
 [dependencies]
 gpui-flow-composite.workspace = true
 gpui-flow-text = { workspace = true, features = ["gpui"] }

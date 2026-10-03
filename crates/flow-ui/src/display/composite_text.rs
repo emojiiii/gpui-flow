@@ -1,5 +1,7 @@
 //! Same-native-backend text input producer, used only by an admitted CPU job.
+mod canvas;
 mod transform;
+pub(crate) use canvas::canvas_font_inputs;
 use gpui_flow_composite::{
     CompositeError, CompositeLimits, DomainSource, RasterViewport, StaticImage, TextImage,
     TextInputs,
@@ -62,6 +64,14 @@ pub(crate) struct TextPreparation<'a> {
 }
 impl TextPreparation<'_> {
     pub fn domain(&mut self, source: &DomainSource, inputs: &mut TextInputs) {
+        self.domain_inner(source, inputs, false);
+    }
+    fn domain_inner(
+        &mut self,
+        source: &DomainSource,
+        inputs: &mut TextInputs,
+        bounded_strings: bool,
+    ) {
         for (object, world, full_source) in source.text_sources() {
             let mut exact_local_clip = None;
             let result = (|| {
@@ -99,13 +109,28 @@ impl TextPreparation<'_> {
                     content.size.height * m.d,
                 ];
                 let clip = space.clip;
+                let mut capacity = self.capacity();
+                let (request_content, request_family) = if bounded_strings {
+                    let mut charge = |bytes: usize, _work: usize| {
+                        capacity = capacity
+                            .checked_sub(bytes as u64)
+                            .ok_or(CompositeError::WorkingSetLimit)?;
+                        Ok(())
+                    };
+                    (
+                        canvas::copy_string(&text.content, &mut charge)?,
+                        canvas::copy_string(&text.font_family, &mut charge)?,
+                    )
+                } else {
+                    (text.content.clone(), text.font_family.clone())
+                };
                 let request = TextRasterRequest {
                     overflow: crate::text_measure::text_overflow(text.overflow),
                     decoration: crate::text_measure::text_decoration(text.decoration),
                     vertical_align: crate::text_measure::vertical_align(text.vertical_align),
                     text: TextMeasureRequest {
-                        content: text.content.clone(),
-                        font_family: text.font_family.clone(),
+                        content: request_content,
+                        font_family: request_family,
                         font_size: text.font_size * m.d,
                         font_weight: text.font_weight,
                         italic: text.italic,
@@ -129,14 +154,6 @@ impl TextPreparation<'_> {
                     device_scale: self.viewport.device_scale,
                     color: [color.r, color.g, color.b, color.a],
                 };
-                let capacity = (32 * 1024 * 1024u64)
-                    .saturating_sub(*self.source_bytes)
-                    .min(
-                        self.limits
-                            .max_surface_bytes
-                            .saturating_sub(self.retained)
-                            .saturating_sub(*self.source_bytes),
-                    );
                 let raster = backend
                     .bridge
                     .rasterize(
@@ -189,9 +206,20 @@ impl TextPreparation<'_> {
             }
         }
     }
+    fn capacity(&self) -> u64 {
+        (32 * 1024 * 1024u64)
+            .saturating_sub(*self.source_bytes)
+            .min(
+                self.limits
+                    .max_surface_bytes
+                    .saturating_sub(self.retained)
+                    .saturating_sub(*self.source_bytes),
+            )
+    }
 }
 
 /// Reuse the same same-App glyph producer for one admitted Canvas command batch.
+#[cfg(test)]
 pub(crate) fn canvas_inputs(
     request: gpui_flow_composite::CanvasTextRequest<'_>,
     backend: Option<&TextBackendSnapshot>,

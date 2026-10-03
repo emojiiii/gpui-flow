@@ -72,9 +72,8 @@ impl Path {
         self.flatten_impl(options, None)
             .expect("unbounded flattening cannot exhaust its point budget")
     }
-    /// Advanced-stroke adapter entry point. Checks between commands; the
-    /// existing depth bound limits temporary overshoot to one curve (2^12
-    /// points with the default options), never a partially accepted contour.
+    /// Advanced-stroke adapter entry point. Curve subdivision checks the
+    /// remaining point allowance before every output point allocation.
     pub(crate) fn flatten_bounded(
         &self,
         options: FlattenOptions,
@@ -97,6 +96,25 @@ impl Path {
         let mut current = Point::ZERO;
         let mut start = Point::ZERO;
         for command in &self.commands {
+            let added = match command {
+                PathCommand::MoveTo { .. } | PathCommand::LineTo { .. } => {
+                    1 + usize::from(
+                        contour.points.is_empty() && matches!(command, PathCommand::LineTo { .. }),
+                    )
+                }
+                PathCommand::QuadraticTo { .. } | PathCommand::CubicTo { .. } => {
+                    usize::from(contour.points.is_empty())
+                }
+                PathCommand::Close => 0,
+            };
+            if max_points.is_some_and(|limit| {
+                completed_points
+                    .saturating_add(contour.points.len())
+                    .saturating_add(added)
+                    > limit
+            }) {
+                return Err("stroke flattened point budget exceeded".into());
+            }
             match *command {
                 PathCommand::MoveTo { to } => {
                     if !contour.points.is_empty() {
@@ -121,7 +139,17 @@ impl Path {
                     if contour.points.is_empty() {
                         contour.points.push(current);
                     }
-                    flatten_quadratic(current, control, to, options, 0, &mut contour.points);
+                    flatten_quadratic(
+                        current,
+                        control,
+                        to,
+                        options,
+                        0,
+                        &mut contour.points,
+                        max_points
+                            .unwrap_or(usize::MAX)
+                            .saturating_sub(completed_points),
+                    )?;
                     current = to;
                 }
                 PathCommand::CubicTo {
@@ -140,7 +168,10 @@ impl Path {
                         options,
                         0,
                         &mut contour.points,
-                    );
+                        max_points
+                            .unwrap_or(usize::MAX)
+                            .saturating_sub(completed_points),
+                    )?;
                     current = to;
                 }
                 PathCommand::Close => {

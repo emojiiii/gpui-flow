@@ -2,7 +2,8 @@
 //! failed admission/rendering leaves both pixels and generation unchanged.
 mod commands;
 pub use commands::{
-    CanvasCommand, CanvasPathTarget, CanvasPattern, CanvasPatternRepeat, CanvasStrokeOptions,
+    CanvasCommand, CanvasFontOutput, CanvasFontRequest, CanvasPathTarget, CanvasPattern,
+    CanvasPatternRepeat, CanvasStrokeOptions, CanvasStrokeTextJob, CanvasStrokeTextOutput,
     CanvasTextOutput, CanvasTextRequest, MAX_CANVAS_COMMANDS, MAX_CANVAS_STATE_DEPTH,
 };
 mod pixels;
@@ -295,6 +296,27 @@ impl CanvasSurface {
         texts: &TextInputs,
         preparation_work: u64,
     ) -> Result<(), CompositeError> {
+        self.draw_with_preparation_work_guarded(
+            source,
+            local_to_canvas,
+            images,
+            texts,
+            preparation_work,
+            &AtomicBool::new(false),
+            self.limits,
+        )
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn draw_with_preparation_work_guarded(
+        &mut self,
+        source: &DomainSource,
+        local_to_canvas: Affine,
+        images: &ImageInputs,
+        texts: &TextInputs,
+        preparation_work: u64,
+        cancelled: &AtomicBool,
+        limits: CompositeLimits,
+    ) -> Result<(), CompositeError> {
         let inverse = source
             .root_transform()
             .inverse()
@@ -309,7 +331,7 @@ impl CanvasSurface {
             Size::new(self.pixels.width() as f32, self.pixels.height() as f32),
         );
         // Current + candidate surface are admitted before compositor scratch.
-        let mut budget = PixelBudget::new(self.limits, self.byte_len().saturating_mul(2))?;
+        let mut budget = PixelBudget::new(limits, self.byte_len().saturating_mul(2))?;
         budget.charge_input_work(preparation_work)?;
         budget.charge_input_work(self.pixels.width() as u64 * self.pixels.height() as u64 * 3)?;
         let frame = rasterize_with_inputs(
@@ -323,7 +345,7 @@ impl CanvasSurface {
                 device_scale: 1.,
             },
             &mut budget,
-            &AtomicBool::new(false),
+            cancelled,
         )?;
         let Some(frame) = frame else {
             return Ok(());

@@ -14,18 +14,48 @@ pub struct TextBoxShape {
     /// when ellipsis removes the hidden rows before paint.
     pub block_height: f32,
 }
-fn paragraph_layout(lines: &[WrappedLine], request: &TextMeasureRequest) -> (Vec<f32>, f32) {
+/// Reserve all offsets only after admitting their storage beside offsets that
+/// are still live. Callers fill at most `count` entries so the Vec never grows.
+fn reserve_line_offsets(
+    count: usize,
+    already_live_bytes: usize,
+    admit: &mut impl FnMut(usize) -> Result<(), String>,
+) -> Result<Vec<f32>, String> {
+    let total_bytes = |capacity: usize| {
+        capacity
+            .checked_mul(std::mem::size_of::<f32>())
+            .and_then(|bytes| already_live_bytes.checked_add(bytes))
+            .ok_or_else(|| "text line-offset storage overflow".to_owned())
+    };
+    let planned_bytes = total_bytes(count)?;
+    // In particular, a rejecting quota is consulted before try_reserve_exact,
+    // even for a count that the allocator could not possibly represent.
+    admit(planned_bytes)?;
+    let mut offsets = Vec::new();
+    offsets
+        .try_reserve_exact(count)
+        .map_err(|_| "text line-offset allocation failed")?;
+    // Vec exposes actual capacity; do not silently assume reserve_exact's
+    // minimum capacity is an exact allocator guarantee.
+    let actual_bytes = total_bytes(offsets.capacity())?;
+    if actual_bytes != planned_bytes {
+        admit(actual_bytes)?;
+    }
+    Ok(offsets)
+}
+fn paragraph_layout(
+    lines: &[WrappedLine],
+    request: &TextMeasureRequest,
+    admit: &mut impl FnMut(usize) -> Result<(), String>,
+) -> Result<(Vec<f32>, f32), String> {
+    let mut offsets = reserve_line_offsets(lines.len(), 0, admit)?;
     let mut rows = 0;
-    let offsets = lines
-        .iter()
-        .enumerate()
-        .map(|(paragraph, line)| {
-            let top = rows as f32 * request.line_height + paragraph as f32 * request.para_spacing;
-            rows += line.wrap_boundaries.len() + 1;
-            top
-        })
-        .collect();
-    (offsets, request.block_height(rows))
+    for (paragraph, line) in lines.iter().enumerate() {
+        let top = rows as f32 * request.line_height + paragraph as f32 * request.para_spacing;
+        rows += line.wrap_boundaries.len() + 1;
+        offsets.push(top);
+    }
+    Ok((offsets, request.block_height(rows)))
 }
 fn plain(request: &TextMeasureRequest, content: &str) -> TextMeasureRequest {
     TextMeasureRequest {
@@ -42,25 +72,39 @@ fn width(
     request: &TextMeasureRequest,
     content: &str,
     color: Hsla,
+    live_offset_bytes: usize,
+    check: &mut impl FnMut(&[WrappedLine], usize) -> Result<(), String>,
 ) -> Result<f32, String> {
-    Ok(shape_text(system, &plain(request, content), color)?
+    let lines = shape_text(system, &plain(request, content), color)?;
+    check(&lines, live_offset_bytes)?;
+    Ok(lines
         .iter()
         .map(|l| f32::from(l.size(px(request.line_height)).width))
         .fold(0., f32::max))
+}
+struct EllipsisRow {
+    available: f32,
+    force: bool,
+    live_offset_bytes: usize,
 }
 fn ellipsize(
     system: &WindowTextSystem,
     request: &TextMeasureRequest,
     row: &str,
     color: Hsla,
-    available: f32,
-    force: bool,
+    geometry: EllipsisRow,
+    check: &mut impl FnMut(&[WrappedLine], usize) -> Result<(), String>,
 ) -> Result<String, String> {
-    if !force && width(system, request, row, color)? <= available {
+    let EllipsisRow {
+        available,
+        force,
+        live_offset_bytes,
+    } = geometry;
+    if !force && width(system, request, row, color, live_offset_bytes, check)? <= available {
         return Ok(row.into());
     }
     let marker = "...";
-    if width(system, request, marker, color)? > available {
+    if width(system, request, marker, color, live_offset_bytes, check)? > available {
         return Ok(marker.into());
     }
     let boundaries = std::iter::once(0)
@@ -73,7 +117,7 @@ fn ellipsize(
     while low + 1 < high {
         let mid = low + (high - low) / 2;
         let candidate = format!("{}...", &row[..boundaries[mid]]);
-        if width(system, request, &candidate, color)? <= available {
+        if width(system, request, &candidate, color, live_offset_bytes, check)? <= available {
             low = mid;
         } else {
             high = mid;
@@ -91,6 +135,31 @@ pub fn shape_text_in_box(
     box_width: f32,
     box_height: f32,
 ) -> Result<TextBoxShape, String> {
+    shape_text_in_box_checked(
+        system,
+        request,
+        color,
+        overflow,
+        box_width,
+        box_height,
+        &mut |_, _| Ok(()),
+    )
+}
+
+/// The checker sees every actual source/probe/output shape, including hidden
+/// rows. `live_offset_bytes` counts the simultaneously live Flow line-offset
+/// vector capacities. An empty run slice also requests storage-only admission
+/// before either offset Vec is allocated. GPUI-owned shape/font caches have
+/// separate host ownership.
+pub(crate) fn shape_text_in_box_checked(
+    system: &WindowTextSystem,
+    request: &TextMeasureRequest,
+    color: Hsla,
+    overflow: TextOverflow,
+    box_width: f32,
+    box_height: f32,
+    check: &mut impl FnMut(&[WrappedLine], usize) -> Result<(), String>,
+) -> Result<TextBoxShape, String> {
     if !box_width.is_finite() || !box_height.is_finite() || box_width <= 0. || box_height <= 0. {
         return Err("invalid text box".into());
     }
@@ -98,7 +167,10 @@ pub fn shape_text_in_box(
         request.validate()?;
     }
     let original = shape_text(system, request, color)?;
-    let (line_offsets, block_height) = paragraph_layout(&original, request);
+    let (line_offsets, block_height) =
+        paragraph_layout(&original, request, &mut |bytes| check(&[], bytes))?;
+    let offset_bytes = line_offsets.capacity() * std::mem::size_of::<f32>();
+    check(&original, offset_bytes)?;
     if !block_height.is_finite() || line_offsets.iter().any(|offset| !offset.is_finite()) {
         return Err("text line height overflow".into());
     }
@@ -179,8 +251,12 @@ pub fn shape_text_in_box(
             request,
             row,
             color,
-            box_width,
-            vertical_overflow && index + 1 == visible,
+            EllipsisRow {
+                available: box_width,
+                force: vertical_overflow && index + 1 == visible,
+                live_offset_bytes: offset_bytes,
+            },
+            check,
         )?;
         changed |= value != *row;
         clipped.push(value);
@@ -201,9 +277,65 @@ pub fn shape_text_in_box(
     if output_glyphs > 8192 {
         return Err("ellipsis output glyph limit (8192)".into());
     }
+    let output_count = visible.min(rows.len());
+    let mut output_offsets =
+        reserve_line_offsets(output_count, offset_bytes, &mut |bytes| check(&[], bytes))?;
+    for (_, top) in rows.iter().take(visible) {
+        output_offsets.push(*top);
+    }
+    check(
+        &lines,
+        offset_bytes + output_offsets.capacity() * std::mem::size_of::<f32>(),
+    )?;
     Ok(TextBoxShape {
         lines,
-        line_offsets: rows.iter().take(visible).map(|(_, top)| *top).collect(),
+        line_offsets: output_offsets,
         block_height,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::reserve_line_offsets;
+
+    #[test]
+    fn line_offset_quota_rejects_before_impossible_allocation() {
+        // This count has a checked usize byte length, but exceeds Vec's isize
+        // allocation limit. The admission error must win before any allocation.
+        let impossible_count = isize::MAX as usize / std::mem::size_of::<f32>() + 1;
+        let mut calls = 0;
+        let error = reserve_line_offsets(impossible_count, 12, &mut |bytes| {
+            calls += 1;
+            assert!(bytes > isize::MAX as usize);
+            Err("rejected before allocation".into())
+        })
+        .unwrap_err();
+        assert_eq!(error, "rejected before allocation");
+        assert_eq!(calls, 1);
+    }
+
+    #[test]
+    fn line_offset_admission_includes_both_live_vectors_and_checked_sizes() {
+        let mut original = reserve_line_offsets(3, 0, &mut |bytes| {
+            assert_eq!(bytes, 12);
+            Ok(())
+        })
+        .unwrap();
+        original.extend([0., 24., 48.]);
+        let live_bytes = original.capacity() * std::mem::size_of::<f32>();
+        let error = reserve_line_offsets(1, live_bytes, &mut |bytes| {
+            assert_eq!(bytes, live_bytes + 4);
+            Err("combined offset quota".into())
+        })
+        .unwrap_err();
+        assert_eq!(error, "combined offset quota");
+        assert_eq!(original, [0., 24., 48.]);
+        for (count, live) in [(usize::MAX, 0), (1, usize::MAX)] {
+            let error = reserve_line_offsets(count, live, &mut |_| {
+                panic!("overflow must fail before admission or allocation")
+            })
+            .unwrap_err();
+            assert_eq!(error, "text line-offset storage overflow");
+        }
+    }
 }
