@@ -1,0 +1,132 @@
+{
+  "recorded_utc": "2026-10-03T08:05:13.890760+00:00",
+  "scope": "Bounded scale-fixed native fixture compilation and independent CPU/headless prevalidation; physical acceptance pending",
+  "production_remote_commit": "981e991817b4465112341b2d2b7ad680bea24920",
+  "freeze_directory": "/workspace/shared/scale-fixed-native-validation-20261003T0802Z",
+  "binary": {
+    "path": "scale_fixed_strokes",
+    "bytes": 179838032,
+    "sha256": "3124b384ac8a56f6c43472a7eddc53eeea2e571c881459e76b40db21dd129a0e",
+    "mode": 493,
+    "mtime_ns": 1791014440456167409,
+    "actual_link_inputs": 502
+  },
+  "source_archive_sha256": "774b2f77cdb257552d7a7babf2d7aea30be3ed84e648543c26275320d5b2314b",
+  "actual_link_inputs": 502,
+  "before_after_archive_match": true,
+  "logs": {
+    "fixture-final-clippy": {
+      "receipt": "/workspace/shared/scale-fixed-native-validation-20261003T0802Z/prevalidation/fixture-final-clippy-receipt.json",
+      "receipt_sha256": "1c132f8e813809807764c460eaa03549f321797516af42a8384cde05904f29c7",
+      "log_sha256": "6a5e670f7abaa5075846e5e24099cf9cdead5f3e606816be530204278286f3f8",
+      "command": "cargo clippy --locked --offline -p gpui-flow -p flow-studio --features gpui-flow/canvas-stroke-text,flow-studio/outline-font-binding-x11 --bin scale_fixed_strokes -- -D warnings",
+      "started_utc": "2026-10-03T08:00:36.905138+00:00",
+      "before_bytes": 12923179008,
+      "stop_floor_bytes": 3355443200,
+      "hard_reserve_bytes": 3221225472,
+      "exit_code": 0,
+      "ended_utc": "2026-10-03T08:00:37.906645+00:00",
+      "after_bytes": 12923174912,
+      "lowest_observed_free_bytes": 12923174912
+    },
+    "fixture-final-build": {
+      "receipt": "/workspace/shared/scale-fixed-native-validation-20261003T0802Z/prevalidation/fixture-final-build-receipt.json",
+      "receipt_sha256": "525482f2f11ea0e40855eb5a86f2cc4f186ae744363cafd5bfafe1ee9b4cd4b7",
+      "log_sha256": "02162e6995594bb4ba16ba437a6f5dcdfca395b8a95fd259a468b6f57a67289e",
+      "command": "cargo build --locked --offline -p gpui-flow -p flow-studio --features gpui-flow/canvas-stroke-text,flow-studio/outline-font-binding-x11 --bin scale_fixed_strokes",
+      "started_utc": "2026-10-03T08:00:37.936328+00:00",
+      "before_bytes": 12923170816,
+      "stop_floor_bytes": 3355443200,
+      "hard_reserve_bytes": 3221225472,
+      "exit_code": 0,
+      "ended_utc": "2026-10-03T08:00:40.689031+00:00",
+      "after_bytes": 12923142144,
+      "lowest_observed_free_bytes": 12768776192
+    },
+    "headless-final": {
+      "receipt": "/workspace/shared/scale-fixed-native-validation-20261003T0802Z/prevalidation/headless-final-receipt.json",
+      "receipt_sha256": "cd560fb5d6029aaa29c12b0594b3745352b8f47509a2658a6cb0b22f3db1b2f6",
+      "log_sha256": "be6105d071b21a930947fa4a1a978cef2a0d751ed2974cb71d2d657d5805bf07",
+      "command": "FLOW_SCALE_FIXED_EVIDENCE_DIR=/workspace/shared/scale-fixed-fixture-validation/helper-data-final /workspace/shared/rust-target-native/debug/scale_fixed_strokes --headless-tour",
+      "started_utc": "2026-10-03T08:01:19.993552+00:00",
+      "before_bytes": 12923047936,
+      "stop_floor_bytes": 3355443200,
+      "hard_reserve_bytes": 3221225472,
+      "exit_code": 0,
+      "ended_utc": "2026-10-03T08:01:20.244222+00:00",
+      "after_bytes": 12922986496,
+      "lowest_observed_free_bytes": 12922986496
+    },
+    "cpu-final": {
+      "receipt": "/workspace/shared/scale-fixed-native-validation-20261003T0802Z/prevalidation/cpu-final-receipt.json",
+      "receipt_sha256": "5abe574e8c555dfe09f783e0715f25bd874f21d9323f87d17353fc414a7b6bb9",
+      "log_sha256": "ad8634dae6852649768745b223178f049a5d263ad31a16e84a51124991c8c43c",
+      "command": "FLOW_SCALE_FIXED_EVIDENCE_DIR=/workspace/shared/scale-fixed-fixture-validation/helper-data-final /workspace/shared/rust-target-native/debug/scale_fixed_strokes --cpu-tour",
+      "started_utc": "2026-10-03T08:01:20.269852+00:00",
+      "before_bytes": 12922982400,
+      "stop_floor_bytes": 3355443200,
+      "hard_reserve_bytes": 3221225472,
+      "exit_code": 0,
+      "ended_utc": "2026-10-03T08:01:23.272570+00:00",
+      "after_bytes": 12922535936,
+      "lowest_observed_free_bytes": 12922535936
+    }
+  },
+  "headless": {
+    "cases": 6,
+    "zooms_each": 3,
+    "native_application_created": false,
+    "other_gates": [
+      "readonly LoadScene denial",
+      "host edit and exact Undo/Redo",
+      "navigation source invariance",
+      "typed precision rejection and atomicity",
+      "candidate-context Fit and constrained Fit"
+    ]
+  },
+  "cpu": {
+    "canonical_exports": 5,
+    "logical_scale_dpr_pairs": [
+      [
+        1,
+        1
+      ],
+      [
+        0.5,
+        1
+      ],
+      [
+        2,
+        1
+      ],
+      [
+        1,
+        2
+      ],
+      [
+        2,
+        2
+      ]
+    ],
+    "independent_pillow_checks": 45,
+    "independent_pillow_passed": 45,
+    "gpu_readback": false
+  },
+  "audit_correction": {
+    "initial_passed": 44,
+    "initial_total": 45,
+    "cause": "Auditor initially assumed all output alpha opaque, but public exact crop205*.5=102.5 requires225last-row alpha128 bytes in225x103 output. Corrected auditor computes exact crop coverage; original audit and PNG bytes retained. No renderer change or relaxed width tolerance."
+  },
+  "pointer_diagnostics": {
+    "actual_pick_tolerance_screen_pixels": 4,
+    "strict_probe_tolerance": 0,
+    "near_edge_picks_do_not_establish_painted_coverage": true
+  },
+  "native": {
+    "status": "pending",
+    "physical_matrix_rows": 14,
+    "main_and_reopen_logs_separate": true,
+    "route_labels": "intent only; no framebuffer proof"
+  },
+  "ledger_status": "unchanged32bounded_verified10partial3not_started"
+}
