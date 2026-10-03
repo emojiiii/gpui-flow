@@ -14,3 +14,15 @@ serde_json.workspace = true
 image.workspace = true
 # Independent SVG byte readback for the scene_export fixture; already locked.
 resvg = { version = "=0.46.0", default-features = false, features = ["raster-images"] }
+
+# The fixture is absent from ordinary Studio builds. Registration-only is useful
+# for the headless helper tour; native capability requires explicit Linux opt-in.
+[features]
+outline-font-binding = ["gpui-flow-text/static-outline-registration"]
+outline-font-binding-x11 = ["outline-font-binding", "gpui-flow-text/static-outline-x11"]
+outline-font-binding-wayland = ["outline-font-binding", "gpui-flow-text/static-outline-wayland"]
+
+[[bin]]
+name = "outline_font_binding"
+path = "src/bin/outline_font_binding.rs"
+required-features = ["outline-font-binding"]
