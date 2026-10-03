@@ -175,11 +175,12 @@ impl DisplayObject {
         }
         bounds
     }
-    /// Conservative local visual bounds, including outer shadows.
+    /// Analytic local visual bounds, including outer shadows and foreground
+    /// blur. Raster support includes additional view-dependent pixel guards.
     /// Do not use these for picking, ItemBox::Stroke, layout or selection.
     pub fn effect_bounds(&self) -> Option<Bounds> {
         self.paint_bounds()
-            .map(|b| self.style.expand_shadow_bounds(b, Affine::IDENTITY))
+            .map(|b| self.style.expand_effect_bounds(b, Affine::IDENTITY))
     }
     pub fn validate(&self) -> Result<(), String> {
         if self.id.as_str().trim().is_empty() {

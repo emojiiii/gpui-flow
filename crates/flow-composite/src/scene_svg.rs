@@ -37,6 +37,9 @@ pub(crate) fn validate(source: &DomainSource) -> Result<(), CompositeError> {
         ) {
             return Err(CompositeError::UnsupportedShape("SVG blend mode".into()));
         }
+        if o.style.has_blur() {
+            return Err(CompositeError::UnsupportedShape("SVG blur".into()));
+        }
         if o.style.has_grayscale() {
             return Err(CompositeError::UnsupportedShape("SVG grayscale".into()));
         }

@@ -107,9 +107,17 @@ pub struct ChangeSet {
     pub structure: Vec<StructureChange>,
     pub lifecycle: Vec<LifecycleEvent>,
     pub dirty: BTreeMap<DisplayId, DirtyFlags>,
-    /// Conservative world-space damage. CPU preparation only; a backend must
-    /// explicitly consume this before claiming partial painting.
+    /// Analytic world-space damage. CPU preparation only; a backend must
+    /// explicitly consume this before claiming partial painting, and honor
+    /// `full_paint_invalidation` when view-dependent support cannot fit here.
     pub damage: Vec<Bounds>,
+    /// Redraw the complete scene/owning paint domains. Foreground blur has
+    /// accumulated device-pixel support that these world-space rectangles do
+    /// not encode. Defaults to false for unchanged or unfiltered documents.
+    /// SceneView already rebuilds complete domain snapshots and never uses
+    /// `damage` as a partial raster crop; future partial-paint consumers must
+    /// bypass their damage rectangles when this is true.
+    pub full_paint_invalidation: bool,
     pub layout: LayoutStats,
 }
 impl ChangeSet {
@@ -339,6 +347,22 @@ pub(crate) fn diff(
             *change.dirty.entry(parent.clone()).or_default() |= DirtyFlags::STRUCTURE;
         }
     }
+    // A full scene invalidation also covers removed/disabled filters and
+    // descendant changes hidden by fixed-size container bounds. Keeping this
+    // deliberately broad avoids claiming an exact view-independent pixel halo.
+    change.full_paint_invalidation = change.dirty.values().any(|flags| {
+        flags.intersects(
+            DirtyFlags::PAINT
+                | DirtyFlags::TRANSFORM
+                | DirtyFlags::GEOMETRY
+                | DirtyFlags::OPACITY
+                | DirtyFlags::ORDER
+                | DirtyFlags::STRUCTURE,
+        )
+    }) && old
+        .nodes()
+        .chain(new.nodes())
+        .any(|node| node.object.style.has_blur());
     Ok(change)
 }
 fn record_property(

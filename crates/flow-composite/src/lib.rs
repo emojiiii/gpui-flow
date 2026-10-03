@@ -4,6 +4,7 @@
 //! exhausted budgets return an error before an output can be published. Native
 //! custom renderers must remain outside these domains. Image and text ink pixels
 //! are supplied by the host, never fetched, decoded or shaped by this crate.
+mod blur;
 mod canvas_surface;
 mod image;
 mod nonseparable;
@@ -110,6 +111,8 @@ pub enum CompositeError {
     UnsupportedShadowBackdrop(DisplayId),
     /// Grayscale would sever a PassThrough descendant from its backdrop.
     UnsupportedGrayscaleBackdrop(DisplayId),
+    /// Foreground blur would sever a PassThrough descendant from its backdrop.
+    UnsupportedBlurBackdrop(DisplayId),
     InvalidGeometry(String),
     TooLarge,
     WorkingSetLimit,
@@ -214,3 +217,6 @@ mod scale_fixed_tests;
 
 #[cfg(test)]
 mod grayscale_tests;
+
+#[cfg(test)]
+mod blur_tests;

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "ledger_version": "v1-review",
   "review": "已锁定45个能力单元和有限验收集合；审阅版，所有扩展/技术依赖显式记录",
-  "as_of": "2026-10-03T10:00:50.555139+00:00",
+  "as_of": "2026-10-03T10:33:24.383243+00:00",
   "source_snapshot": "761b626b5c9c77de1c2fdf5fe4c3751114ffb1e7",
   "upstream": {
     "leafer_ui": "1e11641d3ea6b0211c83447268a90b8d58feec25",
@@ -482,7 +482,7 @@
       "reference_doc": "docs/multiple-shadows.md",
       "implementation_snapshot": "99392f7c35f956f8765ed5730423df19e3d474cd",
       "evidence_commit": null,
-      "automatic": "现有shadow/inner/group回归通过；历史grayscale1701 headless/10既有ignored、UI279及strict通过；新主机31聚焦与115独立CPU PNG检查通过，非新全套",
+      "automatic": "foreground blur最终1741 headless/10既有ignored、composite428（已包含）、UI284及两图strict/format通过；UI后仅新增composite测试，527其他输入不变，留有差异证明",
       "native": "新0927Z独立15行+reopen、两窗exit0，70点击/73事件/46原JPEG，286/286审计；保留278/286审计器假设错误初稿及行9 StaleFrame截图，后续同revision清理",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/effect/src/index.ts",
@@ -491,12 +491,14 @@
       "technical_dependencies": [
         "background blur须读取拥有的backdrop，不能读取任意外部宿主画面"
       ],
-      "progress": "有界scalar grayscale源码与限定原生已验；公开geometry availability非CPU上传generation，JPEG非无损GPU像素。spread/box/scale-fixed shadow与blur/backgroundBlur仍须完成，整项partial，33/9/3不变",
+      "progress": "有界scalar grayscale已过限定原生；foreground blur完整源/预算/consumer源码检查通过，独立原生待验。保留旧A8 tiny-sigma阴影偏移；spread/box/scale-fixed shadow和backgroundBlur仍须完成，整项partial，33/9/3不变",
       "headless_increment_summary": "docs/validation/2026-10-03-grayscale-source-summary.json",
       "grayscale_contract": "docs/grayscale.md",
       "grayscale_native_report": "docs/grayscale-native.md",
       "grayscale_native_summary": "docs/validation/2026-10-03-grayscale-native-summary.json",
-      "grayscale_native_source_commit": "761b626b5c9c77de1c2fdf5fe4c3751114ffb1e7"
+      "grayscale_native_source_commit": "761b626b5c9c77de1c2fdf5fe4c3751114ffb1e7",
+      "foreground_blur_contract": "docs/foreground-blur.md",
+      "foreground_blur_source_summary": "docs/validation/2026-10-03-foreground-blur-source-summary.json"
     },
     {
       "id": "APP-05",

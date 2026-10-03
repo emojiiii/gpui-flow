@@ -86,6 +86,7 @@ impl RenderObject {
             || matches!(&self.object.shape, Shape::Image(image)
                 if image.source_crop.is_some()
                     || (image.is_rounded() && image.fit == scene::display::ImageFit::Contain))
+            || self.object.style.has_blur()
             || self.object.style.has_grayscale()
             || self.object.style.blend_mode != scene::BlendMode::PassThrough
             || self.object.mask != scene::MaskMode::None
@@ -292,6 +293,28 @@ mod resource_compatibility_tests {
                 .any(|issue| issue.feature == UnsupportedFeature::CompositingDomain)
         );
         object.object.style.grayscale = 0.;
+        assert!(object.native_renderable());
+    }
+
+    #[::core::prelude::v1::test]
+    fn blur_direct_native_path_rejects_active_and_accepts_zero() {
+        let mut object = RenderObject {
+            object: DisplayObject::new("r", scene::display::Rect::new(20., 20.)),
+            screen_transform: scene::Affine::IDENTITY,
+            viewport_transform: scene::Affine::IDENTITY,
+            opacity: 1.,
+            clips: vec![],
+        };
+        assert!(object.native_renderable());
+        object.object.style.blur = 0.5;
+        assert!(!object.native_renderable());
+        assert!(
+            object
+                .diagnostics()
+                .iter()
+                .any(|issue| issue.feature == UnsupportedFeature::CompositingDomain)
+        );
+        object.object.style.blur = 0.;
         assert!(object.native_renderable());
     }
 

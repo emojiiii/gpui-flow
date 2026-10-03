@@ -12,8 +12,9 @@ pub struct LayoutEntry {
     pub content_bounds: Option<Bounds>,
     pub local_bounds: Option<Bounds>,
     pub world_bounds: Option<Bounds>,
-    /// Conservative world-space visual bounds, including descendant shadows.
-    /// Kept separate from geometric layout, selection and hit bounds.
+    /// Analytic world-space visual bounds, including descendant effects.
+    /// Raster support also includes view-dependent guards. Kept separate from
+    /// geometric layout, selection and hit bounds.
     pub effect_bounds: Option<Bounds>,
     pub opacity: f32,
     pub visible: bool,
@@ -186,7 +187,7 @@ impl Builder<'_> {
             return Err(SceneError::InvalidGeometry("cached bounds overflow".into()));
         }
         // Compose descendants (including their effects) before expanding this
-        // parent's shadow. Geometric bounds remain deliberately unchanged.
+        // parent's shadows and blur. Geometric bounds remain unchanged.
         entry.effect_bounds = entry.world_bounds;
         for child in &children {
             if self.scene.get(child).expect("child").object.eraser != EraserMode::None {
@@ -203,7 +204,7 @@ impl Builder<'_> {
         }
         entry.effect_bounds = entry
             .effect_bounds
-            .map(|b| object.style.expand_shadow_bounds(b, entry.world_transform));
+            .map(|b| object.style.expand_effect_bounds(b, entry.world_transform));
         if entry.effect_bounds.is_some_and(|b| !b.is_valid()) {
             return Err(SceneError::InvalidGeometry(
                 "cached effect bounds overflow".into(),
@@ -233,6 +234,7 @@ impl Builder<'_> {
             || (descendant_dirty
                 && (object.style.has_visible_shadows()
                     || object.style.has_visible_inner_shadows()
+                    || object.style.has_blur()
                     || object.style.has_grayscale()))
             || old.is_none_or(|e| e.effect_bounds != entry.effect_bounds)
         {

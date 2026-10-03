@@ -278,6 +278,74 @@ fn intersection(a: Bounds, b: Bounds) -> Option<Bounds> {
 mod tests {
     use super::*;
     #[test]
+    fn blur_on_text_or_ancestor_requests_complete_offscreen_text_space() {
+        use gpui_flow_scene::{DisplayObject, Scene, Style, display};
+        for ancestor in [false, true] {
+            for rotated in [false, true] {
+                let mut scene = Scene::new();
+                scene
+                    .insert(
+                        DisplayObject::new("g", display::Group::new()).with_style(Style {
+                            blur: if ancestor { 2. } else { 0. },
+                            ..Default::default()
+                        }),
+                        None,
+                        None,
+                    )
+                    .unwrap();
+                let world = if rotated {
+                    Affine::new(0., 2., -2., 0., -200., -200.)
+                } else {
+                    Affine::translation(-200., -200.) * Affine::scale(2., 2.)
+                };
+                scene
+                    .insert(
+                        DisplayObject::new(
+                            "text",
+                            display::Text::new("offscreen ink", Size::new(70., 30.)),
+                        )
+                        .with_transform(world)
+                        .with_style(Style {
+                            blur: if ancestor { 0. } else { 2. },
+                            ..Default::default()
+                        }),
+                        Some("g".into()),
+                        None,
+                    )
+                    .unwrap();
+                let source = gpui_flow_composite::capture_subtree(
+                    &scene,
+                    &"g".into(),
+                    CompositeLimits::default(),
+                )
+                .unwrap();
+                let sources = source.text_sources();
+                assert_eq!(sources.len(), 1);
+                let (object, matrix, full_source) = sources[0];
+                assert!(full_source);
+                let Shape::Text(text) = &object.shape else {
+                    unreachable!()
+                };
+                let bounds = Bounds::new(Point::ZERO, Size::new(20., 20.));
+                let viewport = RasterViewport {
+                    world_to_screen: Affine::IDENTITY,
+                    canvas_bounds: bounds,
+                    content_mask: bounds,
+                    device_scale: 1.25,
+                };
+                let space = transform::space(matrix, text.content_bounds(), viewport, full_source)
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(space.clip.size, Size::new(140., 60.));
+                if rotated {
+                    assert_eq!(space.exact_local_clip, Some(text.content_bounds()));
+                } else {
+                    assert_eq!(space.clip.origin, Point::new(-200., -200.));
+                }
+            }
+        }
+    }
+    #[test]
     fn effect_text_source_keeps_offscreen_ink_before_destination_clipping() {
         let viewport = RasterViewport {
             world_to_screen: Affine::IDENTITY,

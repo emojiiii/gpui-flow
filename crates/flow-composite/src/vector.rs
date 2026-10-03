@@ -8,6 +8,9 @@ use tiny_skia::{Path, PathBuilder, Transform};
 
 pub(crate) struct PreparedNode {
     pub bounds: Option<[f64; 4]>,
+    pub world: Affine,
+    pub blur: f32,
+    pub device: Option<crate::blur::DeviceNode>,
     pub shadows: Vec<crate::shadow::PreparedShadow>,
     pub inner_shadows: Vec<crate::shadow::PreparedShadow>,
     pub visible: bool,
@@ -34,6 +37,27 @@ pub(crate) enum CompositeOperation {
     DestinationOut,
 }
 impl PreparedNode {
+    pub fn outside(
+        &self,
+        world_to_layer: Affine,
+        origin: [f64; 2],
+        width: u32,
+        height: u32,
+    ) -> bool {
+        if let Some(device) = &self.device {
+            return device.completed.is_none_or(|b| {
+                b[2] <= origin[0]
+                    || b[3] <= origin[1]
+                    || b[0] >= origin[0] + width as f64
+                    || b[1] >= origin[1] + height as f64
+            });
+        }
+        self.bounds.is_none_or(|b| {
+            let b = crate::raster::transformed(b, world_to_layer);
+            b[2] < -1. || b[3] < -1. || b[0] > width as f64 + 1. || b[1] > height as f64 + 1.
+        })
+    }
+
     pub fn operation(&self) -> CompositeOperation {
         if self.eraser == EraserMode::Pixel {
             CompositeOperation::DestinationOut
@@ -51,6 +75,7 @@ impl PreparedNode {
             || !self.shadows.is_empty()
             || !self.inner_shadows.is_empty()
             || self.grayscale > 0.
+            || self.blur > 0.
             || self.opacity < 1.
             || self.blend != BlendMode::PassThrough
     }
@@ -105,6 +130,7 @@ pub(crate) struct Preparation {
     pub lowered_geometry: Option<gpui_flow_scene::StrokeGeometryBudget>,
     pub has_shadows: bool,
     pub has_grayscale: bool,
+    pub has_blur: bool,
     pub has_inner_shadows: bool,
     pub has_image_clips: bool,
     pub has_erasers: bool,
@@ -342,6 +368,9 @@ impl Preparation {
         if !object.visible || object.style.opacity == 0. {
             return Ok(PreparedNode {
                 bounds: None,
+                world: source.world_transform,
+                blur: 0.,
+                device: None,
                 shadows: Vec::new(),
                 inner_shadows: Vec::new(),
                 visible: object.visible,
@@ -399,6 +428,9 @@ impl Preparation {
             self.bounds = previous_bounds;
             return Ok(PreparedNode {
                 bounds,
+                world: source.world_transform,
+                blur: 0.,
+                device: None,
                 shadows: vec![],
                 inner_shadows: vec![],
                 visible: object.visible,
@@ -418,6 +450,7 @@ impl Preparation {
             });
         }
         self.has_grayscale |= object.style.has_grayscale();
+        self.has_blur |= object.style.has_blur();
         let mut paints = Vec::new();
         let mut fill_count = 0;
         let mut image_paint = None;
@@ -662,12 +695,14 @@ impl Preparation {
                     current[2].max(ink_bounds[2] + dx + halo),
                     current[3].max(ink_bounds[3] + dy + halo),
                 ]);
-                shadows.push(crate::shadow::PreparedShadow {
-                    effect,
-                    world,
-                    ink_bounds,
-                });
             }
+            // Retain the effect even if legacy world clipping found no ink.
+            // A child's device blur halo can enter this node's child clip.
+            shadows.push(crate::shadow::PreparedShadow {
+                effect,
+                world: source.world_transform,
+                ink_bounds,
+            });
         }
         let mut inner_shadows = Vec::new();
         if object.style.has_inner_shadows() {
@@ -680,13 +715,11 @@ impl Preparation {
             .filter(|s| s.is_visible())
         {
             self.has_inner_shadows = true;
-            if let Some(ink_bounds) = ink_bounds {
-                inner_shadows.push(crate::shadow::PreparedShadow {
-                    effect,
-                    world: source.world_transform,
-                    ink_bounds,
-                });
-            }
+            inner_shadows.push(crate::shadow::PreparedShadow {
+                effect,
+                world: source.world_transform,
+                ink_bounds,
+            });
         }
         self.bounds = match (
             previous_bounds,
@@ -706,6 +739,9 @@ impl Preparation {
         };
         Ok(PreparedNode {
             bounds: node_bounds,
+            world: source.world_transform,
+            blur: object.style.blur,
+            device: None,
             shadows,
             inner_shadows,
             visible: object.visible,

@@ -123,15 +123,65 @@ fn grayscale_pixels(
     Ok(())
 }
 
+// image 0.25.10 trims exact-zero Gaussian ends. Its one-tap ring path
+// incorrectly reads its forced one-pixel row padding as input. Specialize that
+// exact identity kernel; never clamp sigma, alter nonzero weights or change the
+// positive effect's source, isolation or conservative admission.
+fn blur_pixels(
+    source: Pixmap,
+    sigma: f32,
+    mut check: impl FnMut() -> Result<(), CompositeError>,
+) -> Result<Pixmap, CompositeError> {
+    check()?;
+    let adjacent = (-0.5f32 * (1f32 / sigma).powf(2.)).exp()
+        * (1f32 / ((2f32 * std::f32::consts::PI).sqrt() * sigma));
+    if adjacent == 0. {
+        check()?;
+        return Ok(source);
+    }
+    let (width, height) = (source.width(), source.height());
+    let input = image::RgbaImage::from_raw(width, height, source.take())
+        .ok_or(CompositeError::AllocationFailed)?;
+    // Explicitly encoded-sRGB premultiplied RGBA, including alpha. Ownership
+    // transfers avoid a second full byte-plane or straight-alpha roundtrip.
+    let output = image::imageops::blur(&input, sigma);
+    check()?;
+    drop(input);
+    let mut output = output.into_raw();
+    for row in output.chunks_exact_mut(width as usize * 4) {
+        check()?;
+        for pixel in row.as_chunks_mut::<4>().0 {
+            let alpha = pixel[3];
+            for c in &mut pixel[..3] {
+                *c = (*c).min(alpha);
+            }
+        }
+    }
+    Pixmap::from_vec(
+        output,
+        tiny_skia::IntSize::from_wh(width, height).ok_or(CompositeError::TooLarge)?,
+    )
+    .ok_or(CompositeError::AllocationFailed)
+}
+
 struct Raster<'a> {
     width: u32,
     height: u32,
     pixels: u64,
     world_to_layer: Affine,
+    origin: [f64; 2],
+    physical: Option<crate::blur::PhysicalSpace>,
     budget: &'a mut PixelBudget,
     cancelled: &'a AtomicBool,
 }
 impl Raster<'_> {
+    fn local_to_layer(&self, world: Affine) -> Affine {
+        self.physical.map_or_else(
+            || self.world_to_layer * world,
+            |a| a.local(world, self.origin),
+        )
+    }
+
     fn backdrop(
         &mut self,
         target: &mut Pixmap,
@@ -243,29 +293,41 @@ impl Raster<'_> {
         operation: CompositeOperation,
         clip: Option<&Mask>,
     ) -> Result<(), CompositeError> {
+        self.composite_at(target, source, opacity, operation, clip, [0, 0])
+    }
+    fn composite_at(
+        &mut self,
+        target: &mut Pixmap,
+        source: &Pixmap,
+        opacity: f32,
+        operation: CompositeOperation,
+        clip: Option<&Mask>,
+        offset: [i32; 2],
+    ) -> Result<(), CompositeError> {
         self.check()?;
         self.budget.write(self.pixels)?;
         let blend = match operation {
             CompositeOperation::DestinationOut => {
-                for (y, (dst, src)) in target
-                    .data_mut()
-                    .chunks_mut(self.width as usize * 4)
-                    .zip(source.data().chunks(self.width as usize * 4))
-                    .enumerate()
-                {
+                for y in 0..self.height {
                     self.check()?;
-                    for (x, (dst, src)) in dst
-                        .as_chunks_mut::<4>()
-                        .0
-                        .iter_mut()
-                        .zip(src.as_chunks::<4>().0)
-                        .enumerate()
-                    {
-                        let coverage = clip.map_or(255, |m| m.data()[y * self.width as usize + x]);
+                    let sy = y as i64 - offset[1] as i64;
+                    if sy < 0 || sy >= source.height() as i64 {
+                        continue;
+                    }
+                    for x in 0..self.width {
+                        let sx = x as i64 - offset[0] as i64;
+                        if sx < 0 || sx >= source.width() as i64 {
+                            continue;
+                        }
+                        let index = (y * self.width + x) as usize;
+                        let si = (sy as u32 * source.width() + sx as u32) as usize;
+                        let coverage = clip.map_or(255, |m| m.data()[index]);
                         let keep = 1.
-                            - f64::from(src[3]) / 255. * f64::from(opacity) * f64::from(coverage)
+                            - f64::from(source.data()[si * 4 + 3]) / 255.
+                                * f64::from(opacity)
+                                * f64::from(coverage)
                                 / 255.;
-                        for channel in dst {
+                        for channel in &mut target.data_mut()[index * 4..index * 4 + 4] {
                             *channel = (f64::from(*channel) * keep).round() as u8;
                         }
                     }
@@ -275,30 +337,38 @@ impl Raster<'_> {
             CompositeOperation::Blend(blend) => blend,
         };
         if crate::nonseparable::is_nonseparable(blend) {
-            for (index, (dst, src)) in target
-                .data_mut()
-                .as_chunks_mut::<4>()
-                .0
-                .iter_mut()
-                .zip(source.data().as_chunks::<4>().0.iter())
-                .enumerate()
-            {
-                if index % self.width as usize == 0 {
-                    self.check()?;
+            for y in 0..self.height {
+                self.check()?;
+                let sy = y as i64 - offset[1] as i64;
+                if sy < 0 || sy >= source.height() as i64 {
+                    continue;
                 }
-                crate::nonseparable::pixel(
-                    dst,
-                    src,
-                    opacity,
-                    clip.map_or(255, |mask| mask.data()[index]),
-                    blend,
-                );
+                for x in 0..self.width {
+                    let sx = x as i64 - offset[0] as i64;
+                    if sx < 0 || sx >= source.width() as i64 {
+                        continue;
+                    }
+                    let index = (y * self.width + x) as usize;
+                    let si = (sy as u32 * source.width() + sx as u32) as usize;
+                    let src: &[u8; 4] =
+                        source.data()[si * 4..si * 4 + 4].try_into().expect("pixel");
+                    let dst: &mut [u8; 4] = (&mut target.data_mut()[index * 4..index * 4 + 4])
+                        .try_into()
+                        .expect("pixel");
+                    crate::nonseparable::pixel(
+                        dst,
+                        src,
+                        opacity,
+                        clip.map_or(255, |mask| mask.data()[index]),
+                        blend,
+                    );
+                }
             }
             return Ok(());
         }
         target.draw_pixmap(
-            0,
-            0,
+            offset[0],
+            offset[1],
             source.as_ref(),
             &PixmapPaint {
                 opacity,
@@ -341,17 +411,14 @@ impl Raster<'_> {
         // Conservative, prepared ink bounds include strokes and descendants.
         // Keep an AA guard; skipping a mask's ink still leaves its run marker
         // in children(), so an offscreen alpha mask correctly masks everything.
-        if node.bounds.is_none_or(|b| {
-            let b = transformed(b, self.world_to_layer);
-            b[2] < -1.
-                || b[3] < -1.
-                || b[0] > self.width as f64 + 1.
-                || b[1] > self.height as f64 + 1.
-        }) {
+        if node.outside(self.world_to_layer, self.origin, self.width, self.height) {
             return Ok(());
         }
         if node.eraser == EraserMode::Path {
             return self.erase_path(node, target, clip);
+        }
+        if let Some(plan) = node.device.as_ref().and_then(|d| d.blur.as_ref()) {
+            return self.blur(node, plan, target, depth, clip);
         }
         if node.isolated() {
             if depth >= self.budget.limits.max_depth {
@@ -369,6 +436,58 @@ impl Raster<'_> {
         }
         Ok(())
     }
+    fn blur(
+        &mut self,
+        node: &PreparedNode,
+        plan: &crate::blur::BlurPlan,
+        target: &mut Pixmap,
+        depth: usize,
+        clip: Option<&Mask>,
+    ) -> Result<(), CompositeError> {
+        if depth >= self.budget.limits.max_depth {
+            return Err(CompositeError::NestingLimit);
+        }
+        self.check()?;
+        self.budget.reserve(plan.bytes())?;
+        self.budget.write(plan.work())?;
+        let p = &plan.surface;
+        let mut source = Pixmap::from_vec(
+            bytes(p.pixels * 4)?,
+            tiny_skia::IntSize::from_wh(p.width, p.height).ok_or(CompositeError::TooLarge)?,
+        )
+        .ok_or(CompositeError::AllocationFailed)?;
+        let mut scratch = Raster {
+            width: p.width,
+            height: p.height,
+            pixels: p.pixels,
+            world_to_layer: p.world_to_layer,
+            origin: p.origin,
+            physical: self.physical,
+            budget: self.budget,
+            cancelled: self.cancelled,
+        };
+        // Own shadow captures continue to omit own filters; descendants execute
+        // their complete node paths inside both original and final phase streams.
+        scratch.contents(node, &mut source, depth + 1, None, true)?;
+        let mut output = blur_pixels(source, plan.sigma, || scratch.check())?;
+        if node.grayscale > 0. {
+            scratch.grayscale(&mut output, node.grayscale)?;
+        }
+        self.composite_at(
+            target,
+            &output,
+            node.opacity,
+            node.operation(),
+            clip,
+            [
+                (p.origin[0] - self.origin[0]) as i32,
+                (p.origin[1] - self.origin[1]) as i32,
+            ],
+        )?;
+        drop(output);
+        self.budget.in_use -= plan.bytes();
+        Ok(())
+    }
     /// Homogeneous sRGB matrix on premultiplied bytes: alpha commutes with
     /// this matrix, so avoid a lossy straight-alpha byte roundtrip.
     fn grayscale(&mut self, layer: &mut Pixmap, amount: f32) -> Result<(), CompositeError> {
@@ -384,7 +503,7 @@ impl Raster<'_> {
         let Some(path) = &node.erase_path else {
             return Ok(());
         };
-        let a = self.world_to_layer * path.world;
+        let a = self.local_to_layer(path.world);
         if a.inverse().is_none() || transform(a).invert().is_none_or(|t| !t.is_finite()) {
             return Err(CompositeError::UnsupportedTransform);
         }
@@ -431,15 +550,15 @@ impl Raster<'_> {
         draw_shadow: bool,
     ) -> Result<(), CompositeError> {
         if draw_shadow {
-            for &shadow in &node.shadows {
-                self.shadow(node, shadow, target, depth, false)?;
+            for (index, &shadow) in node.shadows.iter().enumerate() {
+                self.shadow(node, shadow, index, target, depth, false)?;
             }
         }
         let (before, after) = node.paints.split_at(node.fill_count);
         self.paints(before, target, clip)?;
         if let Some(p) = &node.image {
             self.check()?;
-            let a = self.world_to_layer * p.world;
+            let a = self.local_to_layer(p.world);
             let texture = a * p.texture_to_local;
             for matrix in [a, texture] {
                 if matrix.inverse().is_none()
@@ -489,8 +608,8 @@ impl Raster<'_> {
         // Every layer samples the complete original phase stream, not whatever
         // has already been painted at this insertion point.
         if draw_shadow {
-            for &shadow in &node.inner_shadows {
-                self.shadow(node, shadow, target, depth, true)?;
+            for (index, &shadow) in node.inner_shadows.iter().enumerate() {
+                self.shadow(node, shadow, index, target, depth, true)?;
             }
         }
         self.paints(after, target, clip)?;
@@ -526,7 +645,7 @@ impl Raster<'_> {
     ) -> Result<(), CompositeError> {
         for p in paints {
             self.check()?;
-            let a = self.world_to_layer * p.world;
+            let a = self.local_to_layer(p.world);
             if a.inverse().is_none() || transform(a).invert().is_none_or(|t| !t.is_finite()) {
                 return Err(CompositeError::UnsupportedTransform);
             }
@@ -606,13 +725,30 @@ impl Raster<'_> {
         &mut self,
         node: &PreparedNode,
         shadow: crate::shadow::PreparedShadow,
+        index: usize,
         target: &mut Pixmap,
         depth: usize,
         inner: bool,
     ) -> Result<(), CompositeError> {
-        let plan = crate::shadow::SourcePlan::new(shadow, self.world_to_layer, self.budget.limits)?;
+        let plan = if let Some(device) = &node.device {
+            if inner {
+                &device.inner_shadows[index]
+            } else {
+                &device.shadows[index]
+            }
+            .clone()
+        } else {
+            crate::shadow::SourcePlan::new(shadow, self.world_to_layer, self.budget.limits)?
+        };
         let (width, height, pixels) = (plan.width, plan.height, plan.pixels);
-        let [x0, y0] = plan.origin;
+        let [x0, y0] = if node.device.is_some() {
+            [
+                plan.origin[0] - self.origin[0],
+                plan.origin[1] - self.origin[1],
+            ]
+        } else {
+            plan.origin
+        };
         let filter = &plan.filter;
         let scratch_bytes = filter.bytes(pixels, width);
         let filter_work = filter.work(pixels) + if inner { pixels * 2 } else { 0 };
@@ -631,6 +767,8 @@ impl Raster<'_> {
             height,
             pixels,
             world_to_layer: plan.world_to_layer,
+            origin: plan.origin,
+            physical: self.physical,
             budget: self.budget,
             cancelled: self.cancelled,
         };
@@ -829,8 +967,7 @@ impl Raster<'_> {
         let Some(path) = crate::vector::path(&shape)? else {
             return Ok(mask);
         };
-        let a = self.world_to_layer
-            * region.world_transform
+        let a = self.local_to_layer(region.world_transform)
             * Affine::translation(region.local_bounds.origin.x, region.local_bounds.origin.y);
         if a.inverse().is_none() || transform(a).invert().is_none_or(|t| !t.is_finite()) {
             return Err(CompositeError::UnsupportedTransform);
@@ -869,8 +1006,7 @@ impl Raster<'_> {
             let shape = Shape::Rect(clip.local_rect());
             let path = crate::vector::path(&shape)?
                 .ok_or_else(|| CompositeError::InvalidGeometry("empty clip".into()))?;
-            let a = self.world_to_layer
-                * clip.world_transform
+            let a = self.local_to_layer(clip.world_transform)
                 * Affine::translation(clip.local_bounds.origin.x, clip.local_bounds.origin.y);
             if a.inverse().is_none() || transform(a).invert().is_none_or(|t| !t.is_finite()) {
                 return Err(CompositeError::UnsupportedTransform);
@@ -1036,10 +1172,22 @@ fn rasterize_inner(
         }
         prep.logical_camera = Some(camera);
     }
-    let root = prep.node(&source.root, budget.limits, images, texts)?;
+    let mut root = prep.node(&source.root, budget.limits, images, texts)?;
+    let physical = crate::blur::PhysicalSpace {
+        camera: viewport.world_to_screen,
+        scale: viewport.device_scale as f64,
+    };
+    if prep.has_blur {
+        crate::blur::resolve(&mut root, physical, budget.limits, cancelled)?;
+    }
     let scale = viewport.device_scale as f64;
     let b = if source.canvas.is_some() {
         bounds(viewport.canvas_bounds)
+    } else if prep.has_blur {
+        let Some(b) = root.device.as_ref().and_then(|d| d.completed) else {
+            return Ok(None);
+        };
+        b.map(|v| v / scale)
     } else {
         let Some(world_bounds) = prep.bounds else {
             return Ok(None);
@@ -1099,19 +1247,25 @@ fn rasterize_inner(
     let (width, height) = (w as u32, h as u32);
     let pixels = width as u64 * height as u64;
     let a = viewport.world_to_screen;
-    let world_to_layer = Affine::new(
-        (a.a as f64 * scale) as f32,
-        (a.b as f64 * scale) as f32,
-        (a.c as f64 * scale) as f32,
-        (a.d as f64 * scale) as f32,
-        (a.tx as f64 * scale - x0) as f32,
-        (a.ty as f64 * scale - y0) as f32,
-    );
+    let world_to_layer = if prep.has_blur {
+        physical.local(Affine::IDENTITY, [x0, y0])
+    } else {
+        Affine::new(
+            (a.a as f64 * scale) as f32,
+            (a.b as f64 * scale) as f32,
+            (a.c as f64 * scale) as f32,
+            (a.d as f64 * scale) as f32,
+            (a.tx as f64 * scale - x0) as f32,
+            (a.ty as f64 * scale - y0) as f32,
+        )
+    };
     let mut raster = Raster {
         width,
         height,
         pixels,
         world_to_layer,
+        origin: [x0, y0],
+        physical: prep.has_blur.then_some(physical),
         budget,
         cancelled,
     };
@@ -1120,6 +1274,7 @@ fn rasterize_inner(
         || prep.has_image_clips
         || prep.has_erasers
         || prep.has_grayscale
+        || prep.has_blur
     {
         // No domain RGBA, mask, or filter scratch has been allocated yet.
         admission::admit(&raster, &root, source)?;
@@ -1169,5 +1324,76 @@ mod grayscale_loop_tests {
             assert_eq!(*pixel, [27, 27, 27, 128]);
         }
         assert_eq!(&layer.data()[40..], &original[40..]);
+    }
+}
+
+#[cfg(test)]
+mod blur_loop_tests {
+    use super::*;
+    fn source() -> Pixmap {
+        let mut p = Pixmap::new(8, 8).unwrap();
+        p.fill(tiny_skia::Color::from_rgba8(255, 40, 80, 128));
+        p
+    }
+    #[test]
+    fn blur_exact_f32_one_tap_transition_corrects_identity_and_preserves_nonzero_kernel() {
+        let adjacent = |sigma: f32| {
+            (-0.5f32 * (1f32 / sigma).powf(2.)).exp()
+                * (1f32 / ((2f32 * std::f32::consts::PI).sqrt() * sigma))
+        };
+        let (mut lo, mut hi) = (0.001f32.to_bits(), 0.5f32.to_bits());
+        while hi - lo > 1 {
+            let mid = lo + (hi - lo) / 2;
+            if adjacent(f32::from_bits(mid)) == 0. {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        let zero = f32::from_bits(lo);
+        let nonzero = f32::from_bits(hi);
+        assert_eq!(adjacent(zero), 0.);
+        assert!(adjacent(nonzero) > 0.);
+        assert_eq!(nonzero.to_bits(), zero.to_bits() + 1);
+        // Distinct first row and horizontal interior expose both image bugs.
+        let mut input = source();
+        input.data_mut()[0..4].copy_from_slice(&[7, 3, 2, 11]);
+        let corrected = blur_pixels(input.clone(), zero, || Ok(())).unwrap();
+        assert_eq!(corrected.data(), input.data());
+        let raw = image::RgbaImage::from_raw(8, 8, input.data().to_vec()).unwrap();
+        let raw_zero = image::imageops::blur(&raw, zero);
+        assert_ne!(raw_zero.as_raw(), input.data());
+        let expected = image::imageops::blur(&raw, nonzero);
+        let actual = blur_pixels(input, nonzero, || Ok(())).unwrap();
+        assert_eq!(actual.data(), expected.as_raw());
+    }
+    #[test]
+    fn blur_checks_cancellation_before_after_gaussian_and_each_output_row() {
+        for stop in [1, 2, 3, 7] {
+            let mut count = 0;
+            let result = blur_pixels(source(), 1., || {
+                count += 1;
+                if count == stop {
+                    Err(CompositeError::Superseded)
+                } else {
+                    Ok(())
+                }
+            });
+            assert!(matches!(result, Err(CompositeError::Superseded)));
+            assert_eq!(count, stop);
+        }
+        let mut count = 0;
+        assert!(matches!(
+            blur_pixels(source(), 0.001, || {
+                count += 1;
+                if count == 2 {
+                    Err(CompositeError::Superseded)
+                } else {
+                    Ok(())
+                }
+            }),
+            Err(CompositeError::Superseded)
+        ));
+        assert_eq!(count, 2);
     }
 }

@@ -15,6 +15,7 @@ pub(super) fn admit(
         height: raster.height,
         pixels: raster.pixels,
         world_to_layer: raster.world_to_layer,
+        origin: raster.origin,
         budget: &mut ledger,
         cancelled: raster.cancelled,
     };
@@ -46,6 +47,7 @@ struct Admission<'a> {
     height: u32,
     pixels: u64,
     world_to_layer: Affine,
+    origin: [f64; 2],
     budget: &'a mut PixelBudget,
     cancelled: &'a AtomicBool,
 }
@@ -66,13 +68,7 @@ impl Admission<'_> {
         self.check()?;
         if !node.visible
             || node.opacity == 0.
-            || node.bounds.is_none_or(|b| {
-                let b = transformed(b, self.world_to_layer);
-                b[2] < -1.
-                    || b[3] < -1.
-                    || b[0] > self.width as f64 + 1.
-                    || b[1] > self.height as f64 + 1.
-            })
+            || node.outside(self.world_to_layer, self.origin, self.width, self.height)
         {
             return Ok(());
         }
@@ -84,7 +80,29 @@ impl Admission<'_> {
             }
             return Ok(());
         }
-        if node.isolated() {
+        if let Some(plan) = node.device.as_ref().and_then(|d| d.blur.as_ref()) {
+            if depth >= self.budget.limits.max_depth {
+                return Err(CompositeError::NestingLimit);
+            }
+            self.budget.reserve(plan.bytes())?;
+            self.budget.write(plan.work())?;
+            let p = &plan.surface;
+            Admission {
+                width: p.width,
+                height: p.height,
+                pixels: p.pixels,
+                world_to_layer: p.world_to_layer,
+                origin: p.origin,
+                budget: self.budget,
+                cancelled: self.cancelled,
+            }
+            .contents(node, depth + 1, false, true)?;
+            if node.grayscale > 0. {
+                self.budget.write(p.pixels)?;
+            }
+            self.budget.write(self.pixels)?;
+            self.budget.in_use -= plan.bytes();
+        } else if node.isolated() {
             if depth >= self.budget.limits.max_depth {
                 return Err(CompositeError::NestingLimit);
             }
@@ -112,15 +130,29 @@ impl Admission<'_> {
         // Child clip/mask scratch is fully released before either insertion
         // point, so replaying effects first has identical peak/live-byte and
         // cumulative-work charges. Every source still replays all children.
-        for (&effect, inner) in node
+        for (index, &effect, inner) in node
             .shadows
             .iter()
-            .map(|s| (s, false))
-            .chain(node.inner_shadows.iter().map(|s| (s, true)))
+            .enumerate()
+            .map(|(i, s)| (i, s, false))
+            .chain(
+                node.inner_shadows
+                    .iter()
+                    .enumerate()
+                    .map(|(i, s)| (i, s, true)),
+            )
             .filter(|_| shadow)
         {
-            let plan =
-                crate::shadow::SourcePlan::new(effect, self.world_to_layer, self.budget.limits)?;
+            let plan = if let Some(device) = &node.device {
+                if inner {
+                    &device.inner_shadows[index]
+                } else {
+                    &device.shadows[index]
+                }
+                .clone()
+            } else {
+                crate::shadow::SourcePlan::new(effect, self.world_to_layer, self.budget.limits)?
+            };
             let bytes = plan.filter.bytes(plan.pixels, plan.width);
             self.budget.reserve(bytes)?;
             self.budget
@@ -130,6 +162,7 @@ impl Admission<'_> {
                 height: plan.height,
                 pixels: plan.pixels,
                 world_to_layer: plan.world_to_layer,
+                origin: plan.origin,
                 budget: self.budget,
                 cancelled: self.cancelled,
             }

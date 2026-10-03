@@ -350,6 +350,9 @@ pub struct Style {
     /// Additional centered vector strokes in back-to-front order.
     pub stroke_layers: Vec<Stroke>,
     pub opacity: f32,
+    /// Foreground Gaussian standard deviation in local units, finite in [0,256].
+    /// Zero (including negative zero) bypasses filtering and isolation.
+    pub blur: f32,
     /// Alpha-preserving sRGB grayscale amount, finite and in [0, 1].
     pub grayscale: f32,
     pub fill_rule: FillRule,
@@ -372,6 +375,7 @@ impl Default for Style {
             fill_layers: Vec::new(),
             stroke_layers: Vec::new(),
             opacity: 1.0,
+            blur: 0.0,
             grayscale: 0.0,
             fill_rule: FillRule::NonZero,
             blend_mode: BlendMode::PassThrough,
@@ -391,6 +395,9 @@ pub const MAX_SHADOW_LAYERS: usize = 8;
 pub const MAX_INNER_SHADOW_LAYERS: usize = 8;
 
 impl Style {
+    pub fn has_blur(&self) -> bool {
+        self.blur > 0.0
+    }
     pub fn has_grayscale(&self) -> bool {
         self.grayscale > 0.0
     }
@@ -429,6 +436,25 @@ impl Style {
             bounds = bounds.union(expanded);
         }
         bounds
+    }
+    /// Analytic visual extent after own shadows and foreground blur. The
+    /// renderer adds accumulated device-pixel support guards separately.
+    /// `max_scale` equals the uniform magnitude on the supported similarity
+    /// transforms; unsupported affine effects are rejected by the renderer.
+    pub fn expand_effect_bounds(
+        &self,
+        source: crate::Bounds,
+        transform: crate::Affine,
+    ) -> crate::Bounds {
+        let bounds = self.expand_shadow_bounds(source, transform);
+        if !bounds.is_valid() || !self.has_blur() {
+            return bounds;
+        }
+        let halo = 4. * self.blur as f64 * transform.max_scale() as f64;
+        if !halo.is_finite() || halo > f32::MAX as f64 {
+            return crate::Bounds::new(crate::Point::new(f32::NAN, f32::NAN), bounds.size);
+        }
+        bounds.expanded(halo as f32)
     }
     /// Base fill followed by additional fills, in painter order.
     pub fn fills(&self) -> impl Iterator<Item = &Paint> {
@@ -469,6 +495,9 @@ impl Style {
     pub(crate) fn validate(&self) -> Result<(), String> {
         if !self.opacity.is_finite() || self.opacity < 0.0 || self.opacity > 1.0 {
             return Err("opacity must be in [0,1]".into());
+        }
+        if !self.blur.is_finite() || !(0.0..=256.0).contains(&self.blur) {
+            return Err("blur must be finite and in [0,256]".into());
         }
         if !self.grayscale.is_finite() || !(0.0..=1.0).contains(&self.grayscale) {
             return Err("grayscale must be finite and in [0,1]".into());

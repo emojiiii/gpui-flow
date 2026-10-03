@@ -248,6 +248,7 @@ impl DomainSource {
                 && a.object.style.stroke_layers == b.object.style.stroke_layers
                 && a.object.style.fill_rule == b.object.style.fill_rule
                 && a.object.style.grayscale == b.object.style.grayscale
+                && a.object.style.blur == b.object.style.blur
                 && a.object.style.shadow == b.object.style.shadow
                 && a.object.style.shadow_layers == b.object.style.shadow_layers
                 && a.object.style.inner_shadow_layers == b.object.style.inner_shadow_layers
@@ -311,7 +312,8 @@ impl DomainSource {
             }
             let effect = ancestor_effect
                 || node.object.style.has_visible_shadows()
-                || node.object.style.has_visible_inner_shadows();
+                || node.object.style.has_visible_inner_shadows()
+                || node.object.style.has_blur();
             if matches!(node.object.shape, Shape::Text(_)) {
                 out.push((&node.object, node.world_transform, effect));
             }
@@ -358,6 +360,7 @@ fn boundary(scene: &Scene, id: &DisplayId) -> bool {
                 .fills()
                 .any(|p| matches!(p,gpui_flow_scene::Paint::Solid{color} if color.a<255)))
         || o.style.has_grayscale()
+        || o.style.has_blur()
         || o.style.has_shadows()
         || o.style.has_inner_shadows()
         || o.style.blend_mode != BlendMode::PassThrough
@@ -590,6 +593,15 @@ fn capture(
         && requires_parent_backdrop(&captured)
     {
         return Err(CompositeError::UnsupportedGrayscaleBackdrop(o.id.clone()));
+    }
+    if o.shape.allows_children()
+        && o.eraser == EraserMode::None
+        && o.style.has_blur()
+        && o.style.blend_mode == BlendMode::PassThrough
+        && o.style.opacity == 1.
+        && requires_parent_backdrop(&captured)
+    {
+        return Err(CompositeError::UnsupportedBlurBackdrop(o.id.clone()));
     }
     Ok(captured)
 }

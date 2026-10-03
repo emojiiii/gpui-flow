@@ -8,7 +8,7 @@ use gpui_flow_scene::{Affine, DisplayId, Shadow};
 pub(crate) struct PreparedShadow {
     pub effect: Shadow,
     pub world: Affine,
-    pub ink_bounds: [f64; 4],
+    pub ink_bounds: Option<[f64; 4]>,
 }
 
 pub(crate) fn similarity_scale(a: Affine) -> Result<f64, CompositeError> {
@@ -27,6 +27,7 @@ pub(crate) fn similarity_scale(a: Affine) -> Result<f64, CompositeError> {
     Ok(x)
 }
 
+#[derive(Clone)]
 pub(crate) struct FilterPlan {
     pub sigma: f32,
     pub halo: f64,
@@ -36,7 +37,9 @@ pub(crate) struct FilterPlan {
 }
 impl FilterPlan {
     pub fn new(shadow: PreparedShadow, world_to_layer: Affine) -> Result<Self, CompositeError> {
-        let matrix = world_to_layer * shadow.world;
+        Self::matrix(shadow, world_to_layer * shadow.world)
+    }
+    pub fn matrix(shadow: PreparedShadow, matrix: Affine) -> Result<Self, CompositeError> {
         let scale = similarity_scale(matrix)?;
         let sigma = shadow.effect.blur as f64 * scale * 0.5;
         // Prevent Gaussian exponent/normalization underflow, huge kernels and
@@ -105,6 +108,7 @@ pub(crate) fn validate_inner_shape(
 
 /// The same checked source extent is used in recursive admission and painting.
 /// It includes descendant effects but excludes this node's own inner/outer effects.
+#[derive(Clone)]
 pub(crate) struct SourcePlan {
     pub filter: FilterPlan,
     pub origin: [f64; 2],
@@ -114,13 +118,46 @@ pub(crate) struct SourcePlan {
     pub world_to_layer: Affine,
 }
 impl SourcePlan {
+    pub fn physical(
+        shadow: PreparedShadow,
+        a: crate::blur::PhysicalSpace,
+        original: [f64; 4],
+        limits: crate::CompositeLimits,
+    ) -> Result<Self, CompositeError> {
+        let filter = FilterPlan::matrix(shadow, a.local(shadow.world, [0., 0.]))?;
+        let halo = filter.halo;
+        let surface = crate::blur::SurfacePlan::new(
+            [
+                original[0] - halo,
+                original[1] - halo,
+                original[2] + halo,
+                original[3] + halo,
+            ],
+            a,
+            limits,
+        )?;
+        Ok(Self {
+            filter,
+            origin: surface.origin,
+            width: surface.width,
+            height: surface.height,
+            pixels: surface.pixels,
+            world_to_layer: surface.world_to_layer,
+        })
+    }
+
     pub fn new(
         shadow: PreparedShadow,
         world_to_layer: Affine,
         limits: crate::CompositeLimits,
     ) -> Result<Self, CompositeError> {
         let filter = FilterPlan::new(shadow, world_to_layer)?;
-        let ink = crate::raster::transformed(shadow.ink_bounds, world_to_layer);
+        let ink = crate::raster::transformed(
+            shadow.ink_bounds.ok_or_else(|| {
+                CompositeError::InvalidGeometry("empty legacy shadow source".into())
+            })?,
+            world_to_layer,
+        );
         let x0 = ink[0].floor() - filter.halo;
         let y0 = ink[1].floor() - filter.halo;
         let w = ink[2].ceil() + filter.halo - x0;
