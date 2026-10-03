@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-10-03T03:40:27.918041+00:00",
+  "scope": "Native Canvas StrokeTextBox fixture build and no-window helper verification; physical acceptance pending",
+  "checks": [
+    {
+      "command": "cargo check --locked --offline -p flow-studio --features canvas-stroke-text-x11 --bin canvas_stroke_text",
+      "before_bytes": 3721621504,
+      "exit_code": 0,
+      "after_bytes": 3717001216,
+      "lowest_free_bytes": 3717013504,
+      "log_sha256": "30b9697c65e284755c0ce90cf2ec04fe2dac95f543b765004b6af8af12b54459",
+      "receipt_sha256": "fd469df68108c543faf5a4ad42a2c33eb746e2d2f04e6d8601a888d524a9d4b0"
+    },
+    {
+      "command": "cargo clippy --locked --offline -p flow-studio --features canvas-stroke-text-x11 --bin canvas_stroke_text -- -D warnings",
+      "before_bytes": 3716988928,
+      "exit_code": 101,
+      "after_bytes": 3716968448,
+      "lowest_free_bytes": 3716972544,
+      "log_sha256": "3d28965b2e49a9dbd8599499a1c0e17635a3f1883e5bdf1e4f7169560589761b",
+      "receipt_sha256": "a1823f27017a0563304ecaf1335ccd02eb8e09a763825c5161691658177d6b04"
+    },
+    {
+      "command": "cargo clippy --locked --offline -p flow-studio --features canvas-stroke-text-x11 --bin canvas_stroke_text -- -D warnings",
+      "before_bytes": 3716952064,
+      "exit_code": 0,
+      "after_bytes": 3716939776,
+      "lowest_free_bytes": 3716939776,
+      "log_sha256": "57ca8bb0c8212cf493213e854160417aad538ae842b4e508fc4b3bf38cf11e85",
+      "receipt_sha256": "f0e2f5209ec40d078cfd14680ef4d61b7a769b8cb858c2078c9b2db7692eaf82"
+    },
+    {
+      "command": "cargo build --locked --offline -p flow-studio --features canvas-stroke-text-x11 --bin canvas_stroke_text",
+      "before_bytes": 3716849664,
+      "exit_code": 0,
+      "after_bytes": 3516395520,
+      "lowest_free_bytes": 3640262656,
+      "log_sha256": "13718a8fafadd2c31c68dfd2c6c4e217a55489f45615093e84aa357c22c1a8d8",
+      "receipt_sha256": "9c6a364a0be9dba06830814479e8ab5fdd96d448025ae592cbffa4a4b3114301"
+    }
+  ],
+  "lint_fix": "Use fixed-size as_chunks for RGBA diagnostics; initial lint error retained in receipt",
+  "helper_tour": {
+    "status": "passed",
+    "native_constructed": false,
+    "faces": [
+      {
+        "identity": {
+          "private_alias": "FlowOutline2a097cebb391e20375d227b2f4815f4f",
+          "source_sha256": "baa84cec7f5f8b51981063d8ce98ba04e166c6998b18595df063248cbc4f04e3",
+          "registration_sha256": "b4a1ef657a679c02eac3056306dee96e4ddb2b525588b7cc8f79921448f0a7ca",
+          "face_index": 0,
+          "weight": 400,
+          "italic": false,
+          "glyph_count": 24,
+          "units_per_em": 1000,
+          "registration_bytes": 3364
+        },
+        "quadratics": 10,
+        "cubics": 0,
+        "closes": 8
+      },
+      {
+        "identity": {
+          "private_alias": "FlowOutline3cb8610ed5f1ecb3bd26232af433a814",
+          "source_sha256": "0d85275cdd5deb518954403700fdb76bd7ec9749c968e386694eee05e66889f1",
+          "registration_sha256": "1393ce450fc65c41f7e93bda2e0bb9e915185e28de76f50b11dd5950032ab1da",
+          "face_index": 0,
+          "weight": 400,
+          "italic": false,
+          "glyph_count": 24,
+          "units_per_em": 1000,
+          "registration_bytes": 3224
+        },
+        "quadratics": 0,
+        "cubics": 10,
+        "closes": 8
+      }
+    ],
+    "path_rollback": [
+      {
+        "dpr": 1.0,
+        "path_bytes": 336,
+        "rejected": true
+      },
+      {
+        "dpr": 2.0,
+        "path_bytes": 336,
+        "rejected": true
+      }
+    ],
+    "png_demultiplication_verified": true,
+    "scenarios": [
+      "Curves + counters",
+      "Typography",
+      "Pens + affine",
+      "Clips + alpha"
+    ],
+    "scope": "headless source outlines, helpers, PNG and command validation; no native shaping, Canvas stroke or upload"
+  },
+  "helper_log_sha256": "1d7b008b998f0b23cb6cc87d76305a125673c47982829df3918df39b7b9fa97b",
+  "binary": {
+    "path": "/workspace/shared/rust-target-native/debug/canvas_stroke_text",
+    "size": 179893496,
+    "sha256": "03412f2c1a7f344678305f30be99b3c6fbe92e017d8a02d294be82820870ddb1",
+    "mode": 493,
+    "mtime_ns": 1790998518844537095,
+    "stable_workspace_inputs": 490,
+    "native_run": false
+  },
+  "frozen_package": "/workspace/shared/canvas-stroke-native-validation-20261003T0338Z",
+  "frozen_manifest_sha256": "98845bcc492bd8d12bd59834279bcfec7d82a63be656f9d71f52c06067c44b4d",
+  "source_archive_sha256": "a94f38a1e3e03ed64711762a16c6920c4d04a70705b2bbede4a4f5528926eace",
+  "actual_link_workspace_inputs": 490,
+  "actual_link_before_after_hashes_match": true,
+  "source_sha256": {
+    "examples/studio/Cargo.toml": "1a92e9f192b0d21db01854dc87878a19070e6b0f678c27e86452c7d8471ff21c",
+    "examples/studio/src/bin/canvas_stroke_text.rs": "6b093ea652788495116e3102a6abf162a3dfaf16422ff565144da60a3c64c7e0",
+    "docs/canvas-stroke-text-fixture.md": "d1bc7a43d4bf7b5c7438902db61606a7830c15d9b54ca925d6f7538740896077"
+  },
+  "provenance_note": "The 490 archived conservative workspace inputs equal actual-link pre/post hashes. The contract status paragraph was updated after link and is separately preserved; all other 489 inputs still match. External dependencies/compiler/system libraries are excluded.",
+  "native_acceptance": "Pending; no new ledger verification yet",
+  "expected_output_bytes": "One rejection suite is 56,848,000 raw bytes; full physical tour estimated 150\u2013220 MB including other actions/PNG"
+}

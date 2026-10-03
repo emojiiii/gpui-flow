@@ -21,8 +21,14 @@ resvg = { version = "=0.46.0", default-features = false, features = ["raster-ima
 outline-font-binding = ["gpui-flow-text/static-outline-registration"]
 outline-font-binding-x11 = ["outline-font-binding", "gpui-flow-text/static-outline-x11"]
 outline-font-binding-wayland = ["outline-font-binding", "gpui-flow-text/static-outline-wayland"]
+canvas-stroke-text-x11 = ["outline-font-binding-x11", "gpui-flow/canvas-stroke-text"]
 
 [[bin]]
 name = "outline_font_binding"
 path = "src/bin/outline_font_binding.rs"
 required-features = ["outline-font-binding"]
+
+[[bin]]
+name = "canvas_stroke_text"
+path = "src/bin/canvas_stroke_text.rs"
+required-features = ["canvas-stroke-text-x11"]

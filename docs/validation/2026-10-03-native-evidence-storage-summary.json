@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "recorded_date_utc": "2026-10-03",
-  "scope": "Ten completed Linux acceptance executables reversibly archived; original failed APP05 observations remain failures; no source, capture, log, receipt or active Cargo target removed",
-  "binary_count": 10,
-  "net_reclaimed_bytes": 1480236853,
-  "protected_existing_files_verified": 763,
-  "status": "First five used temporary restoration before removing redundant raw copies. Last five used full streamed SHA and byte comparison first, then removed redundant raw copies and immediately verified actual temporary restoration; all recorded steps stayed above 3 GiB.",
+  "scope": "Twelve completed Linux acceptance executables reversibly archived; original failed APP05 observations remain failures; no source, capture, log, receipt or active Cargo target removed",
+  "binary_count": 12,
+  "net_reclaimed_bytes": 1776095262,
+  "protected_existing_files_verified": 883,
+  "status": "First five and final two used actual temporary restoration before removing redundant raw copies. Middle five used full streamed SHA and byte comparison first, then removed redundant raw copies and immediately verified actual temporary restoration. Every recorded step stayed above 3 GiB.",
   "historical_manifest_note": "Historical binary hash manifests are unchanged and validate after restore-binary.py restores the original executable path; a currently absent raw path is an intentional storage state, not missing executable bytes",
   "archive_location": "Same retained local evidence directory; archives themselves are not uploaded to this repository",
   "restore_limits": "Restore refuses a mismatching destination and requires3GiB remaining free disk after recovery; run.sh creates new timestamped recheck logs instead of overwriting historical receipts",
@@ -334,6 +334,94 @@
       "restore_script_sha256": "2813aedc2c2b2c9146f05f6520a9b36f43e79c920f0cb9b512882d289610b627",
       "new_run_script_sha256": "6958ae21875eabacb06e04d76a2b9f93f8ef046d36e001ce68daffc81af781d0",
       "archive_receipt_sha256": "ef838be61a7fa8150e1af0aba97f8c176c38e88381420ab49013dbb328545c90"
+    },
+    {
+      "original_path": "/workspace/shared/canvas-current-path-native-validation-20261002T2109Z/canvas_current_path",
+      "original_bytes": 178201464,
+      "original_sha256": "531921c529dd27894d5b194d699439c26d17e6adf0a2c9b35eba8e759a823a8c",
+      "original_mode": 493,
+      "original_mtime_ns": 1790975279513749207,
+      "archive_name": "canvas_current_path.zst",
+      "archive_bytes": 30273915,
+      "archive_sha256": "bba6fb5d7ddf2219f444d40938122a96a9c5f73203c3ece06a429b2a13ba9489",
+      "restore_command": "./restore-binary.py",
+      "run_command": "./run-archived.sh",
+      "restore_script_tested": true,
+      "restored_sha256_size_mode_mtime_verified": true,
+      "protected_existing_files_verified": 94,
+      "net_reclaimed_bytes": 147927549,
+      "completed_utc": "2026-10-03T03:37:36Z",
+      "native_application_launched": false,
+      "streamed_restore_sha_and_byte_equality_verified": true,
+      "sequence": [
+        {
+          "stage": "start",
+          "free_bytes": 3516309504
+        },
+        {
+          "stage": "compressed_original_still_present",
+          "free_bytes": 3486031872
+        },
+        {
+          "stage": "full_stream_decompression_SHA_and_byte_comparison_passed",
+          "free_bytes": 3486031872
+        },
+        {
+          "stage": "temporary_restore_exists",
+          "free_bytes": 3307806720
+        },
+        {
+          "stage": "redundant_raw_removed_after_stream_and_actual_restore_verification",
+          "free_bytes": 3664228352
+        }
+      ],
+      "restore_script_sha256": "2813aedc2c2b2c9146f05f6520a9b36f43e79c920f0cb9b512882d289610b627",
+      "new_run_script_sha256": "6958ae21875eabacb06e04d76a2b9f93f8ef046d36e001ce68daffc81af781d0",
+      "archive_receipt_sha256": "4874bcb572c9300619983b534d390204ef8c0aef4e79a808a5183a0059508bce"
+    },
+    {
+      "original_path": "/workspace/shared/canvas-current-path-footer-validation-20261002T2122Z/canvas_current_path",
+      "original_bytes": 178214344,
+      "original_sha256": "d2793b833a532e43bdeaadcfd0b3ac9dfc8e11c5b21f446cd8be6aa47939828c",
+      "original_mode": 493,
+      "original_mtime_ns": 1790976175676834837,
+      "archive_name": "canvas_current_path.zst",
+      "archive_bytes": 30283484,
+      "archive_sha256": "cbcba5c0ec5ebc9efe4084487447283337ada859deaaf36b74370bf74d65ba5e",
+      "restore_command": "./restore-binary.py",
+      "run_command": "./run-archived.sh",
+      "restore_script_tested": true,
+      "restored_sha256_size_mode_mtime_verified": true,
+      "protected_existing_files_verified": 26,
+      "net_reclaimed_bytes": 147930860,
+      "completed_utc": "2026-10-03T03:37:39Z",
+      "native_application_launched": false,
+      "streamed_restore_sha_and_byte_equality_verified": true,
+      "sequence": [
+        {
+          "stage": "start",
+          "free_bytes": 3664216064
+        },
+        {
+          "stage": "compressed_original_still_present",
+          "free_bytes": 3633930240
+        },
+        {
+          "stage": "full_stream_decompression_SHA_and_byte_comparison_passed",
+          "free_bytes": 3633930240
+        },
+        {
+          "stage": "temporary_restore_exists",
+          "free_bytes": 3455692800
+        },
+        {
+          "stage": "redundant_raw_removed_after_stream_and_actual_restore_verification",
+          "free_bytes": 3812139008
+        }
+      ],
+      "restore_script_sha256": "2813aedc2c2b2c9146f05f6520a9b36f43e79c920f0cb9b512882d289610b627",
+      "new_run_script_sha256": "6958ae21875eabacb06e04d76a2b9f93f8ef046d36e001ce68daffc81af781d0",
+      "archive_receipt_sha256": "92e822db561193395dd311897b4e372a0e330f87e84b9fd2888b083876ec22d1"
     }
   ]
 }
