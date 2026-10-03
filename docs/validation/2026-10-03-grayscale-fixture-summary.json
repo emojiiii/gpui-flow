@@ -1,0 +1,109 @@
+{
+  "recorded_utc": "2026-10-03T08:46:27.795740+00:00",
+  "scope": "Bounded grayscale native fixture compilation, public planner/headless and independent canonical CPU prevalidation; physical acceptance pending",
+  "frozen_package": "/workspace/shared/grayscale-native-validation-20261003T0844Z",
+  "binary": {
+    "path": "grayscale",
+    "bytes": 179993592,
+    "sha256": "d66b500d368e0bf3bcbf34c6a4826b0c49ab6ed3ab4a93dfada39faecfd4dfcf",
+    "mode": 493,
+    "mtime_ns": 1791016900746613174,
+    "actual_link_inputs": 508
+  },
+  "source_archive_sha256": "005dfbe60e672ed2f777fc3a2be7e3e094258ab6faec4c7a8b5e165bff4dbb69",
+  "actual_link_inputs": 508,
+  "before_after_archive_match": true,
+  "runtime_source_aggregate_sha256": "6f3337234d8554bd8206ac95095e850aca6fbc8eb4a01c58690f7bfbe99a744d",
+  "checks": {
+    "fixture-clippy": {
+      "receipt_path": "/workspace/shared/grayscale-native-validation-20261003T0844Z/prevalidation/fixture-clippy-receipt.json",
+      "receipt_sha256": "1f2fd1d80818696a1b48d63934fca9a3a4bac231340f7a36055f834fa9e1c7c9",
+      "log_sha256": "185bdc7f54f15e37d0b065a5517e13990888e70ab7ebcc263c26845f9a0be7de",
+      "command": "cargo clippy --locked --offline -p gpui-flow -p flow-studio --features gpui-flow/canvas-stroke-text,flow-studio/outline-font-binding-x11 --bin grayscale -- -D warnings",
+      "started_utc": "2026-10-03T08:39:39.902732+00:00",
+      "before_bytes": 12624990208,
+      "stop_floor_bytes": 3355443200,
+      "hard_reserve_bytes": 3221225472,
+      "exit_code": 0,
+      "ended_utc": "2026-10-03T08:39:41.157137+00:00",
+      "after_bytes": 12624961536,
+      "lowest_observed_free_bytes": 12624961536
+    },
+    "fixture-build": {
+      "receipt_path": "/workspace/shared/grayscale-native-validation-20261003T0844Z/prevalidation/fixture-build-receipt.json",
+      "receipt_sha256": "eda82f42b108f2643ae9a418d13cd06ef683a6eeb4ad3ceb9cf7cac9a991152a",
+      "log_sha256": "10545bd6ea4850645f1deba46283560023878253514d3d46b26f2e41ea00ab12",
+      "command": "cargo build --locked --offline -p gpui-flow -p flow-studio --features gpui-flow/canvas-stroke-text,flow-studio/outline-font-binding-x11 --bin grayscale",
+      "started_utc": "2026-10-03T08:41:32.908526+00:00",
+      "before_bytes": 12617826304,
+      "stop_floor_bytes": 3355443200,
+      "hard_reserve_bytes": 3221225472,
+      "exit_code": 0,
+      "ended_utc": "2026-10-03T08:41:40.915871+00:00",
+      "after_bytes": 12439748608,
+      "lowest_observed_free_bytes": 12439748608
+    },
+    "headless-tour": {
+      "receipt_path": "/workspace/shared/grayscale-native-validation-20261003T0844Z/prevalidation/headless-tour-receipt.json",
+      "receipt_sha256": "7e351375c6cbab4a47cc77332a254ef4a512050d37991b3ae82f1a81c80b5655",
+      "log_sha256": "568a988eae30f8ef43675faeb4102373dd32138916b0e402f8f36c1a367b1b37",
+      "command": "FLOW_GRAYSCALE_EVIDENCE_DIR=/workspace/shared/grayscale-fixture-validation/helper-data /workspace/shared/rust-target-native/debug/grayscale --headless-tour",
+      "started_utc": "2026-10-03T08:41:41.178650+00:00",
+      "before_bytes": 12439674880,
+      "stop_floor_bytes": 3355443200,
+      "hard_reserve_bytes": 3221225472,
+      "exit_code": 0,
+      "ended_utc": "2026-10-03T08:41:41.429330+00:00",
+      "after_bytes": 12439638016,
+      "lowest_observed_free_bytes": 12439638016
+    },
+    "cpu-tour": {
+      "receipt_path": "/workspace/shared/grayscale-native-validation-20261003T0844Z/prevalidation/cpu-tour-receipt.json",
+      "receipt_sha256": "386f7a1c3a919bd1f9c0884d4f0c69a44458a562513eb281679faaa5f81175d1",
+      "log_sha256": "bbafc608d2aeb77763936fd4478a8147bed196b1a90a010c327cec73723dca8f",
+      "command": "FLOW_GRAYSCALE_EVIDENCE_DIR=/workspace/shared/grayscale-fixture-validation/helper-data /workspace/shared/rust-target-native/debug/grayscale --cpu-tour",
+      "started_utc": "2026-10-03T08:41:41.457831+00:00",
+      "before_bytes": 12439633920,
+      "stop_floor_bytes": 3355443200,
+      "hard_reserve_bytes": 3221225472,
+      "exit_code": 0,
+      "ended_utc": "2026-10-03T08:41:46.962041+00:00",
+      "after_bytes": 12439445504,
+      "lowest_observed_free_bytes": 12439445504
+    }
+  },
+  "helpers": {
+    "headless_exit": 0,
+    "public_planner_cases": 5,
+    "cpu_exit": 0,
+    "premul_primitive_cases": 18,
+    "canonical_png_exports": 7,
+    "independent_pillow_checks": 115,
+    "independent_pillow_passed": 115
+  },
+  "native": {
+    "status": "pending",
+    "required_physical_rows": 15,
+    "optional_reopen_rows": 1,
+    "Image_Canvas_Text_producers": "automatic runtime tests only; not in physical fixture",
+    "source_vs_presentation": "E is a model-valid scene that intentionally rejects unsafe compositing",
+    "screenshots": "operator original encoded bytes with actual MIME suffix; no framebuffer readback"
+  },
+  "limits": [
+    "Default max_domains8, work32million and3GiB reserve unchanged",
+    "A initially planned9domains because gray0 shadow also needs CPU; draft source corrected to explicit identityNormal shadow-pair before any compilation/run",
+    "Premultiplied tiny-scene results and straight-alpha decoded PNG outputs are distinct",
+    "Sticky interaction errors are recorded; successful navigation does not imply clearing",
+    "Eight-frame physical burst need not catch a queued callback; only actual observations may establish timing",
+    "PNG decode assertions are separate from physical window evidence"
+  ],
+  "ledger": "APP04partial;33/9/3unchanged",
+  "independent_pillow_audit": {
+    "path": "/workspace/shared/grayscale-native-validation-20261003T0844Z/prevalidation/cpu-independent-audit.json",
+    "sha256": "d1d00debca88f37c22d23de233ac9ce2612d1ff721da1164600e9b0c977953c5",
+    "passed": 115,
+    "total": 115,
+    "canonical_png_count": 7,
+    "alpha_source_zero_one_compared_rgba_bytes": 1459200
+  }
+}
