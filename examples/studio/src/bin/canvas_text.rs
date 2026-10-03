@@ -132,6 +132,9 @@ impl Lab {
                 italic: t.italic,
                 text_case: Default::default(),
                 para_spacing: 0.,
+                letter_spacing: 0.,
+                word_spacing: 0.,
+                para_indent: 0.,
                 line_height: t.font_size * t.line_height,
                 wrap_width: Some(240.),
             };

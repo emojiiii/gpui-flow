@@ -16,6 +16,9 @@ fn request(content: &str) -> TextMeasureRequest {
         italic: false,
         text_case: TextCase::None,
         para_spacing: 9.,
+        letter_spacing: 0.,
+        word_spacing: 0.,
+        para_indent: 0.,
         line_height: 24.,
         wrap_width: None,
     }

@@ -353,4 +353,6 @@ mod overflow_tests;
 mod decoration_tests;
 
 #[cfg(test)]
+mod inline_layout_tests;
+#[cfg(test)]
 mod paragraph_style_tests;

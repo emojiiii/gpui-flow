@@ -318,7 +318,7 @@ impl ElementDefinition for BuiltinDefinition {
             "path" => json!({"commands":[]}),
             "pen" => json!({"path":{"commands":[]}}),
             "text" => {
-                json!({"content":"","size":{"width":100.,"height":30.},"font_family":"sans-serif","font_size":14.,"font_weight":400,"italic":false,"line_height":1.2,"text_case":"none","para_spacing":0.,"align":"start","wrap":true,"padding":[0.,0.,0.,0.],"vertical_align":"top","overflow":"clip","decoration":"none"})
+                json!({"content":"","size":{"width":100.,"height":30.},"layout_origin":{"x":0.,"y":0.},"font_family":"sans-serif","font_size":14.,"font_weight":400,"italic":false,"line_height":1.2,"text_case":"none","para_spacing":0.,"letter_spacing":0.,"word_spacing":0.,"para_indent":0.,"writing_mode":"x","auto_size_align":false,"align":"start","wrap":true,"padding":[0.,0.,0.,0.],"vertical_align":"top","overflow":"clip","decoration":"none"})
             }
             "image" => {
                 json!({"source":"","size":{"width":100.,"height":100.},"natural_size":null,"fit":"contain","source_crop":null,"corner_radius":0.,"corner_radii":null})

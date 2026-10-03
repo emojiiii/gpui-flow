@@ -6,6 +6,7 @@ pub const MAX_TEXT_RESIZE_FONT_SIZE: f32 = 512.;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TextFontResizeGeometry {
     size: Size,
+    origin: Point,
     padding: [f32; 4],
     font_size: f32,
 }
@@ -24,6 +25,7 @@ impl TextFontResizeGeometry {
         }
         Ok(Self {
             size: text.size,
+            origin: text.layout_origin,
             padding: text.padding,
             font_size: text.font_size,
         })
@@ -40,7 +42,7 @@ impl TextFontResizeGeometry {
     ) -> Option<TextFontResize> {
         original.inverse()?;
         options.uniform = false;
-        let bounds = Bounds::new(Point::ZERO, self.size);
+        let bounds = Bounds::new(self.origin, self.size);
         let delta =
             resize_transform_with_options(Affine::IDENTITY, bounds, start, current, options)?;
         let factor = if matches!(options.handle, ResizeHandle::Top | ResizeHandle::Bottom) {
@@ -64,7 +66,7 @@ impl TextFontResizeGeometry {
             return None;
         }
         let old_anchor = options.handle.anchor(bounds);
-        let new_anchor = options.handle.anchor(Bounds::new(Point::ZERO, size));
+        let new_anchor = options.handle.anchor(Bounds::new(self.origin, size));
         let transform = if factor == 1. {
             original
         } else {

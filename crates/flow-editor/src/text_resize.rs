@@ -6,6 +6,7 @@ pub const MAX_TEXT_BOX_DIMENSION: f32 = 1_000_000.;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TextBoxResizeGeometry {
     size: Size,
+    origin: Point,
     padding: [f32; 4],
 }
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -18,6 +19,7 @@ impl TextBoxResizeGeometry {
         text.validate()?;
         Ok(Self {
             size: text.size,
+            origin: text.layout_origin,
             padding: text.padding,
         })
     }
@@ -51,7 +53,7 @@ impl TextBoxResizeGeometry {
             .max(floor(top, bottom, self.size.height));
         let delta = resize_transform_with_options(
             Affine::IDENTITY,
-            Bounds::new(Point::ZERO, self.size),
+            Bounds::new(self.origin, self.size),
             start,
             current,
             options,
@@ -71,7 +73,8 @@ impl TextBoxResizeGeometry {
         let transform = if delta == Affine::IDENTITY {
             original
         } else {
-            original * Affine::translation(delta.tx, delta.ty)
+            let moved = delta.transform_point(self.origin);
+            original * Affine::translation(moved.x - self.origin.x, moved.y - self.origin.y)
         };
         transform.inverse()?;
         Some(TextBoxResize { size, transform })

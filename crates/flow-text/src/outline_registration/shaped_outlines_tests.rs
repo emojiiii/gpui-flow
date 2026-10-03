@@ -207,6 +207,9 @@ impl Fixture {
                 line_height: 24.,
                 text_case: TextCase::None,
                 para_spacing: 0.,
+                letter_spacing: 0.,
+                word_spacing: 0.,
+                para_indent: 0.,
                 wrap_width: None,
             },
             align: gpui::TextAlign::Left,
@@ -296,6 +299,9 @@ fn shared_placement_preserves_wrapping_paragraphs_alignment_padding_and_fill_qua
     let mut r = f.request("mm mm\nO", 0);
     r.text.wrap_width = Some(35.);
     r.text.para_spacing = 7.;
+    r.text.letter_spacing = 1.;
+    r.text.word_spacing = 2.;
+    r.text.para_indent = 4.;
     r.bounds = [10.125, 20.25, 70., 120.];
     for align in [
         gpui::TextAlign::Left,

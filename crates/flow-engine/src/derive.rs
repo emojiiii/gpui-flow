@@ -16,7 +16,8 @@ pub struct LayoutProviderId {
 /// A deterministic geometry pass. Implementations may read current live handles
 /// but receive only immutable engine/candidate references, so they cannot commit
 /// recursively. Only affine transforms and Rect/Ellipse/Text/Image/Box/Frame
-/// size fields are writable. All other shape/input fields remain unchanged. No I/O or
+/// size fields and Text's computed layout origin are writable. All other shape/input
+/// fields remain unchanged. No I/O or
 /// externally visible work belongs here; preparation can run more than once.
 pub trait LayoutProvider: Send + Sync + 'static {
     fn derive(&self, engine: &SceneEngine, candidate: &Scene) -> Result<Scene, EngineError>;
@@ -68,7 +69,10 @@ fn validate_scope(before: &Scene, after: &Scene) -> Result<(), EngineError> {
         match (&mut allowed_shape, &new.object.shape) {
             (Shape::Rect(a), Shape::Rect(b)) => a.size = b.size,
             (Shape::Ellipse(a), Shape::Ellipse(b)) => a.size = b.size,
-            (Shape::Text(a), Shape::Text(b)) => a.size = b.size,
+            (Shape::Text(a), Shape::Text(b)) => {
+                a.size = b.size;
+                a.layout_origin = b.layout_origin;
+            }
             (Shape::Image(a), Shape::Image(b)) => a.size = b.size,
             (Shape::Canvas(a), Shape::Canvas(b)) => a.size = b.size,
             (Shape::Box(a), Shape::Box(b)) => a.size = b.size,
@@ -77,7 +81,7 @@ fn validate_scope(before: &Scene, after: &Scene) -> Result<(), EngineError> {
         }
         if allowed_shape != new.object.shape {
             return Err(EngineError::Layout(
-                "provider changed shape fields other than supported size".into(),
+                "provider changed shape fields other than supported layout geometry".into(),
             ));
         }
         let mut stripped = new.object.clone();

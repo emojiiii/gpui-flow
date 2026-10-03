@@ -210,7 +210,7 @@ impl GpuiTextRasterizer {
         if stats.rows > 8192 {
             return Err(OutlineError::Limit("job rows").into());
         }
-        let offset_bytes = shaped.line_offsets.capacity() * size_of::<f32>();
+        let offset_bytes = shaped.line_offsets.capacity() * size_of::<f32>() + shaped.layout_bytes;
         charge_outline_budget(budget, offset_bytes, 0)?;
         let mut glyphs = Vec::new();
         let outer_estimate = stats

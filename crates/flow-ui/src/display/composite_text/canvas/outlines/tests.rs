@@ -80,6 +80,10 @@ fn canvas_outline_full_source_uses_one_isotropic_mapping_before_dpr() {
     text.padding = [2., 3., 4., 5.];
     text.font_size = 10.;
     text.para_spacing = 3.;
+    text.letter_spacing = 1.;
+    text.word_spacing = 2.;
+    text.para_indent = 5.;
+    text.layout_origin = Point::new(-10., -5.);
     for world in [
         Affine::translation(-103.25, -75.125) * Affine::scale(1.5, 1.5),
         Affine::new(0., 2., -3., 0., -103.25, -75.125),
@@ -93,6 +97,15 @@ fn canvas_outline_full_source_uses_one_isotropic_mapping_before_dpr() {
             let mut budget = OutlineBudget::default();
             let request = request_for(&text, &space, dpr, &mut budget, &"stroke".into()).unwrap();
             assert_eq!(request.text.font_size, text.font_size * space.matrix.d);
+            assert_eq!(
+                request.text.letter_spacing,
+                text.letter_spacing * space.matrix.d
+            );
+            assert_eq!(
+                request.text.word_spacing,
+                text.word_spacing * space.matrix.d
+            );
+            assert_eq!(request.text.para_indent, text.para_indent * space.matrix.d);
             assert_eq!(
                 request.text.wrap_width,
                 Some(text.content_bounds().size.width * space.matrix.a)

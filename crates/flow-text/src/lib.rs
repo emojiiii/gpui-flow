@@ -10,6 +10,8 @@ pub mod gpui_overflow;
 #[cfg(feature = "gpui")]
 pub use gpui_backend::GpuiTextMeasurer;
 #[cfg(feature = "gpui")]
+mod gpui_inline;
+#[cfg(feature = "gpui")]
 mod gpui_placement;
 #[cfg(feature = "gpui")]
 pub mod gpui_raster;
@@ -42,6 +44,12 @@ pub struct TextMeasureRequest {
     pub text_case: TextCase,
     /// Additional absolute logical space between hard-newline paragraphs.
     pub para_spacing: f32,
+    /// Extra logical advance after each native shaping cluster (including the last).
+    pub letter_spacing: f32,
+    /// Extra logical advance after each ASCII space cluster.
+    pub word_spacing: f32,
+    /// Reserved advance before the first visual row of each hard-newline paragraph.
+    pub para_indent: f32,
     pub wrap_width: Option<f32>,
 }
 impl TextMeasureRequest {
@@ -53,7 +61,21 @@ impl TextMeasureRequest {
     pub fn block_height(&self, visual_rows: usize) -> f32 {
         self.line_height * visual_rows as f32 + self.para_spacing * self.paragraph_breaks() as f32
     }
+    pub(crate) fn has_inline_layout(&self) -> bool {
+        self.letter_spacing != 0. || self.word_spacing != 0. || self.para_indent != 0.
+    }
+    pub(crate) fn validate_inline_layout(&self) -> Result<(), String> {
+        if [self.letter_spacing, self.word_spacing, self.para_indent]
+            .iter()
+            .any(|n| !n.is_finite() || !(0. ..=1_000_000.).contains(n))
+            || (self.has_inline_layout() && self.content.len() > MAX_TEXT_BYTES)
+        {
+            return Err("text spacing/indent must be finite within 0..=1000000; styled source at most 64KiB".into());
+        }
+        Ok(())
+    }
     pub fn validate(&self) -> Result<(), String> {
+        self.validate_inline_layout()?;
         if self.content.len() > 65_536 || self.font_family.len() > 512 {
             return Err(
                 "text measurement allows at most 64KiB UTF-8 content and 512-byte family".into(),

@@ -55,6 +55,9 @@ fn text_request(text: &display::Text) -> TextMeasureRequest {
         italic: text.italic,
         text_case: Default::default(),
         para_spacing: text.para_spacing,
+        letter_spacing: text.letter_spacing,
+        word_spacing: text.word_spacing,
+        para_indent: text.para_indent,
         line_height: text.font_size * text.line_height,
         wrap_width: None,
     }

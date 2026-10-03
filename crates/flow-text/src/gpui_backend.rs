@@ -38,6 +38,16 @@ pub fn shape_text(
     request: &TextMeasureRequest,
     color: gpui::Hsla,
 ) -> Result<Vec<gpui::WrappedLine>, String> {
+    shape_text_checked(system, request, color, &mut |_| Ok(()))
+}
+
+pub(crate) fn shape_text_checked(
+    system: &WindowTextSystem,
+    request: &TextMeasureRequest,
+    color: gpui::Hsla,
+    admit: &mut impl FnMut(usize) -> Result<(), String>,
+) -> Result<Vec<gpui::WrappedLine>, String> {
+    request.validate_inline_layout()?;
     if !request.para_spacing.is_finite()
         || !(0. ..=1_000_000.).contains(&request.para_spacing)
         || (request.para_spacing != 0. && request.content.len() > crate::MAX_TEXT_BYTES)
@@ -56,7 +66,7 @@ pub fn shape_text(
     // Empty strings also fail explicitly when no usable primary/fallback exists.
     system.resolve_font(&descriptor);
     let content_len = content.len();
-    system
+    let mut lines = system
         .shape_text(
             SharedString::from(content.into_owned()),
             px(request.font_size),
@@ -66,11 +76,20 @@ pub fn shape_text(
                 color,
                 ..Default::default()
             }],
-            request.wrap_width.map(px),
+            if request.has_inline_layout() {
+                None
+            } else {
+                request.wrap_width.map(px)
+            },
             None,
         )
         .map(|lines| lines.into_vec())
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    if request.has_inline_layout() {
+        admit(crate::gpui_inline::storage(&lines)?)?;
+        crate::gpui_inline::apply(&mut lines, request)?;
+    }
+    Ok(lines)
 }
 
 const CACHE_ENTRIES: usize = 128;
@@ -236,6 +255,9 @@ mod tests {
             italic: false,
             text_case: Default::default(),
             para_spacing: 0.,
+            letter_spacing: 0.,
+            word_spacing: 0.,
+            para_indent: 0.,
             line_height: 20.,
             wrap_width: None,
         }

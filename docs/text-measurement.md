@@ -3,9 +3,10 @@
 This is a bounded plain-text slice of Leafer's text layout contract. It uses the
 same native GPUI shaping function for measurement and scene painting. It does
 not estimate width from character counts and does not provide rich-text editing,
-IME, baseline controls, letter spacing, percentage sizing, or complete Leafer
+IME, percentage sizing, or complete Leafer
 Text compatibility. Later bounded [ellipsis](text-overflow.md) and
-[case/paragraph spacing](text-case-paragraph-spacing.md) share the same backend.
+[case/paragraph spacing](text-case-paragraph-spacing.md), and
+[fixed layout properties](text-layout-properties.md) share the same backend.
 
 ## Inputs and dimension ownership
 

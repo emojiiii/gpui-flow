@@ -150,3 +150,40 @@ fn text_box_noop_is_exact_and_invalid_geometry_or_budgets_reject() {
     invalid.padding = [1000.; 4];
     assert!(TextBoxResizeGeometry::new(&invalid).is_err());
 }
+
+#[test]
+fn nonzero_text_origin_keeps_box_and_font_resize_anchors_fixed() {
+    let mut t = text();
+    t.layout_origin = Point::new(-67., -35.);
+    let original = Affine::translation(20., 30.) * Affine::rotation(25.);
+    for handle in ResizeHandle::ALL {
+        let start = handle.position(t.bounds());
+        let current = start + (start - handle.anchor(t.bounds())) * 0.25;
+        let options = ResizeOptions {
+            handle,
+            ..Default::default()
+        };
+        let box_result = TextBoxResizeGeometry::new(&t)
+            .unwrap()
+            .resize(original, start, current, options)
+            .unwrap();
+        let font_result = gpui_flow_editor::TextFontResizeGeometry::new(&t)
+            .unwrap()
+            .resize(original, start, current, options)
+            .unwrap();
+        for (size, transform) in [
+            (box_result.size, box_result.transform),
+            (font_result.size, font_result.transform),
+        ] {
+            assert!(
+                original
+                    .transform_point(handle.anchor(t.bounds()))
+                    .distance(
+                        transform
+                            .transform_point(handle.anchor(Bounds::new(t.layout_origin, size)))
+                    )
+                    < 0.001
+            );
+        }
+    }
+}

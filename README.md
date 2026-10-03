@@ -4,7 +4,7 @@
 
 私有早期开发版本，API 尚未承诺稳定。以 Leafer 的显示对象/容器分层和 React Flow 的节点扩展思路为参考，独立实现；不宣称完整 Leafer 功能或 API 兼容。
 
-当前固定45项进度见[任务表](docs/leafer-task-ledger.md)。已支持有界阴影、[前景模糊](docs/foreground-blur.md)、[拥有背景的模糊](docs/background-blur.md)、[灰度](docs/grayscale.md)及[宿主自定义工具widget](docs/custom-tools.md)。支持集合与明确拒绝范围以各功能契约为准；历史阶段记录不代表当前缺口。
+当前固定45项进度见[任务表](docs/leafer-task-ledger.md)。已支持有界阴影、[前景模糊](docs/foreground-blur.md)、[拥有背景的模糊](docs/background-blur.md)、[灰度](docs/grayscale.md)、[宿主自定义工具widget](docs/custom-tools.md)及[Text间距、段首缩进和自动尺寸对齐](docs/text-layout-properties.md)。支持集合与明确拒绝范围以各功能契约为准；历史阶段记录不代表当前缺口。
 
 单个叶节点外阴影现已进入同一Scene/engine/CPU路径：矢量fill/stroke、图片透明像素和真实glyph alpha作为源，复用锁定image Gaussian；支持blur/offset/color、整体opacity/blend/clip与Undo。visual effect bounds不改变布局/命中/选择。Custom阴影仍明确不支持；后续新增[有界spread/box/scale-fixed模式](docs/shadow-modes.md)（内阴影见下方切片）；Group/Box/Frame现已扩展为[有界子树阴影](docs/group-shadows.md)；见[契约和预算](docs/compositing.md#bounded-leaf-outer-shadows)，示例`outer_shadows`。本轮786项headless（8项原有忽略）、86项UI、严格Clippy/格式与原生链接通过；真实窗口验过blur/offset/alpha/clip/Undo、拒绝恢复、选择与pan/zoom，详见[叶节点阶段验证](docs/compositing.md#outer-shadow-validation-2026-10-01)。
 

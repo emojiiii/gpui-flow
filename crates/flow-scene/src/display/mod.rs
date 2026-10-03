@@ -32,7 +32,9 @@ pub use polygon::Polygon;
 pub use rect::{CornerRadii, Rect};
 use serde::{Deserialize, Serialize};
 pub use star::Star;
-pub use text::{Text, TextAlign, TextCase, TextDecoration, TextOverflow, TextVerticalAlign};
+pub use text::{
+    Text, TextAlign, TextCase, TextDecoration, TextOverflow, TextVerticalAlign, TextWritingMode,
+};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "geometry", rename_all = "snake_case")]
@@ -116,7 +118,13 @@ impl Shape {
             Self::Star(s) => vec![s.flatten()],
             Self::Path(s) => s.flatten(tolerance),
             Self::Pen(s) => s.flatten(tolerance),
-            Self::Text(s) => vec![crate::geometry::rectangle(s.size, 0.0, tolerance)],
+            Self::Text(s) => {
+                let mut contour = crate::geometry::rectangle(s.size, 0.0, tolerance);
+                for point in &mut contour.points {
+                    *point += s.layout_origin;
+                }
+                vec![contour]
+            }
             Self::Image(s) => vec![s.flatten(tolerance)],
             Self::Canvas(s) => vec![s.flatten(tolerance)],
             Self::Group(_) => vec![],

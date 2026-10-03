@@ -1,5 +1,5 @@
 //! Explicit same-platform raster access. No font lookup, shaping, or fallback replacement.
-use crate::{TextMeasureRequest, gpui_overflow::shape_text_in_box};
+use crate::TextMeasureRequest;
 use gpui::{
     Application, Bounds, DevicePixels, IsZero, Platform, PlatformTextSystem, RenderGlyphParams,
     TextAlign, TextSystem, WindowTextSystem, point,
@@ -243,17 +243,27 @@ impl GpuiTextRasterizer {
         }
         .into();
         let system = WindowTextSystem::new(self.shaping.clone());
-        let shaped = shape_text_in_box(
+        let mut shaping_peak = output_bytes;
+        let shaped = crate::gpui_overflow::shape_text_in_box_checked(
             &system,
             &r.text,
             color,
             r.overflow,
             r.bounds[2],
             r.bounds[3],
+            &mut |_, storage| {
+                self.check(epoch, cancelled)?;
+                if storage > max_bytes.saturating_sub(output_bytes) {
+                    return Err("text working-set limit".into());
+                }
+                shaping_peak = shaping_peak.max(output_bytes + storage);
+                Ok(())
+            },
         )?;
         // Flow-owned paragraph/ellipsis offsets stay live for the whole raster
         // job, so account them beside bitmap and decoration storage.
-        let offset_bytes = shaped.line_offsets.capacity() * std::mem::size_of::<f32>();
+        let offset_bytes =
+            shaped.line_offsets.capacity() * std::mem::size_of::<f32>() + shaped.layout_bytes;
         let shape_bytes = output_bytes
             .checked_add(offset_bytes)
             .ok_or("text working-set limit")?;
@@ -274,7 +284,7 @@ impl GpuiTextRasterizer {
             max_bytes.saturating_sub(shape_bytes),
         )?;
         let base_bytes = shape_bytes + decorations.allocated_bytes;
-        out.peak_bytes = base_bytes;
+        out.peak_bytes = base_bytes.max(shaping_peak);
         let mut cache: HashMap<RenderGlyphParams, Arc<GlyphBitmap>> = HashMap::new();
         let mut cache_bytes = 0;
         let stats = crate::gpui_placement::visit_glyphs(&shaped, r, |glyph| {

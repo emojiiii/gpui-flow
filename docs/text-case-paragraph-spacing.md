@@ -47,6 +47,9 @@ All references use leafer-ui `1e11641d3ea6b0211c83447268a90b8d58feec25`:
 - [CharLayout](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/text/src/CharLayout.ts) consumes upstream word/paragraph grouping
 - [Text](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/Text.ts) defaults textCase/paraSpacing and uses a browser font variant for small-caps
 
+For the later spacing, indentation and auto-size extension, see
+[fixed text layout properties](text-layout-properties.md).
+
 Title depends on Leafer's own width-dependent word grouping and is not replaced by
 Unicode titlecase. Small-caps remains unsupported. Letter/word spacing, indentation,
 rich text, vertical writing, full Leafer wrapping parity, and editor typing/caret

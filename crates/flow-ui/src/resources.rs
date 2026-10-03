@@ -652,6 +652,9 @@ fn text_request(text: &Text) -> TextMeasureRequest {
         italic: text.italic,
         text_case: crate::text_measure::text_case(text.text_case),
         para_spacing: text.para_spacing,
+        letter_spacing: text.letter_spacing,
+        word_spacing: text.word_spacing,
+        para_indent: text.para_indent,
         line_height: text.font_size * text.line_height,
         wrap_width: text.wrap.then_some(text.content_bounds().size.width),
     }
@@ -740,6 +743,9 @@ mod tests {
         text.font_weight = 650;
         text.text_case = gpui_flow_scene::display::TextCase::Lower;
         text.para_spacing = 12.;
+        text.letter_spacing = 2.;
+        text.word_spacing = 3.;
+        text.para_indent = 7.;
         text.font_size = 18.;
         text.line_height = 1.5;
         let request = text_request(&text);
@@ -748,6 +754,9 @@ mod tests {
         assert_eq!(request.font_weight, 650);
         assert_eq!(request.text_case, gpui_flow_text::TextCase::Lower);
         assert_eq!(request.para_spacing, 12.);
+        assert_eq!(request.letter_spacing, 2.);
+        assert_eq!(request.word_spacing, 3.);
+        assert_eq!(request.para_indent, 7.);
         assert_eq!(request.line_height, 27.);
         assert_eq!(request.wrap_width, Some(84.));
         text.wrap = false;

@@ -13,6 +13,9 @@ fn request(text: &str, wrap: Option<f32>) -> TextMeasureRequest {
         italic: false,
         text_case: Default::default(),
         para_spacing: 0.,
+        letter_spacing: 0.,
+        word_spacing: 0.,
+        para_indent: 0.,
         line_height: 24.,
         wrap_width: wrap,
     }

@@ -559,6 +559,19 @@ fn text_shape(f: &mut Fields) -> Result<display::Text> {
         _ => display::TextDecoration::None,
     };
     text.para_spacing = f.f32("paraSpacing", 0.)?;
+    for (key, target) in [
+        ("letterSpacing", &mut text.letter_spacing),
+        ("wordSpacing", &mut text.word_spacing),
+        ("paraIndent", &mut text.para_indent),
+    ] {
+        let value = f.number(key, 0.)?;
+        if value < 0. {
+            return Err(f.err(key, "expected nonnegative spacing"));
+        }
+        *target = value as f32;
+    }
+    choice(f, "writingMode", "x", &["x"])?;
+    text.auto_size_align = f.boolean("autoSizeAlign", true)?;
     if let Some(v) = f.take("padding") {
         if let Value::Array(a) = v {
             if a.len() != 4 {
@@ -1104,6 +1117,12 @@ fn export_node(scene: &Scene, id: &DisplayId, depth: usize, geometry: &mut usize
             "Path"
         }
         Shape::Text(v) => {
+            if v.layout_origin != Point::ZERO {
+                return Err(error(
+                    id.to_string(),
+                    "computed text layout_origin has no explicit-size Leafer mapping",
+                ));
+            }
             export_text(&mut m, v);
             "Text"
         }
@@ -1247,5 +1266,10 @@ fn export_text(m: &mut Map<String, Value>, v: &display::Text) {
         },
     );
     put(m, "paraSpacing", v.para_spacing);
+    put(m, "letterSpacing", v.letter_spacing);
+    put(m, "wordSpacing", v.word_spacing);
+    put(m, "paraIndent", v.para_indent);
+    put(m, "writingMode", "x");
+    put(m, "autoSizeAlign", v.auto_size_align);
     put(m, "padding", json!(v.padding));
 }

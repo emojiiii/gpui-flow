@@ -85,6 +85,15 @@ pub fn layout_decorations(
         let baseline = (r.line_height - f32::from(layout.ascent) - f32::from(layout.descent)) * 0.5
             + f32::from(layout.ascent);
         let mut start = 0.;
+        // Indentation precedes the first glyph only. It participates in row
+        // alignment, but is not decorated; empty indented rows have no ink.
+        let mut leading = layout
+            .runs
+            .iter()
+            .flat_map(|run| &run.glyphs)
+            .next()
+            .map_or(f32::from(layout.width), |glyph| f32::from(glyph.position.x))
+            .max(0.);
         let ends = line
             .wrap_boundaries
             .iter()
@@ -99,12 +108,14 @@ pub fn layout_decorations(
             .chain(std::iter::once(Ok(f32::from(layout.width))));
         for end in ends {
             let end = end?;
-            let width = end - start;
+            let advance = end - start;
+            let width = advance - leading;
             if !width.is_finite() || width < 0. {
                 return Err("unsupported text decoration row".into());
             }
             if width > 0. {
-                let x = crate::gpui_raster::aligned_x(r.bounds[0], r.bounds[2], width, r.align);
+                let x = crate::gpui_raster::aligned_x(r.bounds[0], r.bounds[2], advance, r.align)
+                    + leading;
                 let left = snap(x);
                 let right = snap(x + width);
                 for offset in [
@@ -126,6 +137,7 @@ pub fn layout_decorations(
                 }
             }
             start = end;
+            leading = 0.;
             y += r.line_height;
         }
     }

@@ -324,6 +324,10 @@ fn scene_export_native_glyphs_preserve_case_paragraph_affine_and_font_epochs() {
     let mut text = display::Text::new("Straße\nnext", Size::new(140., 80.));
     text.text_case = display::TextCase::Upper;
     text.para_spacing = 5.;
+    text.letter_spacing = 2.;
+    text.word_spacing = 3.;
+    text.para_indent = 7.;
+    text.layout_origin = Point::new(-5., -3.);
     text.font_size = 20.;
     s.insert(
         DisplayObject::new("text", text)

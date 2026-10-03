@@ -348,7 +348,10 @@ fn text_and_image_size_changes_are_allowed_without_rewriting_content_or_resource
         e.install_layout_provider(ShapeMutator {
             enabled: enabled.clone(),
             change: |shape| match shape {
-                Shape::Text(text) => text.size = Size::new(50., 40.),
+                Shape::Text(text) => {
+                    text.size = Size::new(50., 40.);
+                    text.layout_origin = gpui_flow_scene::Point::new(-25., -20.);
+                }
                 Shape::Image(image) => image.size = Size::new(50., 40.),
                 _ => {}
             },
@@ -363,7 +366,10 @@ fn text_and_image_size_changes_are_allowed_without_rewriting_content_or_resource
             Size::new(50., 40.)
         );
         match &object.object.shape {
-            Shape::Text(text) => assert_eq!(text.content, "original"),
+            Shape::Text(text) => {
+                assert_eq!(text.content, "original");
+                assert_eq!(text.layout_origin, gpui_flow_scene::Point::new(-25., -20.));
+            }
             Shape::Image(image) => assert_eq!(image.source, "original.png"),
             _ => unreachable!(),
         }

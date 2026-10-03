@@ -24,6 +24,9 @@ let request = TextMeasureRequest {
     italic: false,
     text_case: Default::default(),
     para_spacing: 0.,
+    letter_spacing: 0.,
+    word_spacing: 0.,
+    para_indent: 0.,
     line_height: 20.0,
     wrap_width: Some(200.0),
 };
@@ -38,7 +41,7 @@ matching font and wrapping policy, `gpui_backend::shape_text` returns GPUI's
 
 All sizes are logical model units. Empty text has one line; a final newline
 preserves an additional empty line. Family, weight, italic face, font size, absolute line
-height, text case, paragraph spacing and optional wrap width determine the result. Platform fallback, CJK,
+height, text case, paragraph/letter/word spacing, paragraph indent and optional wrap width determine the result. Platform fallback, CJK,
 emoji and shaping remain GPUI's responsibility. Metrics use line boxes, not
 ink bounds. Errors return without replacing document geometry.
 
@@ -112,3 +115,5 @@ or changing the dependency-free default. It accepts host-authorized bytes,
 preserves license metadata, rewrites private aliases and exposes exact byte
 identities. It does not register fonts, prove a GPUI FontId binding or enable
 Canvas strokeText. See the [subset, budgets and remaining integration gates](../../docs/static-font-outlines.md).
+
+Spacing and indentation use bounded native clusters; see the [fixed layout contract](../../docs/text-layout-properties.md) for supported values, budgets, and the remaining writing-mode gap.

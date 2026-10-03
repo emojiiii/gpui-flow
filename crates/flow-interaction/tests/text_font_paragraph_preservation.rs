@@ -11,6 +11,11 @@ fn font_resize_and_history_preserve_case_spacing_line_height_and_canonical_conte
     let mut text = Text::new("mixed Case\nß stays canonical", Size::new(160., 80.));
     text.text_case = TextCase::Upper;
     text.para_spacing = 9.;
+    text.letter_spacing = 2.;
+    text.word_spacing = 3.;
+    text.para_indent = 7.;
+    text.auto_size_align = true;
+    text.layout_origin = Point::new(-10., -5.);
     text.line_height = 1.7;
     text.padding = [4.; 4];
     let result = TextFontResizeGeometry::new(&text)
@@ -43,6 +48,11 @@ fn font_resize_and_history_preserve_case_spacing_line_height_and_canonical_conte
     assert_ne!(after.font_size, text.font_size);
     assert_eq!(after.text_case, text.text_case);
     assert_eq!(after.para_spacing, text.para_spacing);
+    assert_eq!(after.letter_spacing, text.letter_spacing);
+    assert_eq!(after.word_spacing, text.word_spacing);
+    assert_eq!(after.para_indent, text.para_indent);
+    assert_eq!(after.auto_size_align, text.auto_size_align);
+    assert_eq!(after.layout_origin, text.layout_origin);
     assert_eq!(after.line_height, text.line_height);
     assert_eq!(after.content, text.content);
     assert!(editor.undo());

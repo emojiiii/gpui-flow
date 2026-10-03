@@ -95,12 +95,36 @@ pub(super) fn measure(
             size.width = metrics.width.max(1.) + text.padding[1] + text.padding[3];
         }
         size.height = metrics.height + text.padding[0] + text.padding[2];
-        if size != text.size {
+        let origin = if text.auto_size_align {
+            use gpui_flow_scene::display::{TextAlign, TextVerticalAlign};
+            gpui_flow_scene::Point::new(
+                if *sizing == TextSizing::Natural {
+                    match text.align {
+                        TextAlign::Start => 0.,
+                        TextAlign::Center => {
+                            -(size.width - text.padding[1] - text.padding[3]) / 2. - text.padding[3]
+                        }
+                        TextAlign::End => -size.width,
+                    }
+                } else {
+                    0.
+                },
+                match text.vertical_align {
+                    TextVerticalAlign::Top => 0.,
+                    TextVerticalAlign::Middle => -metrics.height / 2. - text.padding[0],
+                    TextVerticalAlign::Bottom => -size.height,
+                },
+            )
+        } else {
+            gpui_flow_scene::Point::ZERO
+        };
+        if size != text.size || origin != text.layout_origin {
             scene.update_object(id, |object| {
                 let Shape::Text(text) = &mut object.shape else {
                     unreachable!()
                 };
                 text.size = size;
+                text.layout_origin = origin;
             })?;
         }
     }
@@ -120,6 +144,9 @@ fn request(text: &gpui_flow_scene::display::Text, sizing: TextSizing) -> TextMea
             gpui_flow_scene::display::TextCase::Lower => gpui_flow_text::TextCase::Lower,
         },
         para_spacing: text.para_spacing,
+        letter_spacing: text.letter_spacing,
+        word_spacing: text.word_spacing,
+        para_indent: text.para_indent,
         line_height: text.font_size * text.line_height,
         wrap_width: if sizing == TextSizing::AutoHeight && text.wrap {
             Some(text.content_bounds().size.width)

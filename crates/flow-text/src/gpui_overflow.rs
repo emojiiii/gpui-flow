@@ -1,5 +1,5 @@
 //! Fixed-box end ellipsis using GPUI shaping/wrap boundaries and Unicode graphemes.
-use crate::{TextMeasureRequest, TextOverflow, gpui_backend::shape_text};
+use crate::{TextMeasureRequest, TextOverflow, gpui_backend::shape_text_checked};
 use gpui::{Hsla, WindowTextSystem, WrappedLine, px};
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -13,6 +13,8 @@ pub struct TextBoxShape {
     /// Original row height keeps vertically overflowing text top aligned even
     /// when ellipsis removes the hidden rows before paint.
     pub block_height: f32,
+    /// Bounded owned native-layout copies retained for spacing/indent.
+    pub layout_bytes: usize,
 }
 /// Reserve all offsets only after admitting their storage beside offsets that
 /// are still live. Callers fill at most `count` entries so the Vec never grows.
@@ -67,6 +69,23 @@ fn plain(request: &TextMeasureRequest, content: &str) -> TextMeasureRequest {
         ..request.clone()
     }
 }
+fn fits_width(line: &WrappedLine, available: f32) -> Result<bool, String> {
+    let mut start = 0.;
+    for boundary in &line.wrap_boundaries {
+        let end = line
+            .unwrapped_layout
+            .runs
+            .get(boundary.run_ix)
+            .and_then(|run| run.glyphs.get(boundary.glyph_ix))
+            .ok_or("invalid native wrap boundary")?;
+        let end = f32::from(end.position.x);
+        if end - start > available {
+            return Ok(false);
+        }
+        start = end;
+    }
+    Ok(f32::from(line.unwrapped_layout.width) - start <= available)
+}
 fn width(
     system: &WindowTextSystem,
     request: &TextMeasureRequest,
@@ -75,8 +94,12 @@ fn width(
     live_offset_bytes: usize,
     check: &mut impl FnMut(&[WrappedLine], usize) -> Result<(), String>,
 ) -> Result<f32, String> {
-    let lines = shape_text(system, &plain(request, content), color)?;
-    check(&lines, live_offset_bytes)?;
+    let mut copied_bytes = 0;
+    let lines = shape_text_checked(system, &plain(request, content), color, &mut |bytes| {
+        copied_bytes = bytes;
+        check(&[], live_offset_bytes + bytes)
+    })?;
+    check(&lines, live_offset_bytes + copied_bytes)?;
     Ok(lines
         .iter()
         .map(|l| f32::from(l.size(px(request.line_height)).width))
@@ -166,10 +189,15 @@ pub(crate) fn shape_text_in_box_checked(
     if overflow == TextOverflow::Ellipsis {
         request.validate()?;
     }
-    let original = shape_text(system, request, color)?;
-    let (line_offsets, block_height) =
-        paragraph_layout(&original, request, &mut |bytes| check(&[], bytes))?;
-    let offset_bytes = line_offsets.capacity() * std::mem::size_of::<f32>();
+    let mut layout_bytes = 0;
+    let original = shape_text_checked(system, request, color, &mut |bytes| {
+        layout_bytes = bytes;
+        check(&[], bytes)
+    })?;
+    let (line_offsets, block_height) = paragraph_layout(&original, request, &mut |bytes| {
+        check(&[], layout_bytes + bytes)
+    })?;
+    let offset_bytes = line_offsets.capacity() * std::mem::size_of::<f32>() + layout_bytes;
     check(&original, offset_bytes)?;
     if !block_height.is_finite() || line_offsets.iter().any(|offset| !offset.is_finite()) {
         return Err("text line height overflow".into());
@@ -179,6 +207,7 @@ pub(crate) fn shape_text_in_box_checked(
             lines: original,
             line_offsets,
             block_height,
+            layout_bytes,
         });
     }
     let glyphs: usize = original
@@ -193,15 +222,15 @@ pub(crate) fn shape_text_in_box_checked(
     if count > 8192 {
         return Err("ellipsis source row limit (8192)".into());
     }
-    if block_height <= box_height
-        && original
-            .iter()
-            .all(|l| f32::from(l.size(px(request.line_height)).width) <= box_width)
-    {
+    let fits_horizontally = original.iter().try_fold(true, |fits, line| {
+        fits_width(line, box_width).map(|row_fits| fits && row_fits)
+    })?;
+    if block_height <= box_height && fits_horizontally {
         return Ok(TextBoxShape {
             lines: original,
             line_offsets,
             block_height,
+            layout_bytes,
         });
     }
     let mut rows = Vec::new();
@@ -228,6 +257,11 @@ pub(crate) fn shape_text_in_box_checked(
             rows.push((
                 &line.text[start..end],
                 *top + row_index as f32 * request.line_height,
+                if row_index == 0 {
+                    request.para_indent
+                } else {
+                    0.
+                },
             ));
             row_index += 1;
             start = end;
@@ -235,20 +269,27 @@ pub(crate) fn shape_text_in_box_checked(
         rows.push((
             &line.text[start..],
             *top + row_index as f32 * request.line_height,
+            if row_index == 0 {
+                request.para_indent
+            } else {
+                0.
+            },
         ));
     }
     let visible = rows
         .iter()
-        .take_while(|(_, top)| *top as f64 + request.line_height as f64 <= box_height as f64)
+        .take_while(|(_, top, _)| *top as f64 + request.line_height as f64 <= box_height as f64)
         .count()
         .max(1);
     let vertical_overflow = rows.len() > visible;
     let mut clipped = Vec::with_capacity(visible);
     let mut changed = vertical_overflow;
-    for (index, (row, _)) in rows.iter().take(visible).enumerate() {
+    for (index, (row, _, indent)) in rows.iter().take(visible).enumerate() {
+        let mut row_request = request.clone();
+        row_request.para_indent = *indent;
         let value = ellipsize(
             system,
-            request,
+            &row_request,
             row,
             color,
             EllipsisRow {
@@ -259,16 +300,33 @@ pub(crate) fn shape_text_in_box_checked(
             check,
         )?;
         changed |= value != *row;
-        clipped.push(value);
+        clipped.push((value, *indent));
     }
     if !changed {
         return Ok(TextBoxShape {
             lines: original,
             line_offsets,
             block_height,
+            layout_bytes,
         });
     }
-    let lines = shape_text(system, &plain(request, &clipped.join("\n")), color)?;
+    let mut lines = Vec::with_capacity(clipped.len());
+    let mut output_layout_bytes = 0;
+    for (content, indent) in &clipped {
+        let mut row_request = plain(request, content);
+        row_request.para_indent = *indent;
+        let mut row_bytes = 0;
+        lines.extend(shape_text_checked(
+            system,
+            &row_request,
+            color,
+            &mut |bytes| {
+                row_bytes = bytes;
+                check(&[], offset_bytes + output_layout_bytes + bytes)
+            },
+        )?);
+        output_layout_bytes += row_bytes;
+    }
     let output_glyphs: usize = lines
         .iter()
         .flat_map(|l| &l.unwrapped_layout.runs)
@@ -278,19 +336,23 @@ pub(crate) fn shape_text_in_box_checked(
         return Err("ellipsis output glyph limit (8192)".into());
     }
     let output_count = visible.min(rows.len());
-    let mut output_offsets =
-        reserve_line_offsets(output_count, offset_bytes, &mut |bytes| check(&[], bytes))?;
-    for (_, top) in rows.iter().take(visible) {
+    let mut output_offsets = reserve_line_offsets(
+        output_count,
+        offset_bytes + output_layout_bytes,
+        &mut |bytes| check(&[], bytes),
+    )?;
+    for (_, top, _) in rows.iter().take(visible) {
         output_offsets.push(*top);
     }
     check(
         &lines,
-        offset_bytes + output_offsets.capacity() * std::mem::size_of::<f32>(),
+        offset_bytes + output_layout_bytes + output_offsets.capacity() * std::mem::size_of::<f32>(),
     )?;
     Ok(TextBoxShape {
         lines,
         line_offsets: output_offsets,
         block_height,
+        layout_bytes: output_layout_bytes,
     })
 }
 

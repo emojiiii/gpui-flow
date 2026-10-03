@@ -30,6 +30,9 @@ impl TextPaintPlan {
                 italic: text.italic,
                 text_case: crate::text_measure::text_case(text.text_case),
                 para_spacing: text.para_spacing * m.d,
+                letter_spacing: text.letter_spacing * m.d,
+                word_spacing: text.word_spacing * m.d,
+                para_indent: text.para_indent * m.d,
                 line_height: text.font_size * text.line_height * m.d,
                 wrap_width: text.wrap.then_some(content.size.width * m.a),
             },
@@ -186,6 +189,10 @@ mod tests {
         text.font_weight = 700;
         text.text_case = gpui_flow_scene::display::TextCase::Upper;
         text.para_spacing = 11.;
+        text.letter_spacing = 2.;
+        text.word_spacing = 3.;
+        text.para_indent = 7.;
+        text.layout_origin = gpui_flow_scene::Point::new(-9., -5.);
         for (model_align, native_align) in [
             (SceneTextAlign::Start, TextAlign::Left),
             (SceneTextAlign::Center, TextAlign::Center),
@@ -202,8 +209,14 @@ mod tests {
                 assert_eq!(p.request.wrap_width, Some(90. * zoom));
                 assert_eq!(p.request.line_height, 28. * zoom);
                 assert_eq!(p.request.para_spacing, 11. * zoom);
+                assert_eq!(p.request.letter_spacing, 2. * zoom);
+                assert_eq!(p.request.word_spacing, 3. * zoom);
+                assert_eq!(p.request.para_indent, 7. * zoom);
                 assert_eq!(p.request.text_case, gpui_flow_text::TextCase::Upper);
-                assert_eq!(p.bounds.origin, point(px(13.), px(17.)));
+                assert_eq!(
+                    p.bounds.origin,
+                    point(px(13. - 9. * zoom), px(17. - 5. * zoom))
+                );
                 assert_eq!(p.bounds.size, size(px(90. * zoom), px(40. * zoom)));
                 assert_eq!(text, canonical);
             }

@@ -477,8 +477,8 @@
       "title": "Text固定排版属性",
       "status": "partial",
       "acceptance": "已有font/wrap/align/padding/ellipsis/italic/decoration/affine；必补letterSpacing、wordSpacing、paraIndent、paraSpacing、textCase、writingMode和autoSizeAlign",
-      "boundary": "富runs/WYSIWYG不是此次固定ITextStyleInputData属性集，作为额外范围另立项",
-      "reference_doc": "docs/text-case-paragraph-spacing.md",
+      "boundary": "已补有界letter/wordSpacing、paraIndent、autoSizeAlign，复用textCase/paraSpacing；writingMode的vertical/reverse仍缺，整项部分",
+      "reference_doc": "docs/text-layout-properties.md",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/interface/src/ICommonAttr.ts",
         "symbols_or_contract": "ITextStyleInputData固定字段：letterSpacing/wordSpacing/paraIndent/paraSpacing/textCase/writingMode/autoSizeAlign"
