@@ -441,13 +441,10 @@ impl SceneView {
             return Some((None, geometry.screen_handles(&self.editor)?));
         }
         let id = self.editor.selection.ids.iter().next()?.clone();
-        let handles = gpui_flow_interaction::scene::SceneResizeGeometry::for_target_with_geometry(
-            &self.editor,
-            &id,
-            self.interactions.transform_capabilities(),
-            presented,
-        )?
-        .screen_handles(&self.editor)?;
+        let handles = self
+            .interactions
+            .resize_geometry(&self.editor, &id, presented)?
+            .screen_handles(&self.editor)?;
         Some((Some(id), handles))
     }
     fn rotation_handle(&self) -> Option<gpui_flow_interaction::scene::SceneRotationHandle> {

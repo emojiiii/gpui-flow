@@ -1,4 +1,5 @@
 mod image_crop;
+mod intrinsic_resize;
 mod text_resize;
 use super::{SceneCommand, object_editable, selection_bounds};
 use crate::*;
@@ -87,6 +88,30 @@ impl ScenePluginHost {
     }
     pub fn transform_capabilities(&self) -> TransformCapabilities {
         self.transforms
+    }
+    /// Shared resize overlay/input geometry, including the installed plugin's
+    /// intrinsic sizing box. Geometry is taken from the accepted presentation.
+    pub fn resize_geometry(
+        &self,
+        editor: &SceneEditor,
+        id: &DisplayId,
+        presented: &gpui_flow_engine::SceneEngine,
+    ) -> Option<super::SceneResizeGeometry> {
+        let geometry = super::SceneResizeGeometry::for_target_with_geometry(
+            editor,
+            id,
+            self.transforms,
+            presented,
+        )?;
+        let plugin = self
+            .plugins
+            .iter()
+            .find(|entry| entry.id == "resize" && entry.enabled)?;
+        geometry.with_bounds(
+            plugin
+                .plugin
+                .resize_bounds(editor, &id.0, geometry.bounds)?,
+        )
     }
     /// Cancels an active gesture before changing presentation constraints.
     pub fn set_transform_capabilities(
@@ -681,6 +706,17 @@ impl ScenePluginHost {
             SceneCommand::SetResizeTransform { target, .. } => Some(*target),
             _ => None,
         };
+        let builtin_resize_identity = match &command {
+            SceneCommand::SetBuiltinResize { target, resize } => Some((
+                *target,
+                resize
+                    .child_transforms()
+                    .iter()
+                    .map(|(id, _)| id.clone())
+                    .collect::<Vec<_>>(),
+            )),
+            _ => None,
+        };
         let rotation_batch = matches!(command, SceneCommand::SetRotationTransforms { .. });
         let resize_batch_identity = match &command {
             SceneCommand::SetResizeTransforms { transforms }
@@ -784,6 +820,13 @@ impl ScenePluginHost {
         {
             return Err(InteractionError::InvalidInput(
                 "middleware cannot retarget a resize command".into(),
+            ));
+        }
+        if let Some((target, children)) = &builtin_resize_identity
+            && !matches!(&command, SceneCommand::SetBuiltinResize { target: actual, resize } if actual == target && resize.child_transforms().iter().map(|(id, _)| id).eq(children.iter()))
+        {
+            return Err(InteractionError::InvalidInput(
+                "middleware cannot retarget intrinsic resize or its content".into(),
             ));
         }
         if let Some(targets) = &resize_batch_identity
@@ -1057,6 +1100,9 @@ impl ScenePluginHost {
             }
             SceneCommand::SetTextFontResize { target, resize } => {
                 self.apply_text_font_resize(editor, target, resize)?;
+            }
+            SceneCommand::SetBuiltinResize { target, resize } => {
+                self.apply_builtin_resize(editor, target, resize)?;
             }
             SceneCommand::SetResizeTransform { target, transform } => {
                 if self.capture_target_stale(editor) {

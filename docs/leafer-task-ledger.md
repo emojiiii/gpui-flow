@@ -1,6 +1,6 @@
 # Leafer固定45项任务表
 
-状态：36项有界已验证、6项部分实现、3项未开始。固定ID、验收集合与边界保留；任务数不代表工时或全部上游API兼容。机器可读定义见[任务表JSON](leafer-task-ledger.json)。
+状态：37项有界已验证、5项部分实现、3项未开始。固定ID、验收集合与边界保留；任务数不代表工时或全部上游API兼容。机器可读定义见[任务表JSON](leafer-task-ledger.json)。
 
 功能实现、必要回归和简明契约按模块提交。逐次运行日志、截图、备份收据及历史验收JSON不进入源码仓库；既有提交历史不改写。测试方法见[本地验证](testing.md)。
 
@@ -20,7 +20,7 @@
 | EVT-03 | 事件 / [设备元数据与复合手势](keyboard-routing.md) | 部分实现 | pointer type/buttons/time/pressure、触摸多指、tap/double/longpress的稳定事件契约 | 已有mouse/pointer_id、序号与原生Text双击；不是完整事件族 |
 | EVT-04 | 事件 / [IME与无障碍输入](text-editing.md) | 部分实现 | 中文输入组合/切换/失焦、Tab可达与语义树，定义受支持平台验收 | Kit Textarea提供基础；平台IME边界明确未验 |
 | INT-01 | 交互 / [外部选择移动缩放旋转](text-transform-tools.md) | 有界已验证 | 单选/共享root、多选、Image和能力开启Text的仿射手柄；撤销/取消/只读/陈旧capture | Custom及未支持样式拒绝；不改intrinsic尺寸 |
-| INT-02 | 交互 / [内在尺寸编辑](text-font-resize.md) | 部分实现 | 按组件定义尺寸/内容/字体resize策略，与布局所有权及单Undo一致 | 已支持固定Text盒子和字体大小模式；其他组件intrinsic resize和auto-size ownership覆盖仍缺，整项仍部分 |
+| INT-02 | 交互 / [内在尺寸编辑](intrinsic-resize.md) | 有界已验证 | 按组件定义尺寸/内容/字体resize策略，与布局所有权及单Undo一致 | 内置组件有界尺寸/坐标/Group内容策略及Text盒子/字体模式；布局拥有的覆盖原子拒绝，Text测量须精确相等；退化Line用端点工具，Custom另有正式协议 |
 | INT-03 | 交互 / [Text内容编辑会话](text-editing.md) | 有界已验证 | 可选内容panel、一次文档Undo、Done/Cancel/blur/target切换、身份和只读保护 | 不是WYSIWYG；IME专项归EVT-04 |
 | INT-04 | 交互 / [自定义内外工具协议](custom-tools.md) | 有界已验证 | registry、load/update/unload/destroy、策略门控与宿主自定义widget挂载和释放 | 宿主AnyElement/Entity及owned属性会话；outer输入插件由宿主提供，managed layer拒绝原生panel |
 | INT-05 | 交互 / [路径与倾斜中心编辑工具](line-endpoints.md) | 未开始 | Path控制点、skew和pivot交互须各有真实几何/取消/history验收 | 固定Leafer OSS通用点编辑器是stub，不把自建功能称上游已实现；Line端点现有独立基础 |

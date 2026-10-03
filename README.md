@@ -150,6 +150,7 @@ cargo +1.98.1 run --locked -p flow-studio
 - [单选直线真实端点编辑](docs/line-endpoints.md)（21项新回归、263项受影响/98项UI、严格Clippy及Linux原生拖动/Undo/Shift/affine/zoom已验，范围见文档）
 - [单选/多选共享中心旋转手柄](docs/rotation-handles.md)（默认45°可配置Shift吸附，复用共享capture/batch/history；native子树显式拒绝）
 - [多选共享八方向缩放框](docs/selection-resize.md)（18项新回归、583项受影响/98项UI、严格Clippy/格式与Linux原生共享拖动、mixed/zoom/pan已验；范围见文档）
+- [按内置组件编辑尺寸与内容](docs/intrinsic-resize.md)（明确布局所有权、单Undo和只读取消）
 - [单选八方向缩放手柄](docs/resize-handles.md)（26项新回归、受影响聚合与Linux原生拖动已验；保留旧API，非完整编辑器对齐）
 - [元素实例、属性变更与事件引擎](docs/engine.md)
 - [属性动画、播放控制与Undo历史](docs/animation.md)

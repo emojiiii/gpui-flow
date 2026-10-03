@@ -123,6 +123,22 @@ impl SceneResizeGeometry {
             .all(|h| h.position.is_finite())
             .then_some(handles)
     }
+    /// Rebind to a component's nominal sizing box, retaining the world-space
+    /// one-unit minimum used by transform handles.
+    pub fn with_bounds(mut self, bounds: Rect) -> Option<Self> {
+        if !bounds.is_valid() || !bounds.size.is_positive() {
+            return None;
+        }
+        let x = (self.world.a as f64).hypot(self.world.b as f64) * bounds.size.width as f64;
+        let y = (self.world.c as f64).hypot(self.world.d as f64) * bounds.size.height as f64;
+        if !x.is_finite() || !y.is_finite() || x <= 0. || y <= 0. {
+            return None;
+        }
+        let floor = |length: f64| (1. / length.max(1.)).clamp(0.05, 1.) as f32;
+        self.bounds = bounds;
+        self.minimum_scale = Point::new(floor(x), floor(y));
+        Some(self)
+    }
     /// Check the actual proposed matrices as well, including floating-point
     /// composition through ancestors. Never turn a working native Text descendant
     /// into an unsupported rotated/skewed/nonuniform presentation.

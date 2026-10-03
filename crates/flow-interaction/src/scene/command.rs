@@ -53,6 +53,12 @@ pub enum SceneCommand {
         target: gpui_flow_engine::ElementHandle,
         transform: Affine,
     },
+    /// Intrinsic built-in geometry/content patch. Target, kind and Group child
+    /// membership are validated after middleware and reactive layout.
+    SetBuiltinResize {
+        target: gpui_flow_engine::ElementHandle,
+        resize: gpui_flow_editor::BuiltinResize,
+    },
     /// Changes only a fixed Text box and anchoring translation. Linear terms,
     /// target identity and command kind are preserved through middleware.
     SetTextBoxResize {

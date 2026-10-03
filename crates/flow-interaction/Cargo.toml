@@ -15,3 +15,6 @@ gpui-flow-scene.workspace = true
 gpui-flow-engine.workspace = true
 
 gpui-flow-animation.workspace = true
+
+[dev-dependencies]
+gpui-flow-layout.workspace = true

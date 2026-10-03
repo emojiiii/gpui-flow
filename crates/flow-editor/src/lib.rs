@@ -7,6 +7,9 @@ pub use selection::*;
 mod resize;
 pub use resize::*;
 
+mod intrinsic_resize;
+pub use intrinsic_resize::*;
+
 mod text_resize;
 pub use text_resize::*;
 mod text_font_resize;

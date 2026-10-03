@@ -4,8 +4,8 @@ use crate::scene::{
 use crate::*;
 use gpui_flow_core::{Point, Rect};
 use gpui_flow_editor::{
-    ResizeHandle, ResizeOptions, SceneEditor, TextBoxResizeGeometry, TextFontResizeGeometry,
-    resize_transform, resize_transform_with_options,
+    BuiltinResizeGeometry, BuiltinResizePolicy, ResizeHandle, ResizeOptions, SceneEditor,
+    TextBoxResizeGeometry, TextFontResizeGeometry, resize_transform, resize_transform_with_options,
 };
 use gpui_flow_scene::{Affine, DisplayId, Shape};
 struct Resize {
@@ -20,6 +20,7 @@ struct Resize {
     minimum_scale: Point,
     text_box: Option<TextBoxResizeGeometry>,
     text_font: Option<TextFontResizeGeometry>,
+    builtin: Option<BuiltinResizeGeometry>,
 }
 struct SelectionResize {
     geometry: SceneSelectionResizeGeometry,
@@ -38,10 +39,17 @@ pub enum TextResizeMode {
 #[derive(Default)]
 pub struct SceneResizePlugin {
     text_mode: TextResizeMode,
+    builtin_intrinsic: bool,
     resize: Option<Resize>,
     selection_resize: Option<SelectionResize>,
 }
 impl SceneResizePlugin {
+    /// Opt-in named single-selection policies for non-Text built-ins. Text keeps
+    /// its independently configured mode; shared selections retain transforms.
+    pub fn with_builtin_resize(mut self, intrinsic: bool) -> Self {
+        self.builtin_intrinsic = intrinsic;
+        self
+    }
     pub fn with_text_resize_mode(mut self, mode: TextResizeMode) -> Self {
         self.text_mode = mode;
         self
@@ -56,6 +64,33 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
     }
     fn is_default_action(&self) -> bool {
         true
+    }
+    fn resize_bounds(&self, editor: &SceneEditor, id: &str, paint_bounds: Rect) -> Option<Rect> {
+        let id = DisplayId::from(id);
+        let node = editor.scene().get(&id)?;
+        if let Shape::Text(text) = &node.object.shape {
+            return Some(
+                if self.text_mode == TextResizeMode::Transform
+                    || !crate::scene::resize_handles::affine_text_supported(
+                        &node.object,
+                        TransformCapabilities { affine_text: true },
+                    )
+                {
+                    paint_bounds
+                } else {
+                    text.bounds()
+                },
+            );
+        }
+        if self.builtin_intrinsic {
+            Some(
+                BuiltinResizeGeometry::new(editor.scene(), &id)
+                    .ok()?
+                    .bounds(),
+            )
+        } else {
+            Some(paint_bounds)
+        }
     }
     fn on_lifecycle(&mut self, event: PluginLifecycle) {
         if matches!(
@@ -158,6 +193,12 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
                     ) else {
                         return;
                     };
+                    let Some(bounds) = self.resize_bounds(cx.editor, &id.0, geometry.bounds) else {
+                        return;
+                    };
+                    let Some(geometry) = geometry.with_bounds(bounds) else {
+                        return;
+                    };
                     Some(geometry)
                 } else {
                     None
@@ -196,11 +237,23 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
                 } else {
                     None
                 };
+                let builtin = if handle.is_some()
+                    && self.builtin_intrinsic
+                    && !matches!(node.object.shape, Shape::Text(_))
+                {
+                    let Ok(geometry) = BuiltinResizeGeometry::new(cx.editor.scene(), &id) else {
+                        return;
+                    };
+                    Some(geometry)
+                } else {
+                    None
+                };
                 self.resize = Some(Resize {
                     id,
                     target,
                     text_box,
                     text_font,
+                    builtin,
                     inverse,
                     original: node.object.transform,
                     bounds: geometry.map_or(bounds, |g| g.bounds),
@@ -258,6 +311,28 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
                     let current = resize
                         .inverse
                         .transform_point(cx.editor.viewport.screen_to_world(p.position));
+                    if let Some(geometry) = &resize.builtin {
+                        let Some(result) = geometry.resize(
+                            resize.original,
+                            resize.start_local,
+                            current,
+                            ResizeOptions {
+                                handle: resize.handle.expect("named intrinsic handle"),
+                                uniform: p.modifiers.shift
+                                    || (geometry.policy() == BuiltinResizePolicy::Children
+                                        && resize.uniform),
+                                minimum_scale: resize.minimum_scale,
+                            },
+                        ) else {
+                            out.command(SceneCommand::CancelGesture);
+                            return;
+                        };
+                        out.command(SceneCommand::SetBuiltinResize {
+                            target: resize.target,
+                            resize: result,
+                        });
+                        return;
+                    }
                     if let Some(geometry) = resize.text_font {
                         let Some(result) = geometry.resize(
                             resize.original,
@@ -363,6 +438,7 @@ impl CanvasPlugin<SceneEditor, SceneCommand> for SceneResizePlugin {
                             &DisplayId::from(id.clone()),
                             cx.transforms,
                         )
+                        .and_then(|g| g.with_bounds(self.resize_bounds(cx.editor, id, g.bounds)?))
                         .and_then(|g| g.screen_handles(cx.editor))
                         .and_then(|handles| handles.into_iter().find(|h| h.handle == *handle))
                         .map_or(CanvasCursor::Default, |h| h.cursor)

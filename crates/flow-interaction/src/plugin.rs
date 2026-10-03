@@ -70,6 +70,17 @@ pub trait CanvasPlugin<D = Editor, C = CanvasCommand> {
     fn is_default_action(&self) -> bool {
         false
     }
+    /// Optional sizing-box policy for the scene resize plugin. The host uses
+    /// the same result for painted handles, picking and input. None hides an
+    /// unsupported target; graph plugins retain their existing behavior.
+    fn resize_bounds(
+        &self,
+        _editor: &D,
+        _id: &str,
+        paint_bounds: gpui_flow_core::Rect,
+    ) -> Option<gpui_flow_core::Rect> {
+        Some(paint_bounds)
+    }
     fn on_lifecycle(&mut self, _event: PluginLifecycle) {}
     fn on_event(
         &mut self,

@@ -7,8 +7,8 @@
     "leafer_in": "3eb445bf34debb638766615282224b77108bf610"
   },
   "counts": {
-    "bounded_verified": 36,
-    "partial": 6,
+    "bounded_verified": 37,
+    "partial": 5,
     "not_started": 3,
     "needs_verification": 0,
     "in_progress": 0
@@ -219,10 +219,10 @@
       "id": "INT-02",
       "category": "交互",
       "title": "内在尺寸编辑",
-      "status": "partial",
+      "status": "bounded_verified",
       "acceptance": "按组件定义尺寸/内容/字体resize策略，与布局所有权及单Undo一致",
-      "boundary": "已支持固定Text盒子和字体大小模式；其他组件intrinsic resize和auto-size ownership覆盖仍缺，整项仍部分",
-      "reference_doc": "docs/text-font-resize.md",
+      "boundary": "内置组件有界尺寸/坐标/Group内容策略及Text盒子/字体模式；布局拥有的覆盖原子拒绝，Text测量须精确相等；退化Line用端点工具，Custom另有正式协议",
+      "reference_doc": "docs/intrinsic-resize.md",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/resize/src/resize.ts",
         "symbols_or_contract": "scaleResize / Text.__scaleResize / scaleResizeFontSize"
