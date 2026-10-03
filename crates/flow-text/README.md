@@ -103,3 +103,12 @@ gaps. Soft wraps never gain paragraph spacing. See the
 [contract and regression entry points](../../docs/text-case-paragraph-spacing.md).
 For painting, use `gpui_overflow::shape_text_in_box` and its `line_offsets` in both
 native and CPU paths; raw `shape_text` returns GPUI lines without positioning them.
+
+## Optional static outline preparation
+
+The independent `static-outlines` feature adds bounded CPU-only static-font
+preparation and genuine quadratic/cubic glyph extraction, without enabling GPUI
+or changing the dependency-free default. It accepts host-authorized bytes,
+preserves license metadata, rewrites private aliases and exposes exact byte
+identities. It does not register fonts, prove a GPUI FontId binding or enable
+Canvas strokeText. See the [subset, budgets and remaining integration gates](../../docs/static-font-outlines.md).

@@ -6,9 +6,15 @@ publish.workspace = true
 
 [features]
 default = []
+static-outlines = ["dep:ttf-parser", "dep:sha2", "dep:getrandom"]
 gpui = ["dep:gpui", "dep:unicode-segmentation"]
 
 [dependencies]
 gpui = { workspace = true, optional = true }
 
 unicode-segmentation = { version = "=1.13.3", optional = true }
+
+# CPU-only outline preparation; no platform font system or independent shaper.
+ttf-parser = { version = "=0.25.1", default-features = false, features = ["std"], optional = true }
+sha2 = { version = "=0.10.9", optional = true }
+getrandom = { version = "=0.3.4", optional = true }
