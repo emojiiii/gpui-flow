@@ -28,6 +28,7 @@ mod events;
 mod geometry;
 mod gradient;
 pub mod leafer_json;
+mod mask;
 mod object;
 mod paint_phase;
 mod scene;

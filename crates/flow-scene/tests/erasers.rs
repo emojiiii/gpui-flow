@@ -241,7 +241,7 @@ fn geometric_hits_keep_eraser_and_erased_target_and_obey_existing_gates() {
 }
 
 #[test]
-fn alpha_masks_keep_conservative_layout_and_eraser_root_has_no_visible_contribution() {
+fn active_masks_limit_layout_and_eraser_root_has_no_visible_contribution() {
     let mut scene = nested(EraserMode::Pixel);
     scene
         .insert(
@@ -254,7 +254,7 @@ fn alpha_masks_keep_conservative_layout_and_eraser_root_has_no_visible_contribut
         .unwrap();
     assert_eq!(
         scene.local_bounds(&"parent".into()).unwrap(),
-        Some(Bounds::new(Point::new(-40., 0.), Size::new(60., 20.)))
+        Some(Bounds::new(Point::new(-40., 0.), Size::new(5., 5.)))
     );
     assert_eq!(
         scene

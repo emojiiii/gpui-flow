@@ -32,11 +32,11 @@ The fixed source's mask flush policy depends on the mask object's opacity, not i
 
 The opacity-one Pixel no-op is deliberate source-derived behavior, not an intuitive new mask ordering. An opacity-one mask with translucent fill still follows the opacity-one column. A nested ordinary group containing erasers resolves its own erasure before its completed result is masked. An object marked as both an eraser and an alpha mask renders on a blank mask surface, yielding zero coverage. The next mask starts a new run; hidden masks still start zero-coverage runs. These schedules have local CPU fixtures; they have not been executed in the upstream browser runtime for cross-renderer pixel equivalence.
 
-Only existing direct-Group alpha masks are supported. Grayscale, path/clipping masks and full Leafer mask layout/hit policy remain separate work.
+All five supported direct-Group mask modes share the explicit scheduling and picking contract in [mask modes](mask-modes.md); the table above describes the alpha-mask cases specifically.
 
 ## Bounds, picking and resource safety
 
-Scene and Engine ordinary parent bounds omit an eraser child and its complete subtree. The eraser's own bounds remain queryable, and Engine effect bounds follow the same exclusion. Scene-wide visible bounds omit eraser roots/subtrees. Existing conservative mask aggregation is retained rather than adopting Leafer's first-mask layout policy. Bounds never attempt to shrink to the remaining visible pixels after erasure.
+Scene and Engine ordinary parent bounds omit an eraser child and its complete subtree. The eraser's own bounds remain queryable, and Engine effect bounds follow the same exclusion. Scene-wide visible bounds omit eraser roots/subtrees. Active-mask Groups instead use the first-marker logical prefix described in the mask contract, which can include an eraser before that marker; effect allocation remains conservative. Bounds never attempt to shrink to the remaining visible pixels after erasure.
 
 Geometric picking remains independent of composited pixels. An eraser can be the top geometric hit, an erased object remains a candidate, and an eraser outside its parent's aggregate bounds is still reachable. HitPolicy, hitChildren, visibility, locks and inherited clips retain their existing behavior. This adds neither image pixel picking nor final composited-pixel picking.
 

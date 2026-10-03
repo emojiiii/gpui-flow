@@ -593,7 +593,7 @@ impl Scene {
     /// Geometric subtree bounds in the object's local coordinate space. Hidden
     /// children are included; clipping and stroke extents are respected. Eraser
     /// child subtrees do not expand their parent, but retain their own bounds.
-    /// Alpha masks keep conservative bounds rather than clipping sibling bounds.
+    /// Active masks limit Group geometry through the first z-ordered marker.
     pub fn local_bounds(&self, id: &DisplayId) -> Result<Option<Bounds>, SceneError> {
         self.validate()?;
         self.local_bounds_inner(id)
@@ -603,7 +603,7 @@ impl Scene {
     /// Box/Frame use their own paint/stroke geometry, including a paintless
     /// declared box. Group uses the existing recursive geometric subtree bounds
     /// with child clips and eraser exclusions. Hidden child geometry is retained
-    /// consistently with [`Self::local_bounds`]; masks do not trim the reference.
+    /// consistently with [`Self::local_bounds`], including its active-mask prefix.
     /// Authored scenes resolve fixed strokes at camera 1; presentation snapshots
     /// use their bound camera. This does not redefine public geometric bounds.
     pub fn shadow_reference_bounds(&self, id: &DisplayId) -> Result<Option<Bounds>, SceneError> {
@@ -620,7 +620,7 @@ impl Scene {
                 .paint_bounds())
         }
     }
-    fn local_bounds_inner(&self, id: &DisplayId) -> Result<Option<Bounds>, SceneError> {
+    pub(crate) fn local_bounds_inner(&self, id: &DisplayId) -> Result<Option<Bounds>, SceneError> {
         let node = self
             .nodes
             .get(id)
@@ -629,14 +629,11 @@ impl Scene {
             .resolved_object(id, self.resolved_stroke_camera.unwrap_or(1.))?
             .paint_bounds();
         let clip = node.object.shape.child_clip().map(|(bounds, _, _)| bounds);
-        for child in &node.children {
+        for child in self.mask_layout_children(id)? {
             if let Some(bounds) = self.local_bounds_inner(child)? {
                 let bounds = self.nodes[child].object.transform.transform_bounds(bounds);
                 if !bounds.is_valid() {
                     return Err(SceneError::InvalidGeometry("child bounds overflow".into()));
-                }
-                if self.nodes[child].object.eraser != crate::EraserMode::None {
-                    continue;
                 }
                 let bounds = if let Some(clip) = clip {
                     crate::geometry::intersection(bounds, clip)
@@ -811,8 +808,7 @@ impl Scene {
             .into_iter()
             .rev()
         {
-            if !item.hit_enabled
-                || (!options.include_locked && item.locked)
+            if (!options.include_locked && item.locked)
                 || item.object.hit_policy == HitPolicy::None
                 || item.clips.iter().any(|clip| !clip.contains(world))
                 || (matches!(
@@ -839,27 +835,38 @@ impl Scene {
             } else {
                 (options.tolerance as f64 * inverse.max_scale() as f64).min(f32::MAX as f64) as f32
             };
-            let hit = match item.object.hit_policy {
-                HitPolicy::None => false,
-                HitPolicy::Bounds => self
-                    .local_bounds_inner(&item.object.id)?
-                    .is_some_and(|b| b.expanded(tolerance).contains(local)),
-                HitPolicy::Geometry => {
-                    item.object
-                        .shape
-                        .contains_geometry(local, item.object.style.fill_rule)
-                        || crate::geometry::stroke_hit(
-                            &item.object.shape.flatten(0.1),
-                            local,
-                            tolerance,
-                        )
-                }
-                HitPolicy::Painted => {
-                    let object = self.resolved_object(
-                        &item.object.id,
-                        self.resolved_stroke_camera.unwrap_or(1.),
-                    )?;
-                    object.shape.hit_test(local, &object.style, tolerance)
+            let hit = if self.mask_hit_uses_geometry(&item.object.id) {
+                item.object
+                    .shape
+                    .contains_geometry(local, item.object.style.fill_rule)
+                    || crate::geometry::stroke_hit(
+                        &item.object.shape.flatten(0.1),
+                        local,
+                        tolerance,
+                    )
+            } else {
+                match item.object.hit_policy {
+                    HitPolicy::None => false,
+                    HitPolicy::Bounds => self
+                        .local_bounds_inner(&item.object.id)?
+                        .is_some_and(|b| b.expanded(tolerance).contains(local)),
+                    HitPolicy::Geometry => {
+                        item.object
+                            .shape
+                            .contains_geometry(local, item.object.style.fill_rule)
+                            || crate::geometry::stroke_hit(
+                                &item.object.shape.flatten(0.1),
+                                local,
+                                tolerance,
+                            )
+                    }
+                    HitPolicy::Painted => {
+                        let object = self.resolved_object(
+                            &item.object.id,
+                            self.resolved_stroke_camera.unwrap_or(1.),
+                        )?;
+                        object.shape.hit_test(local, &object.style, tolerance)
+                    }
                 }
             };
             if hit {
@@ -871,7 +878,7 @@ impl Scene {
                 });
             }
         }
-        Ok(result)
+        self.resolve_mask_hits(result, options.tolerance)
     }
     pub fn validation_issues(&self) -> Vec<SceneIssue> {
         let mut issues = Vec::new();

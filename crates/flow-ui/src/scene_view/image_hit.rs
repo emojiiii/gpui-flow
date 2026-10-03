@@ -154,10 +154,15 @@ impl ImageHitPolicies {
             }
             samples.insert(object.id.clone(), (policy, sample));
         }
-        Ok(geometry
-            .hit_test_all_with_image_candidates(world, options, &decoded_ids)?
+        let candidates = geometry
+            .hit_candidates_with_images(world, options, &decoded_ids)?
             .into_iter()
-            .find(|hit| {
+            .filter(|hit| {
+                // A mask-only Path hit explicitly uses its geometric contour,
+                // just as its renderer needs no Image pixel producer.
+                if geometry.scene().mask_hit_uses_geometry(&hit.id) {
+                    return true;
+                }
                 let Some((policy, sample)) = samples.get(&hit.id) else {
                     return true;
                 };
@@ -177,7 +182,13 @@ impl ImageHitPolicies {
                     AlphaSample::Pending => policy.pending == ImageHitFallback::Geometry,
                     AlphaSample::Failed => policy.failed == ImageHitFallback::Geometry,
                 }
-            }))
+            })
+            .collect();
+        Ok(geometry
+            .scene()
+            .resolve_mask_hits(candidates, options.tolerance)?
+            .into_iter()
+            .next())
     }
 }
 

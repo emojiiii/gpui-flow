@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Cached geometry. `local_bounds` is the clipped geometric subtree including
 /// strokes; `content_bounds` excludes stroke. No unsupported effects are inferred.
 /// Eraser child subtrees retain their own entries but do not expand parent bounds.
-/// Alpha masks retain the existing conservative, non-mask-clipped layout policy.
+/// Active masks use the same first-marker geometric prefix as Scene.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LayoutEntry {
     pub world_transform: Affine,
@@ -150,7 +150,7 @@ impl Builder<'_> {
         let bounds_changed = old.is_none()
             || (world_changed && object.style.has_scale_fixed_strokes())
             || child_bounds_changed
-            || flags.intersects(DirtyFlags::GEOMETRY | DirtyFlags::STRUCTURE);
+            || flags.intersects(DirtyFlags::GEOMETRY | DirtyFlags::STRUCTURE | DirtyFlags::ORDER);
         if bounds_changed {
             self.next.stats.bounds_recomputed += 1;
             entry.content_bounds = object.shape.local_bounds();
@@ -158,11 +158,8 @@ impl Builder<'_> {
                 .scene
                 .resolved_object(id, self.scene.resolved_stroke_camera().unwrap_or(1.))?
                 .paint_bounds();
-            for child in &children {
+            for child in self.scene.mask_layout_children(id)? {
                 let child_object = &self.scene.get(child).expect("child").object;
-                if child_object.eraser != EraserMode::None {
-                    continue;
-                }
                 if let Some(bounds) = self.next.entries[child].local_bounds {
                     let bounds = child_object.transform.transform_bounds(bounds);
                     let bounds = clip.map_or(Some(bounds), |(c, _, _)| intersection(bounds, c));
@@ -264,7 +261,10 @@ impl Builder<'_> {
             self.affected.insert(id.clone());
         }
         self.next.entries.insert(id.clone(), entry);
-        Ok(bounds_changed || flags.intersects(DirtyFlags::TRANSFORM | DirtyFlags::STRUCTURE))
+        Ok(bounds_changed
+            || flags.intersects(DirtyFlags::TRANSFORM | DirtyFlags::STRUCTURE)
+            || (object.mask != gpui_flow_scene::MaskMode::None
+                && flags.intersects(DirtyFlags::OPACITY)))
     }
 }
 pub(crate) fn update_layout(

@@ -428,7 +428,7 @@ fn dormant_erasers_masks_and_root_exclusion_match_scene_queries() {
     let mut engine = SceneEngine::new(scene).unwrap();
     assert_eq!(
         engine.local_bounds(&"parent".into()).unwrap(),
-        Some(Bounds::new(Point::new(-40., 0.), Size::new(60., 20.)))
+        Some(Bounds::new(Point::new(-40., 0.), Size::new(5., 5.)))
     );
     let parent_bounds = engine.world_bounds(&"parent".into()).unwrap();
     let eraser = engine.handle(&"eraser".into()).unwrap();

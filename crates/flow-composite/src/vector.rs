@@ -1005,8 +1005,18 @@ fn reference_bounds(
     };
     let mut result = object.paint_bounds();
     if recursive {
-        for child in &source.children {
-            if child.object.eraser != EraserMode::None {
+        let active_masks = crate::plan::has_active_masks(source);
+        let end = if active_masks {
+            source
+                .children
+                .iter()
+                .position(|c| c.object.mask != MaskMode::None)
+                .map_or(source.children.len(), |i| i + 1)
+        } else {
+            source.children.len()
+        };
+        for child in &source.children[..end] {
+            if !active_masks && child.object.eraser != EraserMode::None {
                 continue;
             }
             if let Some(b) = reference_bounds(child, camera, true)? {

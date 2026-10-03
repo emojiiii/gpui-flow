@@ -1,8 +1,10 @@
 //! Real CPU domains uploaded through SceneView; no screenshot/readback emulation.
 use gpui::{prelude::*, *};
 use gpui_flow::{
-    ControlButton, SceneView,
-    scene::{Affine, BlendMode, Color, DisplayObject, MaskMode, Scene, Size, Style, display},
+    ControlButton, SceneView, SceneViewEvent,
+    scene::{
+        Affine, BlendMode, Color, DisplayObject, EventKind, MaskMode, Scene, Size, Style, display,
+    },
 };
 fn document() -> Scene {
     let mut s = Scene::new();
@@ -71,16 +73,33 @@ fn document() -> Scene {
 }
 struct Lab {
     view: Entity<SceneView>,
+    _events: Subscription,
+    last_hit: String,
 }
 impl Lab {
     fn new(cx: &mut Context<Self>) -> Self {
+        let view = cx.new(|cx| {
+            let mut v = SceneView::new(document(), cx).unwrap();
+            v.show_grid = false;
+            v.set_editable(false, cx);
+            v
+        });
+        let events = cx.subscribe(&view, |this, _, event, cx| {
+            if let SceneViewEvent::Pointer(event) = event
+                && event.kind == EventKind::PointerDown
+            {
+                this.last_hit = format!("Last pointer target: {}", event.target);
+                eprintln!(
+                    "pointer target={} world={:?} local={:?}",
+                    event.target, event.world_position, event.local_position
+                );
+                cx.notify();
+            }
+        });
         Self {
-            view: cx.new(|cx| {
-                let mut v = SceneView::new(document(), cx).unwrap();
-                v.show_grid = false;
-                v.set_editable(false, cx);
-                v
-            }),
+            view,
+            _events: events,
+            last_hit: "Click the masked content to inspect the routed target".into(),
         }
     }
     fn edit(&mut self, id: &str, f: impl FnOnce(&mut DisplayObject), cx: &mut Context<Self>) {
@@ -118,6 +137,26 @@ impl Render for Lab {
             mask.visible,
             mask.style.fill.is_some()
         );
+        let group = &self
+            .view
+            .read(cx)
+            .editor
+            .scene()
+            .get(&"mask".into())
+            .unwrap()
+            .object;
+        let width = self
+            .view
+            .read(cx)
+            .editor
+            .engine
+            .local_bounds(&"mask".into())
+            .unwrap()
+            .map_or(0., |b| b.size.width);
+        let hit_status = format!(
+            "hitChildren={} · group width={} · {}",
+            group.hit_children, width, self.last_hit
+        );
         div().size_full().flex().flex_col().bg(rgb(0x161b25)).text_color(rgb(0xffffff))
             .child(div().h(px(58.)).px_4().flex().items_center().gap_2().child("Vector compositing")
                 .child(ControlButton::new("opacity","Opacity 50% / 100%").on_click(cx.listener(|this,_,_,cx|this.edit("opacity",|o|o.style.opacity=if o.style.opacity==0.5 {1.} else {0.5},cx))))
@@ -128,9 +167,10 @@ impl Render for Lab {
                 .child(ControlButton::new("mask-mode", "Next mask mode").on_click(cx.listener(|this,_,_,cx|this.edit("ellipse-mask",|o|o.mask=match o.mask {MaskMode::Alpha=>MaskMode::Grayscale,MaskMode::Grayscale=>MaskMode::Path,MaskMode::Path=>MaskMode::Clipping,MaskMode::Clipping=>MaskMode::ClippingPath,_=>MaskMode::Alpha},cx))))
                 .child(ControlButton::new("mask-fill", "Paint / no paint").on_click(cx.listener(|this,_,_,cx|this.edit("ellipse-mask",|o|o.style.fill=if o.style.fill.is_some(){None}else{Some(Color::hex(0xff3030).into())},cx))))
                 .child(ControlButton::new("mask-visible", "Show / hide marker").on_click(cx.listener(|this,_,_,cx|this.edit("ellipse-mask",|o|o.visible = !o.visible,cx))))
+                .child(ControlButton::new("hit-children", "Hit children").on_click(cx.listener(|this,_,_,cx|this.edit("mask",|o|o.hit_children = !o.hit_children,cx))))
                 .child(div().text_sm().child(status)))
             .child(div().flex_1().min_h_0().overflow_hidden().child(self.view.clone()))
-            .child(div().h(px(64.)).px_4().text_sm().child("Alpha/Grayscale use paint; Path uses the ellipse even without paint. Clipping modes also draw the marker.\nA hidden sole marker disables masking. Opacity applies once; Undo restores edits. Native labels remain outside vector domains."))
+            .child(div().h(px(64.)).px_4().flex().flex_col().text_sm().child(hit_status).child("Alpha/Grayscale use paint; Path uses geometry. Hide the sole marker to restore ordinary content bounds. Undo restores edits."))
     }
 }
 fn main() {

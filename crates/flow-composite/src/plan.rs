@@ -263,6 +263,7 @@ impl DomainSource {
                 && a.stroke_scale == b.stroke_scale
                 && a.object.visible == b.object.visible
                 && a.object.mask == b.object.mask
+                && has_active_masks(a) == has_active_masks(b)
                 && a.object.eraser == b.object.eraser
                 && a.object.style.stroke == b.object.style.stroke
                 && a.object.style.stroke_layers == b.object.style.stroke_layers

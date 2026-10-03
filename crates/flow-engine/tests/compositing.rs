@@ -23,8 +23,9 @@ fn blend_and_mask_setters_report_specific_dirty_bits_and_reject_invalid_values()
     let c = e
         .set_property(h, PropertyKey::Mask, json!("alpha"))
         .unwrap();
-    assert!(c.dirty[&"r".into()].contains(DirtyFlags::PAINT | DirtyFlags::GEOMETRY));
-    assert!(!c.dirty[&"r".into()].contains(DirtyFlags::HIT));
+    assert!(
+        c.dirty[&"r".into()].contains(DirtyFlags::PAINT | DirtyFlags::GEOMETRY | DirtyFlags::HIT)
+    );
     for mode in [
         "overlay",
         "darken",

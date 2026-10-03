@@ -426,6 +426,19 @@ impl SceneEngine {
         options: HitTestOptions,
         image_ids: &BTreeSet<DisplayId>,
     ) -> Result<Vec<HitTestResult>, EngineError> {
+        let hits = self.hit_candidates_with_images(world, options, image_ids)?;
+        Ok(self.scene().resolve_mask_hits(hits, options.tolerance)?)
+    }
+    /// Pre-policy candidates for a host pixel picker. These include content
+    /// needed to decide mask overlap even when hitChildren hides its direct
+    /// target. Filter resource alpha, then call Scene::resolve_mask_hits before
+    /// selecting or dispatching any target; do not dispatch these raw IDs.
+    pub fn hit_candidates_with_images(
+        &self,
+        world: Point,
+        options: HitTestOptions,
+        image_ids: &BTreeSet<DisplayId>,
+    ) -> Result<Vec<HitTestResult>, EngineError> {
         if !world.is_finite() || !options.tolerance.is_finite() || options.tolerance < 0. {
             return Err(
                 SceneError::InvalidGeometry("invalid hit point or tolerance".into()).into(),
@@ -435,8 +448,7 @@ impl SceneEngine {
         for id in self.queries.paint.iter().rev() {
             let object = &self.scene().get(id).expect("node").object;
             let e = self.entry(id)?;
-            if !e.hit_enabled
-                || (!options.include_locked && e.locked)
+            if (!options.include_locked && e.locked)
                 || (!options.include_invisible && (!e.visible || e.opacity <= 0.))
                 || object.hit_policy == HitPolicy::None
                 || e.clips.iter().any(|c| !c.contains(world))
@@ -476,19 +488,28 @@ impl SceneEngine {
             let resolved = self
                 .scene()
                 .resolved_object(id, self.scene().resolved_stroke_camera().unwrap_or(1.))?;
-            let hit = custom.unwrap_or_else(|| match object.hit_policy {
-                HitPolicy::None => false,
-                HitPolicy::Bounds => e
-                    .local_bounds
-                    .is_some_and(|b| b.expanded(tolerance).contains(local)),
-                HitPolicy::Geometry => {
-                    object
-                        .shape
-                        .contains_geometry(local, object.style.fill_rule)
-                        || near_contours(&object.shape, local, tolerance)
-                }
-                HitPolicy::Painted => resolved.shape.hit_test(local, &resolved.style, tolerance),
-            });
+            let hit = if self.scene().mask_hit_uses_geometry(id) {
+                object
+                    .shape
+                    .contains_geometry(local, object.style.fill_rule)
+                    || near_contours(&object.shape, local, tolerance)
+            } else {
+                custom.unwrap_or_else(|| match object.hit_policy {
+                    HitPolicy::None => false,
+                    HitPolicy::Bounds => e
+                        .local_bounds
+                        .is_some_and(|b| b.expanded(tolerance).contains(local)),
+                    HitPolicy::Geometry => {
+                        object
+                            .shape
+                            .contains_geometry(local, object.style.fill_rule)
+                            || near_contours(&object.shape, local, tolerance)
+                    }
+                    HitPolicy::Painted => {
+                        resolved.shape.hit_test(local, &resolved.style, tolerance)
+                    }
+                })
+            };
             let image_candidate = image_ids.contains(id)
                 && matches!(&object.shape, Shape::Image(image) if image.contains(local));
             if hit || image_candidate {

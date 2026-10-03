@@ -21,16 +21,46 @@ Text/Custom geometric paths are explicitly unsupported; alpha/grayscale modes
 continue to use existing producers. No glyph outline is replaced with a text box.
 
 Native JSON uses snake_case. Leafer JSON exchange still explicitly rejects masks.
-The compositor keeps conservative allocation bounds. Complete Leafer mask layout
-and hit rules, arbitrary external host backdrops and container/Text Path erasers
-remain outside this increment, so APP-03 remains partial.
+The compositor keeps conservative effect/allocation bounds, independently of the
+logical bounds below. Arbitrary external host backdrops and container/Text Path
+erasers remain outside this increment, so APP-03 remains partial.
+
+## Layout and picking
+
+When any direct marker is active, Group logical bounds include the stable
+z-ordered prefix through the first marker. Without an active marker, ordinary
+child bounds return. Reorder, visibility and opacity changes update cached
+ancestor bounds; crossing the last marker's zero-opacity boundary also withdraws
+stale composite placement. This replaces the earlier all-child Group bounds.
+Conservative effect bounds still include the full rendered extent.
+
+With `hitChildren=true`, content keeps its own geometric picking, including
+content outside transparent mask pixels. A non-self-painting mask leaf requires
+an overlapping ordinary sibling hit; Clipping variants also paint and hit their
+own shape. With `hitChildren=false`, active mask branches instead select the
+parent Group, using the first-marker bounds gate, real ancestor clips and world
+hit tolerance. Only literal Path markers force paint-independent geometry in
+this mode. Duplicate parent hits are removed and local coordinates use the parent.
+
+Accepted Image alpha is sampled before mask-parent resolution, so transparent
+Image pixels cannot create a proxy hit. Geometric Path Image markers deliberately
+need no decoded pixels. Locks, visibility and attachment checks still apply.
 
 Run `cargo test -p gpui-flow-composite mask_mode_tests` for pixel, blend, eraser,
 resource and budget regression checks. The existing `compositing` example now
-cycles all modes, toggles marker paint/visibility/opacity, and supports Undo.
+cycles all modes, toggles marker paint/visibility/opacity and hit-children policy,
+shows current logical width and pointer target, and supports Undo.
 
 Semantics are based on pinned Leafer [mask scheduling](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/mask/src/index.ts)
 and [branch clipping](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/display-module/display-module/src/BranchRender.ts).
+Logical bounds and picking also follow the pinned
+[LeafBoundsHelper](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/display-module/helper/src/LeafBoundsHelper.ts).
 Pixel regression results describe this CPU implementation, not browser/GPU bit identity.
 
-Validation: 13 focused pixel/admission tests, the shared 1,923-default/304-UI aggregate and strict checks passed. The existing Linux example exercised all five modes, paint/visibility/opacity changes and Undo, then exited normally; screen captures are lossy JPEG, with exact CPU assertions kept in tests.
+Rendering validation includes focused pixel/admission regressions and the existing
+Linux example cycling all five modes, paint/visibility/opacity changes and Undo.
+Screen captures are lossy JPEG; exact CPU assertions remain in tests.
+
+Layout/hit regressions cover ordering, activation, ancestor gates, image-alpha proxies
+and stale placement. The Linux example physically confirmed width 240 → 255 → 240
+on hide/Undo, ordinary child hits outside the mask and paintless Path parent hits.

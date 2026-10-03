@@ -643,7 +643,7 @@ pub(crate) fn property_dirty(name: &str) -> DirtyFlags {
         | "style.shadow"
         | "style.shadow_layers"
         | "style.inner_shadow_layers" => DirtyFlags::PAINT,
-        "mask" => DirtyFlags::PAINT | DirtyFlags::GEOMETRY,
+        "mask" => DirtyFlags::PAINT | DirtyFlags::GEOMETRY | DirtyFlags::HIT,
         "eraser" => DirtyFlags::PAINT | DirtyFlags::GEOMETRY | DirtyFlags::HIT,
         "transform" => DirtyFlags::TRANSFORM | DirtyFlags::HIT,
         "shape" | "text.content" | "path.data" | "image.source_crop" => {

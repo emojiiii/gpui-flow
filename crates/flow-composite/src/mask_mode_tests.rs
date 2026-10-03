@@ -403,3 +403,21 @@ fn mask_schedule_preflight_matches_exact_memory_and_work_limits() {
         }
     }
 }
+
+#[test]
+fn mask_activation_invalidates_stale_placement_when_derived_group_bounds_change() {
+    let mut s = scene();
+    add(
+        &mut s,
+        rect("m", 0., 30., Color::WHITE).with_mask(MaskMode::Alpha),
+        "g",
+    );
+    add(&mut s, rect("ink", 0., 50., Color::WHITE), "g");
+    let full = source(&s);
+    s.update_object(&"m".into(), |o| o.style.opacity = 0.5)
+        .unwrap();
+    assert!(full.placement_eq(&source(&s)));
+    s.update_object(&"m".into(), |o| o.style.opacity = 0.)
+        .unwrap();
+    assert!(!full.placement_eq(&source(&s)));
+}

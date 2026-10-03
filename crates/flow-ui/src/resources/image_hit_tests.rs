@@ -713,3 +713,55 @@ fn coherent_cpu_alpha_hits_use_displayed_frame_and_reject_revoked_generation() {
         DisplayId::from("back")
     );
 }
+
+#[test]
+fn mask_proxy_resolves_only_after_image_alpha_for_marker_and_content() {
+    for image_is_mask in [true, false] {
+        let mut s = Scene::new();
+        s.insert(
+            DisplayObject::new("back", display::Rect::new(100., 100.)),
+            None,
+            None,
+        )
+        .unwrap();
+        let mut owner = DisplayObject::new("owner", display::Group::new());
+        owner.hit_children = false;
+        s.insert(owner, None, None).unwrap();
+        let mask = if image_is_mask {
+            image()
+        } else {
+            DisplayObject::new("mask", display::Rect::new(100., 100.))
+        };
+        s.insert(
+            mask.with_mask(gpui_flow_scene::MaskMode::Alpha),
+            Some("owner".into()),
+            None,
+        )
+        .unwrap();
+        let content = if image_is_mask {
+            DisplayObject::new("content", display::Rect::new(100., 100.))
+        } else {
+            image()
+        };
+        s.insert(content, Some("owner".into()), None).unwrap();
+        let (mut e, mut r, mut p) = setup(s);
+        install(&mut p, &e, strict());
+        load(&mut e, &mut r, vec![frame(0)]);
+        assert_eq!(hit(&p, &e, &r, 50., 50.), Some("back".into()));
+        change_source(&mut e, "opaque.png");
+        load(&mut e, &mut r, vec![frame(255)]);
+        assert_eq!(hit(&p, &e, &r, 50., 50.), Some("owner".into()));
+        change_source(&mut e, "pending.png");
+        assert_eq!(hit(&p, &e, &r, 50., 50.), Some("back".into()));
+        if image_is_mask {
+            e.transaction(|s| {
+                s.update_object(&"image".into(), |o| {
+                    o.mask = gpui_flow_scene::MaskMode::Path
+                })
+            })
+            .unwrap();
+            // Geometric path masking does not depend on unavailable image alpha.
+            assert_eq!(hit(&p, &e, &r, 50., 50.), Some("owner".into()));
+        }
+    }
+}
