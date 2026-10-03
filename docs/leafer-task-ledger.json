@@ -7,8 +7,8 @@
     "leafer_in": "3eb445bf34debb638766615282224b77108bf610"
   },
   "counts": {
-    "bounded_verified": 33,
-    "partial": 9,
+    "bounded_verified": 34,
+    "partial": 8,
     "not_started": 3,
     "needs_verification": 0,
     "in_progress": 0
@@ -331,7 +331,7 @@
       "id": "APP-04",
       "category": "外观",
       "title": "阴影与固定滤镜集合",
-      "status": "partial",
+      "status": "bounded_verified",
       "acceptance": "已有leaf/group inner/outer多影；必补spread/box/scale-fixed shadow、blur、backgroundBlur及grayscale并有像素/预算测试",
       "boundary": "backgroundBlur仅可在拥有完整背景的有界surface执行；不承诺任意宿主backdrop",
       "reference_doc": "docs/multiple-shadows.md",

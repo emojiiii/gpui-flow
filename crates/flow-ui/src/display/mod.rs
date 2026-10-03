@@ -87,6 +87,7 @@ impl RenderObject {
                 if image.source_crop.is_some()
                     || (image.is_rounded() && image.fit == scene::display::ImageFit::Contain))
             || self.object.style.has_blur()
+            || self.object.style.has_background_blur()
             || self.object.style.has_grayscale()
             || self.object.style.blend_mode != scene::BlendMode::PassThrough
             || self.object.mask != scene::MaskMode::None

@@ -4,6 +4,7 @@
 //! exhausted budgets return an error before an output can be published. Native
 //! custom renderers must remain outside these domains. Image and text ink pixels
 //! are supplied by the host, never fetched, decoded or shaped by this crate.
+mod background;
 mod blur;
 mod canvas_surface;
 mod image;
@@ -81,6 +82,19 @@ impl CompositeLimits {
     }
 }
 
+/// Explicit first-increment boundaries for owned backdrop replacement.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BackgroundBlurContext {
+    TargetShape,
+    ArtisticBlend,
+    MaskRun,
+    EraserOwner,
+    RootEraser,
+    AncestorEffect,
+    NestedBackground,
+    ForegroundBackdrop,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CompositeError {
     UnsupportedShape(String),
@@ -115,6 +129,11 @@ pub enum CompositeError {
     UnsupportedGrayscaleBackdrop(DisplayId),
     /// Foreground blur would sever a PassThrough descendant from its backdrop.
     UnsupportedBlurBackdrop(DisplayId),
+    /// A backdrop replacement has no supported owner, coverage or replay contract.
+    UnsupportedBackgroundBlur {
+        object: DisplayId,
+        reason: BackgroundBlurContext,
+    },
     InvalidGeometry(String),
     TooLarge,
     WorkingSetLimit,
@@ -228,3 +247,6 @@ mod shadow_modes_tests;
 
 #[cfg(test)]
 mod shadow_mode_consumer_tests;
+
+#[cfg(test)]
+mod background_tests;

@@ -1,6 +1,6 @@
 # Bounded foreground blur
 
-This APP-04 increment adds scalar foreground blur. The fixed task remains partial: owned-background blur and spread/box/scale-fixed shadows are separate mandatory work. This contract documents the implemented bounded pipeline and its explicit rejection domains; it does not assert browser-pixel parity, an arbitrary host backdrop, native producer coverage or a completed physical gate. The final source checks below have passed; physical fixture acceptance remains a separate gate.
+Scalar foreground blur is part of the fixed APP-04 effect set alongside [shadow modes](shadow-modes.md), [owned background blur](background-blur.md) and [grayscale](grayscale.md). The contract below describes the supported pipeline and explicit rejection domains; it makes no browser-pixel or arbitrary host-backdrop claim.
 
 ## Model and mapping
 
@@ -14,7 +14,7 @@ The renderer filters all four **premultiplied encoded-sRGB** byte channels with 
 
 At very small positive sigma, image0.25.10's adjacent f32 Gaussian weights can underflow to exactly zero. The dependency trims this to one tap while its ring row storage retains a one-pixel pad; it then samples the wrong horizontal position and can omit the first destination row. Foreground blur reproduces the dependency's adjacent f32 weight expression and returns the original source only when that value is exactly zero. The mathematically correct byte result in this range is identity. There is no broad threshold, sigma clamp or modified nonzero kernel. Adjacent representable f32 values on both sides of the actual transition distinguish this branch from the unmodified dependency. This is a narrow correctness deviation, not a claim to preserve image's buggy output for all sigma or to patch the dependency generally.
 
-The existing A8 shadow Gaussian is unchanged by this increment. At physical shadow sigma=.001 (for example scale1, shadow.blur=.002), its one-tap path can still shift shadow alpha right by one physical pixel. This inherited limitation also applies to own/child shadows sampled inside a foreground blur. The new RGBA correction does not repair those A8 calls; the mandatory shadow-mode follow-up must address that case explicitly.
+The later [shadow-mode implementation](shadow-modes.md) applies the same exact one-tap correction to A8 shadows, including shadows sampled inside foreground blur.
 
 ## Complete source and phase ownership
 
@@ -44,26 +44,22 @@ The padded blur layer replaces that node's ordinary isolation layer. The runtime
 
 SceneView promotes active blur to a CPU domain. Direct lower-level native painting rejects it as a compositing-domain feature. PNG, lossless WebP, JPEG and Canvas subtree operations reuse the bounded CPU path with their existing output/background semantics. Mixed SVG rejects active visible blur before resource preparation; strict Leafer interchange rejects nonzero blur including retained hidden state. Existing explicit hidden/zero-opacity consumer policies remain separate from model admission.
 
-Final source receipts must distinguish independent scalar convolution, source/crop and effect-order oracles, unchanged-path regressions, real CPU producer/consumer output, model/history tests, UI controller generation tests and physical observations. Native JPEGs establish visibility only; public `presented_geometry` may take a canonical fast path and does not expose private CPU upload generations. The physical fixture is a separate gate with fresh source/binary hashes and exclusive session evidence. APP-04 status is not upgraded by this foreground slice alone.
+Final source receipts must distinguish independent scalar convolution, source/crop and effect-order oracles, unchanged-path regressions, real CPU producer/consumer output, model/history tests, UI controller generation tests and physical observations. Native JPEGs establish visibility only; public `presented_geometry` may take a canonical fast path and does not expose private CPU upload generations. The physical fixture is a separate gate with fresh source/binary hashes and exclusive session evidence. The task ledger accounts for the complete fixed effect set.
 
 
 ## Pinned Leafer reference boundary
 
 The inspected [Blur.ts](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/effect/src/Blur.ts) sets a filter from blur multiplied by the current world matrix's `a` component; [LeaferCanvasBase](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/canvas/canvas/src/LeaferCanvasBase.ts) applies pixelRatio and a CSS blur filter. This motivates a physical Gaussian mapping, but Flow deliberately uses positive-similarity magnitude so supported rotation does not turn the radius negative or zero. The finite scalar ranges, encoded-premultiplied CPU rule, explicit phase order and rejection domains above are Flow's bounded contract.
 
-Registration alone does not establish execution. At the pinned UI/core/plugin revisions the inspected UIRender, LeafRender, BranchRender, helper and filter paths did not establish a caller executing Effect.blur; the upstream [BackgroundBlur.ts](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/effect/src/BackgroundBlur.ts) is empty. Consequently this increment does not claim executed upstream effect-order or byte parity. The original task nevertheless requires owned-background blur as a future supported Flow capability; an upstream stub does not remove that acceptance requirement.
+Registration alone does not establish execution. At the pinned UI/core/plugin revisions the inspected UIRender, LeafRender, BranchRender, helper and filter paths did not establish a caller executing Effect.blur; the upstream [BackgroundBlur.ts](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/effect/src/BackgroundBlur.ts) is empty. Consequently this increment does not claim executed upstream effect-order or byte parity. The original task still requires owned-background blur; the [owned-prefix implementation](background-blur.md) supplies that Flow capability.
 
 
-## Final source validation, 2026-10-03
+## Validation
 
-The final 528-file conservative source/assets/Cargo inventory has aggregate SHA-256 `365ad834c6e3138277ba9c0a774192046a4daf3df0eec8ab0e7ecf305f89db05`; it is not a compiler dependency graph. Final headless tests/doctests passed **1,741**, with **10 existing ignored**. The complete compositor passed **428** (included in the headless count). UI library tests passed **284**. Headless and the explicit Studio/UI feature graph passed all-targets Clippy with warnings denied, plus formatting and diff checks. Tests are not summed across reruns.
-
-After the UI checks, one compositor-only test was added for entirely offscreen sources on all four sides and corners at DPR1/1.25/2. The other 527 inventory entries, including every runtime/UI source, were unchanged. The final complete compositor/headless and headless strict checks ran on the new inventory; the UI checks retain their original exact snapshot and the single-test-file delta proof rather than claiming another UI run.
-
-The first convolution tests exposed the locked one-tap defect above. Independent source review also found and repaired discarded parent shadows when only child halo entered a clip, and early f32 rounding of large cancelling camera/world translations. A new Frame test initially retained a default black fill, invalidating its intended paintless oracle; that fixture error was corrected explicitly with unchanged positive-shadow assertions. The intermediate syntax/formatting and test failures, final receipts, source manifests and dependency audit remain separately hashed. The source validation summary (historical record in Git history) records commands and boundaries; the independent final review (historical record in Git history) is a source review, not another test run.
-
-No native window was opened for that source checkpoint. The later [bounded 12-row native gate](foreground-blur-native.md) has since completed on its separately frozen fixture/binary, with exact scope and preserved intermediate states recorded there. APP-04 remains partial, with its original remaining effects and acceptance unchanged.
-
-The foreground physical evidence is preserved as private Library COMPLETE v5, including original JPEGs/events, normal exit, both audit drafts and source/rebuild provenance. This adds no exact native-pixel or private-generation claim and does not close APP-04.
-
-The later [shadow-mode increment](shadow-modes.md) now repairs the inherited A8 one-tap displacement and tightens its conservative work accounting. The earlier foreground1049Z binary and native report retain their original historical limitation; this is not a retroactive change to that frozen evidence.
+Independent regressions cover scalar convolution, one-tap identity, full-source
+crops, shadow/filter ordering, offscreen sources and cancelling camera/world
+translations, exact budgets and failure atomicity. The source and UI suites
+passed strict checks. The [12-row Linux native check](foreground-blur-native.md)
+completed and exited normally. Its frozen binary predates the later A8 shadow
+correction; that historical result is not retroactively changed. Run the
+`foreground_blur` Studio example for the interactive cases.

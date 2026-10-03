@@ -6,7 +6,15 @@ use gpui_flow_scene::{
 use std::sync::Arc;
 use tiny_skia::{Path, PathBuilder, Transform};
 
+pub(crate) struct PreparedBackground {
+    pub amount: f32,
+    pub coverage: Option<VectorPaint>,
+    pub site: crate::background::Site,
+}
+
 pub(crate) struct PreparedNode {
+    pub id: gpui_flow_scene::DisplayId,
+    pub background: Option<PreparedBackground>,
     pub bounds: Option<[f64; 4]>,
     pub world: Affine,
     pub blur: f32,
@@ -131,6 +139,7 @@ pub(crate) struct Preparation {
     pub has_shadows: bool,
     pub has_grayscale: bool,
     pub has_blur: bool,
+    pub background_sites: Vec<(gpui_flow_scene::DisplayId, crate::background::Site)>,
     pub has_inner_shadows: bool,
     pub has_shadow_modes: bool,
     pub has_image_clips: bool,
@@ -406,6 +415,8 @@ impl Preparation {
                 self.reference_geometry(source, limits, depth, true)?;
             }
             return Ok(PreparedNode {
+                id: object.id.clone(),
+                background: None,
                 bounds: None,
                 world: source.world_transform,
                 blur: 0.,
@@ -466,6 +477,8 @@ impl Preparation {
             // its parent's positive contribution or the domain allocation.
             self.bounds = previous_bounds;
             return Ok(PreparedNode {
+                id: object.id.clone(),
+                background: None,
                 bounds,
                 world: source.world_transform,
                 blur: 0.,
@@ -488,6 +501,39 @@ impl Preparation {
                 child_clip: None,
             });
         }
+        // Coverage is independent of visible paint and never enters the own
+        // foreground/shadow alpha source. add_path still charges its geometry.
+        let mut coverage_bounds = None;
+        let background = if object.style.has_background_blur() {
+            let coverage = if let Some(path) = path(&object.shape)? {
+                coverage_bounds = Some(self.add_path(&path, source.world_transform, limits)?);
+                self.bounds = None;
+                Some(VectorPaint {
+                    path,
+                    paint: VectorSource::Scene(tiny_skia::Paint::default()),
+                    rule: match object.style.fill_rule {
+                        FillRule::EvenOdd => tiny_skia::FillRule::EvenOdd,
+                        FillRule::NonZero => tiny_skia::FillRule::Winding,
+                    },
+                    world: source.world_transform,
+                })
+            } else {
+                None
+            };
+            let site = self
+                .background_sites
+                .iter()
+                .find(|(id, _)| id == &object.id)
+                .map(|(_, site)| site.clone())
+                .ok_or(CompositeError::UnsupportedExternalBackdrop)?;
+            Some(PreparedBackground {
+                amount: object.style.background_blur,
+                coverage,
+                site,
+            })
+        } else {
+            None
+        };
         self.has_grayscale |= object.style.has_grayscale();
         self.has_blur |= object.style.has_blur();
         let mut paints = Vec::new();
@@ -792,6 +838,7 @@ impl Preparation {
                 reference,
             });
         }
+        node_bounds = crate::blur::union(node_bounds, coverage_bounds);
         self.bounds = match (
             previous_bounds,
             if object.eraser == EraserMode::None {
@@ -809,6 +856,8 @@ impl Preparation {
             (a, b) => a.or(b),
         };
         Ok(PreparedNode {
+            id: object.id.clone(),
+            background,
             bounds: node_bounds,
             world: source.world_transform,
             blur: object.style.blur,

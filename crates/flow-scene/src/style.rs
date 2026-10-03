@@ -465,6 +465,9 @@ pub struct Style {
     /// Foreground Gaussian standard deviation in local units, finite in [0,256].
     /// Zero (including negative zero) bypasses filtering and isolation.
     pub blur: f32,
+    /// Gaussian backdrop deviation in local units, finite in [0,256].
+    /// Available only in a complete, bounded owned paint domain.
+    pub background_blur: f32,
     /// Alpha-preserving sRGB grayscale amount, finite and in [0, 1].
     pub grayscale: f32,
     pub fill_rule: FillRule,
@@ -488,6 +491,7 @@ impl Default for Style {
             stroke_layers: Vec::new(),
             opacity: 1.0,
             blur: 0.0,
+            background_blur: 0.0,
             grayscale: 0.0,
             fill_rule: FillRule::NonZero,
             blend_mode: BlendMode::PassThrough,
@@ -507,6 +511,9 @@ pub const MAX_SHADOW_LAYERS: usize = 8;
 pub const MAX_INNER_SHADOW_LAYERS: usize = 8;
 
 impl Style {
+    pub fn has_background_blur(&self) -> bool {
+        self.background_blur > 0.0
+    }
     pub fn has_blur(&self) -> bool {
         self.blur > 0.0
     }
@@ -644,6 +651,9 @@ impl Style {
         }
         if !self.blur.is_finite() || !(0.0..=256.0).contains(&self.blur) {
             return Err("blur must be finite and in [0,256]".into());
+        }
+        if !self.background_blur.is_finite() || !(0.0..=256.0).contains(&self.background_blur) {
+            return Err("background_blur must be finite and in [0,256]".into());
         }
         if !self.grayscale.is_finite() || !(0.0..=1.0).contains(&self.grayscale) {
             return Err("grayscale must be finite and in [0,1]".into());

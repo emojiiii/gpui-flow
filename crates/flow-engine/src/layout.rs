@@ -256,6 +256,7 @@ impl Builder<'_> {
                 && (object.style.has_visible_shadows()
                     || object.style.has_visible_inner_shadows()
                     || object.style.has_blur()
+                    || object.style.has_background_blur()
                     || object.style.has_grayscale()))
             || old.is_none_or(|e| e.effect_bounds != entry.effect_bounds)
         {

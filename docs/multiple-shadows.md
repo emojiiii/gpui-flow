@@ -16,7 +16,7 @@ atomically through Scene/engine/editor transactions and `Scene::from_json`.
 Unknown fields inside a Shadow still reject. `PropertyKey::ShadowLayers` exposes
 an array with default `[]` and PAINT-only invalidation. Adding, removing, editing
 or reordering layers supports the same serialization and Undo/Redo as the base.
-The ordered array now carries the bounded [spread, box and scale-fixed modes](shadow-modes.md). Per-layer blend and general filter graphs remain separate work. Inner layers use the separate [bounded inner-shadow API](inner-shadows.md); inner box is explicitly inert.
+The ordered array now carries the bounded [spread, box and scale-fixed modes](shadow-modes.md). Per-layer blend and general filter graphs remain separate work. Inner layers use the separate [bounded inner-shadow API](inner-shadows.md); inner box is explicitly inert. The fixed effect set also includes [foreground blur](foreground-blur.md), [owned background blur](background-blur.md) and [grayscale](grayscale.md).
 
 ## Exact composition contract
 

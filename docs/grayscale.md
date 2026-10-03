@@ -1,6 +1,6 @@
 # Bounded grayscale
 
-This document defines the implemented scalar grayscale increment. APP-04 remains partial. It does not replace the task ledger's mandatory acceptance or claim a native/cross-platform validation result.
+This scalar grayscale effect belongs to the fixed APP-04 set alongside [shadow modes](shadow-modes.md), [foreground blur](foreground-blur.md) and [owned background blur](background-blur.md).
 
 ## Model and compatibility
 
@@ -32,17 +32,16 @@ SceneView promotes active grayscale to a complete CPU domain. Missing Text bridg
 
 The in-place pass allocates no pixel scratch. It charges one current-surface pixel-work unit per pixel before touching the layer and checks cancellation at each row. The new isolation uses the existing RGBA layer and normal composite charge. Pre-allocation admission replays the same sequence and every descendant pass repeated by ancestor shadow sources. The existing limits remain: 4096 pixels per axis, 4,194,304 pixels, 128 MiB explicitly tracked live pixels, 32 million cumulative work units and 16 levels, plus existing input/geometry limits. No cache, dependency, downscale or tiling is introduced. Private backend, GPUI cache and GPU allocations retain their existing exclusions from process-memory guarantees.
 
-## Evidence boundary
+## Validation
 
-The historical validation summary records focused and full-check logs and exact source/build-input manifest hashes. The old cloud host was replaced during native QA; its unpublished original logs/raw packages are unavailable, as documented in the recovery report (historical record in Git history). The first consumer run failed because the new Canvas budget test configured a work limit below the initial surface allocation; the test now admits initial allocation and checks the intended transactional draw rejection. The failed log was retained on the old host. Two intermediate strict-check failures were also retained there: the current toolchain required fixed-array chunk iteration, and the first test conversion needed explicit array dereferences. Final-source checks passed after both corrections. Strict Clippy subsequently required constant RGBA chunks to use the current toolchain’s array-chunk API; the lint failure and an intermediate test-reference type-check failure were retained there, followed by corrected-source reruns. After the host replacement, their published summaries and hashes remain historical evidence, not restored original log bytes.
+Core regressions cover the premultiplied pixel rule, alpha preservation, effect
+ordering, zero-path identity, model/history and consumer invalidation. The
+source and UI suites passed strict checks. The recovered-host
+[native check](grayscale-native.md) completed the 15 required rows and a reopen,
+with both windows exiting normally. One screenshot showed a stale diagnostic
+while updated content was visible; the next same-revision live record was clear.
+That outlier remains recorded. Public geometry availability is not private CPU
+upload authority, and desktop JPEGs are not exact framebuffer evidence.
 
-Native window QA and integration fixture receipts are separate gates. This source contract does not assert a native pass. Remaining APP-04 work includes blur/backgroundBlur, spread/box/scale-fixed shadow behavior, and broader upstream filter semantics. Luminance-mask semantics remain outside this scalar appearance effect; grayscale on alpha-mask nodes is supported and preserves extracted alpha coverage.
-
-## Verified source checks
-
-The final 505 source/build inputs have aggregate SHA-256 `6f3337234d8554bd8206ac95095e850aca6fbc8eb4a01c58690f7bfbe99a744d`. The validation summary (historical record in Git history) records 1,701 headless tests/doctests with 10 existing ignored, 279 UI tests, strict all-targets checks for both existing feature graphs, and formatting. No native run is inferred.
-
-
-## Recovered-host native evidence
-
-The independent new-host [native report](grayscale-native.md) records all 15 required fixture rows and one reopen, both exit 0, 70 physical clicks, 73 actual JSON events and 46 original JPEGs. Final artifact audit is 286/286, with the original 278/286 draft retained and its audit-assumption errors explained. One screenshot displays StaleFrame while updated content is visible; the next same-revision live record is clear. It remains an explicit diagnostic outlier. Public geometry availability may be canonical and is not an upload-generation receipt; JPEGs do not prove exact native pixels. The raw evidence and rebuild sources are preserved in private Library version 4 COMPLETE under the identity recorded in the report. APP-04 remains partial and its mandatory remaining effects are unchanged.
+Luminance-mask semantics remain outside this scalar appearance effect. Grayscale
+on alpha-mask nodes preserves their extracted alpha coverage.

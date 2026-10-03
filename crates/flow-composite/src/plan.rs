@@ -121,7 +121,7 @@ pub fn owned_canvas(
         .collect::<Result<_, _>>()?;
     // Empty IDs are forbidden in a validated Scene. This runtime-only cache
     // identity therefore cannot collide with any canonical display object.
-    Ok(DomainSource {
+    let source = DomainSource {
         root: DomainNode {
             stroke_scale: gpui_flow_scene::StrokeScaleData::IDENTITY,
             object: DisplayObject::new("", Group::new()),
@@ -134,7 +134,9 @@ pub fn owned_canvas(
         resolved_camera: scene.resolved_stroke_camera(),
         logical_camera: None,
         logical_effect_camera: None,
-    })
+    };
+    crate::background::validate(&source)?;
+    Ok(source)
 }
 /// Capture a complete subtree for an imperative Canvas draw. Ancestors' clips,
 /// opacity and background are intentionally not included. No scene is mutated.
@@ -190,7 +192,7 @@ pub fn capture_subtree(
         0,
         false,
     )?;
-    Ok(DomainSource {
+    let source = DomainSource {
         root,
         clips: vec![],
         canvas: None,
@@ -198,9 +200,15 @@ pub fn capture_subtree(
         resolved_camera: scene.resolved_stroke_camera(),
         logical_camera: None,
         logical_effect_camera: None,
-    })
+    };
+    crate::background::validate(&source)?;
+    Ok(source)
 }
 impl DomainSource {
+    pub fn has_background_blur(&self) -> bool {
+        crate::background::active(&self.root)
+    }
+
     pub(crate) fn has_scale_fixed_strokes(&self) -> bool {
         fn visit(node: &DomainNode) -> bool {
             node.object.style.has_scale_fixed_strokes() || node.children.iter().any(visit)
@@ -241,6 +249,9 @@ impl DomainSource {
     /// Conservative stale-frame eligibility: paint/opacity-only changes may
     /// reuse a previous image; geometry, transform, clip, mask and order may not.
     pub fn placement_eq(&self, other: &Self) -> bool {
+        if self.has_background_blur() || other.has_background_blur() {
+            return self == other;
+        }
         fn same(a: &DomainNode, b: &DomainNode) -> bool {
             a.object.id == b.object.id
                 && a.object.shape == b.object.shape
@@ -328,7 +339,7 @@ impl DomainSource {
             }
         }
         let mut out = Vec::new();
-        visit(&self.root, false, &mut out);
+        visit(&self.root, self.has_background_blur(), &mut out);
         out
     }
     pub fn ids(&self) -> Vec<&DisplayId> {
@@ -367,6 +378,7 @@ fn boundary(scene: &Scene, id: &DisplayId) -> bool {
                 .any(|p| matches!(p,gpui_flow_scene::Paint::Solid{color} if color.a<255)))
         || o.style.has_grayscale()
         || o.style.has_blur()
+        || o.style.has_background_blur()
         || o.style.has_shadows()
         || o.style.has_inner_shadows()
         || o.style.blend_mode != BlendMode::PassThrough
@@ -426,19 +438,30 @@ fn visit(
             capture(scene, id, parent, limits, &mut Counts::default(), 0, false)
         };
         out.push(match result {
-            Ok(root) if requires_parent_backdrop(&root) => SceneUnit::Rejected(CompositeIssue {
-                object: id.clone(),
-                error: CompositeError::UnsupportedExternalBackdrop,
-            }),
-            Ok(root) => SceneUnit::Domain(Box::new(DomainSource {
-                root,
-                clips: clips.to_vec(),
-                canvas: None,
-                lowered_geometry: None,
-                resolved_camera: scene.resolved_stroke_camera(),
-                logical_camera: None,
-                logical_effect_camera: None,
-            })),
+            Ok(root) => {
+                let source = DomainSource {
+                    root,
+                    clips: clips.to_vec(),
+                    canvas: None,
+                    lowered_geometry: None,
+                    resolved_camera: scene.resolved_stroke_camera(),
+                    logical_camera: None,
+                    logical_effect_camera: None,
+                };
+                match crate::background::validate(&source) {
+                    Ok(_) if requires_parent_backdrop(&source.root) => {
+                        SceneUnit::Rejected(CompositeIssue {
+                            object: id.clone(),
+                            error: CompositeError::UnsupportedExternalBackdrop,
+                        })
+                    }
+                    Ok(_) => SceneUnit::Domain(Box::new(source)),
+                    Err(error) => SceneUnit::Rejected(CompositeIssue {
+                        object: id.clone(),
+                        error,
+                    }),
+                }
+            }
             Err(error) => SceneUnit::Rejected(CompositeIssue {
                 object: id.clone(),
                 error,
@@ -535,6 +558,7 @@ fn capture(
             },
         });
     }
+    crate::background::target(o)?;
     if o.style.has_shadows() && matches!(o.shape, Shape::Custom(_)) {
         return Err(CompositeError::UnsupportedShadow(o.id.clone()));
     }
@@ -615,6 +639,7 @@ fn capture(
         && (o.style.has_visible_shadows() || o.style.has_visible_inner_shadows())
         && o.style.blend_mode == BlendMode::PassThrough
         && o.style.opacity == 1.
+        && !crate::background::active(&captured)
         && requires_parent_backdrop(&captured)
     {
         return Err(CompositeError::UnsupportedShadowBackdrop(o.id.clone()));
@@ -624,6 +649,7 @@ fn capture(
         && o.style.has_grayscale()
         && o.style.blend_mode == BlendMode::PassThrough
         && o.style.opacity == 1.
+        && !crate::background::active(&captured)
         && requires_parent_backdrop(&captured)
     {
         return Err(CompositeError::UnsupportedGrayscaleBackdrop(o.id.clone()));
@@ -633,6 +659,7 @@ fn capture(
         && o.style.has_blur()
         && o.style.blend_mode == BlendMode::PassThrough
         && o.style.opacity == 1.
+        && !crate::background::active(&captured)
         && requires_parent_backdrop(&captured)
     {
         return Err(CompositeError::UnsupportedBlurBackdrop(o.id.clone()));
@@ -643,11 +670,14 @@ fn capture(
 // A mask alone does not isolate a pass-through Group in Leafer. Only blends
 // already protected by a real isolation or a translucent mask run can ignore
 // a native backdrop outside this CPU domain.
-fn requires_parent_backdrop(node: &DomainNode) -> bool {
+pub(crate) fn requires_parent_backdrop(node: &DomainNode) -> bool {
     if !node.object.visible || node.object.style.opacity == 0. {
         return false;
     }
-    if node.object.eraser != EraserMode::None || node.object.style.blend_mode.requires_backdrop() {
+    if node.object.eraser != EraserMode::None
+        || node.object.style.blend_mode.requires_backdrop()
+        || node.object.style.has_background_blur()
+    {
         return true;
     }
     if node.object.style.blend_mode == BlendMode::Normal
@@ -659,6 +689,10 @@ fn requires_parent_backdrop(node: &DomainNode) -> bool {
     {
         return false;
     }
+    requires_children_backdrop(node)
+}
+
+pub(crate) fn requires_children_backdrop(node: &DomainNode) -> bool {
     let mut translucent_run = false;
     for child in &node.children {
         if child.object.mask != MaskMode::None {

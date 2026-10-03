@@ -8,9 +8,11 @@ pub(super) fn admit(
     raster: &Raster<'_>,
     root: &PreparedNode,
     source: &DomainSource,
+    output: Option<&crate::blur::SurfacePlan>,
 ) -> Result<(), CompositeError> {
     let mut ledger = raster.budget.clone();
     let mut plan = Admission {
+        track_initialization: raster.track_initialization,
         width: raster.width,
         height: raster.height,
         pixels: raster.pixels,
@@ -20,6 +22,9 @@ pub(super) fn admit(
         cancelled: raster.cancelled,
     };
     plan.budget.reserve(plan.pixels * 4)?; // retained output
+    if plan.track_initialization {
+        plan.budget.write(plan.pixels)?;
+    }
     if let Some(backdrop) = source.canvas {
         plan.budget.write(plan.pixels)?;
         if backdrop.grid.is_some_and(|g| g.color.a != 0) {
@@ -27,22 +32,41 @@ pub(super) fn admit(
         }
     }
     plan.node(root, 0, false)?;
+    if let Some(output) = output {
+        plan.budget.reserve(output.pixels * 4)?;
+        plan.budget.write(output.pixels * 2)?; // final crop clear/copy
+        plan.width = output.width;
+        plan.height = output.height;
+        plan.pixels = output.pixels;
+        plan.world_to_layer = output.world_to_layer;
+        plan.origin = output.origin;
+    }
     if !source.clips.is_empty() {
         plan.budget.reserve(plan.pixels)?;
+        if plan.track_initialization {
+            plan.budget.write(plan.pixels)?;
+        }
         for index in 0..source.clips.len() {
             plan.budget.write(plan.pixels)?;
             if index != 0 {
                 plan.budget.write(plan.pixels)?;
                 plan.budget.reserve(plan.pixels)?;
+                if plan.track_initialization {
+                    plan.budget.write(plan.pixels)?;
+                }
                 plan.budget.in_use -= plan.pixels;
             }
         }
         plan.budget.write(plan.pixels)?;
         plan.budget.in_use -= plan.pixels;
     }
+    if output.is_some() {
+        plan.budget.in_use -= raster.pixels * 4;
+    }
     plan.check()
 }
 struct Admission<'a> {
+    track_initialization: bool,
     width: u32,
     height: u32,
     pixels: u64,
@@ -75,38 +99,47 @@ impl Admission<'_> {
         if node.eraser == EraserMode::Path {
             if node.erase_path.is_some() {
                 self.budget.reserve(self.pixels)?;
+                if self.track_initialization {
+                    self.budget.write(self.pixels)?;
+                }
                 self.budget.write(self.pixels * 2)?;
                 self.budget.in_use -= self.pixels;
             }
             return Ok(());
         }
-        if let Some(plan) = node.device.as_ref().and_then(|d| d.blur.as_ref()) {
+        if let Some(plan) = node.device.as_ref().and_then(|d| d.background.as_ref()) {
             if depth >= self.budget.limits.max_depth {
                 return Err(CompositeError::NestingLimit);
             }
             self.budget.reserve(plan.bytes())?;
             self.budget.write(plan.work())?;
-            let p = &plan.surface;
-            Admission {
-                width: p.width,
-                height: p.height,
-                pixels: p.pixels,
-                world_to_layer: p.world_to_layer,
-                origin: p.origin,
-                budget: self.budget,
-                cancelled: self.cancelled,
+            self.budget.write(plan.surface.pixels * 2)?;
+            self.budget.reserve(self.pixels * 4)?;
+            if self.track_initialization {
+                self.budget.write(self.pixels)?;
             }
-            .contents(node, depth + 1, false, true)?;
-            if node.grayscale > 0. {
-                self.budget.write(p.pixels)?;
+            self.budget.reserve(self.pixels)?;
+            self.budget.write(self.pixels * 2)?;
+            if let Some(foreground) = node.device.as_ref().and_then(|d| d.blur.as_ref()) {
+                self.foreground_blur(node, foreground, depth)?;
+            } else {
+                self.contents(node, depth + 1, false, true)?;
+                if node.grayscale > 0. {
+                    self.budget.write(self.pixels)?;
+                }
             }
             self.budget.write(self.pixels)?;
-            self.budget.in_use -= plan.bytes();
+            self.budget.in_use -= self.pixels * 5 + plan.bytes();
+        } else if let Some(plan) = node.device.as_ref().and_then(|d| d.blur.as_ref()) {
+            self.foreground_blur(node, plan, depth)?;
         } else if node.isolated() {
             if depth >= self.budget.limits.max_depth {
                 return Err(CompositeError::NestingLimit);
             }
             self.budget.reserve(self.pixels * 4)?;
+            if self.track_initialization {
+                self.budget.write(self.pixels)?;
+            }
             self.contents(node, depth + 1, false, true)?;
             if node.grayscale > 0. {
                 self.budget.write(self.pixels)?;
@@ -116,6 +149,36 @@ impl Admission<'_> {
         } else {
             self.contents(node, depth, clip, true)?;
         }
+        Ok(())
+    }
+    fn foreground_blur(
+        &mut self,
+        node: &PreparedNode,
+        plan: &crate::blur::BlurPlan,
+        depth: usize,
+    ) -> Result<(), CompositeError> {
+        if depth >= self.budget.limits.max_depth {
+            return Err(CompositeError::NestingLimit);
+        }
+        self.budget.reserve(plan.bytes())?;
+        self.budget.write(plan.work())?;
+        let p = &plan.surface;
+        Admission {
+            track_initialization: self.track_initialization,
+            width: p.width,
+            height: p.height,
+            pixels: p.pixels,
+            world_to_layer: p.world_to_layer,
+            origin: p.origin,
+            budget: self.budget,
+            cancelled: self.cancelled,
+        }
+        .contents(node, depth + 1, false, true)?;
+        if node.grayscale > 0. {
+            self.budget.write(p.pixels)?;
+        }
+        self.budget.write(self.pixels)?;
+        self.budget.in_use -= plan.bytes();
         Ok(())
     }
     fn contents(
@@ -144,12 +207,15 @@ impl Admission<'_> {
             .filter(|_| shadow)
         {
             let plan = if let Some(device) = &node.device {
-                if inner {
-                    &device.inner_shadows[index]
+                let Some(plan) = (if inner {
+                    &device.inner_shadows
                 } else {
-                    &device.shadows[index]
-                }
-                .clone()
+                    &device.shadows
+                })
+                .get(index) else {
+                    continue;
+                };
+                plan.clone()
             } else {
                 crate::shadow::SourcePlan::new(effect, self.world_to_layer, self.budget.limits)?
             };
@@ -160,6 +226,7 @@ impl Admission<'_> {
             self.budget.reserve(bytes)?;
             self.budget.write(plan.work(inner))?;
             Admission {
+                track_initialization: self.track_initialization,
                 width: plan.width,
                 height: plan.height,
                 pixels: plan.pixels,
@@ -179,10 +246,16 @@ impl Admission<'_> {
             .is_some_and(|image| image.own_clip.is_some())
         {
             self.budget.reserve(self.pixels)?;
+            if self.track_initialization {
+                self.budget.write(self.pixels)?;
+            }
             self.budget.write(self.pixels)?;
             if clip {
                 self.budget.write(self.pixels * 2)?;
                 self.budget.reserve(self.pixels)?;
+                if self.track_initialization {
+                    self.budget.write(self.pixels)?;
+                }
                 self.budget.in_use -= self.pixels;
             }
             self.budget.in_use -= self.pixels;
@@ -191,10 +264,16 @@ impl Admission<'_> {
             .write(self.pixels * (node.paints.len() as u64 + u64::from(node.image.is_some())))?;
         if node.child_clip.is_some() && !node.children.is_empty() {
             self.budget.reserve(self.pixels)?;
+            if self.track_initialization {
+                self.budget.write(self.pixels)?;
+            }
             self.budget.write(self.pixels)?;
             if clip {
                 self.budget.write(self.pixels * 2)?;
                 self.budget.reserve(self.pixels)?;
+                if self.track_initialization {
+                    self.budget.write(self.pixels)?;
+                }
                 self.budget.in_use -= self.pixels;
             }
             self.children(node, depth, true)?;
@@ -220,11 +299,20 @@ impl Admission<'_> {
                 continue;
             }
             self.budget.reserve(self.pixels * 4)?;
+            if self.track_initialization {
+                self.budget.write(self.pixels)?;
+            }
             self.node(child, depth, false)?;
             self.budget.reserve(self.pixels)?;
+            if self.track_initialization {
+                self.budget.write(self.pixels)?;
+            }
             self.budget.write(self.pixels)?; // alpha extraction
             self.budget.in_use -= self.pixels * 4;
             self.budget.reserve(self.pixels * 4)?;
+            if self.track_initialization {
+                self.budget.write(self.pixels)?;
+            }
             i += 1;
             while i < node.children.len() && node.children[i].mask == MaskMode::None {
                 let content = &node.children[i];

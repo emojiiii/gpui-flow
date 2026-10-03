@@ -362,7 +362,7 @@ pub(crate) fn diff(
     }) && old
         .nodes()
         .chain(new.nodes())
-        .any(|node| node.object.style.has_blur());
+        .any(|node| node.object.style.has_blur() || node.object.style.has_background_blur());
     Ok(change)
 }
 fn record_property(

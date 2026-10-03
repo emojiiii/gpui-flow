@@ -1,6 +1,6 @@
 # Bounded shadow spread, box and scale-fixed modes
 
-This next APP-04 increment extends the existing actual-alpha outer/inner shadow pipeline. The runtime source checks below have passed; the new native fixture gate remains separate. APP-04 remains partial until its original owned-background-blur requirement and other fixed gates are complete.
+This extends the actual-alpha outer/inner shadow pipeline with spread, box and scale-fixed modes. The fixed effect set also includes [foreground blur](foreground-blur.md), [owned background blur](background-blur.md) and [grayscale](grayscale.md).
 
 ## API and exact mode meaning
 
@@ -40,18 +40,13 @@ At Leafer UI `1e11641d3ea6b0211c83447268a90b8d58feec25`, [Shadow.ts](https://git
 
 The eligible single-shadow fast path uses a different scaleFixed helper and may keep scale1 even when zoomed out. Flow deliberately follows the coherent complex multi/inner cap-at-1 rule for every layer, including zero spread, and accepts a Boolean rather than inventing the stroke numeric threshold. Flow also keeps its existing local-vector offset direction and actual composed alpha rather than claiming exact upstream cached geometry, fitting/downsampling or browser bytes. Signed-factor and exact-collapse rules are explicit bounded choices where upstream passes transforms without a complete singular-case pixel contract.
 
-## Source validation and remaining native gate
+## Validation
 
-The owner's final runtime/test/Cargo inventory contains499 Rust/TOML/Cargo files, aggregate SHA-256 `201e73d2ace7b2d6f9a714f9c1aa79db14deb5c525d33de7d4ad4528205f2747`. The successful full headless run passed **1,788 tests/doctests with10 existing ignored**; UI library tests passed **287**. One subsequently added hidden-sibling cumulative-limit test passed in the final complete compositor scope of **456**, and an equivalent iterator-lint fix in one UI Text test was rechecked by that focused test. These are overlapping runs: do not sum456 or1 onto the full totals. The complete headless run included455 compositor cases; its one later test is explicitly separate rather than relabeling that run1,789.
-
-Headless/UI all-targets Clippy with warnings denied, formatting and diff checks passed. All production files were unchanged from the full successful headless/UI snapshot. The final three-file delta is tests only: added sibling regression and equivalent iterator/cast lint fixes. The owner retained per-stage before/after499-file hashes and the delta proof. An integration-time broader inventory contains534 code/assets/Cargo files, aggregate `45b564e154fac6d747d92b9bc92688579241b42e9302bcb3211a58bf34f414ea`; all35 additional entries match the published723d923d source archive. This later inventory is not retroactively claimed as captured by the test runner and neither inventory is an exact compiler dependency graph.
-
-The validation summary (historical record in Git history) records exact commands, logs, snapshots and test-only deltas. The independent source review (historical record in Git history) found and verified repairs for hidden-reference geometry input caps at capture and tighter raster limits, positive sigma narrowing into zero, and unintended mode-default parameter precision drift. Four review regressions failed before fixes and passed afterward. The A8 dependency defect was independently reproduced before its exact correction. Initial fixture mistakes and three headless/one UI test-lint issues remain in the original logs; no budget or oracle tolerance was raised.
-
-No new physical window was opened for this source checkpoint. A separately frozen native fixture is being prepared, including real host Text and bounded mode variants. Canonical CPU output is not native framebuffer data, public geometry availability is not a private upload generation, and browser/cross-platform parity is not claimed. APP-04 remains partial while its native shadow-mode gate and owned-background-blur work remain.
-
-## Integrated fixture CPU validation
-
-The [shadow_modes fixture](shadow-modes-fixture.md) now passes strict compilation/build and all three helpers on the same 535-file source snapshot. It covers 222 platform-free and 48 actual host-Text default-budget requests, 28 independent raw/true-PNG numerical cases, exact zero/tiny A8 identity, three complete-source crops and Path paint invariance. The summary (historical record in Git history) retains the first fixture compilation and typed-error expectation failures, all successful repeats, executable hashes from the first helper onward, and unchanged budget/tolerance limits. These helper counts are separate from the runtime suite above and must not be added to it.
-
-The original fixture checkpoint preceded native execution. The separately frozen [15-row native gate](shadow-modes-native.md) subsequently completed with108 physical clicks/112 events/54 original JPEGs, normal exit0 and298/298 saved-data checks. Original297/298 audit assumptions, ordinary pending/immediate-diagnostic lag and unobserved burst-cancellation timing remain explicit. APP-04 remains partial, including owned backgroundBlur.
+CPU regressions cover actual-alpha projection, negative/collapsed spread, inner
+box inactivity, scale compensation, one-tap identity, budget admission and
+complete-source crops. The source and UI suites passed strict checks. Run the
+[shadow_modes example](shadow-modes-fixture.md) for representative interactive
+scenes. Its 15-row Linux native check completed and exited normally; original
+failed audit assumptions and ordinary pending states remain in the historical
+[native record](shadow-modes-native.md). CPU bytes and desktop JPEGs are distinct
+evidence; neither establishes cross-platform or browser pixel parity.

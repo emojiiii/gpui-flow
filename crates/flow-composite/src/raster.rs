@@ -1,4 +1,5 @@
 mod admission;
+mod background;
 use crate::{
     CanvasBackdrop, CompositeError, CompositeLimits, DomainSource, ImageInputs, TextInputs,
     vector::{CompositeOperation, Preparation, PreparedNode, VectorPaint, VectorSource, transform},
@@ -197,7 +198,67 @@ fn blur_pixels(
     .ok_or(CompositeError::AllocationFailed)
 }
 
+struct GridLayout {
+    scale: f64,
+    gap: f64,
+    start: [f64; 2],
+    x0: f64,
+    x1: f64,
+    y0: f64,
+    y1: f64,
+}
+#[allow(clippy::too_many_arguments)]
+fn grid_layout(
+    backdrop: CanvasBackdrop,
+    viewport: RasterViewport,
+    origin: [f64; 2],
+    dimensions: [u32; 2],
+    prepared_points: usize,
+    limits: CompositeLimits,
+    extend: bool,
+) -> Result<Option<GridLayout>, CompositeError> {
+    let Some(grid) = backdrop.grid.filter(|g| g.color.a != 0) else {
+        return Ok(None);
+    };
+    let scale = viewport.device_scale as f64;
+    let gap = grid.spacing as f64;
+    let canvas = bounds(viewport.canvas_bounds);
+    let start = [
+        canvas[0] + (grid.offset.x as f64).rem_euclid(gap),
+        canvas[1] + (grid.offset.y as f64).rem_euclid(gap),
+    ];
+    let range = |axis: usize| {
+        let low = origin[axis] / scale;
+        let high = (origin[axis] + dimensions[axis] as f64) / scale;
+        let first = ((low - start[axis] - 1.) / gap).ceil();
+        let first = if extend { first } else { first.max(0.) };
+        let high = if extend {
+            high
+        } else {
+            high.min(canvas[axis + 2])
+        };
+        (first, ((high - start[axis]) / gap).ceil().max(first))
+    };
+    let (x0, x1) = range(0);
+    let (y0, y1) = range(1);
+    let dots = (x1 - x0) * (y1 - y0);
+    if !dots.is_finite() || dots * 4. + prepared_points as f64 > limits.max_total_points as f64 {
+        return Err(CompositeError::InputLimit);
+    }
+    Ok(Some(GridLayout {
+        scale,
+        gap,
+        start,
+        x0,
+        x1,
+        y0,
+        y1,
+    }))
+}
+
 struct Raster<'a> {
+    track_initialization: bool,
+    owner: Option<crate::background::Owner>,
     width: u32,
     height: u32,
     pixels: u64,
@@ -222,6 +283,7 @@ impl Raster<'_> {
         viewport: RasterViewport,
         origin: [f64; 2],
         prepared_points: usize,
+        extend: bool,
     ) -> Result<(), CompositeError> {
         self.check()?;
         self.budget.write(self.pixels)?;
@@ -230,32 +292,27 @@ impl Raster<'_> {
         let Some(grid) = backdrop.grid.filter(|g| g.color.a != 0) else {
             return Ok(());
         };
-        let scale = viewport.device_scale as f64;
-        let gap = grid.spacing as f64;
-        let canvas = bounds(viewport.canvas_bounds);
-        let start = [
-            canvas[0] + (grid.offset.x as f64).rem_euclid(gap),
-            canvas[1] + (grid.offset.y as f64).rem_euclid(gap),
-        ];
-        // Restrict generation to the actual allocated visible crop, while
-        // retaining the original canvas grid anchor after scrolling/clipping.
-        let range = |axis: usize, pixels: u32| {
-            let low = origin[axis] / scale;
-            let high = (origin[axis] + pixels as f64) / scale;
-            let first = ((low - start[axis] - 1.) / gap).ceil().max(0.);
-            let end = ((high.min(canvas[axis + 2]) - start[axis]) / gap)
-                .ceil()
-                .max(first);
-            (first, end)
+        let Some(layout) = grid_layout(
+            backdrop,
+            viewport,
+            origin,
+            [self.width, self.height],
+            prepared_points,
+            self.budget.limits,
+            extend,
+        )?
+        else {
+            return Ok(());
         };
-        let (x0, x1) = range(0, self.width);
-        let (y0, y1) = range(1, self.height);
-        let dots = (x1 - x0) * (y1 - y0);
-        if !dots.is_finite()
-            || dots * 4. + prepared_points as f64 > self.budget.limits.max_total_points as f64
-        {
-            return Err(CompositeError::InputLimit);
-        }
+        let GridLayout {
+            scale,
+            gap,
+            start,
+            x0,
+            x1,
+            y0,
+            y1,
+        } = layout;
         let mut path = PathBuilder::new();
         for ix in 0..(x1 - x0) as usize {
             self.check()?;
@@ -282,8 +339,13 @@ impl Raster<'_> {
                 path.push_rect(rect);
             }
         }
-        if let Some(path) = path.finish() {
+        if extend {
             self.budget.write(self.pixels)?;
+        }
+        if let Some(path) = path.finish() {
+            if !extend {
+                self.budget.write(self.pixels)?;
+            }
             let c = grid.color;
             let mut paint = tiny_skia::Paint::default();
             paint.set_color_rgba8(c.r, c.g, c.b, c.a);
@@ -307,6 +369,9 @@ impl Raster<'_> {
     fn surface(&mut self) -> Result<Pixmap, CompositeError> {
         self.check()?;
         self.budget.reserve(self.pixels * 4)?;
+        if self.track_initialization {
+            self.budget.write(self.pixels)?;
+        }
         let data = bytes(self.pixels * 4)?;
         Pixmap::from_vec(
             data,
@@ -450,15 +515,22 @@ impl Raster<'_> {
         if node.eraser == EraserMode::Path {
             return self.erase_path(node, target, clip);
         }
+        if let Some(plan) = node.device.as_ref().and_then(|d| d.background.as_ref()) {
+            return self.background_blur(node, plan, target, depth, clip);
+        }
         if let Some(plan) = node.device.as_ref().and_then(|d| d.blur.as_ref()) {
-            return self.blur(node, plan, target, depth, clip);
+            return self.blur(node, plan, target, depth, clip, false);
         }
         if node.isolated() {
             if depth >= self.budget.limits.max_depth {
                 return Err(CompositeError::NestingLimit);
             }
             let mut layer = self.surface()?;
+            let previous_owner = self
+                .owner
+                .replace(crate::background::Owner::Transparent(node.id.clone()));
             self.contents(node, &mut layer, depth + 1, None, true)?;
+            self.owner = previous_owner;
             if node.grayscale > 0. {
                 self.grayscale(&mut layer, node.grayscale)?;
             }
@@ -469,6 +541,7 @@ impl Raster<'_> {
         }
         Ok(())
     }
+    #[allow(clippy::too_many_arguments)]
     fn blur(
         &mut self,
         node: &PreparedNode,
@@ -476,6 +549,7 @@ impl Raster<'_> {
         target: &mut Pixmap,
         depth: usize,
         clip: Option<&Mask>,
+        foreground: bool,
     ) -> Result<(), CompositeError> {
         if depth >= self.budget.limits.max_depth {
             return Err(CompositeError::NestingLimit);
@@ -490,6 +564,8 @@ impl Raster<'_> {
         )
         .ok_or(CompositeError::AllocationFailed)?;
         let mut scratch = Raster {
+            track_initialization: self.track_initialization,
+            owner: Some(crate::background::Owner::Transparent(node.id.clone())),
             width: p.width,
             height: p.height,
             pixels: p.pixels,
@@ -509,8 +585,12 @@ impl Raster<'_> {
         self.composite_at(
             target,
             &output,
-            node.opacity,
-            node.operation(),
+            if foreground { 1. } else { node.opacity },
+            if foreground {
+                CompositeOperation::Blend(BlendMode::Normal)
+            } else {
+                node.operation()
+            },
             clip,
             [
                 (p.origin[0] - self.origin[0]) as i32,
@@ -548,6 +628,9 @@ impl Raster<'_> {
         }
         self.check()?;
         self.budget.reserve(self.pixels)?;
+        if self.track_initialization {
+            self.budget.write(self.pixels)?;
+        }
         let mut mask = Mask::from_vec(
             bytes(self.pixels)?,
             tiny_skia::IntSize::from_wh(self.width, self.height).ok_or(CompositeError::TooLarge)?,
@@ -764,12 +847,15 @@ impl Raster<'_> {
         inner: bool,
     ) -> Result<(), CompositeError> {
         let plan = if let Some(device) = &node.device {
-            if inner {
-                &device.inner_shadows[index]
+            let Some(plan) = (if inner {
+                &device.inner_shadows
             } else {
-                &device.shadows[index]
-            }
-            .clone()
+                &device.shadows
+            })
+            .get(index) else {
+                return Ok(()); // empty foreground has no shadow source
+            };
+            plan.clone()
         } else {
             crate::shadow::SourcePlan::new(shadow, self.world_to_layer, self.budget.limits)?
         };
@@ -799,6 +885,8 @@ impl Raster<'_> {
         )
         .ok_or(CompositeError::AllocationFailed)?;
         let mut scratch = Raster {
+            track_initialization: self.track_initialization,
+            owner: Some(crate::background::Owner::Transparent(node.id.clone())),
             width,
             height,
             pixels,
@@ -914,6 +1002,8 @@ impl Raster<'_> {
         )
         .ok_or(CompositeError::AllocationFailed)?;
         let mut scratch = Raster {
+            track_initialization: self.track_initialization,
+            owner: Some(crate::background::Owner::Transparent(node.id.clone())),
             width: plan.width,
             height: plan.height,
             pixels: plan.pixels,
@@ -1053,6 +1143,9 @@ impl Raster<'_> {
             let mut mask_surface = self.surface()?;
             self.node(mask_node, &mut mask_surface, depth, None)?;
             self.budget.reserve(self.pixels)?;
+            if self.track_initialization {
+                self.budget.write(self.pixels)?;
+            }
             let mut alpha = bytes(self.pixels)?;
             self.budget.write(self.pixels)?;
             for (row, input) in alpha
@@ -1133,6 +1226,9 @@ impl Raster<'_> {
     ) -> Result<Mask, CompositeError> {
         self.check()?;
         self.budget.reserve(self.pixels)?;
+        if self.track_initialization {
+            self.budget.write(self.pixels)?;
+        }
         let mut mask = Mask::from_vec(
             bytes(self.pixels)?,
             tiny_skia::IntSize::from_wh(self.width, self.height).ok_or(CompositeError::TooLarge)?,
@@ -1160,6 +1256,9 @@ impl Raster<'_> {
             mask.data_mut().copy_from_slice(inherited.data());
             // tiny-skia intersect_path has a temporary one-byte-per-pixel mask.
             self.budget.reserve(self.pixels)?;
+            if self.track_initialization {
+                self.budget.write(self.pixels)?;
+            }
             mask.intersect_path(&path, tiny_skia::FillRule::Winding, true, transform(a));
             self.budget.in_use -= self.pixels;
         } else {
@@ -1172,6 +1271,9 @@ impl Raster<'_> {
             return Ok(());
         }
         self.budget.reserve(self.pixels)?;
+        if self.track_initialization {
+            self.budget.write(self.pixels)?;
+        }
         let mut mask = Mask::from_vec(
             bytes(self.pixels)?,
             tiny_skia::IntSize::from_wh(self.width, self.height).ok_or(CompositeError::TooLarge)?,
@@ -1200,6 +1302,9 @@ impl Raster<'_> {
                 // intersect_path fills a temporary mask and intersects it.
                 self.budget.write(self.pixels)?;
                 self.budget.reserve(self.pixels)?;
+                if self.track_initialization {
+                    self.budget.write(self.pixels)?;
+                }
                 mask.intersect_path(&path, tiny_skia::FillRule::Winding, true, transform(a));
                 self.budget.in_use -= self.pixels;
             }
@@ -1326,7 +1431,10 @@ fn rasterize_inner(
             return Err(CompositeError::UnsupportedTransform);
         }
     }
+    let sites = crate::background::validate_cancelled(source, cancelled)?;
+    let active_background = !sites.is_empty();
     let mut prep = Preparation::with_lowered_geometry(source.lowered_geometry.clone());
+    prep.background_sites = sites;
     if source.has_scale_fixed_strokes() || source.resolved_camera.is_some() {
         // A raw rotated camera matrix has the same lost f32 scale provenance
         // as rotated local columns. The supported logical camera is explicit
@@ -1355,7 +1463,7 @@ fn rasterize_inner(
             .logical_effect_camera
             .unwrap_or(viewport.world_to_screen),
     };
-    let physical_effects = prep.has_blur || prep.has_shadow_modes;
+    let physical_effects = prep.has_blur || prep.has_shadow_modes || active_background;
     if physical_effects {
         crate::blur::resolve(&mut root, physical, budget.limits, cancelled)?;
     }
@@ -1438,31 +1546,111 @@ fn rasterize_inner(
             (a.ty as f64 * scale - y0) as f32,
         )
     };
+    let final_output = if active_background {
+        Some(crate::blur::SurfacePlan::new(
+            [x0, y0, x1, y1],
+            physical,
+            budget.limits,
+        )?)
+    } else {
+        None
+    };
+    let work = if active_background {
+        Some(crate::blur::SurfacePlan::new(
+            crate::blur::background_work(&root, [x0, y0, x1, y1]),
+            physical,
+            budget.limits,
+        )?)
+    } else {
+        None
+    };
+    let (width, height, pixels, world_to_layer, origin) = work
+        .as_ref()
+        .map_or((width, height, pixels, world_to_layer, [x0, y0]), |p| {
+            (p.width, p.height, p.pixels, p.world_to_layer, p.origin)
+        });
     let mut raster = Raster {
+        track_initialization: active_background,
+        owner: source.canvas.map(|_| crate::background::Owner::Canvas),
         width,
         height,
         pixels,
         world_to_layer,
-        origin: [x0, y0],
+        origin,
         physical: physical_effects.then_some(physical),
         budget,
         cancelled,
     };
+    if let Some(backdrop) = source.canvas {
+        grid_layout(
+            backdrop,
+            viewport,
+            origin,
+            [width, height],
+            prep.points,
+            raster.budget.limits,
+            active_background,
+        )?;
+    }
     if prep.has_shadows
         || prep.has_inner_shadows
         || prep.has_image_clips
         || prep.has_erasers
         || prep.has_grayscale
         || prep.has_blur
+        || active_background
     {
         // No domain RGBA, mask, or filter scratch has been allocated yet.
-        admission::admit(&raster, &root, source)?;
+        admission::admit(&raster, &root, source, final_output.as_ref())?;
     }
     let mut output = raster.surface()?;
     if let Some(backdrop) = source.canvas {
-        raster.backdrop(&mut output, backdrop, viewport, [x0, y0], prep.points)?;
+        raster.backdrop(
+            &mut output,
+            backdrop,
+            viewport,
+            origin,
+            prep.points,
+            active_background,
+        )?;
     }
     raster.node(&root, &mut output, 0, None)?;
+    if let Some(p) = final_output {
+        raster.budget.reserve(p.pixels * 4)?;
+        raster.budget.write(p.pixels * 2)?;
+        let mut cropped = Pixmap::from_vec(
+            bytes(p.pixels * 4)?,
+            tiny_skia::IntSize::from_wh(p.width, p.height).ok_or(CompositeError::TooLarge)?,
+        )
+        .ok_or(CompositeError::AllocationFailed)?;
+        let ox = (p.origin[0] - origin[0]) as usize;
+        let oy = (p.origin[1] - origin[1]) as usize;
+        background::copy_window(&output, &mut cropped, [ox, oy], || raster.check())?;
+        let mut final_raster = Raster {
+            track_initialization: true,
+            owner: raster.owner.clone(),
+            width: p.width,
+            height: p.height,
+            pixels: p.pixels,
+            world_to_layer: p.world_to_layer,
+            origin: p.origin,
+            physical: Some(physical),
+            budget: raster.budget,
+            cancelled,
+        };
+        final_raster.clip(&mut cropped, source)?;
+        final_raster.check()?;
+        final_raster.budget.in_use -= pixels * 4;
+        return Ok(Some(CpuFrame {
+            screen_bounds: Bounds::new(
+                Point::new((x0 / scale) as f32, (y0 / scale) as f32),
+                Size::new((w / scale) as f32, (h / scale) as f32),
+            ),
+            width: p.width,
+            height: p.height,
+            premul_rgba: cropped.take(),
+        }));
+    }
     raster.clip(&mut output, source)?;
     raster.check()?;
     Ok(Some(CpuFrame {

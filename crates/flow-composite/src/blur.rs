@@ -125,10 +125,11 @@ impl BlurPlan {
 pub(crate) struct DeviceNode {
     pub completed: Option<Rect>,
     pub blur: Option<BlurPlan>,
+    pub background: Option<BlurPlan>,
     pub shadows: Vec<shadow::SourcePlan>,
     pub inner_shadows: Vec<shadow::SourcePlan>,
 }
-fn union(a: Option<Rect>, b: Option<Rect>) -> Option<Rect> {
+pub(crate) fn union(a: Option<Rect>, b: Option<Rect>) -> Option<Rect> {
     match (a, b) {
         (Some(a), Some(b)) => Some([
             a[0].min(b[0]),
@@ -254,7 +255,38 @@ pub(crate) fn resolve(
             });
         }
     }
+    if let Some(background) = &node.background {
+        let (sigma, halo, kernel) =
+            BlurPlan::parameters(background.amount, a.local(node.world, [0., 0.]))?;
+        if let Some(coverage) = &background.coverage {
+            let c = path_bounds(&coverage.path, coverage.world, a)?;
+            let surface = SurfacePlan::new(
+                [c[0] - halo, c[1] - halo, c[2] + halo, c[3] + halo],
+                a,
+                limits,
+            )?;
+            completed = union(completed, Some(c));
+            device.background = Some(BlurPlan {
+                surface,
+                sigma,
+                kernel,
+            });
+        }
+    }
     device.completed = completed;
     node.device = Some(device);
     Ok(())
+}
+
+/// Every admitted operation contributes its complete sample, including an
+/// offscreen operation whose finished pixels can enter a later sample halo.
+pub(crate) fn background_work(node: &PreparedNode, output: Rect) -> Rect {
+    let mut work = output;
+    if let Some(plan) = node.device.as_ref().and_then(|d| d.background.as_ref()) {
+        work = union(Some(work), Some(plan.surface.rect())).expect("output exists");
+    }
+    for child in &node.children {
+        work = background_work(child, work);
+    }
+    work
 }

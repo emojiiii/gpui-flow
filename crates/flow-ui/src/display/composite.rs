@@ -1021,6 +1021,7 @@ pub(crate) fn paint(frame: &ImageFrame, window: &mut Window) -> Result<(), Strin
 }
 #[cfg(test)]
 mod tests {
+    include!("composite/background_blur_tests.rs");
     use super::*;
     #[test]
     fn premultiplied_rgba_upload_uses_straight_bgra_once() {
