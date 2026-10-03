@@ -8,6 +8,7 @@ mod input_trace;
 mod interaction;
 mod layer_host;
 pub use input_trace::*;
+mod custom_resource;
 mod custom_tool;
 mod image_crop;
 pub(crate) mod image_hit;

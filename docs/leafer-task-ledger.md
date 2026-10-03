@@ -1,6 +1,6 @@
 # Leafer固定45项任务表
 
-状态：37项有界已验证、5项部分实现、3项未开始。固定ID、验收集合与边界保留；任务数不代表工时或全部上游API兼容。机器可读定义见[任务表JSON](leafer-task-ledger.json)。
+状态：38项有界已验证、5项部分实现、2项未开始。固定ID、验收集合与边界保留；任务数不代表工时或全部上游API兼容。机器可读定义见[任务表JSON](leafer-task-ledger.json)。
 
 功能实现、必要回归和简明契约按模块提交。逐次运行日志、截图、备份收据及历史验收JSON不进入源码仓库；既有提交历史不改写。测试方法见[本地验证](testing.md)。
 
@@ -47,7 +47,7 @@
 | ELM-10 | 元素 / [Canvas文字与路径/图案状态](canvas-stroke-text-native.md) | 有界已验证 | 必选fillText、measureText、strokeText；beginPath/moveTo/lineTo/quadraticCurveTo/bezierCurveTo/closePath；createPattern的repeat/no-repeat与transform | 同App、host提供且startup绑定的有界静态TTF/CFF、实色top-left文字盒；任意系统字体/格式和跨平台不在支持集合。原DOM/CSS字体parser、arc/rect便利构造及完整browser状态排除不变；原失败与未定观察保留 |
 | ELM-11 | 元素 / [Canvas与场景导出](scene-raster-export.md) | 有界已验证 | Canvas RGBA/PNG已实现；固定Scene区域PNG/JPEG/WebP和SVG，含背景/透明度/裁切范围及缺资源拒绝 | 固定区域PNG/JPEG/lossless-WebP/mixed-SVG；Image/Canvas/Text为分节点PNG，无editable text/outlines或SVG/PNG位等价；不含字体嵌入/完整SVG导入 |
 | CUS-01 | 自定义元素 / [动态几何命中与宿主呈现](custom-geometry-validation.md) | 有界已验证 | custom属性驱动几何/bounds/hit、显式native renderer、实例隔离；拒绝不支持合成 | schema本身归DAT-01；不双计工厂 |
-| CUS-02 | 自定义元素 / [自定义resize和异步资源协议](custom-nodes.md) | 未开始 | 自定义尺寸/编辑策略与测量、异步ready/cancel事件正式接入 | 任意宿主回调能实现不等于框架已提供协议 |
+| CUS-02 | 自定义元素 / [自定义resize和异步资源协议](custom-element-protocol.md) | 有界已验证 | 自定义尺寸/编辑策略与测量、异步ready/cancel事件正式接入 | 正式measure/resize策略、token原子尺寸编辑及代际异步producer；每view64任务/每返回1MiB，取消丢弃future并唤醒token；外部线程/进程须自行合作取消 |
 | ANI-01 | 交互插件 / [有界属性动画时序](animation-timing.md) | 有界已验证 | 稀疏关键帧、delay/repeat/direction/speed、seek/pause/conflict/cancel和单Undo | 不是嵌套timeline；motion binding归ANI-02 |
 | ANI-02 | 交互插件 / [持续运动路径动画](motion-path-animation.md) | 有界已验证 | 按时钟距离/切线绑定位置/旋转，变化失效/冲突/销毁/取消/history一致 | source/祖先变化保守取消，不自动refollow；无路径生长/文字沿路径/自动timer；完成后显式finish_editor封Undo |
 | ANI-03 | 交互插件 / [组合动画时钟与定位控制](animation-timeline.md) | 有界已验证 | 必选AnimateList式并行与串行子动画、offset、父时钟seek/pause/reverse、结束样式及一次Undo | jump/join、physics、无限嵌套和跨所有跳帧回调不属于v1有限集合，新增须显式扩项 |

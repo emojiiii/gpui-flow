@@ -7,9 +7,9 @@
     "leafer_in": "3eb445bf34debb638766615282224b77108bf610"
   },
   "counts": {
-    "bounded_verified": 37,
+    "bounded_verified": 38,
     "partial": 5,
-    "not_started": 3,
+    "not_started": 2,
     "needs_verification": 0,
     "in_progress": 0
   },
@@ -603,10 +603,10 @@
       "id": "CUS-02",
       "category": "自定义元素",
       "title": "自定义resize和异步资源协议",
-      "status": "not_started",
+      "status": "bounded_verified",
       "acceptance": "自定义尺寸/编辑策略与测量、异步ready/cancel事件正式接入",
-      "boundary": "任意宿主回调能实现不等于框架已提供协议",
-      "reference_doc": "docs/custom-nodes.md",
+      "boundary": "正式measure/resize策略、token原子尺寸编辑及代际异步producer；每view64任务/每返回1MiB，取消丢弃future并唤醒token；外部线程/进程须自行合作取消",
+      "reference_doc": "docs/custom-element-protocol.md",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/editor/src/tool/EditTool.ts",
         "symbols_or_contract": "EditTool协议；Flow异步资源与resize provider扩展"

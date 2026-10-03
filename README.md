@@ -165,6 +165,7 @@ cargo +1.98.1 run --locked -p flow-studio
 - [独立组件与组合开发](docs/components.md)
 - [环境准备与交互教程](docs/getting-started.md)
 - [架构、图模型与持久化](docs/architecture.md)
+- [Custom元素测量、尺寸编辑与异步资源](docs/custom-element-protocol.md)（代际身份、ready/cancel和token会话）
 - [自定义节点、主题与连线](docs/custom-nodes.md)
 - [实现 AgentRunner 与接入宿主](docs/runtime.md)
 - [工作流依赖调度、类型校验与重试](docs/workflows.md)

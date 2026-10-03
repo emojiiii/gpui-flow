@@ -229,7 +229,7 @@ impl SceneEngine {
             Ok(i)
         }
     }
-    fn attached_id(&self, h: ElementHandle) -> Result<DisplayId, EngineError> {
+    pub(crate) fn attached_id(&self, h: ElementHandle) -> Result<DisplayId, EngineError> {
         let i = self.live(h)?;
         if i.state != InstanceState::Attached {
             Err(EngineError::DetachedHandle)

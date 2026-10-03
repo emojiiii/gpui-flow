@@ -2,7 +2,12 @@
 //! GPUI's public asset subscription/cache and the existing shared text shaper.
 //! It does not fetch, decode, or poll private cache state itself.
 mod canvas;
+mod custom;
 mod owned_image;
+pub use custom::{
+    CustomResourceFuture, CustomResourceRequest, MAX_CUSTOM_RESOURCE_BYTES,
+    MAX_CUSTOM_RESOURCE_JOBS, SceneCustomResourceProvider,
+};
 use gpui::{AnyImageCache, App, ImgResourceLoader, RenderImage, Resource, Window};
 use gpui_flow_engine::{
     ElementHandle, ResourceCancellation, ResourceCompletion, ResourceError, ResourceEvent,
@@ -65,6 +70,7 @@ impl std::fmt::Display for CanvasEditError {
 impl std::error::Error for CanvasEditError {}
 
 pub struct SceneResourceAdapter {
+    custom: custom::CustomResources,
     owned_images: owned_image::OwnedImages,
     canvases: canvas::CanvasResources,
     tracker: SceneResources,
@@ -89,6 +95,7 @@ impl SceneResourceAdapter {
             }
         };
         Ok(Self {
+            custom: Default::default(),
             owned_images: Default::default(),
             tracker,
             canvases,
@@ -228,6 +235,39 @@ impl SceneResourceAdapter {
     pub fn tracker(&self) -> &SceneResources {
         &self.tracker
     }
+    /// Explicit runtime registration. Reconfiguration invalidates custom work;
+    /// no imported document can install providers or authorize its own key.
+    pub fn set_custom_resource_provider(
+        &mut self,
+        engine: &SceneEngine,
+        kind: String,
+        provider: Option<SceneCustomResourceProvider>,
+    ) -> Result<(), ResourceError> {
+        if kind.trim().is_empty() {
+            return Err(gpui_flow_engine::EngineError::Registry(
+                "empty custom producer kind".into(),
+            )
+            .into());
+        }
+        self.tracker.invalidate(engine, ResourceKind::Custom)?;
+        self.custom.clear();
+        if let Some(provider) = provider {
+            self.custom.providers.insert(kind, provider);
+        } else {
+            self.custom.providers.remove(&kind);
+        }
+        Ok(())
+    }
+    pub fn custom_resource_bytes(
+        &self,
+        engine: &SceneEngine,
+        handle: ElementHandle,
+    ) -> Option<Arc<[u8]>> {
+        let ticket = self.tracker.ticket(engine, handle)?;
+        (self.tracker.state(engine, ticket) == Some(ResourceState::Loaded))
+            .then(|| self.custom.bytes(ticket))
+            .flatten()
+    }
     pub fn image_load_event(
         &self,
         engine: &SceneEngine,
@@ -311,6 +351,8 @@ impl SceneResourceAdapter {
         cx: &mut App,
     ) -> Result<Vec<ResourceEvent>, ResourceError> {
         let mut events = self.prepare_canvases(engine)?;
+        self.custom
+            .retain(|ticket| self.tracker.state(engine, ticket).is_some());
         self.resolved
             .retain(|ticket, _| self.tracker.state(engine, *ticket).is_some());
         self.images
@@ -335,6 +377,25 @@ impl SceneResourceAdapter {
             .collect::<Vec<_>>();
         for (ticket, shape) in requests {
             let (outcome, presentation) = match shape {
+                Shape::Custom(custom) => {
+                    let Some(key) = self.tracker.custom_key(engine, ticket) else {
+                        continue;
+                    };
+                    let Some(cancellation) = self.tracker.cancellation_token(engine, ticket) else {
+                        continue;
+                    };
+                    let request = CustomResourceRequest {
+                        ticket,
+                        kind: custom.kind,
+                        key,
+                        properties: custom.data,
+                        cancellation,
+                    };
+                    let Some(outcome) = self.custom.prepare(request, window, cx) else {
+                        continue;
+                    };
+                    (outcome, None)
+                }
                 Shape::Image(image) => {
                     if !self.resolved.contains_key(&ticket) {
                         let resource =
@@ -704,6 +765,8 @@ impl SceneResourceAdapter {
         engine: &mut SceneEngine,
     ) -> Result<Vec<ResourceEvent>, ResourceError> {
         self.canvases.dispose(engine);
+        self.custom.clear();
+        self.custom.providers.clear();
         self.resolved.clear();
         self.images.clear();
         self.owned_images.clear();

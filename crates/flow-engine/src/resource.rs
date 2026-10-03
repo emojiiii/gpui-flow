@@ -10,6 +10,7 @@ pub enum ResourceKind {
     Image,
     Text,
     Canvas,
+    Custom,
 }
 impl ResourceKind {
     pub fn as_str(self) -> &'static str {
@@ -17,6 +18,7 @@ impl ResourceKind {
             Self::Image => "image",
             Self::Text => "text",
             Self::Canvas => "canvas",
+            Self::Custom => "custom",
         }
     }
 }
@@ -170,21 +172,29 @@ enum Source {
     Image(String),
     Text(Text),
     Canvas(gpui_flow_scene::display::Canvas),
+    Custom(gpui_flow_scene::display::Custom, String),
 }
 impl Source {
-    fn from_shape(shape: &Shape) -> Option<Self> {
-        match shape {
+    fn from_shape(
+        shape: &Shape,
+        registry: &crate::ElementRegistry,
+    ) -> Result<Option<Self>, EngineError> {
+        Ok(match shape {
             Shape::Image(image) => Some(Self::Image(image.source.clone())),
             Shape::Text(text) => Some(Self::Text(text.clone())),
             Shape::Canvas(canvas) => Some(Self::Canvas(canvas.clone())),
+            Shape::Custom(custom) => registry
+                .custom_resource_key(custom)?
+                .map(|key| Self::Custom(custom.clone(), key)),
             _ => None,
-        }
+        })
     }
     fn matches_shape(&self, shape: &Shape) -> bool {
         match (self, shape) {
             (Self::Image(source), Shape::Image(image)) => *source == image.source,
             (Self::Text(source), Shape::Text(text)) => source == text,
             (Self::Canvas(source), Shape::Canvas(canvas)) => source == canvas,
+            (Self::Custom(source, _), Shape::Custom(custom)) => source == custom,
             _ => false,
         }
     }
@@ -193,6 +203,7 @@ impl Source {
             Self::Image(_) => ResourceKind::Image,
             Self::Text(_) => ResourceKind::Text,
             Self::Canvas(_) => ResourceKind::Canvas,
+            Self::Custom(_, _) => ResourceKind::Custom,
         }
     }
 }
@@ -202,6 +213,12 @@ struct Entry {
     source: Source,
     state: ResourceState,
     invalidated: bool,
+    cancellation: crate::ResourceCancellationToken,
+}
+impl Drop for Entry {
+    fn drop(&mut self) {
+        self.cancellation.cancel();
+    }
 }
 impl Entry {
     fn matches(&self, engine: &SceneEngine) -> bool {
@@ -269,11 +286,15 @@ impl SceneResources {
                                     || property.old["geometry"]["source"]
                                         != property.new["geometry"]["source"]
                             }
-                            Source::Text(_) | Source::Canvas(_) => property.old != property.new,
+                            Source::Text(_) | Source::Canvas(_) | Source::Custom(_, _) => {
+                                property.old != property.new
+                            }
                         }
                     } else {
                         // Conservative support for future granular shape deltas.
                         property.property.starts_with("shape.")
+                            || (property.property.starts_with("custom.")
+                                && matches!(&entry.source, Source::Custom(_, _)))
                             || (property.property == "text.content"
                                 && matches!(&entry.source, Source::Text(_)))
                     }
@@ -281,6 +302,9 @@ impl SceneResources {
                 // Commit observation catches A -> B -> A even without a render
                 // between changes. It never queues one allocation per edit.
                 entry.invalidated |= unmounted || changed;
+                if entry.invalidated {
+                    entry.cancellation.cancel();
+                }
             }
         })?;
         Ok(Self {
@@ -312,37 +336,26 @@ impl SceneResources {
         engine: &mut SceneEngine,
     ) -> Result<Vec<ResourceEvent>, ResourceError> {
         self.check(engine)?;
-        let requested = engine
-            .scene()
-            .nodes()
-            .filter(|node| {
-                matches!(
-                    node.object.shape,
-                    Shape::Image(_) | Shape::Text(_) | Shape::Canvas(_)
-                )
-            })
-            .count();
-        if requested > self.limit {
-            return Err(ResourceError::Capacity {
-                limit: self.limit,
-                requested,
-            });
+        let mut desired = Vec::new();
+        for node in engine.scene().nodes() {
+            let Some(source) = Source::from_shape(&node.object.shape, engine.registry())? else {
+                continue;
+            };
+            if desired.len() == self.limit {
+                return Err(ResourceError::Capacity {
+                    limit: self.limit,
+                    requested: self.limit.saturating_add(1),
+                });
+            }
+            let handle = engine.handle(&node.object.id).expect("attached node");
+            let instance = engine.instance(handle)?;
+            desired.push((
+                handle,
+                node.object.id.clone(),
+                instance.attachment_epoch,
+                source,
+            ));
         }
-        let desired = engine
-            .scene()
-            .nodes()
-            .filter_map(|node| {
-                let source = Source::from_shape(&node.object.shape)?;
-                let handle = engine.handle(&node.object.id)?;
-                let instance = engine.instance(handle).ok()?;
-                Some((
-                    handle,
-                    node.object.id.clone(),
-                    instance.attachment_epoch,
-                    source,
-                ))
-            })
-            .collect::<Vec<_>>();
         let entries = self.entries.borrow();
         let obsolete = entries
             .iter()
@@ -398,6 +411,7 @@ impl SceneResources {
                     source,
                     state: ResourceState::Pending,
                     invalidated: false,
+                    cancellation: Default::default(),
                 };
                 events.push(entry.event(ResourceState::Pending));
                 entries.insert(handle, entry);
@@ -416,6 +430,27 @@ impl SceneResources {
             .get(&handle)
             .filter(|entry| entry.matches(engine))
             .map(|entry| entry.ticket)
+    }
+    pub fn cancellation_token(
+        &self,
+        engine: &SceneEngine,
+        ticket: ResourceTicket,
+    ) -> Option<crate::ResourceCancellationToken> {
+        self.entries
+            .borrow()
+            .get(&ticket.handle)
+            .filter(|entry| entry.ticket == ticket && entry.matches(engine))
+            .map(|entry| entry.cancellation.clone())
+    }
+    pub fn custom_key(&self, engine: &SceneEngine, ticket: ResourceTicket) -> Option<String> {
+        self.entries
+            .borrow()
+            .get(&ticket.handle)
+            .filter(|entry| entry.ticket == ticket && entry.matches(engine))
+            .and_then(|entry| match &entry.source {
+                Source::Custom(_, key) => Some(key.clone()),
+                _ => None,
+            })
     }
     pub fn state(&self, engine: &SceneEngine, ticket: ResourceTicket) -> Option<ResourceState> {
         self.entries
@@ -445,6 +480,9 @@ impl SceneResources {
                 return Ok((ResourceCompletion::AlreadySettled, None));
             }
             entry.state = outcome.into();
+            if matches!(entry.state, ResourceState::Cancelled(_)) {
+                entry.cancellation.cancel();
+            }
             entry.event(entry.state.clone())
         };
         let mut event = event;
@@ -462,6 +500,7 @@ impl SceneResources {
         for entry in self.entries.borrow_mut().values_mut() {
             if entry.ticket.kind == kind {
                 entry.invalidated = true;
+                entry.cancellation.cancel();
             }
         }
         Ok(())
@@ -492,13 +531,11 @@ impl SceneResources {
         let required = engine
             .scene()
             .nodes()
-            .filter(|node| {
-                matches!(
-                    node.object.shape,
-                    Shape::Image(_) | Shape::Text(_) | Shape::Canvas(_)
-                )
+            .try_fold(0usize, |n, node| {
+                Source::from_shape(&node.object.shape, engine.registry())
+                    .map(|source| n + usize::from(source.is_some()))
             })
-            .count();
+            .ok()?;
         if entries.len() != required || entries.values().any(|entry| !entry.matches(engine)) {
             return None;
         }

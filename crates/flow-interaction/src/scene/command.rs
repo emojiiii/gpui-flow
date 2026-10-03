@@ -114,6 +114,12 @@ pub enum SceneCommand {
         key: gpui_flow_engine::PropertyKey,
         value: Value,
     },
+    ResizeCustomSession {
+        token: gpui_flow_editor::EditSessionToken,
+        handle: gpui_flow_engine::ElementHandle,
+        size: Size,
+        anchor: Point,
+    },
     SetObjectData {
         id: DisplayId,
         data: Value,

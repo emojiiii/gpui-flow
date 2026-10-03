@@ -1,6 +1,6 @@
-use crate::{DirtyFlags, EngineError};
+use crate::{CustomMeasurement, CustomResizePolicy, DirtyFlags, EngineError};
 use gpui_flow_scene::{
-    Bounds, Contour, DisplayId, DisplayObject, Point, Scene, Shape, display::Custom,
+    Bounds, Contour, DisplayId, DisplayObject, Point, Scene, Shape, Size, display::Custom,
 };
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, sync::Arc};
@@ -108,6 +108,22 @@ pub trait ElementDefinition: Send + Sync + 'static {
     }
     fn schema(&self) -> PropertySchema;
     fn shape(&self, properties: &Value) -> Result<Shape, String>;
+    /// Optional intrinsic measurement. Bounds must equal generated geometry.
+    fn measure(&self, _properties: &Value) -> Result<Option<CustomMeasurement>, String> {
+        Ok(None)
+    }
+    fn resize_policy(&self) -> CustomResizePolicy {
+        CustomResizePolicy::Disabled
+    }
+    /// Return new serializable properties; geometry is regenerated and checked.
+    fn resize(&self, _properties: &Value, _size: Size) -> Result<Value, String> {
+        Err("custom intrinsic resize is unsupported".into())
+    }
+    /// Opt into the host's asynchronous producer for this kind. This pure key
+    /// grants no filesystem/network access. None means no resource is required.
+    fn resource_key(&self, _properties: &Value) -> Result<Option<String>, String> {
+        Ok(None)
+    }
     /// Optional precise custom picking. None uses generated fallback geometry.
     /// Implementations must remain inside the geometry's declared bounds.
     fn hit_test(&self, _properties: &Value, _point: Point, _tolerance: f32) -> Option<bool> {
@@ -154,6 +170,90 @@ impl Default for ElementRegistry {
     }
 }
 impl ElementRegistry {
+    pub fn measure_custom(&self, custom: &Custom) -> Result<CustomMeasurement, EngineError> {
+        self.custom_call(custom, |definition, properties| {
+            let measured = definition
+                .measure(properties)?
+                .ok_or("custom measurement is unsupported")?;
+            measured
+                .validate(custom.bounds)
+                .map_err(|e| e.to_string())?;
+            Ok(measured)
+        })
+    }
+    pub fn resize_custom(&self, custom: &Custom, size: Size) -> Result<Shape, EngineError> {
+        let measured = self.measure_custom(custom)?;
+        if !size.is_positive()
+            || size.width < measured.minimum.width
+            || size.height < measured.minimum.height
+            || size.width > measured.maximum.width
+            || size.height > measured.maximum.height
+        {
+            return Err(EngineError::Registry(
+                "custom resize exceeds measured limits".into(),
+            ));
+        }
+        let properties = self.custom_call(custom, |definition, properties| {
+            match definition.resize_policy() {
+                CustomResizePolicy::Disabled => return Err("custom resize is disabled".into()),
+                CustomResizePolicy::Uniform
+                    if size.width / measured.bounds.size.width
+                        != size.height / measured.bounds.size.height =>
+                {
+                    return Err("custom resize requires uniform factors".into());
+                }
+                _ => {}
+            }
+            definition.resize(properties, size)
+        })?;
+        let shape = self
+            .create(&custom.kind, "custom-resize-preview", properties)?
+            .shape;
+        let Shape::Custom(resized) = &shape else {
+            return Err(EngineError::Registry(
+                "custom resize changed element kind".into(),
+            ));
+        };
+        let next = self.measure_custom(resized)?;
+        if next.bounds.size != size {
+            return Err(EngineError::Registry(
+                "custom resize did not produce the requested dimensions".into(),
+            ));
+        }
+        Ok(shape)
+    }
+    pub fn custom_resource_key(&self, custom: &Custom) -> Result<Option<String>, EngineError> {
+        if self.get(&custom.kind).is_none() {
+            return Ok(None);
+        }
+        let key = self.custom_call(custom, |definition, properties| {
+            definition.resource_key(properties)
+        })?;
+        if key
+            .as_ref()
+            .is_some_and(|key| key.is_empty() || key.len() > 4096)
+        {
+            return Err(EngineError::Registry(
+                "custom resource key must contain 1..=4096 bytes".into(),
+            ));
+        }
+        Ok(key)
+    }
+    fn custom_call<T>(
+        &self,
+        custom: &Custom,
+        call: impl FnOnce(&dyn ElementDefinition, &Value) -> Result<T, String>,
+    ) -> Result<T, EngineError> {
+        let definition = self
+            .get(&custom.kind)
+            .ok_or_else(|| EngineError::Registry("custom kind is not registered".into()))?;
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let properties = definition.schema().resolve(&custom.data)?;
+            call(definition, &properties)
+        }))
+        .map_err(|_| EngineError::Registry("custom protocol callback panicked".into()))?
+        .map_err(EngineError::Registry)
+    }
     pub fn empty() -> Self {
         Self {
             definitions: BTreeMap::new(),

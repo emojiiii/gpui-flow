@@ -4,6 +4,7 @@
 #![doc = include_str!("../README.md")]
 
 mod change;
+mod custom;
 mod derive;
 mod engine;
 mod instance;
@@ -12,9 +13,11 @@ mod motion;
 mod query;
 mod registry;
 mod resource;
+mod resource_cancel;
 mod subtree;
 
 pub use change::*;
+pub use custom::*;
 pub use derive::{LayoutProvider, LayoutProviderId, MAX_LAYOUT_DERIVATION_PASSES};
 pub use engine::*;
 pub use instance::*;
@@ -23,6 +26,7 @@ pub use motion::PathPlacement;
 pub use query::{ElementQuery, QueryIndexStats, QueryOrder, QueryStats};
 pub use registry::*;
 pub use resource::*;
+pub use resource_cancel::ResourceCancellationToken;
 
 use gpui_flow_scene::SceneError;
 #[derive(Debug, Clone, PartialEq)]

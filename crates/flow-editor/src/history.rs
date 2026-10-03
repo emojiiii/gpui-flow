@@ -326,12 +326,21 @@ impl SceneEditor {
         key: PropertyKey,
         value: serde_json::Value,
     ) -> Result<ChangeSet, EngineError> {
+        self.set_edit_session_properties(token, handle, [(key, value)])
+    }
+    /// Atomic multi-property edit within the same owned history baseline.
+    pub fn set_edit_session_properties(
+        &mut self,
+        token: EditSessionToken,
+        handle: ElementHandle,
+        properties: impl IntoIterator<Item = (PropertyKey, serde_json::Value)>,
+    ) -> Result<ChangeSet, EngineError> {
         if !self.is_edit_session_active(token) {
             return Err(EngineError::Property(
                 "edit session ended or belongs to another editor".into(),
             ));
         }
-        let changes = self.engine.set_property(handle, key, value)?;
+        let changes = self.engine.set_properties(handle, properties)?;
         self.observed_revision = self.engine.revision();
         self.selection.retain_existing(self.engine.scene());
         let last_owned = self.snapshot();

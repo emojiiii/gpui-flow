@@ -609,6 +609,40 @@ impl SceneToolController {
         self.reconcile(editor, host);
         Ok(())
     }
+    /// Resize a registered Custom definition through its measured policy in one
+    /// token-owned atomic update. Done/Cancel retain ordinary inner-tool history.
+    pub fn resize_inner(
+        &mut self,
+        editor: &mut SceneEditor,
+        host: &mut ScenePluginHost,
+        token: ToolSessionToken,
+        size: gpui_flow_scene::Size,
+        anchor: gpui_flow_scene::Point,
+    ) -> Result<(), InteractionError> {
+        self.bind(editor)?;
+        self.reconcile(editor, host);
+        let target = self
+            .active
+            .as_ref()
+            .filter(|s| s.token == token && s.kind == SceneToolKind::CustomInner)
+            .ok_or_else(|| invalid("custom tool session ended or token is stale"))?
+            .target;
+        let before = editor.engine.revision();
+        let result = host.execute(
+            editor,
+            SceneCommand::ResizeCustomSession {
+                token: token.0,
+                handle: target,
+                size,
+                anchor,
+            },
+        );
+        if result.is_ok() && editor.engine.revision() != before {
+            self.session_event(ToolLifecycleKind::Updated);
+        }
+        self.reconcile(editor, host);
+        result.map(|_| ())
+    }
     pub fn set_text(
         &mut self,
         editor: &mut SceneEditor,

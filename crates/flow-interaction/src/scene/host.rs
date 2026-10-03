@@ -684,6 +684,10 @@ impl ScenePluginHost {
             } => Some((*token, *handle, key.clone())),
             _ => None,
         };
+        let custom_resize_identity = match &command {
+            SceneCommand::ResizeCustomSession { token, handle, .. } => Some((*token, *handle)),
+            _ => None,
+        };
         let image_crop_identity = match &command {
             SceneCommand::SetImageCrop { target, .. } => Some(*target),
             _ => None,
@@ -785,6 +789,13 @@ impl ScenePluginHost {
         {
             return Err(InteractionError::InvalidInput(
                 "middleware cannot retarget an owned edit command".into(),
+            ));
+        }
+        if let Some((token, handle)) = custom_resize_identity
+            && !matches!(&command, SceneCommand::ResizeCustomSession { token: actual_token, handle: actual_handle, .. } if *actual_token == token && *actual_handle == handle)
+        {
+            return Err(InteractionError::InvalidInput(
+                "middleware cannot retarget a custom resize session".into(),
             ));
         }
         if let Some(target) = image_crop_identity
@@ -1432,6 +1443,47 @@ impl ScenePluginHost {
                 editor
                     .set_edit_session_property(token, handle, key, value)
                     .map_err(|error| InteractionError::InvalidInput(error.to_string()))?;
+            }
+            SceneCommand::ResizeCustomSession {
+                token,
+                handle,
+                size,
+                anchor,
+            } => {
+                let id = editor
+                    .engine
+                    .object(handle)
+                    .map_err(|e| InteractionError::InvalidInput(e.to_string()))?
+                    .id
+                    .clone();
+                require_editable(&id)?;
+                if !editor.is_edit_session_active(token) {
+                    return Err(InteractionError::InvalidInput(
+                        "custom resize session is stale".into(),
+                    ));
+                }
+                let patch = editor
+                    .engine
+                    .preview_custom_resize(handle, size, anchor)
+                    .map_err(|e| InteractionError::InvalidInput(e.to_string()))?;
+                editor
+                    .set_edit_session_properties(
+                        token,
+                        handle,
+                        [
+                            (
+                                gpui_flow_engine::PropertyKey::Shape,
+                                serde_json::to_value(patch.shape)
+                                    .map_err(|e| InteractionError::InvalidInput(e.to_string()))?,
+                            ),
+                            (
+                                gpui_flow_engine::PropertyKey::Transform,
+                                serde_json::to_value(patch.transform)
+                                    .map_err(|e| InteractionError::InvalidInput(e.to_string()))?,
+                            ),
+                        ],
+                    )
+                    .map_err(|e| InteractionError::InvalidInput(e.to_string()))?;
             }
             SceneCommand::SetObjectData { id, data } => {
                 require_editable(&id)?;
