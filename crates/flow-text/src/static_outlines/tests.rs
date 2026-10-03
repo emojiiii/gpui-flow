@@ -495,3 +495,44 @@ fn oversized_cff_parse_cost_is_rejected_by_constructor_probe() {
         OutlineError::Limit("glyph or job work")
     );
 }
+
+#[test]
+fn separate_stroke_fixtures_admit_counters_period_marks_and_composites() {
+    let sources: [&[u8]; 2] = [
+        include_bytes!("../../tests/fixtures/stroke-quadratic.ttf"),
+        include_bytes!("../../tests/fixtures/stroke-cubic.otf"),
+    ];
+    for source in sources {
+        let font = prepare(source);
+        assert_eq!(font.glyph_count(), 24);
+        let face = Face::parse(font.bytes(), 0).unwrap();
+        for (ch, contours) in [('O', 2), ('B', 3), ('.', 1), ('é', 2), ('\u{301}', 1)] {
+            let id = face.glyph_index(ch).unwrap();
+            let outline = font
+                .outline_glyph(u32::from(id.0), &mut OutlineBudget::default())
+                .unwrap();
+            assert_eq!(
+                outline
+                    .commands
+                    .iter()
+                    .filter(|c| matches!(c, OutlineCommand::Close))
+                    .count(),
+                contours,
+                "{ch}"
+            );
+        }
+        assert_eq!(
+            face.glyph_hor_advance(face.glyph_index('\u{301}').unwrap()),
+            Some(0)
+        );
+        let tables = sfnt::parse(font.bytes()).unwrap();
+        for tag in [b"GSUB", b"GPOS", b"GDEF"] {
+            assert!(!sfnt::table(font.bytes(), &tables, tag).unwrap().is_empty());
+            // Preparation changes names/head checksums only, not shaping tables.
+            assert_eq!(
+                sfnt::table(source, &sfnt::parse(source).unwrap(), tag).unwrap(),
+                sfnt::table(font.bytes(), &tables, tag).unwrap()
+            );
+        }
+    }
+}

@@ -1,0 +1,47 @@
+{
+  "deterministic_regeneration": true,
+  "old_identity_fixtures_unchanged": true,
+  "fonts": [
+    {
+      "file": "stroke-quadratic.ttf",
+      "bytes": 2900,
+      "sha256": "baa84cec7f5f8b51981063d8ce98ba04e166c6998b18595df063248cbc4f04e3",
+      "counter_signed_areas": {
+        "O": [
+          -303333.3333333333,
+          80000.0
+        ],
+        "B": [
+          -364000.0,
+          46800.0,
+          46800.0
+        ]
+      }
+    },
+    {
+      "file": "stroke-cubic.otf",
+      "bytes": 2724,
+      "sha256": "0d85275cdd5deb518954403700fdb76bd7ec9749c968e386694eee05e66889f1",
+      "counter_signed_areas": {
+        "O": [
+          -291620.0,
+          76020.0
+        ],
+        "B": [
+          -364000.0,
+          46800.0,
+          46800.0
+        ]
+      }
+    }
+  ],
+  "rust_parser_test": "passed; real O2/B3/period1/composite2/mark1 contours, zero advance mark and unchanged shaping tables",
+  "native_shaping": "not yet tested for these new fonts",
+  "recorded_utc": "2026-10-03T01:20:26.260088+00:00",
+  "scope": "New first-party stroke test fonts only; actual Canvas strokeText remains unimplemented",
+  "unit_tests": 29,
+  "doctests": 1,
+  "strict_clippy": "passed",
+  "workspace_format": "passed",
+  "test_log_sha256": "0732db61478012a2c999b7496f9ab371da1ed3ffc65bc48704366e37a49c24ea"
+}
