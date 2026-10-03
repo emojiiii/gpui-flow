@@ -306,7 +306,7 @@ fn alpha_masks_and_rounded_frames_preserve_canvas_outside_their_ink() {
             20,
             5
         ),
-        [255, 0, 0, 255]
+        [0, 0, 0, 255] // no active marker: the blue blend sees the canvas
     );
     let mut scene = Scene::new();
     scene

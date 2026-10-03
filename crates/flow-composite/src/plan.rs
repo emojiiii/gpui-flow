@@ -211,7 +211,8 @@ impl DomainSource {
 
     pub(crate) fn has_scale_fixed_strokes(&self) -> bool {
         fn visit(node: &DomainNode) -> bool {
-            node.object.style.has_scale_fixed_strokes() || node.children.iter().any(visit)
+            node.object.mask != MaskMode::Path
+                && (node.object.style.has_scale_fixed_strokes() || node.children.iter().any(visit))
         }
         visit(&self.root)
     }
@@ -224,7 +225,10 @@ impl DomainSource {
             node: &'a DomainNode,
             out: &mut Vec<(&'a DisplayId, &'a gpui_flow_scene::display::Canvas)>,
         ) {
-            if !node.object.visible || node.object.style.opacity == 0. {
+            if !node.object.visible
+                || node.object.style.opacity == 0.
+                || node.object.mask == MaskMode::Path
+            {
                 return;
             }
             if let Shape::Canvas(canvas) = &node.object.shape {
@@ -288,7 +292,10 @@ impl DomainSource {
             node: &'a DomainNode,
             out: &mut Vec<(&'a DisplayId, &'a gpui_flow_scene::display::Image)>,
         ) {
-            if !node.object.visible || node.object.style.opacity == 0. {
+            if !node.object.visible
+                || node.object.style.opacity == 0.
+                || node.object.mask == MaskMode::Path
+            {
                 return;
             }
             if let Shape::Image(image) = &node.object.shape {
@@ -324,7 +331,10 @@ impl DomainSource {
             ancestor_effect: bool,
             out: &mut Vec<(&'a DisplayObject, Affine, bool)>,
         ) {
-            if !node.object.visible || node.object.style.opacity == 0. {
+            if !node.object.visible
+                || node.object.style.opacity == 0.
+                || node.object.mask == MaskMode::Path
+            {
                 return;
             }
             let effect = ancestor_effect
@@ -515,6 +525,13 @@ fn capture(
         .get(id)
         .ok_or_else(|| CompositeError::InvalidGeometry("missing child".into()))?;
     let o = &node.object;
+    if o.mask == MaskMode::Path {
+        counts.masks += 1;
+        if counts.masks > limits.max_mask_runs {
+            return Err(CompositeError::InputLimit);
+        }
+        return capture_reference(scene, id, parent, limits, counts, depth);
+    }
     validate_eraser(o)?;
     counts.nodes += 1;
     if counts.nodes > limits.max_nodes {
@@ -671,7 +688,8 @@ fn capture(
 // already protected by a real isolation or a translucent mask run can ignore
 // a native backdrop outside this CPU domain.
 pub(crate) fn requires_parent_backdrop(node: &DomainNode) -> bool {
-    if !node.object.visible || node.object.style.opacity == 0. {
+    if !node.object.visible || node.object.style.opacity == 0. || node.object.mask == MaskMode::Path
+    {
         return false;
     }
     if node.object.eraser != EraserMode::None
@@ -692,11 +710,24 @@ pub(crate) fn requires_parent_backdrop(node: &DomainNode) -> bool {
     requires_children_backdrop(node)
 }
 
+pub(crate) fn has_active_masks(node: &DomainNode) -> bool {
+    node.children
+        .iter()
+        .any(|c| c.object.mask != MaskMode::None && c.object.visible && c.object.style.opacity > 0.)
+}
+
 pub(crate) fn requires_children_backdrop(node: &DomainNode) -> bool {
+    if !has_active_masks(node) {
+        return node.children.iter().any(requires_parent_backdrop);
+    }
     let mut translucent_run = false;
     for child in &node.children {
         if child.object.mask != MaskMode::None {
-            translucent_run = !child.object.visible || child.object.style.opacity < 1.;
+            if child.object.mask.paints_self() && requires_parent_backdrop(child) {
+                return true;
+            }
+            translucent_run = child.object.style.opacity < 1.
+                || (!child.object.mask.is_path() && !child.object.visible);
             continue;
         }
         if !translucent_run && requires_parent_backdrop(child) {

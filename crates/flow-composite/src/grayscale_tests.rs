@@ -479,6 +479,10 @@ fn grayscale_alpha_masks_ignore_rgb_and_pass_through_filter_does_not_flush_run()
         }
         s.update_object(&"mask".into(), |o| o.visible = false)
             .unwrap();
+        assert_eq!(pixel(&render(&s), 20, 20)[3], 255);
+        let mut active = rect("active", Color::WHITE).with_mask(MaskMode::Alpha);
+        active.z_index = -1;
+        insert(&mut s, active, "g");
         assert!(render(&s).premul_rgba.iter().all(|b| *b == 0));
     }
 }

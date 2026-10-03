@@ -319,8 +319,8 @@
       "title": "隔离混合与蒙版擦除",
       "status": "partial",
       "acceptance": "组透明度/多paint隔离、固定blend集合、mask/erase覆盖关系与hit规则",
-      "boundary": "有界Pixel及几何leaf Path擦除、直接父隔离、固定alpha-mask相位已实现；Custom/外部任意backdrop、Path容器/Text等及完整mask布局/命中兼容仍缺",
-      "reference_doc": "docs/scene-erasers.md",
+      "boundary": "已实现固定blend、五种mask相位/几何裁剪与预算预检、Pixel及leaf Path擦除；完整mask布局/命中、Path容器/Text、Custom和任意外部backdrop仍缺",
+      "reference_doc": "docs/mask-modes.md",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/mask/src/index.ts",
         "symbols_or_contract": "MaskModule及UIRender隔离/混合"

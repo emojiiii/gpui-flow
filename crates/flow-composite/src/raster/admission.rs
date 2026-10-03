@@ -289,6 +289,16 @@ impl Admission<'_> {
         depth: usize,
         clip: bool,
     ) -> Result<(), CompositeError> {
+        if !node
+            .children
+            .iter()
+            .any(|child| child.mask != MaskMode::None && child.visible && child.opacity > 0.)
+        {
+            for child in &node.children {
+                self.node(child, depth, clip)?;
+            }
+            return Ok(());
+        }
         let mut i = 0;
         while i < node.children.len() {
             self.check()?;
@@ -296,6 +306,50 @@ impl Admission<'_> {
             if child.mask == MaskMode::None {
                 self.node(child, depth, clip)?;
                 i += 1;
+                continue;
+            }
+            if child.mask.paints_self() {
+                self.node(child, depth, clip)?;
+            }
+            if child.mask.is_path() {
+                let end = node.children[i + 1..]
+                    .iter()
+                    .position(|c| c.mask != MaskMode::None)
+                    .map_or(node.children.len(), |n| i + 1 + n);
+                if child.opacity > 0. {
+                    self.budget.reserve(self.pixels)?;
+                    if self.track_initialization {
+                        self.budget.write(self.pixels)?;
+                    }
+                    self.budget.write(self.pixels)?;
+                    for path in &child.mask_paths {
+                        if path.is_some() {
+                            self.budget.reserve(self.pixels)?;
+                            if self.track_initialization {
+                                self.budget.write(self.pixels)?;
+                            }
+                            self.budget.write(self.pixels * 2)?;
+                            self.budget.in_use -= self.pixels;
+                        } else {
+                            self.budget.write(self.pixels)?;
+                        }
+                    }
+                    if child.opacity < 1. {
+                        self.budget.reserve(self.pixels * 4)?;
+                        if self.track_initialization {
+                            self.budget.write(self.pixels)?;
+                        }
+                    }
+                    for content in &node.children[i + 1..end] {
+                        self.node(content, depth, true)?;
+                    }
+                    if child.opacity < 1. {
+                        self.budget.write(self.pixels)?;
+                        self.budget.in_use -= self.pixels * 4;
+                    }
+                    self.budget.in_use -= self.pixels;
+                }
+                i = end;
                 continue;
             }
             self.budget.reserve(self.pixels * 4)?;

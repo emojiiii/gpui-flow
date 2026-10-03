@@ -757,7 +757,7 @@ fn static_image_inputs_share_the_working_set_budget_and_deduplicate() {
 }
 
 #[test]
-fn hidden_images_and_ancestors_do_not_need_pixels_but_hidden_masks_still_mask() {
+fn hidden_images_need_no_pixels_and_only_split_an_active_mask_schedule() {
     for zero_opacity in [false, true] {
         let mut s = image_scene(display::ImageFit::Fill, 1.);
         s.update_object(&"image".into(), |o| {
@@ -773,6 +773,10 @@ fn hidden_images_and_ancestors_do_not_need_pixels_but_hidden_masks_still_mask() 
         assert_eq!(at(&render(&s), 10, 10), [255; 4]);
         s.update_object(&"image".into(), |o| o.mask = MaskMode::Alpha)
             .unwrap();
+        assert_eq!(at(&render(&s), 10, 10), [255; 4]);
+        let mut active = rect("active", 0., Color::WHITE).with_mask(MaskMode::Alpha);
+        active.z_index = -1;
+        insert(&mut s, active, "g");
         assert_eq!(at(&render(&s), 10, 10), [0; 4]);
     }
     let mut s = image_scene(display::ImageFit::Fill, 1.);
@@ -884,7 +888,7 @@ fn hidden_blend_image_cannot_reject_visible_masked_siblings() {
 }
 
 #[test]
-fn hidden_mask_preserves_zero_alpha_without_requiring_external_backdrop() {
+fn hidden_mask_needs_an_active_marker_to_isolate_external_blends() {
     let mut scene = Scene::new();
     let mut root = group("g", 1.);
     root.style.blend_mode = BlendMode::PassThrough;
@@ -895,11 +899,21 @@ fn hidden_mask_preserves_zero_alpha_without_requiring_external_backdrop() {
     let mut red = rect("red", 0., Color::hex(0xff0000));
     red.style.blend_mode = BlendMode::Multiply;
     insert(&mut scene, red, "g");
+    assert!(matches!(
+        &scene_units(&scene, CompositeLimits::default()).unwrap()[0],
+        SceneUnit::Rejected(CompositeIssue {
+            error: CompositeError::UnsupportedExternalBackdrop,
+            ..
+        })
+    ));
+    let mut active = rect("active", 0., Color::WHITE).with_mask(MaskMode::Alpha);
+    active.z_index = -1;
+    insert(&mut scene, active, "g");
     assert_eq!(at(&render(&scene), 10, 10), [0; 4]);
 }
 
 #[test]
-fn hidden_mask_retains_zero_alpha_run_without_external_backdrop_dependency() {
+fn hidden_image_mask_run_requires_another_active_marker() {
     let mut scene = image_scene(display::ImageFit::Fill, 1.);
     scene
         .update_object(&"g".into(), |o| o.style.blend_mode = BlendMode::PassThrough)
@@ -913,6 +927,16 @@ fn hidden_mask_retains_zero_alpha_run_without_external_backdrop_dependency() {
     mask.z_index = -1;
     mask.visible = false;
     insert(&mut scene, mask, "g");
+    assert!(matches!(
+        &scene_units(&scene, CompositeLimits::default()).unwrap()[0],
+        SceneUnit::Rejected(CompositeIssue {
+            error: CompositeError::UnsupportedExternalBackdrop,
+            ..
+        })
+    ));
+    let mut active = rect("active", 0., Color::WHITE).with_mask(MaskMode::Alpha);
+    active.z_index = -2;
+    insert(&mut scene, active, "g");
     let frame = render_pixels(&scene, static_pixels(1, 1, &[0, 0, 255, 255]));
     assert_eq!(at(&frame, 10, 10), [0; 4]);
 }
@@ -1063,6 +1087,10 @@ fn container_alpha_masks_include_children_and_clip_without_drawing_mask_surface(
     assert_eq!(at(&f, 22, 10), [0; 4]);
     s.update_object(&"mask".into(), |o| o.visible = false)
         .unwrap();
+    assert_eq!(at(&render(&s), 10, 10), [0, 0, 255, 255]);
+    let mut active = rect("active", 0., Color::WHITE).with_mask(MaskMode::Alpha);
+    active.z_index = -1;
+    insert(&mut s, active, "g");
     assert!(render(&s).premul_rgba.iter().all(|b| *b == 0));
 }
 

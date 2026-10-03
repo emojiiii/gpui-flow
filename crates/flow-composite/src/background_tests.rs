@@ -378,7 +378,6 @@ fn background_typed_contexts_precede_missing_producers_and_path_precedence() {
         if kind == 2 {
             let mut marker = rect("mask", bounds(0., 0., 16., 16.), Color::WHITE);
             marker.mask = MaskMode::Alpha;
-            marker.visible = false;
             insert(&mut s, marker, Some("parent"));
         }
         if kind == 3 {
@@ -399,6 +398,12 @@ fn background_typed_contexts_precede_missing_producers_and_path_precedence() {
             matches!(error(&s),CompositeError::UnsupportedBackgroundBlur{reason,..} if reason==expected),
             "kind={kind}"
         );
+        if kind == 2 {
+            s.update_object(&"mask".into(), |o| o.visible = false)
+                .unwrap();
+            // No visible marker means no mask run; the owned backdrop is valid.
+            assert!(source(&s).has_background_blur());
+        }
     }
     let mut s = Scene::new();
     let mut path = glass("path", bounds(0., 0., 4., 4.), 256.);

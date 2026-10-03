@@ -19,6 +19,7 @@ pub(crate) fn active(node: &DomainNode) -> bool {
     node.object.visible
         && node.object.style.opacity > 0.
         && node.object.eraser != EraserMode::Path
+        && node.object.mask != MaskMode::Path
         && (node.object.style.has_background_blur() || node.children.iter().any(active))
 }
 fn refusal(node: &DomainNode, reason: Context) -> CompositeError {
@@ -31,6 +32,7 @@ pub(crate) fn target(node: &gpui_flow_scene::DisplayObject) -> Result<(), Compos
     if !node.visible
         || node.style.opacity == 0.
         || node.eraser == EraserMode::Path
+        || node.mask == MaskMode::Path
         || !node.style.has_background_blur()
     {
         return Ok(());
@@ -107,7 +109,11 @@ fn validate_inner(
         }
         let entry = *index;
         *index += 1;
-        if !o.visible || o.style.opacity == 0. || o.eraser == EraserMode::Path {
+        if !o.visible
+            || o.style.opacity == 0.
+            || o.eraser == EraserMode::Path
+            || o.mask == MaskMode::Path
+        {
             return Ok(());
         }
         target(o)?;
@@ -166,9 +172,10 @@ fn validate_inner(
             context.owner = Some(Owner::Transparent(o.id.clone()));
             context.eraser_owner = erasers;
         }
+        let active_masks = crate::plan::has_active_masks(node);
         let mut run = false;
         for child in &node.children {
-            run |= child.object.mask != MaskMode::None;
+            run |= active_masks && child.object.mask != MaskMode::None;
             let mut child_context = context.clone();
             child_context.mask_run |= run;
             visit(child, child_context, index, sites, cancelled)?;

@@ -37,14 +37,26 @@ pub enum HitPolicy {
     Geometry,
     Bounds,
 }
-/// Alpha masks affect following z-ordered siblings until the next mask.
-/// Only direct Group children may be masks. This changes rendering, not picking.
+/// Masks affect following z-ordered siblings until the next mask.
+/// Only direct Group children may be masks; clipping modes also paint themselves.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MaskMode {
     #[default]
     None,
     Alpha,
+    Grayscale,
+    Path,
+    Clipping,
+    ClippingPath,
+}
+impl MaskMode {
+    pub fn is_path(self) -> bool {
+        matches!(self, Self::Path | Self::ClippingPath)
+    }
+    pub fn paints_self(self) -> bool {
+        matches!(self, Self::Clipping | Self::ClippingPath)
+    }
 }
 /// Erase earlier contents of the direct parent's isolated render surface.
 /// Pixel uses rendered alpha; Path uses the geometric filled contour. Renderers

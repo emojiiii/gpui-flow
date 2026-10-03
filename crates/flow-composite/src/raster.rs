@@ -1131,6 +1131,18 @@ impl Raster<'_> {
         depth: usize,
         clip: Option<&Mask>,
     ) -> Result<(), CompositeError> {
+        // Only a visible, positive-opacity marker enables mask scheduling.
+        // Once enabled, all markers (including hidden ones) split runs.
+        if !node
+            .children
+            .iter()
+            .any(|child| child.mask != MaskMode::None && child.visible && child.opacity > 0.)
+        {
+            for child in &node.children {
+                self.node(child, target, depth, clip)?;
+            }
+            return Ok(());
+        }
         let mut i = 0;
         while i < node.children.len() {
             let child = &node.children[i];
@@ -1140,6 +1152,43 @@ impl Raster<'_> {
                 continue;
             }
             let mask_node = child;
+            if mask_node.mask.paints_self() {
+                self.node(mask_node, target, depth, clip)?;
+            }
+            if mask_node.mask.is_path() {
+                let end = node.children[i + 1..]
+                    .iter()
+                    .position(|c| c.mask != MaskMode::None)
+                    .map_or(node.children.len(), |n| i + 1 + n);
+                if mask_node.opacity > 0. {
+                    let opaque = mask_node.opacity == 1.;
+                    let mask =
+                        self.path_mask(&mask_node.mask_paths, if opaque { clip } else { None })?;
+                    if opaque {
+                        // A fully opaque path mask clips the actual parent;
+                        // artistic blending and erasers must see its backdrop.
+                        for child in &node.children[i + 1..end] {
+                            self.node(child, target, depth, Some(&mask))?;
+                        }
+                    } else {
+                        let mut content = self.surface()?;
+                        for child in &node.children[i + 1..end] {
+                            self.node(child, &mut content, depth, Some(&mask))?;
+                        }
+                        self.composite(
+                            target,
+                            &content,
+                            mask_node.opacity,
+                            CompositeOperation::Blend(BlendMode::Normal),
+                            clip,
+                        )?;
+                        self.release(content);
+                    }
+                    self.budget.in_use -= self.pixels;
+                }
+                i = end;
+                continue;
+            }
             let mut mask_surface = self.surface()?;
             self.node(mask_node, &mut mask_surface, depth, None)?;
             self.budget.reserve(self.pixels)?;
@@ -1154,7 +1203,15 @@ impl Raster<'_> {
             {
                 self.check()?;
                 for (a, p) in row.iter_mut().zip(input.as_chunks::<4>().0) {
-                    *a = p[3];
+                    *a = if mask_node.mask == MaskMode::Grayscale {
+                        ((299 * u32::from(p[0])
+                            + 587 * u32::from(p[1])
+                            + 114 * u32::from(p[2])
+                            + 500)
+                            / 1000) as u8
+                    } else {
+                        p[3]
+                    };
                 }
             }
             let mask = Mask::from_vec(
@@ -1199,6 +1256,54 @@ impl Raster<'_> {
             drop(mask);
         }
         Ok(())
+    }
+    fn path_mask(
+        &mut self,
+        paths: &[Option<crate::vector::VectorPaint>],
+        inherited: Option<&Mask>,
+    ) -> Result<Mask, CompositeError> {
+        self.check()?;
+        self.budget.reserve(self.pixels)?;
+        if self.track_initialization {
+            self.budget.write(self.pixels)?;
+        }
+        let mut mask = Mask::from_vec(
+            bytes(self.pixels)?,
+            tiny_skia::IntSize::from_wh(self.width, self.height).ok_or(CompositeError::TooLarge)?,
+        )
+        .ok_or(CompositeError::AllocationFailed)?;
+        self.budget.write(self.pixels)?;
+        if let Some(inherited) = inherited {
+            mask.data_mut().copy_from_slice(inherited.data());
+        } else {
+            mask.data_mut().fill(255);
+        }
+        for path in paths {
+            self.check()?;
+            if let Some(path) = path {
+                let a = self.local_to_layer(path.world);
+                if a.inverse().is_none() || transform(a).invert().is_none_or(|t| !t.is_finite()) {
+                    return Err(CompositeError::UnsupportedTransform);
+                }
+                for p in path.path.points() {
+                    let q = a.transform_point(Point::new(p.x, p.y));
+                    if !q.is_finite() || q.x.abs() > 1_000_000. || q.y.abs() > 1_000_000. {
+                        return Err(CompositeError::UnsupportedTransform);
+                    }
+                }
+                self.budget.reserve(self.pixels)?;
+                if self.track_initialization {
+                    self.budget.write(self.pixels)?;
+                }
+                self.budget.write(self.pixels * 2)?;
+                mask.intersect_path(&path.path, path.rule, true, transform(a));
+                self.budget.in_use -= self.pixels;
+            } else {
+                self.budget.write(self.pixels)?;
+                mask.data_mut().fill(0);
+            }
+        }
+        Ok(mask)
     }
     fn masked(
         &mut self,
@@ -1596,6 +1701,7 @@ fn rasterize_inner(
         || prep.has_inner_shadows
         || prep.has_image_clips
         || prep.has_erasers
+        || prep.has_masks
         || prep.has_grayscale
         || prep.has_blur
         || active_background

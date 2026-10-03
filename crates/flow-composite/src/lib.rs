@@ -115,6 +115,7 @@ pub enum CompositeError {
     UnsupportedExternalBackdrop,
     /// Path erasure currently accepts only geometric vector leaves.
     UnsupportedPathEraser(DisplayId),
+    UnsupportedPathMask(DisplayId),
     UnsupportedTransform,
     UnsupportedScaleFixed(String),
     UnsupportedShadow(DisplayId),
@@ -250,3 +251,6 @@ mod shadow_mode_consumer_tests;
 
 #[cfg(test)]
 mod background_tests;
+
+#[cfg(test)]
+mod mask_mode_tests;
