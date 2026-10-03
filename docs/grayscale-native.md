@@ -1,0 +1,78 @@
+# Grayscale native QA on recovered host — 2026-10-03
+
+All 15 required physical rows and the single optional reopen were completed. The stable functional observations matched the bounded fixture expectations. A diagnostic-display outlier remains in row 9: one screenshot shows StaleFrame while the updated gray content is visible; the following same-revision live record has no composite issue. This is not an all-frames-error-free claim.
+
+Main ran 09:30:50–09:42:51 UTC and reopened once at 09:43:31–09:44:05 UTC. Both exited normally with code 0 and empty stderr. The desktop was released after reopen. No source edit, build, relink, push or dependency change occurred during this QA.
+
+## Provenance and evidence
+
+- Host: replacement cloud Linux host `d2b65af346d2`
+- Executable: `grayscale`, 179,993,592 bytes, SHA256 `b9a943e40e7bb6bc15258ca4165870fd0411fbc6ef381992e44cd318688dcc6c`
+- Source archive SHA256: `bd2ebbea550f13ba92db035adf596a9e6302950faa041b453afd9e084255fd77`
+- All 679 archived repository files matched their hashes; all 60 original freeze entries were unchanged. The separate publication receipt identifies commit `761b626b5c9c77de1c2fdf5fe4c3751114ffb1e7`, tree `1e8a27f6fac93ac1c425b2cfa3ef0d93bbb7b5dd`. Actual build before/after and remote-tree matching were supplied by the integrator; dependencies, compiler and system libraries have their separate recovery provenance
+- This is a new run and executable on the recovered host. No unavailable raw screenshot or trace from interrupted 0844Z was spliced into this package. Prior full-suite counts are historical, not rerun claims
+- Desktop 1364×1024. Host initially restored client 1180×812; normal window restore gave the requested 1060×770. Actual client rectangle (92,162)–(1152,932), canvas (100,270)–(1140,690), 1040×420, Window DPR 1. Complete controls and footer fit at that size. Exact graphics backend/device was not captured
+- 70 documented physical clicks: 56 host controls, 10 canvas inputs, two window restores and two normal closes. Launcher keyboard actions and the desktop focus click are separate from this count
+- Main 70 plus reopen 3 JSON events match all 73 numbered event files one-to-one. With the two session manifests there are 75 native session files, 1,119,077 bytes. There are 29 explicit observation records, including the retained early pending record and the two expected rejected-presentation observations
+- 46 original JPEG/JFIF screenshots, 6,595,531 bytes. Fresh literal 0927Z directory closure, exclusive creation, true MIME extension and unique main/reopen prefixes were used. All original file hashes and headers were independently checked. No JPEG conversion or fabricated native PNG/RGBA capture
+
+The first launcher shortcut did not open the launcher because the desktop lacked focus. A fresh screenshot confirmed it; focusing the existing browser title bar and opening Application Finder worked. Each wrapper subsequently ran exactly once. Launch-named screenshots before window appearance are desktop evidence only.
+
+## Physical matrix
+
+Each row has exact receipt paths, source fingerprints/revisions, viewport, public presentation metadata, actual pointer traces, screenshot UTC/hash and limits in `physical-row-records.json`.
+
+|Row|Procedure|Observed result|Limit or outlier|
+|---|---|---|---|
+|01|A initial leaves, alpha patches, own shadows; actual r2 click|The 0/.5/1 columns were visibly distinct, including red/green/blue, half-alpha red and two own-shadow sets. r2 interior click routed to r2. Full footer fit.|No additional outlier observed.|
+|02|A Amount 0|Right primary and bottom edited objects regained authored colors; middle .5 column stayed unchanged.|No additional outlier observed.|
+|03|A Amount .5, Undo, Redo|Half-gray source changed to zero on Undo and back to half on Redo; exact source comparisons passed.|010 and main-08 captured pending=true/Compositing. They are retained as intermediate evidence; 012/013 confirm the same revision4 source settled. No old transient was relabeled settled.|
+|04|Eight invalid hidden/zero-opacity values and safe history afterward|All eight values rejected with source/revision and immediate public presentation unchanged. Subsequent Undo/Redo still restored the safe edit.|main-11 is an immediate capture before the Undo paint update; main-12 is the settled zero state.|
+|05|Zoom .5, 2, Home; actual g2 click|Source/revision stayed unchanged. Half zoom shows the whole scene; double zoom intentionally crops. Home restores the scene and g2 click routes correctly.|The cropped right/bottom content at zoom2 is expected from the fixed viewport, not a disappearance.|
+|06|Fresh A, one complete eight-frame amount burst|Eight accepted edits end at amount1/revision8 with a current-looking full grayscale result, no pending work and no composite issue at Record.|Public presented geometry and amounts are not CPU upload generation identifiers.|
+|07|Second burst, prompt B reset, new click|After one burst edit, B reset records seven remaining retired steps, replaces the entity/token and accepts focus-green input. No further A burst edits appear afterward.|main-19 is still an A compositing transition immediately after the B click; main-20/21 show actual B. Evidence establishes observed remaining count and later stability, not timing of a CPU-worker cancellation.|
+|08|Fresh B opacity .5 baseline and overlap click|Left filtered group overlaps once over blue, contrasting with right colored reference; outside blue and later magenta remain colored. focus-green is the actual routed target.|Full strict/tolerant candidate lists also include focus-red and focus-external beneath the selected object.|
+|09|B Variant opacity1, Undo .5|Opacity1 visibly restores opaque gray group contents while outside siblings stay colored; Undo restores the .5 appearance and exact source.|Preserved outlier: main-23 displays StaleFrame with pending=false/presented=true and correct new gray content. Subsequent043 at the same revision1 contains no composite issue. Do not claim the entire row was error-free or that screenshot-time causation was proven.|
+|10|Fresh C nested Box and Frame; two child clicks|Both nested child/parent passes are visible with colored effects. Box child overflows its parent while Frame clips it. Rounded/fractional ancestor clipping is visible. Both child interiors route to the expected IDs.|No exact color/edge-alpha assertion is made from JPEG.|
+|11|C own paint phase after children, then Undo|Filtered magenta-derived own stroke overlays the right edge after the phase change; Undo restores the original covered edge and exact canonical document.|No additional outlier observed.|
+|12|Fresh D mask, Pixel and Path; two geometric clicks|Mask and Pixel show partial coverage while Path shows a complete hole; later green survivors are gray. Pixel and Path geometry remain pickable despite erased paint.|main-29 is an immediate blank transition; main-30 is settled. Geometry picking is intentionally distinct from visible ink coverage.|
+|13|D source Amount0 then Undo1|Visible coverage, holes and survivors stay unchanged while source amounts change and restore. Parent passes remain1.|No whole-native-image equality is inferred; the separate canonical CPU exports establish their own byte equality.|
+|14|Fresh E expected unsafe grayscale backdrop rejection|Full OwnedCanvas draws no unfiltered colored substitute and reports UnsupportedGrayscaleBackdrop(DisplayId("focus")). Source remains accepted.|presented.available is true for this rejected scene because it is public geometry availability, not successful CPU raster/upload.|
+|15|E explicit Normal, actual child click, Undo rejection, Redo recovery|Normal visibly produces the dark gray child with unchanged outside red and later magenta. Actual target is multiply. Undo restores typed rejection; Redo restores valid visible content and exact canonical source.|main-35 is an intermediate Compositing image retaining the prior error footer. Settled066/070 have no current composite issue;063/068 retain the expected rejection.|
+|16|Optional normal close and one reopen|Both processes exit0. Reopen begins with original A source, revision0, token0 and fresh event numbering, then actual r2 input works. Full footer fits after normal restore.|Entity IDs are process-scoped; unique evidence directory and fresh event sequence establish separation. This does not inspect private history or publication generations.|
+
+## Independent evidence audit
+
+`native-audit-final.json` contains 286 passing checks. These are independent calculations by the same QA operator on the actual saved artifacts, not a separate renderer execution or external review. They cover event retention, source edits and exact document restoration, invalid input atomicity, public navigation invariance, expected typed rejections, current geometry metadata, burst/session correlation, actual picking, original screenshot bytes, source provenance and exit status.
+
+The first audit draft, `native-audit.json`, had 278/286 passing checks. Its 8 failures and original script remain in `audit-draft-candidate-assumption.json` and `.py`. One assertion used unsorted file iteration. Seven incorrectly equated a single routed event target with the whole hit_test_all candidate list. The final audit checks explicit full expected lists and their first routed target: B also includes focus-red/focus-external, C includes its parent, D includes underlying red, and E includes external red. The trace, oracle tolerances and renderer were unchanged. The draft result is preserved, not relabeled.
+
+All 10 real PointerDown targets match the expected top candidate. Their full strict and four-screen-pixel-tolerant candidate lists agree at the sampled interior positions. The actual positions contain the input adapter's small subpixel offsets. D intentionally uses Geometry picking, so pixel/path remain targets inside removed paint; this does not imply visible ink.
+
+All nine history actions restore the exact expected authored JSON. Eight negative/above-one/NaN/infinite attempts across hidden and zero-opacity states reject as Validation errors with unchanged source/revision and immediate public presentation. The three navigation commands leave source/revision intact. The first burst executes eight source edits and settles at amount 1. The second executes one edit before preset B observes seven remaining retired steps; no later A burst edits appear, and the new entity/token receives actual input. This is concrete session evidence without asserting exact CPU-worker cancellation time or private publication generations.
+
+## Retained diagnostic and presentation boundaries
+
+`main-23-row09-b-opacity-one.jpg` at 09:36:22.743 UTC displays StaleFrame with pending=false/presented=true and the correct new opaque gray group. The following `043-event.json`, same revision 1 and opacity 1, contains no composite issue; `044-event.json` records exact Undo and is also clear. The integrator found an existing mechanism in which differing semantic accepted/requested keys can emit StaleFrame and a parent footer can observe diagnostics before a child updates/paints. This supports a possible stale-footer/transient explanation; it does not prove the internal cause at the capture moment. The original screenshot and all records are retained. Do not summarize this run as having no StaleFrame anywhere.
+
+Early A Redo `010-event.json` and main-08 are a real pending/Compositing intermediate state, followed by settled same-source 012/013. Immediate main-11, main-19, main-29 and main-35 captures can precede the requested paint/preset frame; later explicitly settled captures are separately named. Filenames describe intended checkpoints and are never used as proof that the transition had completed.
+
+For ordinary grayscale scenes, presented_geometry can return canonical geometry through a fast path. available/amounts therefore do not prove an accepted CPU upload generation. E reports geometry available even while its complete OwnedCanvas raster is correctly rejected and the screen is blank except for a typed error. Acceptance here combines actual visible observation, later public no-pending/error state, exact source correlation, and the separate focused controller tests. No private generation is claimed read.
+
+Original JPEG screenshots cannot establish exact RGB values, alpha-edge invariance, image-wide equality or GPU pixel identity. The recovered host's separate helper/planner/CPU outputs and 115 Pillow checks remain independent canonical CPU evidence. The 24 UI and 7 model focused checks are fresh prevalidation; old-host 1701/279 suite counts remain historical. No Image, Canvas or Text producer was physically tested by this shape fixture, and no cross-platform or general performance claim is made.
+
+## Raw backup and sealing
+
+The backup coordinator created a new raw-evidence Library identity and saved PARTIAL versions at startup and after A, B/C and D/E. Input was paused for each stable copy. Each version kept source and actual original artifacts; the large executable was omitted from the small backup while its hash, source and rebuild recipe were retained. The prior metadata-only recovery identity remains separate. Artifact completeness and QA verdict are different fields. The final COMPLETE backup is requested only after this local package is sealed, and its successful version/receipt will be reported separately without rewriting these original evidence files.
+
+See `screenshots.sha256`, `session-evidence.sha256`, `native-evidence.sha256` and `seal-receipt.json` for final integrity. Full raw events, the audit draft, intermediate images and the StaleFrame outlier remain intact.
+
+At the pre-seal inventory, original native logs/capture metadata/screenshots/session files total 8,233,553 bytes; the full validation package excluding the executable totals 11,705,683 bytes, below the preferred 30 MiB evidence budget. Small final checksum/receipt files are added after this inventory.
+
+## Integrator publication and durable copy
+
+The sealed operator report above is reproduced from `grayscale-native-validation-20261003T0927Z/native-qa.md`, SHA-256 `1cd7d67851d1da1200b7b8e467cdca43421a0006c7ecf90bda7b81e573914e54`. The original report and package were not edited after sealing. The integrator independently verified all 60 freeze, 39 top-level, 46 screenshot and 75 session checksum entries, plus the final ZIP SHA and CRC.
+
+The new private Library item `libfile_a7a2d07317148191a4d3e8b1e52cb69c` is version **4 COMPLETE**, filename `gpui-flow-grayscale-native-evidence-20261003-0927Z.zip`, 6,847,541 bytes, SHA-256 `f423cec66eba1da9861e73add5c8aa511ff3378e0b02a88a64dd633667b7d0ea`. It contains 207 original files plus its three backup metadata/checksum files. All 210 extracted entries passed the backup coordinator's checksum audit. Only the 179,993,592-byte rebuildable executable is omitted; source, binary identity, build recipe, original JPEGs, actual traces, independent CPU PNGs, both audit versions and both process exits remain. COMPLETE describes artifact collection; the bounded QA result and row-9 diagnostic outlier remain separate. This identity is distinct from the old-host metadata-only recovery ZIP.
+
+APP-04 remains partial: this closes the grayscale increment's bounded physical fixture gate, while blur/backgroundBlur and spread/box/scale-fixed shadows retain their original mandatory scope. No old-host raw evidence was recovered, no cross-platform or exact native GPU pixel claim is added, and no CI/deployment was started for this documentation checkpoint.

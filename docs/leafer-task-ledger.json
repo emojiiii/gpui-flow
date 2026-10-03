@@ -2,7 +2,7 @@
   "schema_version": 1,
   "ledger_version": "v1-review",
   "review": "已锁定45个能力单元和有限验收集合；审阅版，所有扩展/技术依赖显式记录",
-  "as_of": "2026-10-03T09:39:19.738196+00:00",
+  "as_of": "2026-10-03T10:00:50.555139+00:00",
   "source_snapshot": "761b626b5c9c77de1c2fdf5fe4c3751114ffb1e7",
   "upstream": {
     "leafer_ui": "1e11641d3ea6b0211c83447268a90b8d58feec25",
@@ -482,8 +482,8 @@
       "reference_doc": "docs/multiple-shadows.md",
       "implementation_snapshot": "99392f7c35f956f8765ed5730423df19e3d474cd",
       "evidence_commit": null,
-      "automatic": "现有shadow/inner/group回归通过",
-      "native": "历史受限视觉检查；缺失模式未验",
+      "automatic": "现有shadow/inner/group回归通过；历史grayscale1701 headless/10既有ignored、UI279及strict通过；新主机31聚焦与115独立CPU PNG检查通过，非新全套",
+      "native": "新0927Z独立15行+reopen、两窗exit0，70点击/73事件/46原JPEG，286/286审计；保留278/286审计器假设错误初稿及行9 StaleFrame截图，后续同revision清理",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/effect/src/index.ts",
         "symbols_or_contract": "EffectModule；Shadow / InnerShadow / Blur / BackgroundBlur；ICommonAttr grayscale"
@@ -491,9 +491,12 @@
       "technical_dependencies": [
         "background blur须读取拥有的backdrop，不能读取任意外部宿主画面"
       ],
-      "progress": "有界scalar grayscale已实现；1701 headless/10既有ignored、UI279、strict及format通过，原生待验。alpha保留/隔离与预算/consumer拒绝有回归，spread/box/scale-fixed shadow和blur/backgroundBlur仍缺，整项partial",
+      "progress": "有界scalar grayscale源码与限定原生已验；公开geometry availability非CPU上传generation，JPEG非无损GPU像素。spread/box/scale-fixed shadow与blur/backgroundBlur仍须完成，整项partial，33/9/3不变",
       "headless_increment_summary": "docs/validation/2026-10-03-grayscale-source-summary.json",
-      "grayscale_contract": "docs/grayscale.md"
+      "grayscale_contract": "docs/grayscale.md",
+      "grayscale_native_report": "docs/grayscale-native.md",
+      "grayscale_native_summary": "docs/validation/2026-10-03-grayscale-native-summary.json",
+      "grayscale_native_source_commit": "761b626b5c9c77de1c2fdf5fe4c3751114ffb1e7"
     },
     {
       "id": "APP-05",
@@ -1126,6 +1129,6 @@
     "published_source_restored_exactly": true,
     "old_raw_QA_packages_restored": false,
     "old_grayscale0844Z": "interrupted, no exit or full pass",
-    "new_grayscale0927Z": "independent tour pending; raw Library backups partial until sealed"
+    "new_grayscale0927Z": "independent15-row+reopen tour sealed; Library v4 COMPLETE; row9 StaleFrame outlier retained; old0844Z raw remains unavailable"
   }
 }

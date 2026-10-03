@@ -104,7 +104,7 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 | APP-01 | appearance/gradient和CPU对应回归通过 | 历史渐变/多paint窗口及Canvas矢量窗口通过 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
 | APP-02 | fixed最终1679/10既有ignored、UI275、strict；18helper组合及5PNG/45 Pillow通过；旧open证据保留 | 14行、99点击/32pointer/28live/38 JPEG；265审计，主窗/reopen退出0；stale footer/sticky error/未实抓取消保留 | 源码`981e9918`、夹具`369d250c`；[有界native](scale-fixed-native.md)、[不变原契约核对](scale-fixed-acceptance-audit.md)，旧open辅助20/21保留 |
 | APP-03 | 受影响三crate778/3既有ignored、UI focused、strict通过；夹具7CPU+6真实App reset回归 | 修复轮15行/90次点击(73控件+17画布)/18pointer/41receipt，456审计通过；旧reset失败及旧00截图缺失事故单列 | 核心`a46ae005`、夹具`4507492c`；[native证据](scene-eraser-native.md)，整项仍部分 |
-| APP-04 | 现有shadow/inner/group回归通过 | 历史受限视觉检查；缺失模式未验 | 尚无独立完整验收提交 |
+| APP-04 | 历史grayscale1701/279与strict；新host31聚焦/115 CPU PNG，非新全套 | 独立15行+reopen两窗exit0；70点击/73事件/46 JPEG，286审计；行9 StaleFrame及初稿保留 | [有界灰度原生](grayscale-native.md)；其余固定效果仍缺，整项partial |
 | APP-05 | 历史74 state；修订UI245含13coherent，最终hook后2导航/4镜像focused复验，strict/链接通过（重叠） | 新72记录/57 JPEG截图，33状态样本完整，7点击符合accepted geometry；12硬失效样本loading保留，退出0 | `93ee7f7cabfb7979aeca93ec137ccf81644baeb5`；[coherent复验](validation/2026-10-02-state-coherent-native-summary.json)，[原始失败证据](validation/2026-10-02-state-geometry-summary.json)保留 |
 | APP-06 | 无GPU damage消费测试 | 未实现/未验收 | 尚无独立完整验收提交 |
 | LAY-01 | flow/auto_size/reverse/item_boxes/gap/taffy对应全套通过 | 核心是纯measure/arrange契约；窗口专门矩阵仍未宣称 | `a08670a2fbe2882997d21d6a9f812d4197d3da74` |
@@ -221,3 +221,5 @@ UI `1e11641d3ea6b0211c83447268a90b8d58feec25`；core `1d703303ff0759ce4973d54c87
 - 2026-10-03 08:24：APP-02原必选验收字符串不变，scale-fixed源码/自动/14行限定原生与265审计通过后升级有界已验证，计数33/9/3，总45。拒绝域、旧JPEG辅助20/21、sticky错误条/初始stale footer及未物理验证queued callback取消均保留；[范围核对](scale-fixed-acceptance-audit.md)。APP-04 grayscale仍在独立开发，不改状态。
 
 - 2026-10-03 08:38：APP-04增加[有界scalar grayscale](grayscale.md)，1701 headless/10既有ignored、279 UI、strict及format通过；限定原生尚待验收。其余固定效果缺口保留，状态与33/9/3计数不变。
+
+- 2026-10-03 10:00：APP-04 grayscale新主机独立15必做行+一次reopen完成，两窗exit0，286/286工件审计；原278/286审计器假设初稿与StaleFrame截图保留，后续同revision状态清理。46原JPEG/73事件/源码与重建来源已保存私有Library v4 COMPLETE。旧0844Z未恢复或拼接；geometry availability不代表上传generation。其余原固定效果仍缺，**33/9/3不变**；[详细范围](grayscale-native.md)。
