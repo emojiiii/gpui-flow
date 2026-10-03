@@ -65,6 +65,8 @@ pub struct GpuiTextRasterizer {
     shaping: Arc<TextSystem>,
     raster: Arc<dyn PlatformTextSystem>,
     epoch: AtomicU64,
+    #[cfg(feature = "static-outline-registration")]
+    outlines: Option<crate::outline_registration::OutlineBindings>,
 }
 impl GpuiTextRasterizer {
     /// Capture the platform's text-system Arc before passing that SAME platform
@@ -73,13 +75,79 @@ impl GpuiTextRasterizer {
     pub fn application(platform: Rc<dyn Platform>) -> (Application, Arc<Self>) {
         let raster = platform.text_system();
         let app = Application::with_platform(platform);
-        let bridge = Arc::new(Self {
-            shaping: app.text_system(),
-            raster,
-            epoch: AtomicU64::new(0),
-        });
+        let bridge = Arc::new(Self::unbound(app.text_system(), raster));
         (app, bridge)
     }
+    fn unbound(shaping: Arc<TextSystem>, raster: Arc<dyn PlatformTextSystem>) -> Self {
+        Self {
+            shaping,
+            raster,
+            epoch: AtomicU64::new(0),
+            #[cfg(feature = "static-outline-registration")]
+            outlines: None,
+        }
+    }
+    #[cfg(all(
+        feature = "static-outline-registration",
+        any(
+            test,
+            all(
+                target_os = "linux",
+                any(feature = "static-outline-x11", feature = "static-outline-wayland")
+            )
+        )
+    ))]
+    pub(crate) fn from_outline_registration(
+        shaping: Arc<TextSystem>,
+        raster: Arc<dyn PlatformTextSystem>,
+        outlines: crate::outline_registration::OutlineBindings,
+    ) -> Self {
+        Self {
+            shaping,
+            raster,
+            epoch: AtomicU64::new(0),
+            outlines: Some(outlines),
+        }
+    }
+
+    /// Exact admitted descriptors, in startup order. Generic `application` bridges
+    /// remain unsupported, even if supplied a platform that happens to be Linux.
+    #[cfg(feature = "static-outline-registration")]
+    pub fn static_outline_descriptors(
+        &self,
+    ) -> Result<Vec<gpui::Font>, crate::outline_registration::OutlineBindingError> {
+        self.outlines
+            .as_ref()
+            .map(|bindings| bindings.descriptors())
+            .ok_or(crate::outline_registration::OutlineBindingError::Unsupported)
+    }
+
+    /// Validate a shaped run's native ID against this App's immutable startup
+    /// bindings. All runs must pass before a future outline candidate is painted;
+    /// an unbound fallback rejects the whole candidate. No glyphs are shaped here.
+    #[cfg(feature = "static-outline-registration")]
+    pub fn static_outline_font(
+        &self,
+        system: &Arc<TextSystem>,
+        font_id: gpui::FontId,
+        style: crate::static_outlines::StaticStyle,
+        epoch: u64,
+        cancelled: &AtomicBool,
+    ) -> Result<
+        &crate::static_outlines::PreparedFont,
+        crate::outline_registration::OutlineBindingError,
+    > {
+        use crate::outline_registration::OutlineBindingError;
+        let bindings = self
+            .outlines
+            .as_ref()
+            .ok_or(OutlineBindingError::Unsupported)?;
+        if self.epoch() != epoch || cancelled.load(Ordering::Relaxed) {
+            return Err(OutlineBindingError::StaleSnapshot);
+        }
+        bindings.lookup(system, font_id, style, epoch)
+    }
+
     pub fn matches_text_system(&self, system: &Arc<TextSystem>) -> bool {
         Arc::ptr_eq(&self.shaping, system)
     }
@@ -625,6 +693,8 @@ mod tests {
             shaping: Arc::new(TextSystem::new(raster.clone())),
             raster,
             epoch: AtomicU64::new(0),
+            #[cfg(feature = "static-outline-registration")]
+            outlines: None,
         };
         let cancel = AtomicBool::new(false);
         assert!(bridge.check(0, &cancel).is_ok());
@@ -633,5 +703,36 @@ mod tests {
         assert!(bridge.check(1, &cancel).is_ok());
         cancel.store(true, Ordering::Relaxed);
         assert!(bridge.check(1, &cancel).is_err());
+    }
+}
+
+#[cfg(all(test, feature = "static-outline-registration"))]
+mod outline_registration_bridge_tests {
+    use super::*;
+    use crate::{outline_registration::OutlineBindingError, static_outlines::StaticStyle};
+    #[test]
+    fn generic_bridge_has_no_outline_capability() {
+        let raster: Arc<dyn PlatformTextSystem> = Arc::new(gpui::NoopTextSystem::new());
+        let shaping = Arc::new(TextSystem::new(raster.clone()));
+        let bridge = GpuiTextRasterizer::unbound(shaping.clone(), raster);
+        assert_eq!(
+            bridge.static_outline_descriptors().unwrap_err(),
+            OutlineBindingError::Unsupported
+        );
+        assert_eq!(
+            bridge
+                .static_outline_font(
+                    &shaping,
+                    gpui::FontId(1),
+                    StaticStyle {
+                        weight: 400,
+                        italic: false
+                    },
+                    0,
+                    &AtomicBool::new(false)
+                )
+                .unwrap_err(),
+            OutlineBindingError::Unsupported
+        );
     }
 }

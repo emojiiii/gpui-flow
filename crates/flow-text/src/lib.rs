@@ -17,6 +17,9 @@ pub use gpui_raster::{GpuiTextRasterizer, RasterizedText, TextRasterRequest};
 #[cfg(feature = "static-outlines")]
 pub mod static_outlines;
 
+#[cfg(feature = "static-outline-registration")]
+pub mod outline_registration;
+
 mod text_case;
 pub use text_case::{MAX_TEXT_BYTES, TextCase};
 
