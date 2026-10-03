@@ -1,7 +1,7 @@
 //! Compact native gate for spacing, indentation, auto-size anchors and history.
 use gpui::{prelude::*, *};
 use gpui_flow::{
-    ControlButton, GpuiTextMeasurer, SceneView,
+    ControlButton, GpuiTextMeasurer, GpuiTextRasterizer, SceneView,
     layout::{FlowLayout, TextSizing},
     scene::{Affine, Color, DisplayObject, Scene, Shape, Size as SceneSize, Style, display},
 };
@@ -69,6 +69,7 @@ fn text<'a>(scene: &'a Scene, id: &str) -> &'a display::Text {
 #[derive(Clone, Copy)]
 enum Action {
     Toggle,
+    Mode,
     Undo,
     Redo,
     Reject,
@@ -78,7 +79,7 @@ struct Lab {
     status: &'static str,
 }
 impl Lab {
-    fn new(cx: &mut Context<Self>) -> Self {
+    fn new(bridge: Arc<GpuiTextRasterizer>, cx: &mut Context<Self>) -> Self {
         let (mut scene, layout) = document();
         let measured =
             layout.with_text_measurer(Arc::new(GpuiTextMeasurer::new(cx.text_system().clone())));
@@ -87,6 +88,7 @@ impl Lab {
             let mut view = SceneView::new(scene, cx).unwrap();
             view.show_grid = false;
             view.set_editable(false, cx);
+            view.set_text_rasterizer(Some(bridge), cx).unwrap();
             measured.install_reactive(&mut view.editor.engine).unwrap();
             view.editor.selection.select("anchor".into(), false);
             view
@@ -127,6 +129,28 @@ impl Lab {
                         "Reset to the original layout"
                     }
                 }
+                Action::Mode => {
+                    use display::TextWritingMode::*;
+                    view.editor
+                        .transaction(|scene| {
+                            for id in ["paragraph", "anchor"] {
+                                scene.update_object(&id.into(), |object| {
+                                    let Shape::Text(text) = &mut object.shape else {
+                                        unreachable!()
+                                    };
+                                    text.writing_mode = match text.writing_mode {
+                                        X => Y,
+                                        Y => YReverse,
+                                        YReverse => XReverse,
+                                        XReverse => X,
+                                    };
+                                })?;
+                            }
+                            Ok(())
+                        })
+                        .unwrap();
+                    "Changed axis: upright native clusters, Natural bounds reflowed"
+                }
                 Action::Undo => {
                     view.editor.undo();
                     "Undo"
@@ -164,7 +188,8 @@ impl Render for Lab {
         let paragraph = text(scene, "paragraph");
         let anchor = text(scene, "anchor");
         let values = format!(
-            "Letters {} · words {} · indent {} · auto align {} · local origin ({:.1}, {:.1})",
+            "Mode {:?} · letters {} · words {} · indent {} · auto align {} · local origin ({:.1}, {:.1})",
+            paragraph.writing_mode,
             paragraph.letter_spacing,
             paragraph.word_spacing,
             paragraph.para_indent,
@@ -175,6 +200,7 @@ impl Render for Lab {
         let mut buttons = div().h(px(56.)).px_4().flex().items_center().gap_3();
         for (id, title, action) in [
             ("toggle", "Apply / reset layout", Action::Toggle),
+            ("mode", "Next writing mode", Action::Mode),
             ("undo", "Undo", Action::Undo),
             ("redo", "Redo", Action::Redo),
             ("reject", "Reject -1", Action::Reject),
@@ -188,29 +214,29 @@ impl Render for Lab {
             .child(buttons)
             .child(div().flex_1().min_h_0().overflow_hidden().child(self.view.clone()))
             .child(div().h(px(90.)).px_4().text_sm().child(self.status).child(div().child(values))
-                .child(div().child("Only paragraph first rows indent. The selected bounds follow the fixed origin crosshair. Writing mode x only; vertical/reverse remains unsupported.")))
+                .child(div().child("Only paragraph first rows indent. The selected bounds follow the fixed origin crosshair. Y columns advance left to right; reverse changes cluster order, and glyphs stay upright.")))
     }
 }
 fn main() {
-    gpui_kit::application()
-        .with_assets(gpui_kit::assets::Assets)
-        .run(|cx| {
-            gpui_kit::init(cx);
-            cx.open_window(
-                WindowOptions {
-                    window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
-                        None,
-                        size(px(900.), px(550.)),
-                        cx,
-                    ))),
-                    ..Default::default()
-                },
-                |window, cx| {
-                    window.set_window_title("gpui-flow · Fixed text layout properties");
-                    cx.new(Lab::new)
-                },
-            )
-            .unwrap();
-            cx.activate(true);
-        });
+    let (app, bridge) =
+        GpuiTextRasterizer::application(gpui_kit::platform::current_platform(false));
+    app.with_assets(gpui_kit::assets::Assets).run(move |cx| {
+        gpui_kit::init(cx);
+        cx.open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
+                    None,
+                    size(px(900.), px(550.)),
+                    cx,
+                ))),
+                ..Default::default()
+            },
+            move |window, cx| {
+                window.set_window_title("gpui-flow · Fixed text layout properties");
+                cx.new(|cx| Lab::new(bridge, cx))
+            },
+        )
+        .unwrap();
+        cx.activate(true);
+    });
 }

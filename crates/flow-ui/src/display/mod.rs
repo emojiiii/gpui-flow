@@ -76,6 +76,7 @@ impl RenderObject {
             })
         };
         if matches!(self.object.shape, Shape::Canvas(_))
+            || matches!(&self.object.shape, Shape::Text(text) if text.writing_mode != scene::display::TextWritingMode::X)
             || ((self.opacity < 1.
                 || self
                     .object
@@ -356,3 +357,6 @@ mod decoration_tests;
 mod inline_layout_tests;
 #[cfg(test)]
 mod paragraph_style_tests;
+
+#[cfg(test)]
+mod writing_mode_tests;

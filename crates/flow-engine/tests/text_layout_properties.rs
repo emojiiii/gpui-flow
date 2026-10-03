@@ -68,9 +68,6 @@ fn invalid_factory_and_shape_updates_leave_scene_layout_revision_and_resources_u
         ("letter_spacing", json!({"type":"percent","value":0.1})),
         ("word_spacing", json!("10%")),
         ("para_indent", json!("10")),
-        ("writing_mode", json!("y")),
-        ("writing_mode", json!("x-reverse")),
-        ("writing_mode", json!("y-reverse")),
         ("writing_mode", json!("unknown")),
         ("auto_size_align", json!("true")),
         ("layout_origin", json!({"x":-1_000_001.,"y":0.})),
@@ -151,4 +148,37 @@ fn each_layout_edit_invalidates_geometry_paint_hit_and_old_resource_identity() {
     );
     assert_eq!(engine.scene(), &before);
     assert_eq!(engine.revision(), revision);
+}
+
+#[test]
+fn writing_mode_changes_invalidate_layout_paint_hit_and_resource_identity() {
+    let mut engine = SceneEngine::new(Scene::new()).unwrap();
+    let (handle, _) = engine
+        .create("text", "t", json!({"content":"AB"}), None, None)
+        .unwrap();
+    let mut resources = SceneResources::new(&mut engine).unwrap();
+    for mode in ["y", "y-reverse", "x-reverse", "x"] {
+        resources.synchronize(&mut engine).unwrap();
+        let ticket = resources.ticket(&engine, handle).unwrap();
+        let mut shape = json!(engine.object(handle).unwrap().shape);
+        shape["geometry"]["writing_mode"] = json!(mode);
+        let changes = engine
+            .set_property(handle, PropertyKey::Shape, shape)
+            .unwrap();
+        assert!(
+            changes.dirty[&"t".into()]
+                .contains(DirtyFlags::GEOMETRY | DirtyFlags::PAINT | DirtyFlags::HIT)
+        );
+        assert_eq!(
+            resources
+                .complete(&mut engine, ticket, ResourceOutcome::Loaded)
+                .unwrap()
+                .0,
+            ResourceCompletion::Stale
+        );
+        let Shape::Text(text) = &engine.object(handle).unwrap().shape else {
+            unreachable!()
+        };
+        assert_eq!(text.content, "AB");
+    }
 }

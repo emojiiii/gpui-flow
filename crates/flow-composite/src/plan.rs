@@ -432,8 +432,9 @@ fn visit(
     // Native Text content masks are rectangular. Preserve actual ancestor
     // geometry through the existing glyph bridge/CPU mask, never an AABB.
     // Affine Text reuses local glyph pixels; missing bridges/styles fail explicitly.
-    let text_clip_domain = matches!(o.shape, Shape::Text(_))
-        && (complex_ancestor_clip || !world.is_positive_uniform_scale_translation());
+    let text_clip_domain = matches!(&o.shape, Shape::Text(text)
+        if text.writing_mode != gpui_flow_scene::display::TextWritingMode::X
+            || complex_ancestor_clip || !world.is_positive_uniform_scale_translation());
     if boundary(scene, id) || image_geometry_domain || text_clip_domain {
         *domains += 1;
         if *domains > limits.max_domains {

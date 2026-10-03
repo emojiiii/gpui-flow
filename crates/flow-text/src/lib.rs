@@ -28,6 +28,11 @@ pub mod outline_registration;
 #[cfg(feature = "static-outline-registration")]
 pub use gpui_outlines::{OutlinedText, PositionedGlyphOutline, TextOutlineError};
 
+mod writing_mode;
+pub use writing_mode::{UnsupportedWritingMode, WritingMode, WritingModeError};
+#[cfg(feature = "gpui")]
+pub mod gpui_writing_mode;
+
 mod text_case;
 pub use text_case::{MAX_TEXT_BYTES, TextCase};
 
@@ -125,6 +130,20 @@ impl TextMetrics {
 /// A cache must include all request fields and discard entries on invalidate.
 pub trait TextMeasurer: Send + Sync {
     fn measure(&self, request: &TextMeasureRequest) -> Result<TextMetrics, String>;
+    /// Opt-in axis layout. Existing hosts explicitly reject new modes.
+    fn measure_writing_mode(
+        &self,
+        request: &TextMeasureRequest,
+        mode: WritingMode,
+    ) -> Result<TextMetrics, WritingModeError> {
+        if mode == WritingMode::X {
+            self.measure(request).map_err(Into::into)
+        } else {
+            Err(WritingModeError::Unsupported(
+                UnsupportedWritingMode::Backend,
+            ))
+        }
+    }
     /// Distance from the first logical line-box top to its alphabetic baseline.
     /// Legacy measurement implementations remain source-compatible and fail
     /// explicitly only when a caller opts into baseline alignment.

@@ -197,6 +197,42 @@ impl TextMeasurer for GpuiTextMeasurer {
         // Stale results must not escape to the document, even uncached.
         cache.complete(epoch, request.clone(), metrics)
     }
+    fn measure_writing_mode(
+        &self,
+        request: &TextMeasureRequest,
+        mode: crate::WritingMode,
+    ) -> Result<TextMetrics, crate::WritingModeError> {
+        if mode == crate::WritingMode::X {
+            return self.measure(request).map_err(Into::into);
+        }
+        request.validate()?;
+        let epoch = self
+            .cache
+            .lock()
+            .map_err(|_| "text metric cache poisoned")?
+            .epoch;
+        let metrics = catch_unwind(AssertUnwindSafe(|| {
+            if self.text_system.all_font_names().is_empty() {
+                return Err(crate::WritingModeError::Invalid(
+                    "native text system has no available fonts".into(),
+                ));
+            }
+            let shaper = WindowTextSystem::new(self.text_system.clone());
+            crate::gpui_writing_mode::shape_axis(&shaper, request, mode)
+                .map(|shape| shape.metrics().clone())
+        }))
+        .map_err(|_| "native axis text shaping panicked")??;
+        if self
+            .cache
+            .lock()
+            .map_err(|_| "text metric cache poisoned")?
+            .epoch
+            != epoch
+        {
+            return Err("fonts invalidated during measurement; retry the transaction".into());
+        }
+        Ok(metrics)
+    }
     fn first_baseline(&self, request: &TextMeasureRequest) -> Result<f32, String> {
         request.validate()?;
         let epoch = self

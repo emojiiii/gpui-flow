@@ -636,7 +636,13 @@ fn text_shape(f: &mut Fields) -> Result<display::Text> {
         }
         *target = value as f32;
     }
-    choice(f, "writingMode", "x", &["x"])?;
+    text.writing_mode = match choice(f, "writingMode", "x", &["x", "x-reverse", "y", "y-reverse"])?
+    {
+        "x-reverse" => display::TextWritingMode::XReverse,
+        "y" => display::TextWritingMode::Y,
+        "y-reverse" => display::TextWritingMode::YReverse,
+        _ => display::TextWritingMode::X,
+    };
     text.auto_size_align = f.boolean("autoSizeAlign", true)?;
     if let Some(v) = f.take("padding") {
         if let Value::Array(a) = v {
@@ -1344,7 +1350,16 @@ fn export_text(m: &mut Map<String, Value>, v: &display::Text) {
     put(m, "letterSpacing", v.letter_spacing);
     put(m, "wordSpacing", v.word_spacing);
     put(m, "paraIndent", v.para_indent);
-    put(m, "writingMode", "x");
+    put(
+        m,
+        "writingMode",
+        match v.writing_mode {
+            display::TextWritingMode::X => "x",
+            display::TextWritingMode::XReverse => "x-reverse",
+            display::TextWritingMode::Y => "y",
+            display::TextWritingMode::YReverse => "y-reverse",
+        },
+    );
     put(m, "autoSizeAlign", v.auto_size_align);
     put(m, "padding", json!(v.padding));
 }

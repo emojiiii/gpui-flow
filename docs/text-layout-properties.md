@@ -2,11 +2,10 @@
 
 This module adds `letter_spacing`, `word_spacing`, `para_indent`, and
 `auto_size_align` to the existing `text_case` and `para_spacing` contract.
-ELM-04 remains **partial**: actual vertical/reverse `writing_mode` layout is still
-required. `writing_mode: "x"` is the sole accepted value; `y`, `x-reverse`,
-`y-reverse`, and unknown values fail explicitly. Declaring or round-tripping an
-unused enum does not establish writing-mode support. Rich runs and WYSIWYG editing
-remain outside the original fixed-property task.
+`writing_mode` additionally supports a bounded Flow axis extension described below.
+The pinned Leafer build only declares these modes; it has no non-horizontal
+runtime to copy. This is not a claim of Leafer vertical-text parity.
+Rich runs and WYSIWYG editing remain outside the original fixed-property task.
 
 ## Supported behavior
 
@@ -56,6 +55,44 @@ origin. Repeated reflow is idempotent; undo/redo restores the complete geometry.
 Leafer JSON's currently supported explicit-size exporter rejects a nonzero origin
 instead of silently discarding it; Flow document serialization retains it.
 
+## Upright cluster writing modes
+
+`x` retains the existing horizontal implementation. Flow's `x-reverse` places
+native clusters right to left; `y` places them top to bottom; `y-reverse` places
+them bottom to top. Every glyph stays upright. All glyphs and offsets in one
+native shaping cluster stay together, including ligatures and combining marks.
+Case conversion precedes shaping. Canonical source content is never reordered.
+The nondefault modes require monotonic source clusters and horizontal native
+positions; unsupported native ordering returns a typed `Unsupported` result.
+This is axis layout, not bidi/RTL shaping or OpenType vertical GSUB/metrics.
+
+Y modes use one font-size inline cell per native cluster, centered horizontally
+in a line-height-wide column. Columns advance left to right. Wrapping uses the
+content **height** for Y and width for X-reverse, breaking only between native
+clusters. A cluster wider/taller than the inline limit remains whole and clips.
+Letter/ASCII-space spacing follows the inline direction; paragraph indentation
+applies only to each hard-newline paragraph's first row/column. Paragraph spacing
+separates rows/columns only at hard newlines. Empty and trailing paragraphs retain
+one row/column. `align` acts along the inline axis with Start/End following its
+direction; `vertical_align` acts along the cross axis (left/middle/right in Y).
+Padding and clipping remain in physical x/y coordinates.
+
+Fixed boxes and `Natural` measured sizing are supported. Physical measurement,
+auto-size alignment, local bounds, undo/redo, resource readiness and painting use
+the same axis placement. Vertical `AutoHeight` and first-baseline alignment reject
+because those consumers own/assume a horizontal line axis. Third-party measurers
+must opt into `measure_writing_mode`; its default rejects new modes.
+
+Nondefault modes currently require Clip and no decoration. The model rejects
+unavailable combinations atomically and the raster API returns typed Unsupported
+errors. They use the same App's actual glyph raster backend through the bounded
+CPU compositor for native presentation and raster/SVG export. A missing bridge
+is an explicit failure. Direct native `DisplayElement` reports a required
+compositing domain. No glyph rectangle proxy, font replacement, glyph mirroring
+or rotated-image approximation is used. Leafer JSON accepts/emits the exact four
+spellings using these documented Flow semantics; a pinned Leafer reader will
+ignore its writingMode setting rather than reproduce Flow's axis presentation.
+
 ## Limits and checks
 
 Nondefault spacing/indent admits at most 64KiB source UTF-8, 8192 shaped glyphs and
@@ -63,8 +100,10 @@ Nondefault spacing/indent admits at most 64KiB source UTF-8, 8192 shaped glyphs 
 admitted before allocation and retained storage is charged beside paragraph
 indices, bitmap and decoration storage, including simultaneously live ellipsis
 source/probe/output copies. Existing source expansion, raster, outline, work,
-font-epoch and cancellation gates remain in force. Default unstyled Clip text
-keeps the existing native path.
+font-epoch and cancellation gates remain in force. Default horizontal unstyled Clip text
+keeps the existing native path. Axis plans additionally admit at most 8192 rows
+and charge owned glyph/row/cluster storage before allocation; font epochs,
+cancellation, pixel-work and working-set limits remain shared with horizontal text.
 
 Focused regressions cover model/import/registry rejection, reactive reflow and
 history, asymmetric auto alignment, nonzero-origin resize anchors, native cluster
@@ -93,3 +132,12 @@ the status reports rejection, with the current scene and revision unchanged.
 The fixture uses the real native measurer and shared renderer, with no pixel oracle.
 
 The Linux example completed Apply, Undo, Redo and atomic negative-value rejection, then exited normally. Public Rust struct literals for Text and TextMeasureRequest must initialize the new fields; existing constructors and older Scene JSON preserve their defaults.
+
+**Next writing mode** cycles X → Y → Y-reverse → X-reverse → X for both
+the clipped paragraph and Natural label. The same window installs the native
+glyph bridge, so oriented text is real ink; Undo/Redo includes mode and bounds.
+
+The axis-mode Linux smoke run cycled all four modes, reflowed the Natural label,
+restored mode/bounds with Undo/Redo and rejected negative spacing atomically,
+then exited normally. Vertical labels can overlap the example’s fixed annotations;
+this does not establish typography for every script or every property combination.

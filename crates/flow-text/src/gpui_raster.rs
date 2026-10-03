@@ -174,10 +174,51 @@ impl GpuiTextRasterizer {
         if cfg!(target_family = "wasm") {
             return Err("text raster bridge requires a native desktop platform".into());
         }
+        self.rasterize_writing_mode(
+            request,
+            crate::WritingMode::X,
+            epoch,
+            cancelled,
+            max_bytes,
+            remaining_work,
+        )
+        .map_err(|e| e.to_string())
+    }
+    /// Paint upright native glyphs with Flow axis placement. The same per-glyph
+    /// raster/cache/budget path serves horizontal and oriented text.
+    #[allow(clippy::too_many_arguments)] // Existing raster contract plus the opt-in mode.
+    pub fn rasterize_writing_mode(
+        &self,
+        request: &TextRasterRequest,
+        mode: crate::WritingMode,
+        epoch: u64,
+        cancelled: &AtomicBool,
+        max_bytes: usize,
+        remaining_work: &mut u64,
+    ) -> Result<Option<RasterizedText>, crate::WritingModeError> {
+        if cfg!(target_family = "wasm") {
+            return Err(crate::WritingModeError::Unsupported(
+                crate::UnsupportedWritingMode::Backend,
+            ));
+        }
+        if mode != crate::WritingMode::X {
+            if request.overflow != crate::TextOverflow::Clip {
+                return Err(crate::WritingModeError::Unsupported(
+                    crate::UnsupportedWritingMode::Ellipsis,
+                ));
+            }
+            if request.decoration != crate::TextDecoration::None {
+                return Err(crate::WritingModeError::Unsupported(
+                    crate::UnsupportedWritingMode::Decoration,
+                ));
+            }
+        }
         catch_unwind(AssertUnwindSafe(|| {
-            self.rasterize_inner(request, epoch, cancelled, max_bytes, remaining_work)
+            self.rasterize_inner(request, mode, epoch, cancelled, max_bytes, remaining_work)
         }))
-        .map_err(|_| "native text rasterization panicked".to_string())?
+        .map_err(|_| {
+            crate::WritingModeError::Invalid("native text rasterization panicked".into())
+        })?
     }
     pub(crate) fn check(&self, epoch: u64, cancelled: &AtomicBool) -> Result<(), String> {
         if self.epoch() != epoch || cancelled.load(Ordering::Relaxed) {
@@ -186,17 +227,24 @@ impl GpuiTextRasterizer {
             Ok(())
         }
     }
+    #[allow(clippy::too_many_arguments)]
     fn rasterize_inner(
         &self,
         r: &TextRasterRequest,
+        mode: crate::WritingMode,
         epoch: u64,
         cancelled: &AtomicBool,
         max_bytes: usize,
         remaining_work: &mut u64,
-    ) -> Result<Option<RasterizedText>, String> {
+    ) -> Result<Option<RasterizedText>, crate::WritingModeError> {
         self.check(epoch, cancelled)?;
-        r.text.validate()?;
-        if !r.device_scale.is_finite()
+        // Axis shaping admits case-conversion storage before its full validation.
+        if mode == crate::WritingMode::X {
+            r.text.validate()?;
+        }
+        if !r.text.font_size.is_finite()
+            || r.text.font_size <= 0.
+            || !r.device_scale.is_finite()
             || r.device_scale <= 0.
             || r.text.font_size * r.device_scale > 512.
             || r.bounds
@@ -244,50 +292,71 @@ impl GpuiTextRasterizer {
         .into();
         let system = WindowTextSystem::new(self.shaping.clone());
         let mut shaping_peak = output_bytes;
-        let shaped = crate::gpui_overflow::shape_text_in_box_checked(
-            &system,
-            &r.text,
-            color,
-            r.overflow,
-            r.bounds[2],
-            r.bounds[3],
-            &mut |_, storage| {
-                self.check(epoch, cancelled)?;
-                if storage > max_bytes.saturating_sub(output_bytes) {
-                    return Err("text working-set limit".into());
-                }
-                shaping_peak = shaping_peak.max(output_bytes + storage);
-                Ok(())
-            },
-        )?;
-        // Flow-owned paragraph/ellipsis offsets stay live for the whole raster
-        // job, so account them beside bitmap and decoration storage.
-        let offset_bytes =
-            shaped.line_offsets.capacity() * std::mem::size_of::<f32>() + shaped.layout_bytes;
+        let mut admit = |storage: usize| {
+            self.check(epoch, cancelled)?;
+            if storage > max_bytes.saturating_sub(output_bytes) {
+                return Err("text working-set limit".to_owned());
+            }
+            shaping_peak = shaping_peak.max(output_bytes + storage);
+            Ok(())
+        };
+        let (shaped, axis) = if mode == crate::WritingMode::X {
+            (
+                Some(crate::gpui_overflow::shape_text_in_box_checked(
+                    &system,
+                    &r.text,
+                    color,
+                    r.overflow,
+                    r.bounds[2],
+                    r.bounds[3],
+                    &mut |_, storage| admit(storage),
+                )?),
+                None,
+            )
+        } else {
+            (
+                None,
+                Some(crate::gpui_writing_mode::shape_axis_checked(
+                    &system, &r.text, mode, &mut admit,
+                )?),
+            )
+        };
+        let offset_bytes = if let Some(shaped) = &shaped {
+            shaped.line_offsets.capacity() * std::mem::size_of::<f32>() + shaped.layout_bytes
+        } else {
+            axis.as_ref().expect("axis layout").allocated_bytes()
+        };
         let shape_bytes = output_bytes
             .checked_add(offset_bytes)
             .ok_or("text working-set limit")?;
         if shape_bytes > max_bytes {
             return Err("text working-set limit".into());
         }
-        let decorations = crate::gpui_decoration::layout_decorations(
-            &shaped,
-            &crate::gpui_decoration::DecorationRequest {
-                decoration: r.decoration,
-                font_size: r.text.font_size,
-                line_height: r.text.line_height,
-                bounds: r.bounds,
-                align: r.align,
-                vertical_align: r.vertical_align,
-                device_scale: r.device_scale,
-            },
-            max_bytes.saturating_sub(shape_bytes),
-        )?;
+        let decorations = if let Some(shaped) = &shaped {
+            crate::gpui_decoration::layout_decorations(
+                shaped,
+                &crate::gpui_decoration::DecorationRequest {
+                    decoration: r.decoration,
+                    font_size: r.text.font_size,
+                    line_height: r.text.line_height,
+                    bounds: r.bounds,
+                    align: r.align,
+                    vertical_align: r.vertical_align,
+                    device_scale: r.device_scale,
+                },
+                max_bytes.saturating_sub(shape_bytes),
+            )?
+        } else {
+            crate::gpui_decoration::DecorationLayout {
+                rects: vec![],
+                allocated_bytes: 0,
+            }
+        };
         let base_bytes = shape_bytes + decorations.allocated_bytes;
         out.peak_bytes = base_bytes.max(shaping_peak);
         let mut cache: HashMap<RenderGlyphParams, Arc<GlyphBitmap>> = HashMap::new();
         let mut cache_bytes = 0;
-        let stats = crate::gpui_placement::visit_glyphs(&shaped, r, |glyph| {
+        let mut paint_glyph = |glyph: crate::gpui_placement::GlyphPlacement| -> Result<(), String> {
             self.check(epoch, cancelled)?;
             let origin = glyph.origin.map(|v| v * r.device_scale);
             if origin
@@ -361,7 +430,17 @@ impl GpuiTextRasterizer {
             }
             paint_bitmap(&mut out, &bitmap, integer, r.color, remaining_work)?;
             Ok(())
-        })?;
+        };
+        let stats = if let Some(shaped) = &shaped {
+            crate::gpui_placement::visit_glyphs(shaped, r, &mut paint_glyph)?
+        } else {
+            axis.as_ref().expect("axis layout").visit(
+                r.bounds,
+                r.align,
+                r.vertical_align,
+                &mut paint_glyph,
+            )?
+        };
         out.rows = stats.rows;
         for rect in decorations.rects {
             self.check(epoch, cancelled)?;

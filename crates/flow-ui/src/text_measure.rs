@@ -42,3 +42,16 @@ pub(crate) fn text_case(value: gpui_flow_scene::display::TextCase) -> gpui_flow_
         Scene::Lower => gpui_flow_text::TextCase::Lower,
     }
 }
+
+/// Explicit mapping keeps the scene model independent from the backend crate.
+pub(crate) fn writing_mode(
+    mode: gpui_flow_scene::display::TextWritingMode,
+) -> gpui_flow_text::WritingMode {
+    use gpui_flow_scene::display::TextWritingMode as Scene;
+    match mode {
+        Scene::X => gpui_flow_text::WritingMode::X,
+        Scene::XReverse => gpui_flow_text::WritingMode::XReverse,
+        Scene::Y => gpui_flow_text::WritingMode::Y,
+        Scene::YReverse => gpui_flow_text::WritingMode::YReverse,
+    }
+}

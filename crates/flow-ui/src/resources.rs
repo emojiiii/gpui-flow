@@ -477,6 +477,15 @@ impl SceneResourceAdapter {
                 Shape::Text(text) => {
                     let request = text_request(&text);
                     let shaped = catch_unwind(AssertUnwindSafe(|| {
+                        if text.writing_mode != gpui_flow_scene::display::TextWritingMode::X {
+                            gpui_flow_text::gpui_writing_mode::shape_axis(
+                                window.text_system(),
+                                &request,
+                                crate::text_measure::writing_mode(text.writing_mode),
+                            )
+                            .map_err(|error| error.to_string())?;
+                            return Ok(());
+                        }
                         if text.decoration != gpui_flow_scene::display::TextDecoration::None {
                             request.validate()?;
                         }
@@ -518,7 +527,7 @@ impl SceneResourceAdapter {
                             },
                             usize::MAX,
                         )?;
-                        Ok::<_, String>(shaped)
+                        Ok::<_, String>(())
                     }))
                     .unwrap_or_else(|_| Err("native text shaping panicked".into()));
                     (
@@ -789,7 +798,11 @@ fn text_request(text: &Text) -> TextMeasureRequest {
         word_spacing: text.word_spacing,
         para_indent: text.para_indent,
         line_height: text.font_size * text.line_height,
-        wrap_width: text.wrap.then_some(text.content_bounds().size.width),
+        wrap_width: text.wrap.then_some(if text.writing_mode.is_vertical() {
+            text.content_bounds().size.height
+        } else {
+            text.content_bounds().size.width
+        }),
     }
 }
 /// The URI check prevents accidental delegation of imported remote references.

@@ -41,12 +41,26 @@ pub enum TextCase {
     Upper,
     Lower,
 }
-/// Pinned Leafer declares other modes but implements horizontal writing only.
+/// Flow upright-cluster axis extension. Pinned Leafer declares these values but
+/// does not implement their non-horizontal layout semantics.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TextWritingMode {
     #[default]
     X,
+    #[serde(rename = "x-reverse")]
+    XReverse,
+    Y,
+    #[serde(rename = "y-reverse")]
+    YReverse,
+}
+impl TextWritingMode {
+    pub fn is_vertical(self) -> bool {
+        matches!(self, Self::Y | Self::YReverse)
+    }
+    pub fn is_reverse(self) -> bool {
+        matches!(self, Self::XReverse | Self::YReverse)
+    }
 }
 fn horizontal(value: &TextWritingMode) -> bool {
     *value == TextWritingMode::X
@@ -162,6 +176,13 @@ impl Text {
         )
     }
     pub fn validate(&self) -> Result<(), String> {
+        if self.writing_mode != TextWritingMode::X
+            && (self.overflow != TextOverflow::Clip || self.decoration != TextDecoration::None)
+        {
+            return Err(
+                "axis writing modes currently require clip overflow and no decoration".into(),
+            );
+        }
         if (self.overflow == TextOverflow::Ellipsis
             || self.decoration != TextDecoration::None
             || self.text_case != TextCase::None
@@ -169,7 +190,8 @@ impl Text {
             || self.letter_spacing != 0.
             || self.word_spacing != 0.
             || self.para_indent != 0.
-            || self.layout_origin != Point::ZERO)
+            || self.layout_origin != Point::ZERO
+            || self.writing_mode != TextWritingMode::X)
             && self.content.len() > 65_536
         {
             return Err("styled text allows at most 64KiB UTF-8 content".into());

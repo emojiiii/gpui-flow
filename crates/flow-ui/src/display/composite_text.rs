@@ -140,7 +140,11 @@ impl TextPreparation<'_> {
                         word_spacing: text.word_spacing * m.d,
                         para_indent: text.para_indent * m.d,
                         line_height: text.font_size * text.line_height * m.d,
-                        wrap_width: text.wrap.then_some(content.size.width * m.a),
+                        wrap_width: text.wrap.then_some(if text.writing_mode.is_vertical() {
+                            content.size.height * m.d
+                        } else {
+                            content.size.width * m.a
+                        }),
                     },
                     align: match text.align {
                         TextAlign::Start => gpui::TextAlign::Left,
@@ -159,21 +163,29 @@ impl TextPreparation<'_> {
                 };
                 let raster = backend
                     .bridge
-                    .rasterize(
+                    .rasterize_writing_mode(
                         &request,
+                        crate::text_measure::writing_mode(text.writing_mode),
                         backend.epoch,
                         self.cancelled,
                         capacity as usize,
                         self.remaining_work,
                     )
-                    .map_err(|reason| match reason.as_str() {
-                        "text working-set limit" => CompositeError::WorkingSetLimit,
-                        "text pixel work limit" => CompositeError::WorkLimit,
-                        "text snapshot superseded" => CompositeError::Superseded,
-                        _ => CompositeError::TextRasterization {
-                            text: object.id.clone(),
-                            reason,
-                        },
+                    .map_err(|error| match error {
+                        gpui_flow_text::WritingModeError::Unsupported(_) => {
+                            CompositeError::UnsupportedTextStyle(object.id.clone())
+                        }
+                        gpui_flow_text::WritingModeError::Invalid(reason) => {
+                            match reason.as_str() {
+                                "text working-set limit" => CompositeError::WorkingSetLimit,
+                                "text pixel work limit" => CompositeError::WorkLimit,
+                                "text snapshot superseded" => CompositeError::Superseded,
+                                _ => CompositeError::TextRasterization {
+                                    text: object.id.clone(),
+                                    reason,
+                                },
+                            }
+                        }
                     })?;
                 let Some(raster) = raster else {
                     return Ok(None);

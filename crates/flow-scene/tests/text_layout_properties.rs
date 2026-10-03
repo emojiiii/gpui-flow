@@ -159,7 +159,7 @@ fn leafer_defaults_and_numeric_layout_properties_roundtrip() {
 
 #[test]
 fn unsupported_modes_units_and_invalid_layout_values_reject_atomically() {
-    for mode in ["y", "x-reverse", "y-reverse", "horizontal", "X", "unknown"] {
+    for mode in ["horizontal", "x_reverse", "y_reverse", "X", "unknown"] {
         let mut value = json!(text());
         value["writing_mode"] = json!(mode);
         assert!(serde_json::from_value::<Text>(value).is_err(), "{mode}");
@@ -208,4 +208,52 @@ fn computed_origin_cannot_be_lost_through_explicit_size_leafer_export() {
     let error = scene.to_leafer_json().unwrap_err();
     assert_eq!(error.path, "t");
     assert!(error.message.contains("layout_origin"));
+}
+
+#[test]
+fn flow_axis_modes_roundtrip_and_reject_unavailable_style_combinations_atomically() {
+    for (mode, spelling) in [
+        (TextWritingMode::XReverse, "x-reverse"),
+        (TextWritingMode::Y, "y"),
+        (TextWritingMode::YReverse, "y-reverse"),
+    ] {
+        let mut source = leafer();
+        source["writingMode"] = json!(spelling);
+        let scene = Scene::from_leafer_json(&source.to_string()).unwrap();
+        assert_eq!(scene_text(&scene).writing_mode, mode);
+        assert_eq!(
+            Scene::from_leafer_json(&scene.to_leafer_json().unwrap()).unwrap(),
+            scene
+        );
+        let mut value = text();
+        value.writing_mode = mode;
+        value.validate().unwrap();
+        assert_eq!(serde_json::from_value::<Text>(json!(value)).unwrap(), value);
+        let mut scene = scene;
+        let before = scene.clone();
+        assert!(
+            scene
+                .update_object(&"t".into(), |o| {
+                    let Shape::Text(text) = &mut o.shape else {
+                        unreachable!()
+                    };
+                    text.overflow = gpui_flow_scene::display::TextOverflow::Ellipsis;
+                })
+                .is_err()
+        );
+        assert_eq!(scene, before);
+        assert!(
+            scene
+                .update_object(&"t".into(), |o| {
+                    let Shape::Text(text) = &mut o.shape else {
+                        unreachable!()
+                    };
+                    text.decoration = gpui_flow_scene::display::TextDecoration::Underline;
+                })
+                .is_err()
+        );
+        assert_eq!(scene, before);
+        value.content = "a".repeat(65_537);
+        assert!(value.validate().is_err());
+    }
 }

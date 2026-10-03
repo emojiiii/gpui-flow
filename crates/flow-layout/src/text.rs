@@ -28,6 +28,12 @@ pub(super) fn validate(layout: &FlowLayout, scene: &Scene) -> Result<(), FlowErr
         let Shape::Text(text) = &node.object.shape else {
             return Err(invalid(id, "text sizing requires Text"));
         };
+        if *sizing == TextSizing::AutoHeight && text.writing_mode.is_vertical() {
+            return Err(invalid(
+                id,
+                "vertical writing mode requires fixed-box or Natural sizing; AutoHeight would own its wrap axis",
+            ));
+        }
         if *sizing == TextSizing::Natural && text.wrap {
             return Err(invalid(id, "natural text sizing requires wrap=false"));
         }
@@ -75,15 +81,23 @@ pub(super) fn measure(
         };
         let request = request(text, *sizing);
         request.validate().map_err(|e| invalid(id, e))?;
-        let metrics = catch_unwind(AssertUnwindSafe(|| backend.measure(&request)))
-            .map_err(|_| invalid(id, "text measurement backend panicked"))?
-            .map_err(|e| invalid(id, e))?;
+        let metrics = catch_unwind(AssertUnwindSafe(|| {
+            backend.measure_writing_mode(&request, writing_mode(text.writing_mode))
+        }))
+        .map_err(|_| invalid(id, "text measurement backend panicked"))?
+        .map_err(|e| invalid(id, e.to_string()))?;
         metrics.validate().map_err(|e| invalid(id, e))?;
         let expected_height = request.block_height(metrics.lines);
         if metrics.lines <= request.paragraph_breaks()
             || metrics.line_height != request.line_height
             || !expected_height.is_finite()
-            || (metrics.height - expected_height).abs() > expected_height.max(1.) * 0.00001
+            || ((if text.writing_mode.is_vertical() {
+                metrics.width
+            } else {
+                metrics.height
+            }) - expected_height)
+                .abs()
+                > expected_height.max(1.) * 0.00001
         {
             return Err(invalid(
                 id,
@@ -97,24 +111,36 @@ pub(super) fn measure(
         size.height = metrics.height + text.padding[0] + text.padding[2];
         let origin = if text.auto_size_align {
             use gpui_flow_scene::display::{TextAlign, TextVerticalAlign};
-            gpui_flow_scene::Point::new(
-                if *sizing == TextSizing::Natural {
-                    match text.align {
-                        TextAlign::Start => 0.,
-                        TextAlign::Center => {
-                            -(size.width - text.padding[1] - text.padding[3]) / 2. - text.padding[3]
-                        }
-                        TextAlign::End => -size.width,
-                    }
-                } else {
-                    0.
-                },
-                match text.vertical_align {
-                    TextVerticalAlign::Top => 0.,
-                    TextVerticalAlign::Middle => -metrics.height / 2. - text.padding[0],
-                    TextVerticalAlign::Bottom => -size.height,
-                },
-            )
+            let inline_origin = |content: f32, outer: f32, leading: f32| match text.align {
+                TextAlign::Center => -content / 2. - leading,
+                TextAlign::Start if !text.writing_mode.is_reverse() => 0.,
+                TextAlign::End if text.writing_mode.is_reverse() => 0.,
+                _ => -outer,
+            };
+            let cross_origin = |content: f32, outer: f32, leading: f32| match text.vertical_align {
+                TextVerticalAlign::Top => 0.,
+                TextVerticalAlign::Middle => -content / 2. - leading,
+                TextVerticalAlign::Bottom => -outer,
+            };
+            if text.writing_mode.is_vertical() {
+                gpui_flow_scene::Point::new(
+                    cross_origin(metrics.width, size.width, text.padding[3]),
+                    inline_origin(metrics.height, size.height, text.padding[0]),
+                )
+            } else {
+                gpui_flow_scene::Point::new(
+                    if *sizing == TextSizing::Natural {
+                        inline_origin(
+                            size.width - text.padding[1] - text.padding[3],
+                            size.width,
+                            text.padding[3],
+                        )
+                    } else {
+                        0.
+                    },
+                    cross_origin(metrics.height, size.height, text.padding[0]),
+                )
+            }
         } else {
             gpui_flow_scene::Point::ZERO
         };
@@ -175,6 +201,12 @@ pub(super) fn baselines(
             let Shape::Text(text) = &object.shape else {
                 unreachable!("validated baseline Text")
             };
+            if text.writing_mode.is_vertical() {
+                return Err(invalid(
+                    child,
+                    "vertical writing mode does not expose a horizontal first baseline",
+                ));
+            }
             let request = request(text, layout.texts[child]);
             request.validate().map_err(|e| invalid(child, e))?;
             let backend = backend.ok_or_else(|| {
@@ -273,5 +305,15 @@ impl MeasuredFlowLayout {
     ) -> Result<LayoutProviderId, FlowError> {
         self.layout
             .install_reactive_measured(engine, Some(self.measurer.clone()))
+    }
+}
+
+fn writing_mode(mode: gpui_flow_scene::display::TextWritingMode) -> gpui_flow_text::WritingMode {
+    use gpui_flow_scene::display::TextWritingMode as Scene;
+    match mode {
+        Scene::X => gpui_flow_text::WritingMode::X,
+        Scene::XReverse => gpui_flow_text::WritingMode::XReverse,
+        Scene::Y => gpui_flow_text::WritingMode::Y,
+        Scene::YReverse => gpui_flow_text::WritingMode::YReverse,
     }
 }

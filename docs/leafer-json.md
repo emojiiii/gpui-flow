@@ -65,7 +65,7 @@ Shape-specific fields:
 | Polygon | Explicit flat/object `points` and Boolean `closed`; no regular-polygon generator, curve smoothing or path override |
 | Star | Equal positive `width` and `height`, integer `corners` from 2 to 4096, ratio `innerRadius`, `startAngle`; centered on half-size |
 | Path | Explicit SVG string or finite numeric SVG opcode array `path`, using the bounded `Path::from_svg` / `to_svg`; omitted path/implicit box geometry and Canvas-only numeric opcodes are unsupported |
-| Text | Explicit positive `width` and `height`, string `text`, `fontFamily`, `fontSize`, numeric hundred-step `fontWeight` from 100 to 900, `italic`, `lineHeight`, `textAlign`, `verticalAlign`, `textWrap`, `textOverflow`, `textCase`, `textDecoration`, `paraSpacing`, `letterSpacing`, `wordSpacing`, `paraIndent`, `autoSizeAlign`, horizontal `writingMode`, scalar/four-value `padding` |
+| Text | Explicit positive `width` and `height`, string `text`, `fontFamily`, `fontSize`, numeric hundred-step `fontWeight` from 100 to 900, `italic`, `lineHeight`, `textAlign`, `verticalAlign`, `textWrap`, `textOverflow`, `textCase`, `textDecoration`, `paraSpacing`, `letterSpacing`, `wordSpacing`, `paraIndent`, `autoSizeAlign`, `writingMode` (`x`, plus the [Flow axis extension](text-layout-properties.md#upright-cluster-writing-modes)), scalar/four-value `padding` |
 | Image | Explicit positive `width` / `height`, nonempty `url`, corners; URL implies stretch/`ImageFit::Fill`, with no separate `fill` |
 | Canvas | Positive `width` / `height`, corners, `pixelRatio`, `smooth`, `safeResize`; configuration only, no pixels/commands/context/URL snapshot |
 | Group / Pen | Ordered `children`; no intrinsic dimensions; Pen retains a distinct structural kind |
