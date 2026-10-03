@@ -204,7 +204,7 @@ own checks; these results are anchored to the archive below.
   composite/UI all-targets Clippy and demo Clippy, formatting and diff checks
   passed. The full 204-test UI suite was not rerun after this final routing delta
 
-The machine-readable [validation summary](validation/2026-10-02-image-crop-summary.json)
+The machine-readable validation summary (historical record in Git history)
 records trace sequence evidence, screenshot names/hashes, exact comparisons,
 automated scope and unverified cases. Original screenshots, native logs and
 frozen source/binary remain in the local validation artifact bundle.

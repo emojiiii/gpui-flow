@@ -27,7 +27,7 @@ The final restored **1230×800** client area exposes all three control rows and
 both complete footer lines (`32-configured-window-final.jpg`).
 
 Hashes, receipt details and verification scope are in the
-[native summary](validation/2026-10-02-canvas-pattern-native-summary.json).
+native summary (historical record in Git history).
 Original captures, raw audits, trace, executable and archive remain in the
 retained evidence package, not this repository.
 
@@ -64,7 +64,7 @@ surfaces, not one cross-surface transaction.
 The package contains **34 original JPEG captures** (5,935,004 bytes), correctly
 renamed `.jpg` without changing bytes, and **six decoded PNG derivatives**. The
 derivatives preserve the decoded JPEG raster, not lossless renderer pixels.
-The [central capture-format erratum](screenshot-evidence-formats.md) separately
+The central capture-format erratum (historical record in Git history) separately
 corrects 327 older desktop captures; they are not part of this run.
 
 There are **24 zero-difference full-Canvas region comparisons** for rollback,
@@ -76,7 +76,7 @@ extent samples.
 
 In `18-nested-clips.jpg`, strict 5×5 screen patches `[431,427,5,5]` (left) and
 `[806,427,5,5]` (right) contain respectively **5 and 10 pixels** differing from
-background RGB `[25,43,67]`. Both map to logical x `[307,312)`, y `[115,120)`;
+background RGB `[25,43,67]`. Both map to logical x `307,312)`, y `[115,120)`;
 all outer-clip controls have x ≤ 303. They are wholly exterior, at least four
 logical units beyond that bound, rather than boundary-straddling samples.
 More distant samples match the background. **The cause is unestablished:**
@@ -92,7 +92,7 @@ remote publication; the published-tree link is the supplied later record.
 
 ## Separate automated evidence and boundaries
 
-The [automated summary](validation/2026-10-02-canvas-patterns-summary.json)
+The [automated summary (historical record in Git history)
 records 1,602 default-member passes (10 existing ignored), 258 UI passes,
 36 focused composite pattern passes, six focused resource pattern passes and
 one fixture helper-tour pass. Focused/full counts overlap. Strict Clippy,

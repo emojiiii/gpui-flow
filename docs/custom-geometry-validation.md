@@ -194,7 +194,7 @@ independently compared with that local checkpoint: zero mismatches. The
 integrator verified the remote checkpoint and zero GitHub Actions runs; native
 execution and these local checks are not a remote CI result.
 
-The [compact audit summary](validation/2026-10-02-custom-geometry-summary.json)
+The compact audit summary (historical record in Git history)
 contains source/binary/receipt/raw-log hashes, screenshot hashes, independently
 checked assertions, and 45 selected exact payloads with original JSONL line
 numbers. The complete trace has **81 records**: 49 state checks, 13 changed

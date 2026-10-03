@@ -152,7 +152,7 @@ The raw log contains 500 JSON lines, of which 474 are compared operations
 pure payloads again, confirmed zero mismatches and no trace-limit marker, and
 asserted the expected behavior below independently of equality. Raw-log SHA256:
 `e86bd573389e73be96a4626abec0e105b999502526d718652da6846854a154de`.
-The [compact durable evidence](validation/2026-10-02-focus-keyboard-summary.json)
+The compact durable evidence (historical record in Git history)
 contains provenance, exact operation indices, 41 complete native/pure payload
 pairs and exact host-input/control records. `V1:50` means view 1 operation 50,
 not a raw-log line number; the evidence includes both.

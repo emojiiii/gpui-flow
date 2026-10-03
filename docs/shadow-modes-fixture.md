@@ -22,7 +22,7 @@ All 534 nonfixture inputs in the broader build 03 inventory are byte-identical t
 - Maximum platform-free matrix work 6,472,682; peak tracked bytes 590,800; retained output 77,076 bytes. Text maximum work 2,155,000, peak 462,736 bytes, retained output 106,000 bytes, glyph producer work 23,584. All outputs are discarded to tracked zero at request end; all source invariance checks pass. These measurements are not whole-process/GPU memory or timing guarantees
 - Minimum recorded free disk across all stages: 23,258,210,304 bytes, above the enforced 3,221,225,472-byte reserve. No limits or tolerances were raised; no font was installed; no native window was opened. Process RSS was not measured
 
-[fixture validation summary](validation/2026-10-03-shadow-modes-fixture-summary.json) gives exact outcomes and session paths. The independent auditor's findings remain a separate evidence class. Do not sum preflight and final repeats as different coverage.
+fixture validation summary (historical record in Git history) gives exact outcomes and session paths. The independent auditor's findings remain a separate evidence class. Do not sum preflight and final repeats as different coverage.
 
 ## Accepted semantics used by the integrated fixture
 
@@ -130,4 +130,4 @@ No Leafer/browser golden, browser Gaussian equivalence, singular Canvas parity, 
 
 ## Subsequent native evidence
 
-The [native record](shadow-modes-native.md) identifies the exact separately frozen invocation, original captures, normal close and saved-data audit. It does not turn synthetic DPR2 into physical coverage or the CPU arrays into GPU readback. The [independent CPU artifact review](shadow-modes-fixture-artifact-audit.md) is retained separately from the native operator's data checks.
+The [native record](shadow-modes-native.md) identifies the exact separately frozen invocation, original captures, normal close and saved-data audit. It does not turn synthetic DPR2 into physical coverage or the CPU arrays into GPU readback. The independent CPU artifact review (historical record in Git history) is retained separately from the native operator's data checks.

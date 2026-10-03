@@ -12,7 +12,7 @@ tree `465ed194ff3f565d1ceaeca0ecdd06a64cbfefb5`. All **475 repository build inpu
 the frozen archive, before/after-link manifests and this published tree.
 External dependencies, compiler and system libraries are excluded; no full
 reproducible-build claim is made. Binary/archive hashes, exact receipt and audit
-hashes are in the [native summary](validation/2026-10-02-open-stroke-native-summary.json).
+hashes are in the native summary (historical record in Git history).
 This report is added in a later documentation revision than the source commit.
 
 The real window ran **21:40:50–21:47:54 UTC**, closed normally with **exit0**,
@@ -49,7 +49,7 @@ selected physical matrix, not every combination of all controls.
 ## Pixel evidence and retained outlier
 
 The original audit records **23/23 trace/source assertions** and **41 focused
-decoded-JPEG pixel assertions**. The [capture-format erratum](screenshot-evidence-formats.md) records the
+decoded-JPEG pixel assertions**. The capture-format erratum (historical record in Git history) records the
 historical `.png` filename mismatch; raw reports and hashes predate this
 correction and remain unchanged. These measurements do not establish lossless
 Canvas/GPU buffer or native/CPU renderer equality:
@@ -85,7 +85,7 @@ backend/browser equivalence, cross-platform or device-level DPR claim is made.
 Physical controls do not establish memory/precision rejection, zero-length/empty
 inputs, every supported shape or every control combination.
 
-The [automated source checks](validation/2026-10-02-open-stroke-alignment-summary.json)
+The automated source checks (historical record in Git history)
 passed1,566 default-member tests (10 existing ignored),252 UI tests and the fixture
 control-tour test, plus strict workspace/docs Clippy, formatting and native link.
 These are supplied prior checks, not additional native tests. The precise API,

@@ -14,7 +14,7 @@
 Taffy trait导入与timing lint修复已备份为`817a68f6e4b014b6897768f1ef75ee5e8545c1dd`。
 562项headless测试、7项真实媒体测试、38项UI库单测和10个可执行文档通过；
 workspace/all-targets check及严格clippy通过。完整命令、后续原生链接/字体探针结果
-见[本地验证记录](local-validation-2026-09-30.md)。CI仍暂停，真实窗口交互、
+见本地验证记录（历史记录见Git历史）。CI仍暂停，真实窗口交互、
 Windows/macOS和大规模性能未验；历史通过数字不能替代当前日志。
 
 ## 已接入源码的切片

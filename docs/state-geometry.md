@@ -180,7 +180,7 @@ window acceptance; the integration owner records native results separately.
 
 ## Historical native functional result and transition defect
 
-The [capture-format erratum](screenshot-evidence-formats.md) identifies these original desktop captures as lossy JPEG bytes
+The capture-format erratum (historical record in Git history) identifies these original desktop captures as lossy JPEG bytes
 saved with `.png` filenames. Original files, raw reports and hashes remain
 unchanged. Screenshot measurements describe decoded captures, not lossless
 renderer pixels; trace-backed results retain their separate scope.
@@ -188,7 +188,7 @@ renderer pixels; trace-backed results retain their separate scope.
 The exact source checkpoint [`1b79a3bb`](https://github.com/emojiiii/gpui-flow/commit/1b79a3bb9d895ac9be29fff5dd58ee151dc229da)
 ran on the dot-cloud Linux desktop from 19:01:57 to 19:05:14 UTC on 2026-10-02,
 with normal exit 0 and empty stderr. All 51 raw records and 18 saved screenshots
-are indexed in the [evidence summary](validation/2026-10-02-state-geometry-summary.json).
+are indexed in the evidence summary (historical record in Git history).
 The complete 560-blob source archive matches tree `365162c249e55f4975be3498cfee9cea94c29151`.
 
 Real wheel and click input hit the expanded-only area and a named relocated card.
@@ -289,7 +289,7 @@ blocker in the four corrected paths. The fractional-view and zero-opacity tests
 validate the shared guard and style state; they do not substitute for native GPU
 pixel validation. Native acceptance was pending at that source checkpoint. The subsequent frozen
 Linux revalidation is recorded in [state-coherent-native.md](state-coherent-native.md)
-and its [compact summary](validation/2026-10-02-state-coherent-native-summary.json):
+and its compact summary (historical record in Git history):
 33 state-only samples retain coherent card/text, and seven clicks match accepted
 geometry. Hard invalidations still intentionally load. The earlier failed window
 evidence remains unchanged. APP-05 is bounded verified for the original fixed

@@ -280,7 +280,7 @@ exactly that frozen tree; later working-tree edits were not used as evidence.
 - Actual raw JSON is `native.stderr`: **15 records**, comprising fourteen
   attempts and one Undo witness. `native.jsonl` is empty stdout, not the record
   source. `native.receipt` and `native.exit` confirm the run window and exit
-- [Compact audit summary](validation/2026-10-02-scene-export-summary.json)
+- Compact audit summary (historical record in Git history)
   preserves all exact parsed records, independent decode results, source/file/raw
   hashes, screenshots inventory, and inspected build/test-log hashes
 
@@ -341,6 +341,6 @@ independent file-audit pass.
 
 The raster checkpoint above remains unchanged and does not itself establish SVG.
 The later [mixed SVG native report](scene-svg-native.md) and
-[compact evidence](validation/2026-10-02-scene-svg-native-summary.json) add the
+compact evidence (historical record in Git history) add the
 missing fourth format. Their combined evidence closes ELM-11's fixed-region
 PNG/JPEG/lossless-WebP/mixed-SVG contract, retaining all per-format limitations.

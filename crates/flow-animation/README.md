@@ -2,7 +2,7 @@
 
 Local Linux validation (2026-09-30): timing regressions and full headless tests pass,
 as do workspace check/strict clippy. See
-[validation details](../../docs/local-validation-2026-09-30.md); CI and real-window
+validation details (historical record in Git history); CI and real-window
 interaction remain unverified.
 
 Opt-in, deterministic property tweens driven by an explicit host clock. Translation,

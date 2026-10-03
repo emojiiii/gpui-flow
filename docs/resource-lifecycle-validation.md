@@ -154,7 +154,7 @@ screenshots were visually reviewed, including actual green/purple checker
 pixels, stale-source/attachment/instance placeholders, denial after late
 completion, the producer failure, the dropped view and the remounted completion.
 
-The [checked-in evidence summary](validation/2026-10-02-resource-lifecycle-summary.json)
+The checked-in evidence summary (historical record in Git history)
 contains the run receipt, all **62 exact JSON records**, screenshot hashes,
 indexed assertions, parsed milestone counts and source hashes. Its raw JSONL
 SHA-256 is

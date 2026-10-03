@@ -2,7 +2,7 @@
 
 Source publication: [`93ee7f7c`](https://github.com/emojiiii/gpui-flow/commit/93ee7f7cabfb7979aeca93ec137ccf81644baeb5), verified remote tree
 `a8f08d035dde97d13eecc932630e8fdda65dfb42`. This report identifies the
-frozen shared-worktree executable. [Compact machine-readable evidence](validation/2026-10-02-scene-svg-native-summary.json)
+frozen shared-worktree executable. Compact machine-readable evidence (historical record in Git history)
 links the earlier raster proof and records exact binary/archive/output/receipt
 hashes. Original outputs, screenshots and raw trace remain in the retained local
 evidence directory; they are not bundled in this repository.
@@ -14,7 +14,7 @@ The Linux run **2026-10-02 19:59:44–20:03:57 UTC** exited normally with **0**.
 **3 expected atomic rejections**. Stderr contains 14 intended JSON records
 (the attempts plus one Undo witness), with empty stdout and no unrelated error.
 Twenty-five original JPEG desktop captures record source and decoded preview states.
-They retain their historical `.png` filenames; see the [capture-format erratum](screenshot-evidence-formats.md).
+They retain their historical `.png` filenames; see the capture-format erratum (historical record in Git history).
 The two exported PNGs and 24 embedded PNG payloads are genuine PNG and unaffected.
 
 Together with the earlier [PNG/JPEG/lossless-WebP native acceptance](scene-raster-export.md#native-acceptance-and-independent-file-audit),
@@ -78,7 +78,7 @@ large-scene performance are not physically established here.
 The core checkpoint passed **28 SVG tests**, **294 total composite tests** and
 strict composite Clippy. The fixture passed **5 tests**, check, strict Clippy and
 native build. Counts are overlapping package-scoped evidence, not a new full
-workspace pass. [Core record](validation/2026-10-02-scene-svg-summary.json).
+workspace pass. Core record (historical record in Git history).
 
 Binary SHA-256:
 `1ce5d72467dfd4bcef27188e71798bd9867bb2af8e6103606bcb54938423c3b7`.

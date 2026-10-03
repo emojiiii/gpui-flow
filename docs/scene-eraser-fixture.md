@@ -2,7 +2,7 @@
 
 ## Delivery and verification state
 
-The native fixture lives at `examples/studio/src/bin/scene_erasers.rs`. This document defines its behavior and acceptance matrix; build, helper and native results are recorded separately in `docs/validation/2026-10-03-scene-eraser-fixture-summary.json`. A successful syntax/type check is not native acceptance. The repaired fifteen-row physical run and its separate capture-integrity incident are recorded in [native evidence](scene-eraser-native.md); the first reset crash remains in the [historical failed report](scene-eraser-native-failed-reset.md).
+The native fixture lives at `examples/studio/src/bin/scene_erasers.rs`. This document defines its behavior and acceptance matrix; build, helper and native results are recorded separately in `docs/validation/2026-10-03-scene-eraser-fixture-summary.json`. A successful syntax/type check is not native acceptance. The repaired fifteen-row physical run and its separate capture-integrity incident are recorded in [native evidence](scene-eraser-native.md); the first reset crash remains in the historical failed report (historical record in Git history).
 
 The source uses the public APIs exercised by the existing compositing/export fixtures. Ordinary Studio auto-bin discovery finds it, and existing `gpui`, `gpui-kit`, `gpui-flow`, `serde_json` and `image` dependencies suffice. No new dependency or runtime-only test hook is required.
 

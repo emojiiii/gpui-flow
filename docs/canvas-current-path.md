@@ -5,7 +5,7 @@ The full DPR 1/2 functional run passed against published source
 [`39fcf56a`](https://github.com/emojiiii/gpui-flow/commit/39fcf56a2e91f59d5da7a04ee519cade66f8cb69).
 Its original clipped-footer defect is preserved in the evidence; a separate
 layout-only run verified the footer fix. See the [native report](canvas-current-path-native.md)
-and [machine-readable summary](validation/2026-10-02-canvas-current-path-native-summary.json).
+and machine-readable summary (historical record in Git history).
 No browser or cross-platform pixel equivalence is claimed.
 
 ## Runtime path and batch-local state
@@ -185,7 +185,7 @@ The original Linux native run, **21:12:30–21:18:56 UTC**, exited normally with
 code 0: **55 physical button actions, 84 JSON records, 63 original JPEG desktop captures**.
 The recorded trace audit passed **27/27 assertions**. Twenty screenshot pairs
 have zero differing decoded-JPEG pixels in both 300 × 210 displayed Canvas
-regions. The [capture-format erratum](screenshot-evidence-formats.md) documents the original `.png` suffix mismatch.
+regions. The capture-format erratum (historical record in Git history) documents the original `.png` suffix mismatch.
 Cross-call Q/C construction, Clear versus BeginPath, reusable geometry, evenodd
 holes, paint/pen transform timing, frozen clips, four late-invalid rollbacks,
 safe/reset resize, DPR swap, configuration Undo, and regeneration were exercised.
@@ -212,8 +212,8 @@ its 475-input frozen shared-tree provenance does **not** establish a build of on
 published commit, repeat the full matrix, or accept that other work.
 
 See the [native report](canvas-current-path-native.md),
-[native summary](validation/2026-10-02-canvas-current-path-native-summary.json),
-and [automated summary](validation/2026-10-02-canvas-current-path-summary.json)
+native summary (historical record in Git history),
+and automated summary (historical record in Git history)
 for separate source/publication records and raw-evidence hashes. Native pool
 rejection, font failure, upload/OOM injection, safe A→B→A before preparation,
 and all-frame behavior were not established by these controls. Automated

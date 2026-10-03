@@ -182,7 +182,7 @@ cargo clippy --locked --offline -p gpui-flow-composite --all-targets -- -D warni
 cargo test --locked --offline -p gpui-flow-composite -- --test-threads=1
 ```
 
-[Compact validation record](validation/2026-10-02-scene-svg-summary.json)
+Compact validation record (historical record in Git history)
 records source and log hashes. Native SceneView/font acceptance, host file
 delivery and cross-platform comparison are separate from these deterministic
 core tests. This pass did not open a native window, commit, push, trigger Actions
@@ -190,7 +190,7 @@ or deploy.
 
 ## Subsequent native acceptance
 
-The [capture-format erratum](screenshot-evidence-formats.md) applies to the 25 desktop captures below,
+The capture-format erratum (historical record in Git history) applies to the 25 desktop captures below,
 which are JPEG bytes under historical `.png` names. Actual exported/embedded PNG
 files and their independent decode/FNV/alpha checks are unaffected.
 
@@ -200,7 +200,7 @@ rejections, 25 screenshots, normal exit 0. Actual resvg readback and an independ
 file audit establish mixed vector plus per-producer Image/Canvas/Text ink; no
 editable text, glyph outlines or SVG/PNG bit-exact claim is made. See the
 [native report](scene-svg-native.md) and
-[compact native record](validation/2026-10-02-scene-svg-native-summary.json).
+compact native record (historical record in Git history).
 Together with the earlier PNG/JPEG/WebP evidence, ELM-11 is bounded verified
 within the existing four-format/fixed-region contract. The earlier core-only
 validation boundary above remains historical.

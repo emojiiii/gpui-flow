@@ -3,7 +3,7 @@
 This bounded APP-02 increment adds a default-disabled policy to each native
 `Stroke`. The unchanged fixed APP-02 contract is now bounded verified after
 [automatic and native evidence](scale-fixed-native.md); the
-[original-scope audit](scale-fixed-acceptance-audit.md) and limitations below
+original-scope audit (historical record in Git history) and limitations below
 remain explicit. Older open-stroke evidence and its retained outlier are preserved.
 
 ```rust

@@ -31,7 +31,7 @@ Layout executable SHA-256:
 
 Trace references are original `native.stderr` line numbers; capture numbers refer
 to the original functional package. Its `.png` filenames contain JPEG bytes, as
-recorded in the [capture-format erratum](screenshot-evidence-formats.md). Both surfaces are independently checked,
+recorded in the capture-format erratum (historical record in Git history). Both surfaces are independently checked,
 not treated as one distributed transaction.
 
 | Exercised contract | Evidence and result |
@@ -56,7 +56,7 @@ publishing their diagnostic pixels to the live canvases. Runtime edits preserve
 document revision; five configuration changes and five Undos end at revision 10.
 
 Twenty original JPEG capture pairs have **zero differing decoded pixels in both displayed
-300 × 210 regions**: left `[130,278,430,488)`, right `[487,278,787,488)`.
+300 × 210 regions**: left `130,278,430,488)`, right `[487,278,787,488)`.
 Pairs: 02→10, 10→12, 10→14, 16→17, 10→19, 21→22, 24→25, 10→27,
 29→30, 32→33, 32→35, 02→37, 02→42, 44→45, 47→48, 02→51,
 51→53, 53→54, 02→58, 02→61. These are within-run decoded-JPEG region
@@ -102,7 +102,7 @@ Original evidence remains outside the repository, unchanged:
 - `/workspace/shared/canvas-current-path-native-validation-20261002T2109Z`: `native-qa.md`, `native-audit.json`, `pixel-region-comparisons.json`, `published-source-match.json`, trace/receipt, hashes, original JPEG captures with `.png` filenames, frozen inputs and binary
 - `/workspace/shared/canvas-current-path-footer-validation-20261002T2122Z`: `native-layout-qa.md`, `handoff.json`, trace/receipt, hashes, original JPEG captures with `.png` filenames, frozen inputs and binary
 
-The [native summary](validation/2026-10-02-canvas-current-path-native-summary.json)
+The [native summary (historical record in Git history)
 retains report/manifest hashes and source distinctions. Both packages' evidence
 and screenshot checksum manifests were verified during documentation review;
 this is an integrity check, not a second native execution or independent rerun
@@ -114,6 +114,6 @@ of all 27 assertions or a new native execution. Large raw traces, binaries,
 archives and screenshots are not bundled into this repository.
 
 See [current-path contract](canvas-current-path.md),
-[automated summary](validation/2026-10-02-canvas-current-path-summary.json), and
+automated summary (historical record in Git history), and
 [prior fillText/measureText slice](canvas-text-commands.md), whose evidence remains
 [`003288b3`](https://github.com/emojiiii/gpui-flow/commit/003288b3a9b4178890c162a4f1271f3b8dd41f4f).

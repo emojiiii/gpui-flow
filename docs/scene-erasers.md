@@ -81,6 +81,6 @@ cargo clippy --locked --offline -j1 -p gpui-flow -p flow-studio --features gpui-
 
 The test exercises the production controller's incompatible-frame withdrawal, cancellation and rejection of late successful work, None/Pixel/Path transitions, and acceptance only after the matching upload receipt. It creates no native App/Window and does not perform an actual GPU upload; it is controller-state coverage. Native eraser window checks, other UI runtime tests, upstream-browser execution and cross-platform equivalence remain unclaimed.
 
-The [machine-readable summary](validation/2026-10-03-scene-erasers-summary.json)
+The machine-readable summary (historical record in Git history)
 records the 778 affected-crate passes, three existing ignored tests, focused UI
 result, exact commands, source hashes, original failure and review correction.

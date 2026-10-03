@@ -1,7 +1,7 @@
 # Ordered vector paint stacks and stroke styles
 
 Local Linux validation (2026-09-30): headless regressions and workspace/all-targets
-check/strict clippy pass. See [local validation](local-validation-2026-09-30.md)
+check/strict clippy pass. See local validation (historical record in Git history)
 for exact coverage; CI and real-window interaction remain unverified.
 
 This milestone implements a bounded, source-informed appearance contract. It is

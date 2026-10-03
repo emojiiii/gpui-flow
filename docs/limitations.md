@@ -2,7 +2,7 @@
 
 本项目是早期、可扩展的 Rust 原型，不承诺 React Flow/Leafer UI API 兼容、生产稳定性或任意规模性能。以下区分已落入源码的子集与仍待实现的契约，不代表全部功能已经完成。
 
-> 2026-09-30 当前批次已通过Linux本地headless/UI单测、workspace check/严格clippy及文档示例。精确命令与原生链接结果见[本地验证记录](local-validation-2026-09-30.md)。真实窗口交互、跨平台、CI及下列未实现能力仍不在通过声明内。
+> 2026-09-30 当前批次已通过Linux本地headless/UI单测、workspace check/严格clippy及文档示例。精确命令与原生链接结果见本地验证记录（历史记录见Git历史）。真实窗口交互、跨平台、CI及下列未实现能力仍不在通过声明内。
 
 ## UI 与交互
 

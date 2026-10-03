@@ -1,7 +1,7 @@
 # Native Canvas stroke-text acceptance fixture
 
 Status: the initial frozen `0338Z` revision passed cached build, strict Clippy and
-the no-window helper tour; the [build summary](validation/2026-10-03-canvas-stroke-fixture-summary.json)
+the no-window helper tour; the build summary (historical record in Git history)
 records those checks. Native scenarios 1–3 accepted on both resources. Its
 original one-batch scenario 4 accepted at DPR 1 but returned `WorkLimit` at DPR 2
 under the unchanged default 32,000,000 surface-write ceiling. The preceding

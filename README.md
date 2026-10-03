@@ -26,7 +26,7 @@ Group/Box/Frame外阴影使用完整子树alpha，包含子阴影、mask结果�
 
 最新文字检查点通过714项headless（另有8项原有忽略）、76项UI库单测、单独的8项GPUI字体单测、严格Clippy/格式和原生构建。真实字体探针覆盖CJK/组合音标/RTL/emoji/wrap，并在DPR 1/1.25/2对同后端灰度glyph逐像素验证；原生窗口验证了文字mask/clip/混合、整体透明度、桥撤销恢复、字体失效、对齐与Undo。详细范围与未验场景见[文字验证](docs/compositing.md#same-backend-text-validation-2026-10-01)。
 
-此前资源/布局/动画/状态源码批次的媒体、字体、14个二进制及文档记录见[历史本地验证](docs/local-validation-2026-09-30.md)。API迁移见[源码批次状态](docs/source-only-status.md)：旧JSON读取默认兼容不等于Rust穷尽字面量/枚举match源码兼容。
+此前资源/布局/动画/状态源码批次的媒体、字体、14个二进制及文档记录见历史本地验证（历史记录见Git历史）。API迁移见[源码批次状态](docs/source-only-status.md)：旧JSON读取默认兼容不等于Rust穷尽字面量/枚举match源码兼容。
 
 显式`SceneCompositing::OwnedCanvas`现将SceneView自己的不透明主题底色、网格和完整presented Scene纳入同一CPU域，支持顶层对象读取这些真实背景及更早root进行Multiply/Screen；默认逐域模式保持不变。缺producer/资源/预算错误整画布拒绝，不支持任意宿主GPUI背景捕获。新增`owned_canvas`示例，见[范围和预算](docs/compositing.md#explicit-owned-canvas-backdrop)。本轮731项headless、81项UI、严格Clippy/格式与原生链接通过；真实窗口验证底色/grid/混合、整域拒绝恢复、默认模式边界、拖动及pan/zoom。硬失效重算会暂时隐藏旧画布，不宣称流畅帧率；见[实际验收](docs/compositing.md#owned-canvas-validation-2026-10-01)。
 

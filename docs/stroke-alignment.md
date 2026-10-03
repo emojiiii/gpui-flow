@@ -196,7 +196,7 @@ native target, retaining the 3 GiB disk reserve:
 
 All 475 build-input file hashes matched before and after the final test/link
 sequence. Exact commands, log hashes, scope and binary provenance are recorded
-in the [validation summary](validation/2026-10-02-open-stroke-alignment-summary.json).
+in the validation summary (historical record in Git history).
 The fixture's bounded even/odd dash patterns are `36/24` and `36/24/12` at phase
 `-13`; the latter is exercised with all cap types without raising production
 budgets. The later [open-contour native acceptance](open-stroke-native.md) records

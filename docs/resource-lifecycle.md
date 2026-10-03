@@ -1,7 +1,7 @@
 # Native text/image resource lifecycle
 
 Local Linux validation (2026-09-30): headless regressions and workspace/all-targets
-check/strict clippy pass. See [local validation](local-validation-2026-09-30.md)
+check/strict clippy pass. See local validation (historical record in Git history)
 for exact coverage; CI and real-window interaction remain unverified.
 This adds lifecycle wiring for the existing GPUI text and image backends;
 it is not full Leafer resource parity.
@@ -205,4 +205,4 @@ fit/size preservation, canonical text changes and explicit font invalidation.
 unit cases; `display/mod.rs` has a legacy struct-literal/wrapper case. The 16 engine
 resource tests and UI adapter unit cases passed locally. They do not establish
 live window loading/paint delivery, GPU presentation fences or cross-platform behavior.
-See [local validation](local-validation-2026-09-30.md).
+See local validation (historical record in Git history).

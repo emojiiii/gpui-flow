@@ -3,14 +3,14 @@
 Source publication: [`93ee7f7c`](https://github.com/emojiiii/gpui-flow/commit/93ee7f7cabfb7979aeca93ec137ccf81644baeb5), verified remote tree
 `a8f08d035dde97d13eecc932630e8fdda65dfb42`. This report records the
 frozen shared-worktree executable, not a newly rebuilt published revision.
-[Machine-readable evidence](validation/2026-10-02-state-coherent-native-summary.json)
+Machine-readable evidence (historical record in Git history)
 contains binary/archive/receipt/log hashes and exact click checks. Original
 screenshots and raw trace remain in the retained evidence directory named there;
 they are not included in this repository.
 
 ## Result and fixed scope
 
-The [capture-format erratum](screenshot-evidence-formats.md) identifies these original desktop captures as lossy JPEG bytes
+The capture-format erratum (historical record in Git history) identifies these original desktop captures as lossy JPEG bytes
 saved with `.png` filenames. Original files, raw reports and hashes remain
 unchanged. Screenshot measurements describe decoded captures, not lossless
 renderer pixels; trace-backed results retain their separate scope.
@@ -23,7 +23,7 @@ widths, positions, colors and the orange 340-wide press frame. This verifies the
 exercised coherent paint/hit repair. It does not inspect every GPU frame or prove
 continuous smoothness/FPS.
 
-The earlier failed [51-record/18-capture run](validation/2026-10-02-state-geometry-summary.json)
+The earlier failed 51-record/18-capture run (historical record in Git history)
 is retained unchanged. Its observed transition disappearance was real and must
 not be retroactively relabeled a pass. This later frozen binary supplies the
 repair evidence.

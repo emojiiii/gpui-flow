@@ -7,7 +7,7 @@ This accepts the exercised startup registration and binding-level candidate
 contract. Canvas strokeText placement, geometry and publication are separate work.
 
 Implementation/fixture source: [`452ebe67`](https://github.com/emojiiii/gpui-flow/commit/452ebe679e3f68becc9d9b97976d32c55037b782).
-The [machine-readable summary](validation/2026-10-03-static-font-binding-native-summary.json)
+The machine-readable summary (historical record in Git history)
 records the frozen source, executable, fonts, report checksums and scope.
 
 ## Actual native observations

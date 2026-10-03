@@ -49,5 +49,5 @@ The later [native acceptance](canvas-stroke-text-native.md) records the original
 work-limit failure and the focused bounded-batch follow-up. That separate result
 supplies the physical evidence for the fixed ELM-10 operation collection.
 
-The [validation summary](validation/2026-10-03-canvas-stroke-lowering-summary.json)
+The validation summary (historical record in Git history)
 records commands, log hashes and this checkpoint's source hashes.

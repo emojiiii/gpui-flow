@@ -6,7 +6,7 @@ current validation boundary. The historical paint-only contract below is retaine
 where it still applies.
 
 Local Linux validation (2026-09-30): headless regressions and workspace/all-targets
-check/strict clippy pass. See [local validation](local-validation-2026-09-30.md)
+check/strict clippy pass. See local validation (historical record in Git history)
 for exact coverage; CI and real-window interaction remain unverified.
 See [named-states.md](named-states.md) for the complete contract.
 

@@ -127,7 +127,7 @@ or cross-DPR hardware acceptance.
 Source publication: [`93ee7f7c`](https://github.com/emojiiii/gpui-flow/commit/93ee7f7cabfb7979aeca93ec137ccf81644baeb5), verified remote tree
 `a8f08d035dde97d13eecc932630e8fdda65dfb42`. The frozen Linux/X11 fixture
 ran **20:12:22–20:19:26 UTC**, physically operated through the desktop and normally
-closed through its titlebar, **exit 0**. The [compact evidence record](validation/2026-10-02-drag-viewport-native-summary.json)
+closed through its titlebar, **exit 0**. The compact evidence record (historical record in Git history)
 contains source, binary, audit and trace hashes; originals remain in the retained
 local directory identified there. No screenshots or 16.9 MB raw trace are included
 in this repository.
@@ -138,7 +138,7 @@ confirms the real release/tail/interruption witnesses. The ledger promotes
 INT-06 to **bounded verified**, preserving the physical and provenance limits.
 No build or native run was performed by this documentation audit.
 
-See the [capture-format erratum](screenshot-evidence-formats.md) for the historical
+See the capture-format erratum (historical record in Git history) for the historical
 `.png` suffix mismatch. Capture-derived colors/bounds are decoded-JPEG
 observations; trace and input-time geometry checks remain separate evidence.
 

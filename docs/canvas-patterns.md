@@ -130,12 +130,12 @@ final validation and native link:
 The linked binary SHA-256 is
 `9925d8b90c5bcd7afe0666597439721988ca6468e994922b28093abb34113fd4`.
 Exact commands, log hashes, evidence provenance and the source allowlist are in
-the [automated validation summary](validation/2026-10-02-canvas-patterns-summary.json).
+the automated validation summary (historical record in Git history).
 That automated summary retains its pre-native, acceptance-pending status. The
 subsequent [native report](canvas-pattern-native.md) and
-[native summary](validation/2026-10-02-canvas-pattern-native-summary.json) record
+native summary (historical record in Git history) record
 the completed physical tour and its two unresolved screenshot checks. The
-[capture-format erratum](screenshot-evidence-formats.md) explains the lossy JPEG
+capture-format erratum (historical record in Git history) explains the lossy JPEG
 evidence limits. No Actions, deployment or cross-platform tests were run for
 this validation pass.
 

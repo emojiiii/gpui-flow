@@ -2,7 +2,7 @@
 
 Local Linux validation (2026-09-30): Kurbo bounds and advanced-stroke regressions
 pass, alongside the full headless/UI suites and workspace check/strict clippy.
-See [validation details](../../docs/local-validation-2026-09-30.md); real-window
+See validation details (historical record in Git history); real-window
 interaction, cross-platform behavior and CI remain unverified.
 
 A retained vector scene graph that runs without GPUI or a window server. This is

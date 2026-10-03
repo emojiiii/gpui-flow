@@ -11,7 +11,7 @@ presentation behavior through `SceneStateStyles::presentation_at`, already
 consumed by `SceneView` rendering. It is **not** a claim of full Leafer state
 parity. Its 14 named-state regressions and the full local headless suite now pass,
 as do workspace/all-targets check and strict clippy. See
-[local validation](local-validation-2026-09-30.md) for exact coverage; real-window
+local validation (historical record in Git history) for exact coverage; real-window
 interaction and CI remain unverified.
 
 The upstream reference is the actual Leafer state plugin at

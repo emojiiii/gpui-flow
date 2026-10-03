@@ -1,3 +1,6 @@
 /target
 *.flow.local.json
 .DS_Store
+
+# Generated validation output stays outside the source tree.
+/docs/validation/

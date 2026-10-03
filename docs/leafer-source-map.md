@@ -2,7 +2,7 @@
 
 Status: historical source research plus a separately labelled current source map, **not a full parity claim**. Reviewed 2026-09-30. The original research changed no Rust source and executed no upstream code, install, build script or example. Later implementation slices below must not be confused with that original read-only report.
 
-> 当前批次已恢复Linux本地验证：headless及UI回归、workspace check/严格clippy和可执行文档通过；精确范围见[本地验证记录](local-validation-2026-09-30.md)。该历史批次未验CI、真实窗口交互与跨平台；后续独立Linux真实窗口验收见下面各增量契约，仍不表示完整Leafer能力已经完成。
+> 当前批次已恢复Linux本地验证：headless及UI回归、workspace check/严格clippy和可执行文档通过；精确范围见本地验证记录（历史记录见Git历史）。该历史批次未验CI、真实窗口交互与跨平台；后续独立Linux真实窗口验收见下面各增量契约，仍不表示完整Leafer能力已经完成。
 
 > 基线说明：下方差距矩阵记录源码研究时的 `43eda10` 状态。后续已实现的引擎身份/生命周期/schema/dirty 缓存及原生事件接入见 [engine.md](engine.md)，不要把历史矩阵的“absent”误读为最新状态。后续批次实现了[多层矢量 paints](appearance.md)和[显式行列布局](flow-layout.md)；另有基础属性动画和编辑器安全播放会话；完整外观合成/效果、全局响应式布局调度、完整timeline/高级状态过渡/运动路径仍然缺失。
 

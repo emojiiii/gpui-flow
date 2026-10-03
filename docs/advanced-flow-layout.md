@@ -268,7 +268,7 @@ physical button sequence above, and exited normally with status **0**. An
 independent audit read all 19 raw JSONL records, verified the executable/hash
 receipts and inspected all 12 original PNG screenshots. Full evidence, exact
 payloads and individual screenshot hashes are retained in
-[`2026-10-02-advanced-layout-summary.json`](validation/2026-10-02-advanced-layout-summary.json).
+`2026-10-02-advanced-layout-summary.json` (historical record in Git history).
 
 The receipt audit recomputed the expected sequence rather than trusting the
 footer's `PASS` strings:

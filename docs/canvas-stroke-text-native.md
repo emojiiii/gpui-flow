@@ -12,7 +12,7 @@ The original fixture is
 the explicit-batch remedy is
 [`747ecf55`](https://github.com/emojiiii/gpui-flow/commit/747ecf5528429b722014b3c065f2690f4c56b41f).
 The [fixture contract](canvas-stroke-text-fixture.md) and
-[build summaries](validation/2026-10-03-canvas-stroke-fixture-summary.json)
+build summaries (historical record in Git history)
 retain the source, checks and earlier failed result.
 
 ## Original run and preserved failure
