@@ -135,6 +135,7 @@ cargo +1.98.1 run --locked -p flow-studio
 
 ## 文档导航
 
+- [有限Leafer JSON交换](docs/leafer-json.md)（13tag、Pen分支身份、数字SVG路径与严格往返）
 - [Leafer能力任务总表与逐项证据](docs/leafer-task-ledger.md)（45项审阅版；有界已验、部分、待核实明确区分，不按测试/提交数计算功能完成率）
 
 - [当前源码批次与未验证范围](docs/source-only-status.md)

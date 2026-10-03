@@ -1,6 +1,6 @@
 # Leafer固定45项任务表
 
-状态：38项有界已验证、5项部分实现、2项未开始。固定ID、验收集合与边界保留；任务数不代表工时或全部上游API兼容。机器可读定义见[任务表JSON](leafer-task-ledger.json)。
+状态：39项有界已验证、4项部分实现、2项未开始。固定ID、验收集合与边界保留；任务数不代表工时或全部上游API兼容。机器可读定义见[任务表JSON](leafer-task-ledger.json)。
 
 功能实现、必要回归和简明契约按模块提交。逐次运行日志、截图、备份收据及历史验收JSON不进入源码仓库；既有提交历史不改写。测试方法见[本地验证](testing.md)。
 
@@ -8,7 +8,7 @@
 |---|---|---|---|---|
 | DAT-01 | 数据 / [元素工厂与属性schema](engine.md) | 有界已验证 | 内置及Custom注册、默认值/版本/验证；非法输入原子拒绝 | 运行时回调不序列化；不含Leafer格式导入 |
 | DAT-02 | 数据 / [原子属性与历史](engine.md) | 有界已验证 | 有类型setter、批量首旧末新、一次revision及UndoRedo，失败无部分修改 | 直接可信宿主底层修改不是权限边界 |
-| DAT-03 | 数据 / [版本化文档与有限Leafer映射](leafer-json.md) | 部分实现 | 必选现有Scene JSON v1读写/未知版本拒绝；固定原语tag、transform、基础paint的Leafer JSON映射，未知属性明确拒绝并往返 | 不含JS回调、任意computed缓存或完整上游JSON兼容；迁移仅在存在正式v2时定义 |
+| DAT-03 | 数据 / [版本化文档与有限Leafer映射](leafer-json.md) | 有界已验证 | 必选现有Scene JSON v1读写/未知版本拒绝；固定原语tag、transform、基础paint的Leafer JSON映射，未知属性明确拒绝并往返 | 不含JS回调、任意computed缓存或完整上游JSON兼容；迁移仅在存在正式v2时定义 |
 | DAT-04 | 数据 / [查询与增量缓存性能](query-indexes.md) | 有界已验证 | 固定id/name/tag/class/子树条件与顺序；随机仿射+重挂载对照、固定fixture重算计数及CPU benchmark | 无通用CSS选择器语言；不声称GPU局部绘制 |
 | INS-01 | 实例 / [代际身份与树操作](engine.md) | 有界已验证 | create/clone/detach/reattach/reparent/destroy保留或更换身份有明确定义；奇异/循环原子拒绝 | 不是多App分层组合 |
 | INS-02 | 实例 / [多层App实例组合](layered-app.md) | 有界已验证 | 多层画布树、跨层事件/坐标转发、独立生命周期与销毁 | 多个普通SceneView并排不等于App分层 |

@@ -18,7 +18,8 @@ pub enum QueryOrder {
 
 /// Exact, case-sensitive AND conditions, not a selector language. A subtree is
 /// an attached instance, includes its root by default, and rejects stale handles.
-/// Tags are the serialized Shape::tag() names (including "custom"). Classes are
+/// Tags are canonical Shape::tag() names (including "custom" and "pen_group"
+/// for the persisted Pen branch kind). Classes are
 /// individual members of DisplayObject::classes. No condition means all nodes.
 #[derive(Debug, Clone, Copy)]
 pub struct ElementQuery<'a> {

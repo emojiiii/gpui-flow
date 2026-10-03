@@ -88,6 +88,7 @@ impl SceneToolRegistry {
                 | "image"
                 | "canvas"
                 | "group"
+                | "pen_group"
                 | "box"
                 | "frame"
                 | "custom"

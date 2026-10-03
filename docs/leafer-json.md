@@ -64,18 +64,31 @@ Shape-specific fields:
 | Line | Exactly two explicit flat/object `points`, or `width` from local `(0,0)` to `(width,0)`; `closed` must be false |
 | Polygon | Explicit flat/object `points` and Boolean `closed`; no regular-polygon generator, curve smoothing or path override |
 | Star | Equal positive `width` and `height`, integer `corners` from 2 to 4096, ratio `innerRadius`, `startAngle`; centered on half-size |
-| Path | Explicit SVG path string `path`, using the existing bounded `Path::from_svg` / `to_svg`; omitted path/implicit box geometry and numeric command arrays are unsupported |
-| Text | Explicit positive `width` and `height`, string `text`, `fontFamily`, `fontSize`, numeric hundred-step `fontWeight` from 100 to 900, `italic`, `lineHeight`, `textAlign`, `verticalAlign`, `textWrap`, `textOverflow`, `textCase`, `textDecoration`, `paraSpacing`, scalar/four-value `padding` |
+| Path | Explicit SVG string or finite numeric SVG opcode array `path`, using the bounded `Path::from_svg` / `to_svg`; omitted path/implicit box geometry and Canvas-only numeric opcodes are unsupported |
+| Text | Explicit positive `width` and `height`, string `text`, `fontFamily`, `fontSize`, numeric hundred-step `fontWeight` from 100 to 900, `italic`, `lineHeight`, `textAlign`, `verticalAlign`, `textWrap`, `textOverflow`, `textCase`, `textDecoration`, `paraSpacing`, `letterSpacing`, `wordSpacing`, `paraIndent`, `autoSizeAlign`, horizontal `writingMode`, scalar/four-value `padding` |
 | Image | Explicit positive `width` / `height`, nonempty `url`, corners; URL implies stretch/`ImageFit::Fill`, with no separate `fill` |
 | Canvas | Positive `width` / `height`, corners, `pixelRatio`, `smooth`, `safeResize`; configuration only, no pixels/commands/context/URL snapshot |
-| Group | Ordered `children`; no intrinsic dimensions |
+| Group / Pen | Ordered `children`; no intrinsic dimensions; Pen retains a distinct structural kind |
 | Box / Frame | Positive `width` / `height`, corners, `overflow` (`show` / `hide`), ordered `children` |
 
-`Pen` and custom tags are explicitly unsupported. The pinned Leafer Pen is a
-branch containing styled Paths; Flow Pen is a first-class leaf path builder.
-Treating them as equivalent would lose tag/tree semantics. Custom runtime
-registrations have no finite upstream mapping. No existing tag is silently
-lowered to Path or Group.
+The pinned Leafer `Pen` is a branch containing styled Paths. It maps to an
+explicit `Group::pen()` / `GroupKind::Pen` structural kind with canonical tag
+`pen_group`; export writes `Pen` again and preserves every ordered child and
+its paint. Native Scene v1 persists the kind in Group geometry; ordinary Group
+still serializes empty geometry unchanged. The factory exposes `pen_group`.
+Use `Group::new()` instead of a Rust `Group {}` literal for ordinary groups.
+
+Flow's existing `display::Pen` remains the independent leaf path builder and
+continues to reject direct Leafer export; it is never renamed into a branch.
+Child Paths accept the pinned numeric M/L/H/V/C/S/Q/T/A/Z opcodes (including
+relative variants), so ordinary Pen path-builder output can be imported. Export
+normalizes paths to SVG strings; array spelling and analytical arc commands are
+not retained. Malformed/truncated arrays, invalid flags and unknown/Canvas-only
+opcodes fail atomically under the same budgets.
+
+Pen builder/runtime fields (`pathElement`, `pathStyle`, `__path`) are not document
+inputs and are rejected, as are direct `path` and size fields on the structural
+Pen. Custom runtime registrations still have no finite upstream mapping.
 
 ### Defaults and retained-state fidelity
 
@@ -92,7 +105,9 @@ Text supports `textAlign` left/center/right, `verticalAlign` top/middle/bottom,
 none/under/delete/under-delete. Flow has no unclipped `textOverflow: show`, so
 input must explicitly select hide or ellipsis. Text auto sizing, default `show`,
 `break` wrapping, title/small caps, arbitrary overflow strings, font-weight names,
-spacing plugins and decoration objects are rejected. Numeric line height is in
+vertical/reverse writing modes and decoration objects are rejected. The implemented
+nonnegative letter/word spacing, paragraph indentation and auto-size alignment
+fields use the [Text layout contract](text-layout-properties.md). Numeric line height is in
 pixels and becomes Flow's font-size multiplier; percent-unit objects preserve a
 multiplier directly. Export uses `{ "type":"percent", "value": ... }`.
 
@@ -105,6 +120,13 @@ Flow's `BeforeChildren` paint order. Leafer's conditional rendering/isolation
 policy is not reproduced by the adapter. Flow's explicit `StrokeAfterChildren`
 state is rejected on export because no mapped upstream field represents it.
 Canvas runtime pixels remain outside either document representation.
+
+Original input spelling/default omission is not preserved: export writes explicit
+retained values, not computed caches. Runtime engine handles, resource tickets,
+layout snapshots and subscriptions never belong to the Scene document. Unknown
+computed fields are rejected even if null/false; similarly named keys inside
+explicit object `data` remain inert metadata. Nonzero computed Text layout origin
+is rejected rather than silently converted into an unrelated input field.
 
 Layers, gradients, effects, masks, blend-mode overrides, custom hit policies,
 scene-level metadata, live editor/layout/animation/state/resource objects,
@@ -169,6 +191,8 @@ and UI
 - [UI declarations and UI.one](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/UI.ts): input attributes and defaults
 - [Group.set / toJSON](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/Group.ts): `tag`, ordered child JSON
 - [MatrixHelper.setLayout](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/math/src/MatrixHelper.ts): signed scale, rotation and linear skew composition
+- [Numeric path opcodes](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/path/src/PathCommandMap.ts): explicit command IDs and fixed argument lengths
+- [Pen and its inherited Group](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/Pen.ts): `Pen extends Group`, `setStyle` appends separately styled Paths; Group `toJSON` serializes ordered children
 - [Primitive source directory](https://github.com/leaferjs/leafer-ui/tree/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src): Rect/Ellipse/Line/Polygon/Star/Path/Pen/Text/Image/Canvas/Box/Frame tags and attributes
 - [ImageData](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display-module/data/src/ImageData.ts): URL creates a stretch paint and removes separate fill from JSON
 - [UIData.setPath](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display-module/data/src/UIData.ts) and [PathConvert.parse](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/path/src/PathConvert.ts): an explicit empty string becomes empty command data; omitting `path` instead leaves UI's box fallback, which this subset rejects
@@ -191,6 +215,9 @@ cargo clippy --locked --offline -p gpui-flow-scene --all-targets -- -D warnings
 These are data-model tests; no native-window or full upstream browser equivalence
 is claimed by this milestone.
 
-Local validation on 2026-10-02: all 24 focused tests passed (0 failed, 0 ignored),
-scene-package `--all-targets` Clippy with `-D warnings` passed, and isolated
-rustfmt checks passed. This is focused evidence, not a new full-workspace pass.
+The completed finite contract covers thirteen Leafer tags, including distinct Pen
+branches, fixed SVG numeric opcodes, strict input/computed-field admission and
+unchanged native Scene v1. Thirty exchange tests and thirteen factory tests pass;
+the final unchanged-source aggregate passes 1887 default tests/doctests (11
+ignored), 304 UI tests, strict all-target checks and formatting. This pure data
+module makes no browser/GPUI pixel-equivalence claim.

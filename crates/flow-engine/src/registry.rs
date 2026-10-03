@@ -262,8 +262,20 @@ impl ElementRegistry {
     pub fn with_builtins() -> Self {
         let mut registry = Self::empty();
         for kind in [
-            "rect", "ellipse", "line", "polygon", "star", "path", "pen", "text", "image", "group",
-            "box", "frame", "canvas",
+            "rect",
+            "ellipse",
+            "line",
+            "polygon",
+            "star",
+            "path",
+            "pen",
+            "text",
+            "image",
+            "group",
+            "box",
+            "frame",
+            "canvas",
+            "pen_group",
         ] {
             registry
                 .definitions
@@ -426,7 +438,7 @@ impl ElementDefinition for BuiltinDefinition {
             "canvas" => {
                 json!({"size":{"width":100.,"height":100.},"pixel_ratio":1.,"smooth":true,"safe_resize":false,"corner_radius":0.,"corner_radii":null})
             }
-            "group" => json!({}),
+            "group" | "pen_group" => json!({}),
             "box" | "frame" => {
                 json!({"size":{"width":100.,"height":100.},"corner_radius":0.,"corner_radii":null,"clip_children":self.0=="frame","paint_order":"before_children"})
             }
@@ -464,6 +476,9 @@ impl ElementDefinition for BuiltinDefinition {
         }
     }
     fn shape(&self, properties: &Value) -> Result<Shape, String> {
+        if self.0 == "pen_group" {
+            return Ok(gpui_flow_scene::display::Group::pen().into());
+        }
         serde_json::from_value(json!({"type":self.0,"geometry":properties}))
             .map_err(|e| e.to_string())
     }

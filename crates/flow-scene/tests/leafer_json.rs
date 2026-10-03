@@ -56,6 +56,187 @@ fn all_twelve_supported_tags_preserve_geometry_paint_and_order() {
 }
 
 #[test]
+fn pen_branch_keeps_its_tag_order_styles_and_native_identity() {
+    let input = json!({"tag":"Pen","id":"pen","x":12,"y":5,"scaleX":-2,"rotation":15,"children":[
+        {"tag":"Path","id":"first","path":"M0 0L20 0L0 10Z","fill":"#f008","stroke":"#123","strokeWidth":2},
+        {"tag":"Path","id":"second","path":"M30 0Q40 20 50 0","fill":null,"stroke":"#00f","strokeWidth":3,"strokeCap":"round"},
+        {"tag":"Pen","id":"nested","children":[]}
+    ]});
+    let scene = parse(input);
+    let pen = &object(&scene, "pen").shape;
+    assert_eq!(pen.tag(), "pen_group");
+    assert!(pen.allows_children());
+    assert!(pen.local_bounds().is_none());
+    let Shape::Group(group) = pen else {
+        panic!("structural Pen branch")
+    };
+    assert_eq!(group.kind(), display::GroupKind::Pen);
+    assert_eq!(
+        scene
+            .get(&"pen".into())
+            .unwrap()
+            .children
+            .iter()
+            .map(|id| id.as_str())
+            .collect::<Vec<_>>(),
+        ["first", "second", "nested"]
+    );
+    let exported: Value = serde_json::from_str(&scene.to_leafer_json().unwrap()).unwrap();
+    assert_eq!(exported[0]["tag"], "Pen");
+    assert_eq!(exported[0]["children"][2]["tag"], "Pen");
+    let native = scene.to_json().unwrap();
+    assert!(native.contains("\"kind\": \"pen\"") || native.contains("\"kind\":\"pen\""));
+    let restored = Scene::from_json(&native).unwrap();
+    assert_eq!(restored, scene);
+    assert_eq!(
+        restored.get(&"pen".into()).unwrap().object.shape.tag(),
+        "pen_group"
+    );
+    assert_eq!(
+        restored.to_leafer_json().unwrap(),
+        scene.to_leafer_json().unwrap()
+    );
+    round_trip(&scene);
+    assert_ne!(
+        object(&scene, "first").style,
+        object(&scene, "second").style
+    );
+}
+
+#[test]
+fn ordinary_group_json_stays_unchanged_and_leaf_pen_is_not_relabelled() {
+    assert_eq!(
+        serde_json::to_value(display::Group::new()).unwrap(),
+        json!({})
+    );
+    let group: display::Group = serde_json::from_value(json!({})).unwrap();
+    assert_eq!(group.kind(), display::GroupKind::Group);
+    assert!(serde_json::from_value::<display::Group>(json!({"kind":"unknown"})).is_err());
+    let leaf: Shape = display::Pen::new().into();
+    assert_eq!(leaf.tag(), "pen");
+    assert!(!leaf.allows_children());
+    let mut scene = Scene::new();
+    scene
+        .insert(DisplayObject::new("leaf", leaf), None, None)
+        .unwrap();
+    let before = scene.clone();
+    assert!(scene.to_leafer_json().is_err());
+    assert_eq!(scene, before);
+    let empty = parse(json!({"tag":"Pen","id":"empty"}));
+    assert_eq!(object(&empty, "empty").shape.tag(), "pen_group");
+    round_trip(&empty);
+}
+
+#[test]
+fn pen_numeric_path_builder_commands_preserve_actual_curve_geometry() {
+    let numeric = json!([
+        1, 0, 0, 2, 20, 0, 7, 30, 20, 40, 0, 5, 40, -10, 50, -10, 60, 0, 11
+    ]);
+    let scene = parse(
+        json!({"tag":"Pen","id":"pen","children":[{"tag":"Path","id":"p","path":numeric,"stroke":"#28a","strokeWidth":2}]}),
+    );
+    let expected = display::Path::from_svg("M0 0 L20 0 Q30 20 40 0 C40 -10 50 -10 60 0 Z").unwrap();
+    assert_eq!(object(&scene, "p").shape, Shape::Path(expected));
+    round_trip(&scene);
+    let encoded: Value = serde_json::from_str(&scene.to_leafer_json().unwrap()).unwrap();
+    assert!(encoded[0]["children"][0]["path"].is_string());
+}
+
+#[test]
+fn numeric_relative_smooth_and_arc_commands_use_the_shared_svg_normalization() {
+    let cases = [
+        (
+            json!([1, 10, 10, 20, 4, 5, 30, 3, 40, -2, 11]),
+            "M10 10 l4 5 h3 v-2 Z",
+        ),
+        (
+            json!([
+                1, 0, 0, 5, 10, 10, 20, 10, 30, 0, 6, 40, -10, 50, 0, 7, 60, 10, 70, 0, 8, 80, 0
+            ]),
+            "M0 0 C10 10 20 10 30 0 S40 -10 50 0 Q60 10 70 0 T80 0",
+        ),
+        (
+            json!([1, 0, 0, 9, 10, 20, 30, 0, 1, 25, 5]),
+            "M0 0 A10 20 30 0 1 25 5",
+        ),
+    ];
+    for (path, svg) in cases {
+        let scene = parse(json!({"tag":"Path","id":"p","path":path}));
+        assert_eq!(
+            object(&scene, "p").shape,
+            Shape::Path(display::Path::from_svg(svg).unwrap())
+        );
+        round_trip(&scene);
+    }
+    round_trip(&parse(json!({"tag":"Path","id":"empty","path":[]})));
+}
+
+#[test]
+fn malformed_numeric_paths_fail_atomically_without_interpreting_canvas_opcodes() {
+    let before = parse(json!({"tag":"Rect","id":"keep"}));
+    for path in [
+        json!([1, 0]),
+        json!([1, 0, 0, 5, 1, 2, 3]),
+        json!([1.5, 0, 0]),
+        json!([1, 0, "no"]),
+        json!([1, 0, 0, 9, 10, 10, 0, 2, 0, 20, 20]),
+        json!([21, 0, 0, 10, 10]),
+        json!([1, 0, 0, 999]),
+        json!([1, 1000001, 0]),
+    ] {
+        let input = json!({"tag":"Pen","children":[{"tag":"Rect"},{"tag":"Path","path":path}]});
+        let mut destination = before.clone();
+        assert!(
+            destination
+                .replace_from_leafer_json(&input.to_string())
+                .is_err(),
+            "{input}"
+        );
+        assert_eq!(destination, before);
+    }
+}
+
+#[test]
+fn pen_computed_builder_state_and_late_unknown_fields_are_atomic_errors() {
+    let baseline = parse(json!({"tag":"Rect","id":"keep","width":20,"height":10}));
+    for key in [
+        "path",
+        "__path",
+        "pathElement",
+        "pathStyle",
+        "__layout",
+        "worldTransform",
+        "computedBounds",
+        "childlessJSON",
+    ] {
+        let mut value =
+            json!({"tag":"Pen","id":"pen","children":[{"tag":"Path","id":"p","path":"M0 0L5 8"}]});
+        value[key] = json!(null);
+        let mut destination = baseline.clone();
+        assert!(
+            destination
+                .replace_from_leafer_json(&value.to_string())
+                .is_err(),
+            "{key}"
+        );
+        assert_eq!(destination, baseline);
+    }
+    let late = json!({"tag":"Pen","children":[{"tag":"Path","path":"M0 0L2 3"},{"tag":"Rect","computedBounds":false}]});
+    let mut destination = baseline.clone();
+    assert!(
+        destination
+            .replace_from_leafer_json(&late.to_string())
+            .is_err()
+    );
+    assert_eq!(destination, baseline);
+    // The same words inside explicit application metadata remain inert data.
+    let inert = parse(
+        json!({"tag":"Pen","data":{"__layout":{"private":"text only"},"onClick":"never executed"}}),
+    );
+    round_trip(&inert);
+}
+
+#[test]
 fn upstream_defaults_are_not_flow_defaults() {
     let s = parse(
         json!([{"tag":"Rect","id":"r"},{"tag":"Frame","id":"f"},{"tag":"Line","id":"l","stroke":"#123"}]),
@@ -168,7 +349,7 @@ fn strict_unknown_tag_fields_and_unsupported_features() {
     for v in [
         json!({"tag":"Unknown"}),
         json!({"tag":"rect"}),
-        json!({"tag":"Pen"}),
+        json!({"tag":"Pen","path":"M0 0L1 1"}),
         json!({"tag":"Custom"}),
         json!({"tag":"Rect","bogus":1}),
         json!({"tag":"Rect","text":"ignored?"}),
@@ -182,7 +363,7 @@ fn strict_unknown_tag_fields_and_unsupported_features() {
         json!({"tag":"Image","url":"asset://a","width":20,"height":20,"crop":[0,0,1,1]}),
         json!({"tag":"Image","url":"asset://a","width":20,"height":20,"fill":"#000"}),
         json!({"tag":"Canvas","url":"data:image/png;base64,test"}),
-        json!({"tag":"Path","path":[1,0,0,2,1,1]}),
+        json!({"tag":"Path","path":[1,0,0,999]}),
         json!({"tag":"Rect","strokeWidth":5}),
         json!({"tag":"Rect","fill":"red"}),
     ] {
@@ -256,7 +437,10 @@ fn unsupported_text_and_star_geometry_fail_without_approximation() {
 #[test]
 fn path_requires_explicit_geometry_instead_of_upstream_box_fallback() {
     reject(json!({"tag":"Path"}), "explicit SVG path");
-    reject(json!({"tag":"Path","path":null}), "expected string");
+    reject(
+        json!({"tag":"Path","path":null}),
+        "expected SVG string or numeric command array",
+    );
     let s = parse(json!({"tag":"Path","id":"empty","path":""}));
     let Shape::Path(path) = &object(&s, "empty").shape else {
         panic!("Path tag changed");

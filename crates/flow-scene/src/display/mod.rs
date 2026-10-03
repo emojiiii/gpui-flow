@@ -22,7 +22,7 @@ pub use canvas::Canvas;
 pub use custom::Custom;
 pub use ellipse::Ellipse;
 pub use frame::Frame;
-pub use group::Group;
+pub use group::{Group, GroupKind};
 pub use image::{Image, ImageFit, ImageMapping};
 pub use line::Line;
 pub use path::{Path, PathCommand};
@@ -80,7 +80,7 @@ impl Shape {
             Self::Text(_) => "text",
             Self::Image(_) => "image",
             Self::Canvas(_) => "canvas",
-            Self::Group(_) => "group",
+            Self::Group(group) => group.tag(),
             Self::Box(_) => "box",
             Self::Frame(_) => "frame",
             Self::Custom(_) => "custom",

@@ -361,135 +361,201 @@ fn points(f: &mut Fields) -> Result<Vec<Point>> {
     }
 }
 fn shape(f: &mut Fields, tag: &str, geometry: &mut usize) -> Result<Shape> {
-    let shape =
-        match tag {
-            "Group" => Shape::Group(display::Group::new()),
-            "Rect" | "Box" | "Frame" | "Canvas" | "Image" => {
-                let size = f.size(tag == "Image")?;
-                let (radius, radii) = corners(f)?;
-                match tag {
-                    "Rect" => Shape::Rect(display::Rect {
-                        size,
-                        corner_radius: radius,
-                        corner_radii: radii,
-                    }),
-                    "Box" | "Frame" => {
-                        let clip = choice(
-                            f,
-                            "overflow",
-                            if tag == "Frame" { "hide" } else { "show" },
-                            &["hide", "show"],
-                        )? == "hide";
-                        if tag == "Box" {
-                            Shape::Box(display::Box {
-                                size,
-                                corner_radius: radius,
-                                corner_radii: radii,
-                                clip_children: clip,
-                                paint_order: ContainerPaintOrder::BeforeChildren,
-                            })
-                        } else {
-                            Shape::Frame(display::Frame {
-                                size,
-                                corner_radius: radius,
-                                corner_radii: radii,
-                                clip_children: clip,
-                                paint_order: ContainerPaintOrder::BeforeChildren,
-                            })
-                        }
-                    }
-                    "Canvas" => Shape::Canvas(display::Canvas {
-                        size,
-                        corner_radius: radius,
-                        corner_radii: radii,
-                        pixel_ratio: f.f32("pixelRatio", 1.)?,
-                        smooth: f.boolean("smooth", true)?,
-                        safe_resize: f.boolean("safeResize", false)?,
-                    }),
-                    _ => {
-                        let mut image = display::Image::new(f.string("url", "")?, size);
-                        image.fit = display::ImageFit::Fill;
-                        image.corner_radius = radius;
-                        image.corner_radii = radii;
-                        Shape::Image(image)
-                    }
-                }
-            }
-            "Ellipse" => {
-                let size = f.size(false)?;
-                Shape::Ellipse(display::Ellipse {
+    let shape = match tag {
+        "Group" => Shape::Group(display::Group::new()),
+        "Pen" => Shape::Group(display::Group::pen()),
+        "Rect" | "Box" | "Frame" | "Canvas" | "Image" => {
+            let size = f.size(tag == "Image")?;
+            let (radius, radii) = corners(f)?;
+            match tag {
+                "Rect" => Shape::Rect(display::Rect {
                     size,
-                    start_angle: f.f32("startAngle", 0.)?,
-                    end_angle: f.f32("endAngle", 0.)?,
-                    inner_radius: f.f32("innerRadius", 0.)?,
-                    closed: f.boolean("closed", true)?,
-                })
-            }
-            "Line" => {
-                let p = if f.map.contains_key("points") {
-                    points(f)?
-                } else {
-                    vec![Point::ZERO, Point::new(f.f32("width", 100.)?, 0.)]
-                };
-                if p.len() != 2 {
-                    return Err(f.err("points", "Line requires exactly two points"));
+                    corner_radius: radius,
+                    corner_radii: radii,
+                }),
+                "Box" | "Frame" => {
+                    let clip = choice(
+                        f,
+                        "overflow",
+                        if tag == "Frame" { "hide" } else { "show" },
+                        &["hide", "show"],
+                    )? == "hide";
+                    if tag == "Box" {
+                        Shape::Box(display::Box {
+                            size,
+                            corner_radius: radius,
+                            corner_radii: radii,
+                            clip_children: clip,
+                            paint_order: ContainerPaintOrder::BeforeChildren,
+                        })
+                    } else {
+                        Shape::Frame(display::Frame {
+                            size,
+                            corner_radius: radius,
+                            corner_radii: radii,
+                            clip_children: clip,
+                            paint_order: ContainerPaintOrder::BeforeChildren,
+                        })
+                    }
                 }
-                if f.boolean("closed", false)? {
-                    return Err(f.err("closed", "closed Line is unsupported"));
+                "Canvas" => Shape::Canvas(display::Canvas {
+                    size,
+                    corner_radius: radius,
+                    corner_radii: radii,
+                    pixel_ratio: f.f32("pixelRatio", 1.)?,
+                    smooth: f.boolean("smooth", true)?,
+                    safe_resize: f.boolean("safeResize", false)?,
+                }),
+                _ => {
+                    let mut image = display::Image::new(f.string("url", "")?, size);
+                    image.fit = display::ImageFit::Fill;
+                    image.corner_radius = radius;
+                    image.corner_radii = radii;
+                    Shape::Image(image)
                 }
-                *geometry += p.len();
-                Shape::Line(display::Line::new(p[0], p[1]))
             }
-            "Polygon" => {
-                let p = points(f)?;
-                *geometry += p.len();
-                Shape::Polygon(display::Polygon {
-                    points: p,
-                    closed: f.boolean("closed", true)?,
-                })
+        }
+        "Ellipse" => {
+            let size = f.size(false)?;
+            Shape::Ellipse(display::Ellipse {
+                size,
+                start_angle: f.f32("startAngle", 0.)?,
+                end_angle: f.f32("endAngle", 0.)?,
+                inner_radius: f.f32("innerRadius", 0.)?,
+                closed: f.boolean("closed", true)?,
+            })
+        }
+        "Line" => {
+            let p = if f.map.contains_key("points") {
+                points(f)?
+            } else {
+                vec![Point::ZERO, Point::new(f.f32("width", 100.)?, 0.)]
+            };
+            if p.len() != 2 {
+                return Err(f.err("points", "Line requires exactly two points"));
             }
-            "Star" => {
-                let size = f.size(false)?;
-                if size.width != size.height {
-                    return Err(f.err("height", "Star requires equal width and height"));
-                }
-                let count = f.number("corners", 5.)?;
-                if count.fract() != 0. || !(2. ..=4096.).contains(&count) {
-                    return Err(f.err("corners", "expected integer in 2..=4096"));
-                }
-                let ratio = f.number("innerRadius", 0.382)?;
-                let mut star = display::Star::new(
-                    count as usize,
-                    size.width * 0.5,
-                    (size.width as f64 * 0.5 * ratio) as f32,
-                );
-                star.start_angle = (f.number("startAngle", 0.)? - 90.) as f32;
-                *geometry += count as usize * 2;
-                Shape::Star(star)
+            if f.boolean("closed", false)? {
+                return Err(f.err("closed", "closed Line is unsupported"));
             }
-            "Path" => {
-                if !f.map.contains_key("path") {
-                    return Err(f.err(
-                        "path",
-                        "explicit SVG path required; implicit box geometry is unsupported",
-                    ));
-                }
-                let path = display::Path::from_svg(&f.string("path", "")?)
-                    .map_err(|e| f.err("path", e))?;
-                *geometry += path.commands.len();
-                Shape::Path(path)
+            *geometry += p.len();
+            Shape::Line(display::Line::new(p[0], p[1]))
+        }
+        "Polygon" => {
+            let p = points(f)?;
+            *geometry += p.len();
+            Shape::Polygon(display::Polygon {
+                points: p,
+                closed: f.boolean("closed", true)?,
+            })
+        }
+        "Star" => {
+            let size = f.size(false)?;
+            if size.width != size.height {
+                return Err(f.err("height", "Star requires equal width and height"));
             }
-            "Text" => Shape::Text(text_shape(f)?),
-            "Pen" => return Err(f.err(
-                "tag",
-                "Leafer Pen is a Group of Paths; Flow Pen is a leaf. Explicit conversion required",
-            )),
-            _ => return Err(f.err("tag", format!("unsupported tag {tag:?}"))),
-        };
+            let count = f.number("corners", 5.)?;
+            if count.fract() != 0. || !(2. ..=4096.).contains(&count) {
+                return Err(f.err("corners", "expected integer in 2..=4096"));
+            }
+            let ratio = f.number("innerRadius", 0.382)?;
+            let mut star = display::Star::new(
+                count as usize,
+                size.width * 0.5,
+                (size.width as f64 * 0.5 * ratio) as f32,
+            );
+            star.start_angle = (f.number("startAngle", 0.)? - 90.) as f32;
+            *geometry += count as usize * 2;
+            Shape::Star(star)
+        }
+        "Path" => {
+            if !f.map.contains_key("path") {
+                return Err(f.err(
+                    "path",
+                    "explicit SVG path required; implicit box geometry is unsupported",
+                ));
+            }
+            let path = path_input(f)?;
+            *geometry += path.commands.len();
+            Shape::Path(path)
+        }
+        "Text" => Shape::Text(text_shape(f)?),
+        _ => return Err(f.err("tag", format!("unsupported tag {tag:?}"))),
+    };
     if *geometry > MAX_LEAFER_GEOMETRY_ITEMS {
         return Err(f.err("tag", "cumulative geometry budget exceeded"));
     }
     Ok(shape)
+}
+/// Decode the pinned fixed-arity SVG opcode set. Canvas-only codes are errors.
+fn path_input(f: &mut Fields) -> Result<display::Path> {
+    let value = f.take("path").expect("presence checked");
+    let svg = match value {
+        Value::String(svg) => svg,
+        Value::Array(values) => {
+            use std::fmt::Write;
+            let mut svg = String::new();
+            let mut at = 0;
+            let mut commands = 0;
+            while at < values.len() {
+                let code = finite(&values[at])
+                    .filter(|n| n.fract() == 0.)
+                    .ok_or_else(|| f.err("path", "expected integer path opcode"))?;
+                let (letter, arity) = match code as i64 {
+                    1 => ('M', 2),
+                    10 => ('m', 2),
+                    2 => ('L', 2),
+                    20 => ('l', 2),
+                    3 => ('H', 1),
+                    30 => ('h', 1),
+                    4 => ('V', 1),
+                    40 => ('v', 1),
+                    5 => ('C', 6),
+                    50 => ('c', 6),
+                    6 => ('S', 4),
+                    60 => ('s', 4),
+                    7 => ('Q', 4),
+                    70 => ('q', 4),
+                    8 => ('T', 2),
+                    80 => ('t', 2),
+                    9 => ('A', 7),
+                    90 => ('a', 7),
+                    11 => ('Z', 0),
+                    _ => {
+                        return Err(
+                            f.err("path", format!("unsupported numeric path opcode {code}"))
+                        );
+                    }
+                };
+                commands += 1;
+                if commands > MAX_LEAFER_GEOMETRY_ITEMS {
+                    return Err(f.err("path", "path command budget exceeded"));
+                }
+                let args = values
+                    .get(at + 1..at + 1 + arity)
+                    .ok_or_else(|| f.err("path", "truncated numeric path command"))?;
+                svg.push(letter);
+                for (index, value) in args.iter().enumerate() {
+                    let number = finite(value)
+                        .ok_or_else(|| f.err("path", "expected finite bounded path coordinate"))?;
+                    if matches!(letter, 'A' | 'a')
+                        && matches!(index, 3 | 4)
+                        && number != 0.
+                        && number != 1.
+                    {
+                        return Err(f.err("path", "arc flags must be zero or one"));
+                    }
+                    write!(&mut svg, " {number}").expect("String formatting");
+                }
+                at += 1 + arity;
+                if svg.len() > MAX_LEAFER_JSON_BYTES {
+                    return Err(f.err("path", "normalized path exceeds byte budget"));
+                }
+            }
+            svg
+        }
+        _ => return Err(f.err("path", "expected SVG string or numeric command array")),
+    };
+    display::Path::from_svg(&svg).map_err(|e| f.err("path", e))
 }
 fn text_shape(f: &mut Fields) -> Result<display::Text> {
     let size = f.size(true)?;
@@ -1154,7 +1220,10 @@ fn export_node(scene: &Scene, id: &DisplayId, depth: usize, geometry: &mut usize
             put(&mut m, "safeResize", v.safe_resize);
             "Canvas"
         }
-        Shape::Group(_) => "Group",
+        Shape::Group(group) => match group.kind() {
+            display::GroupKind::Group => "Group",
+            display::GroupKind::Pen => "Pen",
+        },
         Shape::Box(v) => {
             put_size(&mut m, v.size);
             put_corners(&mut m, v.corner_radius, v.corner_radii);

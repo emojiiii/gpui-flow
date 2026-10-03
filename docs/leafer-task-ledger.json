@@ -7,8 +7,8 @@
     "leafer_in": "3eb445bf34debb638766615282224b77108bf610"
   },
   "counts": {
-    "bounded_verified": 38,
-    "partial": 5,
+    "bounded_verified": 39,
+    "partial": 4,
     "not_started": 2,
     "needs_verification": 0,
     "in_progress": 0
@@ -47,7 +47,7 @@
       "id": "DAT-03",
       "category": "数据",
       "title": "版本化文档与有限Leafer映射",
-      "status": "partial",
+      "status": "bounded_verified",
       "acceptance": "必选现有Scene JSON v1读写/未知版本拒绝；固定原语tag、transform、基础paint的Leafer JSON映射，未知属性明确拒绝并往返",
       "boundary": "不含JS回调、任意computed缓存或完整上游JSON兼容；迁移仅在存在正式v2时定义",
       "reference_doc": "docs/leafer-json.md",

@@ -312,3 +312,45 @@ fn all_builtin_definitions_publish_schema_and_valid_defaults() {
     }
     assert!(registry.create("image", "missing", json!({})).is_err());
 }
+
+#[test]
+fn pen_branch_factory_preserves_distinct_kind_and_child_identity() {
+    let mut engine = SceneEngine::new(Scene::new()).unwrap();
+    let (pen, _) = engine
+        .create("pen_group", "pen-branch", json!({}), None, None)
+        .unwrap();
+    let (path, _) = engine
+        .create("path", "child", json!({}), Some(pen), None)
+        .unwrap();
+    assert_eq!(engine.object(pen).unwrap().shape.tag(), "pen_group");
+    assert!(engine.object(pen).unwrap().shape.allows_children());
+    assert_eq!(engine.object(path).unwrap().shape.tag(), "path");
+    let saved = engine.scene().to_json().unwrap();
+    let restored = Scene::from_json(&saved).unwrap();
+    assert_eq!(restored, *engine.scene());
+    assert_eq!(
+        restored.get(&"pen-branch".into()).unwrap().children,
+        ["child".into()]
+    );
+    assert!(
+        engine
+            .create("pen_group", "bad", json!({"path":"M0 0L1 1"}), None, None)
+            .is_err()
+    );
+    let pens = engine
+        .query(ElementQuery {
+            tag: Some("pen_group"),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(pens, vec![pen]);
+    assert!(
+        engine
+            .query(ElementQuery {
+                tag: Some("group"),
+                ..Default::default()
+            })
+            .unwrap()
+            .is_empty()
+    );
+}
