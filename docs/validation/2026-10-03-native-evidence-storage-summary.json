@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "recorded_date_utc": "2026-10-03",
-  "scope": "Twelve completed Linux acceptance executables reversibly archived; original failed APP05 observations remain failures; no source, capture, log, receipt or active Cargo target removed",
-  "binary_count": 12,
-  "net_reclaimed_bytes": 1776095262,
-  "protected_existing_files_verified": 883,
-  "status": "First five and final two used actual temporary restoration before removing redundant raw copies. Middle five used full streamed SHA and byte comparison first, then removed redundant raw copies and immediately verified actual temporary restoration. Every recorded step stayed above 3 GiB.",
+  "scope": "Thirteen completed Linux acceptance-run executables reversibly archived; original failed APP05 and partial-failed Canvas stroke run remain failures; no source/capture/log/receipt/active target removed",
+  "binary_count": 13,
+  "net_reclaimed_bytes": 1925317726,
+  "protected_existing_files_verified": 1180,
+  "status": "First five and final three used actual temporary restoration before removing redundant raw copies. Middle five used full streamed SHA and byte comparison before raw removal and actual temporary restoration immediately after. Every recorded step stayed above3GiB.",
   "historical_manifest_note": "Historical binary hash manifests are unchanged and validate after restore-binary.py restores the original executable path; a currently absent raw path is an intentional storage state, not missing executable bytes",
   "archive_location": "Same retained local evidence directory; archives themselves are not uploaded to this repository",
   "restore_limits": "Restore refuses a mismatching destination and requires3GiB remaining free disk after recovery; run.sh creates new timestamped recheck logs instead of overwriting historical receipts",
@@ -422,6 +422,51 @@
       "restore_script_sha256": "2813aedc2c2b2c9146f05f6520a9b36f43e79c920f0cb9b512882d289610b627",
       "new_run_script_sha256": "6958ae21875eabacb06e04d76a2b9f93f8ef046d36e001ce68daffc81af781d0",
       "archive_receipt_sha256": "92e822db561193395dd311897b4e372a0e330f87e84b9fd2888b083876ec22d1"
+    },
+    {
+      "original_path": "/workspace/shared/canvas-stroke-native-validation-20261003T0338Z/canvas_stroke_text",
+      "original_bytes": 179893496,
+      "original_sha256": "03412f2c1a7f344678305f30be99b3c6fbe92e017d8a02d294be82820870ddb1",
+      "original_mode": 493,
+      "original_mtime_ns": 1790998518844537095,
+      "archive_name": "canvas_stroke_text.zst",
+      "archive_bytes": 30671032,
+      "archive_sha256": "61766f3db874684d7ed89feb6d31f3762e3a32d3312fd564df84183884222dc6",
+      "restore_command": "./restore-binary.py",
+      "run_command": "./run-archived.sh",
+      "restore_script_tested": true,
+      "restored_sha256_size_mode_mtime_verified": true,
+      "protected_existing_files_verified": 297,
+      "net_reclaimed_bytes": 149222464,
+      "completed_utc": "2026-10-03T03:52:52Z",
+      "native_application_launched": false,
+      "streamed_restore_sha_and_byte_equality_verified": true,
+      "sequence": [
+        {
+          "stage": "start",
+          "free_bytes": 3454664704
+        },
+        {
+          "stage": "compressed_original_still_present",
+          "free_bytes": 3423977472
+        },
+        {
+          "stage": "full_stream_decompression_SHA_and_byte_comparison_passed",
+          "free_bytes": 3423977472
+        },
+        {
+          "stage": "temporary_restore_exists",
+          "free_bytes": 3244060672
+        },
+        {
+          "stage": "redundant_raw_removed_after_stream_and_actual_restore_verification",
+          "free_bytes": 3603865600
+        }
+      ],
+      "restore_script_sha256": "2813aedc2c2b2c9146f05f6520a9b36f43e79c920f0cb9b512882d289610b627",
+      "new_run_script_sha256": "6958ae21875eabacb06e04d76a2b9f93f8ef046d36e001ce68daffc81af781d0",
+      "archive_receipt_sha256": "c7b2ab0cc095d24e7c9f06a7048b981a975d5d9f73b6eaa3278260146b94698b",
+      "acceptance_note": "Run exited0 but scenario4 DPR2 WorkLimit failed; reversible storage does not change failed acceptance."
     }
   ]
 }

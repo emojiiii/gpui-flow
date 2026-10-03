@@ -1,11 +1,21 @@
 # Native Canvas stroke-text acceptance fixture
 
-Status: cached build, strict Clippy and the no-window helper tour passed.
-**Physical acceptance remains pending.** This document is an acceptance contract,
-not evidence that the native tour has passed. The [build summary](validation/2026-10-03-canvas-stroke-fixture-summary.json)
-records those checks. Runtime/adapter tests and the earlier native font identity
-fixture have separate evidence. Neither establishes this fixture's native stroke
-acceptance.
+Status: the initial frozen `0338Z` revision passed cached build, strict Clippy and
+the no-window helper tour; the [build summary](validation/2026-10-03-canvas-stroke-fixture-summary.json)
+records those checks. Native scenarios 1–3 accepted on both resources. Its
+original one-batch scenario 4 accepted at DPR 1 but returned `WorkLimit` at DPR 2
+under the unchanged default 32,000,000 surface-write ceiling. The preceding
+independent clear left DPR 2 empty. That failure and the original frozen
+source/binary remain untouched historical evidence. Although its subsequent
+rejection suite reported 8×2 preserved results, the empty DPR 2 baseline does
+not establish rollback of visible stroke ink.
+
+The current source deliberately separates scenario 4 into two balanced batches,
+records every public resource edit, saves failed partial states, and disallows an
+empty rejection baseline. Cached build, strict Clippy and the revised no-window
+helper tour passed. **Physical acceptance of the remedy remains pending.** This document is an acceptance contract, not evidence
+that the revised tour passed. Runtime/adapter and native font identity evidence
+remain separate.
 
 ## Scope and opt-in
 
@@ -71,7 +81,7 @@ requires the physical tour and captures.
 Every action creates a new numbered folder in a unique session under
 `FLOW_CANVAS_STROKE_DIR` (default: a unique child of the OS temporary directory's
 `gpui-flow-canvas-stroke`). Files use `create_new`; the session is not overwritten.
-Every settled action exports both actual committed resources:
+Every completed action exports both actual committed resources:
 
 - `settled-one.premul-rgba`, `settled-two.premul-rgba`: exact row-major,
   premultiplied RGBA8 bytes; these are authoritative for equality
@@ -87,8 +97,18 @@ to settle pending configurations, then obtains
 `SceneResourceAdapter::canvas_snapshot` and requires Arc identity between these
 two observations. It exports that committed resource snapshot. It does not
 claim public access to GPUI's uploaded GPU allocation identity. Per-action
-receipts are also JSON lines on stdout. Failed actions emit a failure line and
-attempt to persist `failed.json`; file-write failures are reported explicitly.
+receipts are also JSON lines on stdout. Regeneration first writes
+`regeneration-plan.json` with deliberate batch names and full command lists.
+Each attempted clear or draw writes an append-only
+`regeneration-NN-one.json` or `regeneration-NN-two.json`, also emitted as a
+`regeneration-step` JSON line. These record acceptance/error, generation before
+and after, snapshot publication, pixel checksums, dimensions/DPR, ink presence
+and retained current-path size. Unattempted later steps have no result receipt.
+
+Failed actions are marked `complete: false`, stop without retry, and attempt to
+persist `failed.json` plus `failed-state-{one,two}` Canvas and cloned replay
+raw/PNG exports. These describe the actual cleared or partially drawn state,
+never a completed gallery. File-write/readback failures are reported explicitly.
 
 FNV-1a64 is a compact, noncryptographic receipt checksum, not a cryptographic
 identity proof. Exact raw-byte comparisons establish rollback. The retained
@@ -104,8 +124,8 @@ All controls remain in fixed positions as scenarios change:
 | Row / position | Button | Required observation |
 | --- | --- | --- |
 | 1 / 1 | Next scenario | Cycle 1→2→3→4→1; accepted actual stroke batches and PNG/raw export for both DPRs |
-| 1 / 2 | Regenerate | Clear pixels as a separate accepted edit, then redraw the selected scenario with valid fresh commands |
-| 1 / 3 | Reject suite | Eight atomic rejected submissions on each resource, one helper-level owner check; preserve live snapshots and replay geometry |
+| 1 / 2 | Regenerate | Clear each resource separately, then submit each planned batch to both resources; all planned steps must succeed |
+| 1 / 3 | Reject suite | Require nonempty pixels and retained paths on both resources, then check eight rejected submissions/resource and one helper-level owner check |
 | 1 / 4 | Invalidate + recover | Old-epoch binding lookup rejects; actual valid stroke commands recover under the fresh epoch |
 | 1 / 5 | Export settled | Export the current committed resources without a drawing operation |
 | 2 / 1 | Safe shrink/grow | Toggle logical width 440↔280 with safe physical intersection preservation; current path resets |
@@ -131,20 +151,40 @@ The bounded gallery has four scenarios:
    Restore permits a right-side sample while retaining the outer clip. Outer
    Restore permits bottom samples. Wide translucent strokes overlap between
    contours within one command and with a second independent translucent draw.
-   Alpha is source-over per draw, not group opacity
+   Alpha is source-over per draw, not group opacity. The upper clipped block and
+   lower translucent block are separate, deliberate resource command batches
+
+Scenarios 1–3 still contain one gallery batch each. Scenario 4 has exactly two:
+
+1. `current-path-nested-clips`: all original path/clip construction and three
+   upper stroke-text jobs, both original Restores and both font faces
+2. `alpha-overlap-and-sentinel`: the original four lower translucent text jobs,
+   explicit opacity changes and final sentinel, again with both font faces
+
+No visual commands are removed, reordered or automatically retried; this boundary
+is planned before drawing and is independent of errors. The first batch ends
+after the outer Restore at identity transform and full opacity. The second starts
+with the same default state and explicitly sets its translucent opacity. Current
+path geometry persists across the boundary until the final sentinel replaces it.
+Each batch receives the unchanged default limits. A successful two-batch gallery
+does not erase or overturn the historical one-batch `WorkLimit`, nor establish
+that arbitrary larger batches fit the ceiling.
 
 Each accepted gallery finishes with the same small curved-band current path and
 its visible thin stroke at the bottom. A rejection replaces that path in its
 candidate, so exact replay comparison can detect geometry rollback failures even
 when the old pixels remain unchanged. The clips scenario constructs its own
-current clipping path earlier in the same batch before restoring the sentinel.
+current clipping path in the first batch before the second restores the sentinel.
 
 Recommended bounded tour, recording each action and checking each resulting
 PNG/raw pair:
 
 1. Capture the initial native window and verify scenario 1 exports. Inspect all
    source/registration identities and startup native shaping diagnostics
-2. Click Next scenario three times, pausing to inspect/export scenarios 2, 3, 4
+2. Click Next scenario three times, pausing to inspect/export scenarios 2, 3, 4.
+   For revised scenario 4 require all four named batch/resource draw receipts to
+   accept and publish nonempty new snapshots. Inspect completed DPR 2 clips,
+   hole, both fonts and lower alpha samples in the final PNG/raw pair
 3. Click Reject suite, inspect every rejection receipt and before/after/replay
    file, then Regenerate for an explicit valid recovery
 4. Click Invalidate + recover and inspect the fresh-epoch stroke export
@@ -163,8 +203,13 @@ The initial paint has origin `startup`; controls have origin `physical_button`.
 Eight rejection substeps are synchronous consequences of one physical button,
 not eight independently clicked buttons. The UI presents the aggregate result;
 each receipt retains the individual outcomes. An unexpected successful batch or
-wrong error class is a failure, not an expected rejection. The two Canvas edits
-are independent transactions; no cross-resource atomic commit is claimed.
+wrong error class is a failure, not an expected rejection. Each clear and named
+batch/resource edit is an independent transaction; neither the entire gallery
+nor both resources commit atomically. Regeneration visits clear/one, clear/two,
+then each named batch on one and two in order. It stops at the first failed
+resource step, retains earlier accepted edits, and exports the actual failure
+state. Successful draw calls must also publish a new nonempty snapshot to count
+as complete gallery steps. This is not automatic fallback after `WorkLimit`.
 
 ## Rejection and shaping evidence
 
@@ -176,6 +221,11 @@ exact premultiplied RGBA equality, unchanged retained path byte count and exact
 current-path replay bytes. Before/after Canvas and cloned replay images are
 saved. The clone replay clears only the clone's pixels and fills/strokes its
 retained path; it does not paint into the live Canvas.
+
+Both initial resources must have nonzero-alpha pixels and nonempty retained path
+geometry. Otherwise the suite fails before submitting rejection cases and
+requires complete regeneration. This prevents the original empty DPR 2 baseline
+from being presented as successful visible-ink rollback.
 
 | Step | Content / change | Expected error and additional proof |
 | --- | --- | --- |
@@ -231,10 +281,12 @@ are diagnostic shaping, not the exact line objects painted by the Canvas adapter
 
 ## Deferred build, helper checks and cost
 
-Source-only review is complete enough for independent review. The source was
+The revised source is ready for independent review. The source was
 parsed/formatted with the installed `rustfmt --edition 2024` and its `--check`
-form. **Cargo, native startup, helper-tour and unit tests have not run for this
-fixture.** Parent coordination owns the single build slot, free-space watchdog,
+form. Cached build, strict Clippy and the revised helper tour passed. Native
+startup and physical rechecking remain pending; no separate unit-test harness
+was linked for the two-batch remedy. The original partial native results remain separate
+evidence. Parent coordination owns the single build slot, free-space watchdog,
 native desktop slot, frozen copy, and any Git publication.
 
 After an exact build slot/disk allowance is granted, use only the existing native
@@ -276,7 +328,10 @@ room for a build or repeat tour.
 
 `--helper-tour` branches before any Application/platform/window creation. It
 prepares both real source fonts, checks expected quadratic/cubic/counter/composite
-outline coverage, validates every gallery Text request and command count,
+outline coverage, validates every gallery Text request and per-batch command count,
+requires independent Save/Restore balance and both font faces in every batch,
+keeps scenarios 1–3 at one batch with 4/6/8 text jobs respectively, and requires
+scenario 4's named two-batch plan with 3/4 text jobs,
 checks current-path rollback at DPR 1/2, and round-trips a known premultiplied
 sample through the existing PNG encoder/decoder to verify demultiplication.
 It does not establish native shaping, stroke rendering or resource upload.

@@ -198,7 +198,12 @@ fn replay(surface: &CanvasSurface) -> Result<CanvasSurface, String> {
         .map_err(|e| e.to_string())?;
     Ok(clone)
 }
-fn gallery(fonts: &[Arc<PreparedFont>; 2], scenario: usize) -> Vec<CanvasCommand> {
+struct GalleryBatch {
+    name: &'static str,
+    commands: Vec<CanvasCommand>,
+}
+fn gallery_batches(fonts: &[Arc<PreparedFont>; 2], scenario: usize) -> Vec<GalleryBatch> {
+    let mut batches = Vec::new();
     let mut out = Vec::new();
     match scenario {
         0 => {
@@ -348,6 +353,13 @@ fn gallery(fonts: &[Arc<PreparedFont>; 2], scenario: usize) -> Vec<CanvasCommand
                 2.,
             ));
             out.push(CanvasCommand::Restore);
+            // This deliberate boundary keeps each independently balanced block
+            // under the unchanged per-batch raster work ceiling at DPR 2. The
+            // original one-batch native WorkLimit remains historical evidence.
+            batches.push(GalleryBatch {
+                name: "current-path-nested-clips",
+                commands: std::mem::take(&mut out),
+            });
             // Wide single-glyph outlines overlap within one StrokeTextBox. Below,
             // two independent source-over draws overlap too. Neither is group alpha.
             out.push(CanvasCommand::SetOpacity(0.5));
@@ -375,7 +387,15 @@ fn gallery(fonts: &[Arc<PreparedFont>; 2], scenario: usize) -> Vec<CanvasCommand
     out.push(CanvasCommand::StrokeCurrentPath {
         stroke: Stroke::new(Color::hex(0x75889c), 0.8),
     });
-    out
+    batches.push(GalleryBatch {
+        name: if scenario == 3 {
+            "alpha-overlap-and-sentinel"
+        } else {
+            "gallery"
+        },
+        commands: out,
+    });
+    batches
 }
 fn document() -> Scene {
     let mut scene = Scene::new();
@@ -735,32 +755,113 @@ impl Lab {
                 .collect()
         })
     }
-    fn regenerate(&self, cx: &mut Context<Self>) -> Result<Value, String> {
-        self.view.update(cx, |view, cx| {
+    fn regenerate(&self, folder: &Path, cx: &mut Context<Self>) -> Result<Value, String> {
+        let batches = gallery_batches(&self.fonts, self.scenario);
+        let plan = json!({"scenario":self.scenario,"name":SCENARIOS[self.scenario],
+            "batch_count":batches.len(),"clear_is_separate_edit":true,
+            "default_work_limit_unchanged":true,"automatic_retry":false,
+            "max_surface_writes_per_batch":gpui_flow::composite::CompositeLimits::default().max_surface_writes,
+            "sequence":"clear one, clear two, then each named batch on one and two; stop on first failure",
+            "batches":batches.iter().enumerate().map(|(i,b)|json!({"index":i,"name":b.name,
+                "commands_debug":format!("{:#?}",b.commands)})).collect::<Vec<_>>()});
+        write_new(
+            &folder.join("regeneration-plan.json"),
+            &serde_json::to_vec_pretty(&plan).map_err(|e| e.to_string())?,
+        )?;
+        let mut steps = Vec::new();
+        // Each clear and named batch is an independent public resource edit.
+        // Earlier accepted edits are not undone if a later step fails.
+        for stage in 0..=batches.len() {
+            let name = if stage == 0 {
+                "clear"
+            } else {
+                batches[stage - 1].name
+            };
             for id in IDS {
-                let h = view
-                    .editor
-                    .engine
-                    .handle(&id.into())
-                    .ok_or("missing Canvas handle")?;
-                view.edit_canvas(h, |s| s.clear(), cx)
-                    .map_err(|e| e.to_string())?;
+                let before = self.view.update(cx, |view, cx| capture(view, id, cx))?;
+                let outcome = self.view.update(cx, |view, cx| {
+                    let h = view
+                        .editor
+                        .engine
+                        .handle(&id.into())
+                        .expect("fixture Canvas remains attached");
+                    if stage == 0 {
+                        view.edit_canvas(h, |s| s.clear(), cx)
+                    } else {
+                        view.draw_canvas_commands_with_cancel(
+                            h,
+                            &batches[stage - 1].commands,
+                            &ImageInputs::default(),
+                            &AtomicBool::new(false),
+                            cx,
+                        )
+                    }
+                });
+                let after = self.view.update(cx, |view, cx| capture(view, id, cx))?;
+                let has_ink = after
+                    .resource
+                    .premultiplied_rgba()
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .any(|p| p[3] > 0);
+                let published = after.surface.generation() > before.surface.generation()
+                    && !Arc::ptr_eq(&before.resource, &after.resource);
+                let pixels_changed =
+                    before.resource.premultiplied_rgba() != after.resource.premultiplied_rgba();
+                let expected =
+                    outcome.is_ok() && (stage == 0 || (published && pixels_changed && has_ink));
+                let step = json!({"stage":stage,"name":name,"resource":id,
+                    "accepted":outcome.is_ok(),"complete":expected,"error":outcome.as_ref().err().map(ToString::to_string),
+                    "generation_before":before.surface.generation(),"generation_after":after.surface.generation(),
+                    "new_snapshot_published":published,"has_nonzero_alpha":has_ink,
+                    "pixel_bytes_changed":pixels_changed,
+                    "width":after.resource.width(),"height":after.resource.height(),"dpr":after.surface.config().pixel_ratio,
+                    "before_fnv1a64":checksum(before.resource.premultiplied_rgba()),
+                    "after_fnv1a64":checksum(after.resource.premultiplied_rgba()),
+                    "current_path_bytes":after.surface.current_path_byte_len()});
+                write_new(
+                    &folder.join(format!("regeneration-{stage:02}-{id}.json")),
+                    &serde_json::to_vec_pretty(&step).map_err(|e| e.to_string())?,
+                )?;
+                println!(
+                    "{}",
+                    json!({"fixture":"canvas-stroke-text","event":"regeneration-step",
+                    "sequence":self.trace.sequence,"origin":self.origin,"step":step})
+                );
+                steps.push(step);
+                if !expected {
+                    return Err(format!(
+                        "Incomplete regeneration at {name}/{id}: {}; earlier accepted clears/batches remain; no retry",
+                        outcome.err().map_or_else(
+                            || "expected fresh nonempty stroke snapshot was not observed".into(),
+                            |e| e.to_string()
+                        )
+                    ));
+                }
             }
-            Ok::<_, String>(())
-        })?;
-        let commands = gallery(&self.fonts, self.scenario);
-        let outcomes = self.draw(&commands, false, cx);
-        if let Some(error) = outcomes.into_iter().find_map(Result::err) {
-            return Err(error.to_string());
         }
         Ok(
-            json!({"scenario":self.scenario,"name":SCENARIOS[self.scenario],"commands_debug":format!("{commands:#?}"),
-            "accepted_resources":2,"clear_is_separate_accepted_edit":true}),
+            json!({"scenario":self.scenario,"name":SCENARIOS[self.scenario],"complete":true,
+            "accepted_resources":2,"batch_count":batches.len(),"steps":steps,
+            "clear_is_separate_accepted_edit":true,"atomicity":"one resource edit per step; whole gallery is not atomic"}),
         )
     }
     fn rejects(&self, folder: &Path, cx: &mut Context<Self>) -> Result<Value, String> {
         let before = self.capture_both(cx)?;
         let before_exports = self.export_both(folder, "before", &before, true)?;
+        if before.iter().any(|capture| {
+            capture.surface.current_path_byte_len() == 0
+                || !capture
+                    .resource
+                    .premultiplied_rgba()
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .any(|p| p[3] > 0)
+        }) {
+            return Err("Reject suite requires nonempty pixels and retained current path on both resources; regenerate a complete gallery first".into());
+        }
         let mut checks = Vec::new();
         let mut all = true;
         for (ix, name) in [
@@ -938,9 +1039,9 @@ impl Lab {
         let detail = match action {
             "next" => {
                 self.scenario = (self.scenario + 1) % SCENARIOS.len();
-                self.regenerate(cx)?
+                self.regenerate(&folder, cx)?
             }
-            "regenerate" => self.regenerate(cx)?,
+            "regenerate" => self.regenerate(&folder, cx)?,
             "reject" => self.rejects(&folder, cx)?,
             "safe" | "reset" | "dpr" | "undo" => self.config(action, cx)?,
             "epoch" => {
@@ -958,7 +1059,7 @@ impl Lab {
                         &AtomicBool::new(false),
                     )
                     .err();
-                let recovery = self.regenerate(cx)?;
+                let recovery = self.regenerate(&folder, cx)?;
                 json!({"old_epoch":old,"new_epoch":self.bridge.epoch(),"old_lookup_error":format!("{old_rejected:?}"),
                     "old_epoch_rejected":old_rejected==Some(OutlineBindingError::StaleSnapshot),"valid_recovery":recovery})
             }
@@ -1000,13 +1101,20 @@ impl Lab {
     fn run_action(&mut self, action: &str, cx: &mut Context<Self>) {
         if let Err(error) = self.action(action, cx) {
             self.status = format!("FAILED {action}: {error}");
-            let failure = json!({"fixture":"canvas-stroke-text","action":action,"origin":self.origin,
-                "failed":error,"sequence":self.trace.sequence,"scenario":self.scenario});
-            eprintln!("{failure}");
             let folder = self
                 .trace
                 .directory
                 .join(format!("{:03}-{action}", self.trace.sequence));
+            let failed_state = self
+                .capture_both(cx)
+                .and_then(|captures| self.export_both(&folder, "failed-state", &captures, true));
+            let failure = json!({"fixture":"canvas-stroke-text","action":action,"origin":self.origin,
+                "failed":error,"sequence":self.trace.sequence,"scenario":self.scenario,
+                "complete":false,"failed_state":failed_state.as_ref().ok(),
+                "failed_state_export_error":failed_state.as_ref().err(),
+                "scope":"actual state after failure; earlier accepted clears/batches may remain; not a completed gallery"});
+            eprintln!("{failure}");
+            self.last_exports = folder.to_string_lossy().into();
             if let Ok(bytes) = serde_json::to_vec_pretty(&failure)
                 && let Err(write_error) = write_new(&folder.join("failed.json"), &bytes)
             {
@@ -1110,20 +1218,62 @@ fn helper_tour() -> Result<Value, String> {
         }
         paths.push(json!({"dpr":dpr,"path_bytes":surface.current_path_byte_len(),"rejected":true}));
     }
+    let mut batch_plans = Vec::new();
     for scenario in 0..SCENARIOS.len() {
-        let commands = gallery(&fonts, scenario);
-        if commands.len() > gpui_flow::composite::MAX_CANVAS_COMMANDS {
-            return Err("gallery command limit".into());
+        let batches = gallery_batches(&fonts, scenario);
+        let expected_strokes: &[usize] = match scenario {
+            0 => &[4],
+            1 => &[6],
+            2 => &[8],
+            _ => &[3, 4],
+        };
+        if batches.len() != expected_strokes.len() {
+            return Err("gallery batch boundary contract".into());
         }
-        for command in commands {
-            if let CanvasCommand::StrokeTextBox { text, .. } = command {
-                text.validate()?;
+        let mut plans = Vec::new();
+        for (batch, expected) in batches.iter().zip(expected_strokes) {
+            if batch.commands.len() > gpui_flow::composite::MAX_CANVAS_COMMANDS {
+                return Err("gallery command limit".into());
             }
+            let mut depth = 0_usize;
+            let mut strokes = 0;
+            let mut faces = [false; 2];
+            for command in &batch.commands {
+                match command {
+                    CanvasCommand::Save => depth += 1,
+                    CanvasCommand::Restore => {
+                        depth = depth.checked_sub(1).ok_or("gallery Restore without Save")?
+                    }
+                    CanvasCommand::StrokeTextBox { text, .. } => {
+                        text.validate()?;
+                        strokes += 1;
+                        for (i, font) in fonts.iter().enumerate() {
+                            faces[i] |= text.font_family == font.private_alias();
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if depth != 0 || strokes != *expected || faces != [true, true] {
+                return Err("unbalanced or incomplete gallery batch".into());
+            }
+            plans.push(
+                json!({"name":batch.name,"commands":batch.commands.len(),"stroke_jobs":strokes,
+                "save_restore_balanced":true,"both_fonts_present":true}),
+            );
         }
+        if scenario == 3
+            && (batches[0].name != "current-path-nested-clips"
+                || batches[1].name != "alpha-overlap-and-sentinel")
+        {
+            return Err("clip/alpha batch names changed".into());
+        }
+        batch_plans.push(json!({"scenario":scenario,"batches":plans}));
     }
     Ok(
         json!({"status":"passed","native_constructed":false,"faces":faces,"path_rollback":paths,
-        "png_demultiplication_verified":true,"scenarios":SCENARIOS,"scope":"headless source outlines, helpers, PNG and command validation; no native shaping, Canvas stroke or upload"}),
+        "png_demultiplication_verified":true,"scenarios":SCENARIOS,"batch_plans":batch_plans,
+        "scope":"headless source outlines, helpers, PNG and balanced batch validation; no native shaping, Canvas stroke or upload"}),
     )
 }
 fn run() -> Result<(), String> {
