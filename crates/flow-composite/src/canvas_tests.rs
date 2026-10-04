@@ -350,10 +350,14 @@ fn visible_custom_rejects_whole_canvas_hidden_subtrees_need_no_producer() {
             None,
         )
         .unwrap();
-    assert!(matches!(
-        owned_canvas(&scene, backdrop(Color::WHITE), CompositeLimits::default()),
-        Err(CompositeError::UnsupportedShape(_))
-    ));
+    let captured =
+        owned_canvas(&scene, backdrop(Color::WHITE), CompositeLimits::default()).unwrap();
+    let mut budget = PixelBudget::new(CompositeLimits::default(), 17).unwrap();
+    assert_eq!(
+        rasterize(&captured, viewport(), &mut budget, &AtomicBool::new(false)).unwrap_err(),
+        CompositeError::CustomBackendRequired("custom".into())
+    );
+    assert_eq!(budget.retained_bytes(), 17);
     scene
         .update_object(&"g".into(), |o| o.visible = false)
         .unwrap();

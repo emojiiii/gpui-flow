@@ -1524,13 +1524,25 @@ mod owned_canvas_tests {
             None,
         );
         assert!(error.is_none());
-        assert!(matches!(
-            &owned.units[..],
-            [SceneUnit::Rejected(gpui_flow_composite::CompositeIssue {
-                error: gpui_flow_composite::CompositeError::UnsupportedShape(_),
-                ..
-            })]
-        ));
+        let [SceneUnit::Domain(domain)] = &owned.units[..] else {
+            panic!("complete Custom domain expected");
+        };
+        let bounds = gpui_flow_scene::Bounds::new(WorldPoint::ZERO, WorldSize::new(40., 40.));
+        let result = gpui_flow_composite::rasterize(
+            domain,
+            gpui_flow_composite::RasterViewport {
+                world_to_screen: gpui_flow_scene::Affine::IDENTITY,
+                canvas_bounds: bounds,
+                content_mask: bounds,
+                device_scale: 1.,
+            },
+            &mut gpui_flow_composite::PixelBudget::new(CompositeLimits::default(), 0).unwrap(),
+            &std::sync::atomic::AtomicBool::new(false),
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            gpui_flow_composite::CompositeError::CustomBackendRequired("native".into())
+        );
     }
 }
 

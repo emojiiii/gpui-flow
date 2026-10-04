@@ -352,7 +352,7 @@ fn visible_custom_rejects_atomic_capture_hidden_custom_is_not_a_producer() {
     let json = s.to_json().unwrap();
     assert_eq!(
         SceneExportPlan::new(&s, request(), CompositeLimits::default()).unwrap_err(),
-        CompositeError::UnsupportedShape("custom".into())
+        CompositeError::UnsupportedCustomExport("custom".into())
     );
     assert_eq!(s.to_json().unwrap(), json);
     let mut hidden = custom;

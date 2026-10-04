@@ -28,9 +28,9 @@ mask prefixes retain stable z-order when computing the Group clear bounds.
 
 Path ignores fill visibility/alpha, strokes and effects. Positive object opacity
 gates the operation without attenuating it; zero opacity and hidden state disable
-clearing. Custom Pixel producers retain their existing unsupported-producer error.
-The same applies to ordinary Custom paint and self-painting masks: fallback geometry
-does not represent complete host-renderer pixels. Custom Path compositing itself
+clearing. Custom Pixel, ordinary paint and self-painting masks require the separate
+[host CPU producer](custom-element-protocol.md#explicit-custom-cpu-pixels). Missing
+inputs reject the complete domain; fallback geometry never represents native pixels. Custom Path compositing itself
 needs no resource pixels, but host preparation may still resolve declared resource
 keys. Every contour point, including retained hidden reference geometry, is charged
 at capture and rechecked against the raster request’s potentially tighter limits.

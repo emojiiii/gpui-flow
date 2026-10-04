@@ -57,7 +57,7 @@ OwnedCanvas rasterizes the view's opaque `theme.background`, optional `show_grid
 
 Any root eraser marker, including a hidden marker, forces a separate document surface within that domain. Document erasure then reveals the separately retained background/grid; root artistic blends see that isolated document surface. See the [eraser ownership and mask schedules](scene-erasers.md).
 
-The host still supplies the existing image resolver/cache and, for visible Text, the explicit same-native-backend text bridge above. Current static and animated images and supported text use the same immutable inputs, clock, worker, upload acceptance and retirement lifecycle. Visible painted Custom, missing text capability, unsupported text styles/transforms, missing/denied/failed image input or any budget error rejects the entire canvas. There is no partial native fallback or reordered native overlay. Hidden/zero-opacity subtrees do not require producers; hidden mask markers retain zero-alpha runs. Ordinary host controls outside SceneView are not part of the domain.
+The host still supplies the existing image resolver/cache and, for visible Text, the explicit same-native-backend text bridge above. Current static and animated images and supported text use the same immutable inputs, clock, worker, upload acceptance and retirement lifecycle. Visible painted Custom without the [explicit CPU bridge](custom-element-protocol.md#explicit-custom-cpu-pixels), missing text capability, unsupported text styles/transforms, missing/denied/failed image input or any budget error rejects the entire canvas. There is no partial native fallback or reordered native overlay. Hidden/zero-opacity subtrees do not require producers; hidden mask markers retain zero-alpha runs. Ordinary host controls outside SceneView are not part of the domain.
 
 This is **not arbitrary external GPUI backdrop capture**. A toolkit widget or host surface behind the view cannot become a blend input. The headless `owned_canvas(scene, CanvasBackdrop, limits)` API requires an opaque background and rejects transparent backgrounds with `UnsupportedExternalBackdrop`; treating transparency as a captured host background would be incorrect. `scene_units` keeps the original per-domain external-backdrop rejection. No GPUI fork, GPU/readback path, screenshot producer or new rendering dependency is involved.
 
@@ -67,7 +67,7 @@ The complete canvas allocation is intersected with its viewport and parent conte
 
 Theme/grid, mode, tree/presentation, resources/fonts, pan/zoom, window placement, viewport, parent mask and DPR participate in exact request identity. Mode/theme/grid or geometry changes hard-cancel stale work and hide incompatible accepted frames; time-only image samples still coalesce without starving admitted work. The runtime canvas cache ID is empty (a validated Scene cannot contain an empty ID), is never inserted into the canonical document, and is excluded from document/resource identity enumeration. Diagnostics label it `canvas`.
 
-Run `cargo run --locked --offline -p flow-studio --bin owned_canvas`. The example includes top-level blends over background/grid and earlier roots, real text and an animated GIF, theme/grid/mode/blend controls, whole-canvas Custom rejection/recovery, drag/pan/zoom and Undo. Compilation or source fixtures alone are not native-window validation; the actual validation checkpoint is recorded separately below.
+Run `cargo run --locked --offline -p flow-studio --bin owned_canvas`. The example includes top-level blends over background/grid and earlier roots, real text and an animated GIF, theme/grid/mode/blend controls, whole-canvas unregistered-Custom rejection/recovery, drag/pan/zoom and Undo. Compilation or source fixtures alone are not native-window validation; the actual validation checkpoint is recorded separately below.
 
 ## Fixed-size painted containers
 
@@ -162,7 +162,7 @@ Run `cargo run --locked --offline -p flow-studio --bin animated_images`. The ori
 
 ## Honest boundaries
 
-Ordinarily painted Custom inside a required domain rejects the entire domain.
+Ordinarily painted Custom inside a required domain needs the [explicit host CPU bridge](custom-element-protocol.md#explicit-custom-cpu-pixels); without it, materialization rejects the complete domain with `CustomBackendRequired`. Native DisplayRenderer registration never supplies CPU pixels.
 Geometry-only Custom Path masks/erasers consume their explicit fallback contours;
 see [mask modes](mask-modes.md) and [erasers](scene-erasers.md). Text requires the explicit same-platform bridge described above and rejects unsupported styles/transforms; without that bridge, `TextBackendRequired` rejects the entire domain. Static and animated Image nodes have a real selected-frame pixel producer. The view shows a diagnostic; it does not silently omit the unsupported descendant or fall back to individually faded native children. Ordinary text/image/custom siblings outside domains retain their native route.
 

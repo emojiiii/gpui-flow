@@ -2,7 +2,12 @@
 //! Vector tessellation supports affine transforms and nested rounded frame clipping.
 mod clip;
 pub(crate) mod composite;
+pub(crate) mod composite_custom;
 pub(crate) mod composite_text;
+pub use composite_custom::{
+    CustomRasterCancellation, CustomRasterOutput, CustomRasterRequest, CustomRasterResource,
+    CustomRasterizer,
+};
 mod diagnostics;
 mod gradient;
 mod image;

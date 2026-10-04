@@ -1,15 +1,18 @@
 //! Measured Custom resizing and cancellable asynchronous resource ownership.
 use gpui::{prelude::*, *};
 use gpui_flow::{
-    ControlButton, SceneToolWidget, SceneView, SceneViewEvent,
-    display::{DisplayElement, DisplayRenderer, RenderObject},
+    ControlButton, SceneCompositing, SceneToolWidget, SceneView, SceneViewEvent,
+    display::{
+        CustomRasterOutput, CustomRasterRequest, CustomRasterizer, DisplayElement, DisplayRenderer,
+        RenderObject,
+    },
     engine::*,
     interaction::scene::{SceneCommand, ToolSessionToken},
     resources::SceneCustomResourceProvider,
     scene::{self, Affine, Color, Contour, Scene, Shape, Style, display::Custom},
 };
 use serde_json::{Value, json};
-use std::{cell::RefCell, rc::Rc, time::Duration};
+use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 
 struct Card;
 impl ElementDefinition for Card {
@@ -83,6 +86,77 @@ struct Renderer;
 impl DisplayRenderer for Renderer {
     fn render(&self, o: &RenderObject, _: &mut Window, _: &mut App) -> AnyElement {
         DisplayElement::new(o.clone()).into_any_element()
+    }
+}
+// Independent CPU implementation. The native renderer above is never captured.
+struct Rasterizer;
+impl CustomRasterizer for Rasterizer {
+    fn rasterize(
+        &self,
+        request: CustomRasterRequest<'_>,
+    ) -> Result<Option<CustomRasterOutput>, String> {
+        let Shape::Custom(custom) = &request.object.shape else {
+            return Err("expected Custom".into());
+        };
+        let resource = request.resource.ok_or("accepted payload required")?;
+        if !resource.bytes.starts_with(b"payload:") {
+            return Err("unexpected payload".into());
+        }
+        let scale = request.world_transform.max_scale()
+            * request.viewport.world_to_screen.max_scale()
+            * request.viewport.device_scale;
+        let width = (custom.bounds.size.width * scale).ceil().max(1.) as u32;
+        let height = (custom.bounds.size.height * scale).ceil().max(1.) as u32;
+        let work = u64::from(width) * u64::from(height);
+        if width > request.limits.max_dimension
+            || height > request.limits.max_dimension
+            || work > request.max_pixel_work
+            || work.saturating_mul(4) > request.max_output_bytes
+        {
+            return Err("host raster budget".into());
+        }
+        let mut pixels = Vec::new();
+        pixels
+            .try_reserve_exact(work as usize * 4)
+            .map_err(|_| "allocation")?;
+        let color = request
+            .object
+            .style
+            .fills()
+            .find_map(|paint| {
+                if let scene::Paint::Solid { color } = paint {
+                    Some(*color)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(Color::TRANSPARENT);
+        for y in 0..height {
+            if request.cancellation.is_cancelled() {
+                return Err("cancelled".into());
+            }
+            for x in 0..width {
+                // A real transparent aperture demonstrates that CPU paint is not fallback contours.
+                if x > width / 3 && x < width * 2 / 3 && y > height / 3 && y < height * 2 / 3 {
+                    pixels.extend_from_slice(&[0; 4]);
+                } else {
+                    let a = u16::from(color.a);
+                    pixels.extend_from_slice(&[
+                        (u16::from(color.r) * a / 255) as u8,
+                        (u16::from(color.g) * a / 255) as u8,
+                        (u16::from(color.b) * a / 255) as u8,
+                        color.a,
+                    ]);
+                }
+            }
+        }
+        Ok(Some(CustomRasterOutput {
+            width,
+            height,
+            premul_rgba: pixels,
+            local_bounds: custom.bounds,
+            pixel_work: work,
+        }))
     }
 }
 struct Widget;
@@ -171,6 +245,8 @@ impl Lab {
             let mut view =
                 SceneView::from_engine(SceneEngine::with_registry(scene, registry).unwrap(), cx);
             view.show_grid = false;
+            view.compositing_mode = SceneCompositing::OwnedCanvas;
+            view.set_custom_rasterizer("async.card", Some(Arc::new(Rasterizer)), cx);
             view.renderers.register("async.card", Renderer);
             view.register_inner_tool("sizing", "custom", |_, _, _| Widget, cx)
                 .unwrap();

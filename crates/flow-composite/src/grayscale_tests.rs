@@ -870,11 +870,20 @@ fn grayscale_svg_rejects_at_plan_before_resources_but_hidden_zero_and_noop_are_a
     );
     assert!(matches!(
         scene_units(&s, CompositeLimits::default()).unwrap()[0],
-        SceneUnit::Rejected(CompositeIssue {
-            error: CompositeError::UnsupportedShape(_),
-            ..
-        })
+        SceneUnit::Domain(_)
     ));
+    let mut budget = PixelBudget::new(CompositeLimits::default(), 17).unwrap();
+    assert_eq!(
+        rasterize(
+            &source(&s),
+            viewport(),
+            &mut budget,
+            &AtomicBool::new(false)
+        )
+        .unwrap_err(),
+        CompositeError::CustomBackendRequired("custom".into())
+    );
+    assert_eq!(budget.retained_bytes(), 17);
     s.update_object(&"custom".into(), |o| o.visible = false)
         .unwrap();
     assert!(matches!(

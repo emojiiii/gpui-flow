@@ -86,7 +86,7 @@ backend diagnostics 为 0。未运行 Windows/macOS、完整 SVG 文档、外部
 
 `display::Custom::new(kind, bounds, contours).with_data(json)` 提供业务类型标识、声明边界、可序列化的后备矢量路径与自定义属性。缺少业务 renderer 时仍能显示其后备几何；反序列化从不执行任意应用代码。
 
-宿主实现 `gpui_flow::display::DisplayRenderer`，并调用 `view.renderers.register("my.element", renderer)` 覆盖该类型的 GPUI 呈现。renderer 接收完整 `RenderObject`（世界/视口变换、继承透明度、裁切链）和 GPUI Window/App。定制 renderer 必须遵守自身声明的裁切/坐标约定。图节点对应的另一个扩展接口是 `NodeRenderer`；两者各自服务不同层。
+宿主实现 `gpui_flow::display::DisplayRenderer`，并调用 `view.renderers.register("my.element", renderer)` 覆盖该类型的 GPUI 呈现。renderer 接收完整 `RenderObject`（世界/视口变换、继承透明度、裁切链）和 GPUI Window/App。定制 renderer 必须遵守自身声明的裁切/坐标约定。 CPU隔离域另需显式注册 [CustomRasterizer](custom-element-protocol.md#explicit-custom-cpu-pixels)，不会捕获该 AnyElement 或把后备路径冒充它的像素。图节点对应的另一个扩展接口是 `NodeRenderer`；两者各自服务不同层。
 
 ## 图形编辑
 

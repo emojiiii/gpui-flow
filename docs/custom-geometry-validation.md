@@ -46,7 +46,7 @@ rewrites the document or registers a factory implicitly.
 - Editor Undo/Redo restores the exact document, live handle, geometry, hit result
   and GPUI `RenderObject` input; viewport pan/zoom composes with object transforms
 - Native renderer registration, replacement and removal are per registry
-- A required group compositing domain containing Custom rejects once, with no
+- A required group compositing domain containing Custom captures successfully, then rejects at materialization without explicit CPU inputs, with no
   native Custom or ordinary sibling fallback from inside that domain; an
   unrelated native root remains; Undo restores the original complete plan
 - OwnedCanvas rejects the complete output, including roots before/after Custom,
@@ -119,7 +119,7 @@ inner top-left, not absolute desktop coordinates.
    renderer: the same current geometry becomes cyan again.
 6. With both renderers installed, press Reject domain in view 1, wait for paint,
    then Sample twice, allowing a paint between samples. Its diamond and
-   purple sibling must both disappear and `UnsupportedShape("custom")` must be
+   purple sibling must both disappear and `CustomBackendRequired` must be
    reported for `domain`; green bar remains. View 2 remains intact. The host
    renderer count must stay equal across those post-rejection samples. Normal
    pre-rejection repaints may increment it, so do not compare against a
@@ -151,8 +151,10 @@ Record each unperformed step as unverified.
   opacity and paint capabilities themselves; registering one does not add a CPU
   pixel producer. Arbitrary widgets, resources and host renderer effects are not
   verified by this vector-body probe
-- Ordinary painted Custom remains unsupported inside required CPU or OwnedCanvas
-  domains, including Pixel erasers and Alpha/Grayscale/Clipping/ClippingPath masks.
+- Ordinary painted Custom, Pixel erasers and Alpha/Grayscale/Clipping/ClippingPath
+  masks require the separate [CPU bridge](custom-element-protocol.md#explicit-custom-cpu-pixels).
+  This native geometry probe does not register that capability and still rejects
+  complete required CPU/OwnedCanvas domains, now with `CustomBackendRequired`.
   Geometry-only Path masks and Path erasers now consume validated fallback contours;
   this does not add a native-renderer pixel producer. Empty contours mean no covered
   area, and declared bounds are never a filled substitute. Host resource preparation

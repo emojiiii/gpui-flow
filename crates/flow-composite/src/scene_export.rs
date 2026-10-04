@@ -171,6 +171,9 @@ impl SceneExportPlan {
             },
             limits,
         )?;
+        if let Some((object, _)) = source.customs().first() {
+            return Err(CompositeError::UnsupportedCustomExport(object.id.clone()));
+        }
         source.logical_camera = Some(request.scale);
         source.logical_effect_camera = Some(Affine::scale(request.scale, request.scale));
         source.canvas = Some(CanvasBackdrop {

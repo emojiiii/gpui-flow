@@ -1,7 +1,8 @@
 mod admission;
 mod background;
 use crate::{
-    CanvasBackdrop, CompositeError, CompositeLimits, DomainSource, ImageInputs, TextInputs,
+    CanvasBackdrop, CompositeError, CompositeLimits, CustomInputs, DomainSource, ImageInputs,
+    TextInputs,
     vector::{CompositeOperation, Preparation, PreparedNode, VectorPaint, VectorSource, transform},
 };
 use gpui_flow_scene::{
@@ -1500,9 +1501,35 @@ pub fn rasterize_with_inputs(
     budget: &mut PixelBudget,
     cancelled: &AtomicBool,
 ) -> Result<Option<CpuFrame>, CompositeError> {
+    rasterize_with_custom_inputs(
+        source,
+        images,
+        texts,
+        &CustomInputs::default(),
+        viewport,
+        budget,
+        cancelled,
+    )
+}
+/// Rasterize a complete domain with explicitly supplied host Custom pixels.
+/// Inputs and retained outputs share the same cumulative surface/work budget.
+pub fn rasterize_with_custom_inputs(
+    source: &DomainSource,
+    images: &ImageInputs,
+    texts: &TextInputs,
+    customs: &CustomInputs,
+    viewport: RasterViewport,
+    budget: &mut PixelBudget,
+    cancelled: &AtomicBool,
+) -> Result<Option<CpuFrame>, CompositeError> {
     let before = budget.in_use;
-    budget.reserve(images.byte_len().saturating_add(texts.byte_len()))?;
-    let result = rasterize_inner(source, images, texts, viewport, budget, cancelled);
+    budget.reserve(
+        images
+            .byte_len()
+            .saturating_add(texts.byte_len())
+            .saturating_add(customs.byte_len()),
+    )?;
+    let result = rasterize_inner(source, images, texts, customs, viewport, budget, cancelled);
     budget.in_use = before
         + result
             .as_ref()
@@ -1515,6 +1542,7 @@ fn rasterize_inner(
     source: &DomainSource,
     images: &ImageInputs,
     texts: &TextInputs,
+    customs: &CustomInputs,
     viewport: RasterViewport,
     budget: &mut PixelBudget,
     cancelled: &AtomicBool,
@@ -1565,7 +1593,7 @@ fn rasterize_inner(
         }
         prep.logical_camera = Some(camera);
     }
-    let mut root = prep.node(&source.root, budget.limits, images, texts)?;
+    let mut root = prep.node_with_custom(&source.root, budget.limits, images, texts, customs)?;
     let physical = crate::blur::PhysicalSpace {
         camera: viewport.world_to_screen,
         scale: viewport.device_scale as f64,

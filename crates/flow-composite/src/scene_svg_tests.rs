@@ -1031,7 +1031,7 @@ fn svg_failed_image_and_custom_producer_never_fall_back_to_geometry() {
         .unwrap();
     assert!(matches!(
         SceneExportPlan::new(&custom, request(), CompositeLimits::default()),
-        Err(CompositeError::UnsupportedShape(_))
+        Err(CompositeError::UnsupportedCustomExport(_))
     ));
 }
 

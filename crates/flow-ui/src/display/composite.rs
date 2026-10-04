@@ -1,8 +1,9 @@
 //! Per-SceneView CPU work queue and real GPUI image upload. No global caches.
 use gpui::{App, Bounds, Corners, RenderImage, Window, px};
 use gpui_flow_composite::{
-    CompositeError, CompositeIssue, CompositeLimits, CpuFrame, DomainSource, ImageInputs,
-    PixelBudget, RasterViewport, StaticImage, TextInputs, rasterize_with_inputs,
+    CompositeError, CompositeIssue, CompositeLimits, CpuFrame, CustomInputs, DomainSource,
+    ImageInputs, PixelBudget, RasterViewport, StaticImage, TextInputs,
+    rasterize_with_custom_inputs,
 };
 use gpui_flow_engine::{ElementHandle, SceneEngine};
 use gpui_flow_scene::DisplayId;
@@ -14,6 +15,7 @@ use std::{
     },
 };
 
+use super::composite_custom::{CustomObservation, CustomPreparation, CustomRasterizers};
 use super::composite_text::{TextBackendSnapshot, TextPreparation};
 
 const MAX_ENTRIES: usize = 8;
@@ -26,6 +28,7 @@ pub(crate) struct DomainKey {
     identities: Vec<(ElementHandle, u64)>,
     text_tickets: Vec<Option<gpui_flow_engine::ResourceTicket>>,
     images: BTreeMap<DisplayId, crate::resources::CompositeImageObservation>,
+    customs: BTreeMap<DisplayId, CustomObservation>,
 }
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct RequestKey {
@@ -64,6 +67,7 @@ impl RequestKey {
                     identities,
                     text_tickets: vec![],
                     images: BTreeMap::new(),
+                    customs: BTreeMap::new(),
                 }
             })
             .collect();
@@ -84,6 +88,35 @@ impl RequestKey {
         resources: Option<&crate::resources::SceneResourceAdapter>,
     ) -> Self {
         for domain in &mut self.domains {
+            for (object, _) in domain.source.customs() {
+                let gpui_flow_scene::Shape::Custom(custom) = &object.shape else {
+                    unreachable!()
+                };
+                let mut observation = CustomObservation {
+                    backend: None,
+                    ticket: None,
+                    cancellation: None,
+                    bytes: Ok(None),
+                };
+                match engine.registry().custom_resource_key(custom) {
+                    Ok(Some(_)) => {
+                        observation = resources
+                            .map(|r| r.composite_custom(engine, object))
+                            .unwrap_or_else(|| CustomObservation {
+                                bytes: Err(CompositeError::CustomPending(object.id.clone())),
+                                ..observation.clone()
+                            });
+                    }
+                    Err(error) => {
+                        observation.bytes = Err(CompositeError::CustomRasterization {
+                            object: object.id.clone(),
+                            reason: error.to_string(),
+                        })
+                    }
+                    Ok(None) => {}
+                }
+                domain.customs.insert(object.id.clone(), observation);
+            }
             domain.text_tickets = domain
                 .source
                 .texts()
@@ -119,6 +152,26 @@ impl RequestKey {
         }
         self
     }
+    pub fn with_custom_rasterizers(mut self, registry: &CustomRasterizers) -> Self {
+        for domain in &mut self.domains {
+            for (object, _) in domain.source.customs() {
+                let gpui_flow_scene::Shape::Custom(custom) = &object.shape else {
+                    unreachable!()
+                };
+                if let Some(observation) = domain.customs.get_mut(&object.id) {
+                    observation.backend = registry.get(&custom.kind);
+                }
+            }
+        }
+        self
+    }
+    pub fn inputs_current(&self) -> bool {
+        self.text_current()
+            && self
+                .domains
+                .iter()
+                .all(|d| d.customs.values().all(CustomObservation::current))
+    }
     pub fn with_text_backend(
         mut self,
         bridge: Option<&Arc<gpui_flow_text::GpuiTextRasterizer>>,
@@ -147,10 +200,11 @@ impl RequestKey {
         engine: &SceneEngine,
         resources: Option<&crate::resources::SceneResourceAdapter>,
         bridge: Option<&Arc<gpui_flow_text::GpuiTextRasterizer>>,
+        customs: &CustomRasterizers,
         viewport: RasterViewport,
         window: u64,
     ) -> bool {
-        self.text_current()
+        self.inputs_current()
             && self.animation_only(
                 &Self::new(
                     self.domains.iter().map(|d| d.source.clone()).collect(),
@@ -159,7 +213,8 @@ impl RequestKey {
                     window,
                 )
                 .with_resources(engine, resources)
-                .with_text_backend(bridge),
+                .with_text_backend(bridge)
+                .with_custom_rasterizers(customs),
             )
     }
     // Frame selection is soft invalidation. Everything else is semantic and
@@ -175,6 +230,7 @@ impl RequestKey {
             && self.domains.len() == other.domains.len()
             && self.domains.iter().zip(&other.domains).all(|(a, b)| {
                 a.source == b.source
+                    && a.customs == b.customs
                     && a.text_tickets == b.text_tickets
                     && a.identities == b.identities
                     && same_resources(&a.images, &b.images)
@@ -196,13 +252,15 @@ impl RequestKey {
                 .zip(other.domains.iter().find(|d| d.source.root_id() == id))
                 .is_some_and(|(a, b)| {
                     a.source == b.source
+                        && a.customs == b.customs
                         && a.text_tickets == b.text_tickets
                         && a.identities == b.identities
                         && same_resources(&a.images, &b.images)
                 })
     }
     fn same_domain_sample(&self, other: &Self, id: &DisplayId) -> bool {
-        self.text_backend == other.text_backend
+        (self.domains.iter().all(|d| d.customs.is_empty()) || self.revision == other.revision)
+            && self.text_backend == other.text_backend
             && self.engine == other.engine
             && self.layout_provider == other.layout_provider
             && self.window == other.window
@@ -212,7 +270,8 @@ impl RequestKey {
                 == other.domains.iter().find(|d| d.source.root_id() == id)
     }
     fn compatible(&self, other: &Self, id: &DisplayId) -> bool {
-        self.text_backend == other.text_backend
+        (self.domains.iter().all(|d| d.customs.is_empty()) || self.revision == other.revision)
+            && self.text_backend == other.text_backend
             && self.engine == other.engine
             && self.layout_provider == other.layout_provider
             && self.window == other.window
@@ -224,7 +283,9 @@ impl RequestKey {
                 .find(|d| d.source.root_id() == id)
                 .zip(other.domains.iter().find(|d| d.source.root_id() == id))
                 .is_some_and(|(a, b)| {
-                    a.text_tickets == b.text_tickets
+                    a.customs == b.customs
+                        && (a.customs.is_empty() || a.source == b.source)
+                        && a.text_tickets == b.text_tickets
                         && a.identities == b.identities
                         && same_resources(&a.images, &b.images)
                         && a.source.placement_eq(&b.source)
@@ -357,11 +418,26 @@ pub(crate) fn selected_image_with_limits(
     }
     let input =
         StaticImage::from_straight_bgra(size.width.0 as u32, size.height.0 as u32, data, limits)?;
-    *bytes = next;
+    let allocated = bytes
+        .checked_add(input.byte_len())
+        .ok_or(CompositeError::WorkingSetLimit)?;
+    if allocated > capacity.min(MAX_RETAINED) {
+        return Err(CompositeError::WorkingSetLimit);
+    }
+    *bytes = allocated;
     Ok(Arc::new(input))
 }
 impl Work {
     pub fn run(&self) -> WorkResult {
+        if !self.key.inputs_current() || self.cancel.load(Ordering::Acquire) {
+            return self
+                .key
+                .domains
+                .iter()
+                .filter(|d| !self.settled.contains(d.source.root_id()))
+                .map(|d| (d.source.root_id().clone(), Err(CompositeError::Superseded)))
+                .collect();
+        }
         let mut images = ImageInputs::default();
         let mut converted: BTreeMap<
             (gpui::ImageId, usize),
@@ -418,6 +494,22 @@ impl Work {
                 }
             }
         }
+        let mut customs = CustomInputs::default();
+        {
+            let mut producer = CustomPreparation {
+                viewport: self.key.viewport,
+                cancelled: &self.cancel,
+                retained: self.retained,
+                source_bytes: &mut source_bytes,
+                remaining_work: &mut remaining_work,
+                limits: CompositeLimits::default(),
+            };
+            for domain in &self.key.domains {
+                if !self.settled.contains(domain.source.root_id()) {
+                    producer.domain(&domain.source, &domain.customs, &mut customs);
+                }
+            }
+        }
         // GPUI/cache-owned decoded originals are outside this adapter's surface
         // budget. Our converted copies are charged by rasterize_with_images.
         let mut budget = match PixelBudget::new(CompositeLimits::default(), self.retained) {
@@ -454,10 +546,11 @@ impl Work {
                 let result = if index >= MAX_ENTRIES {
                     Err(CompositeError::InputLimit)
                 } else {
-                    rasterize_with_inputs(
+                    rasterize_with_custom_inputs(
                         &d.source,
                         &images,
                         &texts,
+                        &customs,
                         self.key.viewport,
                         &mut budget,
                         &self.cancel,
@@ -600,7 +693,7 @@ impl CompositeController {
     }
     pub fn take_work(&mut self) -> Option<Work> {
         let key = self.requested.as_ref()?;
-        if !key.text_current()
+        if !key.inputs_current()
             || self.running
             || !self.obsolete_uploads.is_empty()
             || self.completed.as_ref() == Some(key)
@@ -667,7 +760,7 @@ impl CompositeController {
     }
     pub fn finish(&mut self, key: Arc<RequestKey>, result: WorkResult) {
         self.running = false;
-        if !key.text_current()
+        if !key.inputs_current()
             || self.requested.as_ref() != Some(&key)
             || self.cancel.load(Ordering::Relaxed)
         {
@@ -748,9 +841,12 @@ impl CompositeController {
         self.requested.as_ref() != self.completed.as_ref()
             || self.requested.as_ref().is_some_and(|k| {
                 k.domains.iter().any(|d| {
-                    d.images
+                    d.customs
                         .values()
-                        .any(|i| matches!(i.image, Err(CompositeError::ImagePending(_))))
+                        .any(|c| matches!(c.bytes, Err(CompositeError::CustomPending(_))))
+                        || d.images
+                            .values()
+                            .any(|i| matches!(i.image, Err(CompositeError::ImagePending(_))))
                 })
             })
     }
@@ -775,7 +871,7 @@ impl CompositeController {
                 <= MAX_RETAINED
     }
     pub fn frame(&self, id: &DisplayId) -> Option<(ImageFrame, bool)> {
-        if self.requested.as_ref().is_some_and(|k| !k.text_current())
+        if self.requested.as_ref().is_some_and(|k| !k.inputs_current())
             || self.blocked_uploads.contains(id)
         {
             return None;
@@ -795,7 +891,7 @@ impl CompositeController {
         id: &DisplayId,
         image: &Arc<RenderImage>,
     ) -> Option<ImageFrame> {
-        if !key.text_current() || self.requested.as_ref() != Some(key) {
+        if !key.inputs_current() || self.requested.as_ref() != Some(key) {
             return None;
         }
         let Some(Some(candidate)) = self.candidates.get(id) else {
@@ -827,7 +923,7 @@ impl CompositeController {
             .map(|a| a.frame)
     }
     pub fn upload_failed(&mut self, key: &Arc<RequestKey>, id: &DisplayId, error: String) {
-        if !key.text_current() || self.requested.as_ref() != Some(key) {
+        if !key.inputs_current() || self.requested.as_ref() != Some(key) {
             return;
         }
         let released = self
@@ -856,14 +952,14 @@ impl CompositeController {
     /// Read only the published batch. Pending candidates cannot leak into an
     /// older native/geometry snapshot, even if one domain finishes early.
     pub fn presentation_frame(&self, key: &RequestKey, id: &DisplayId) -> Option<ImageFrame> {
-        key.text_current().then_some(())?;
+        key.inputs_current().then_some(())?;
         self.accepted
             .get(id)
             .filter(|accepted| key.same_domain_sample(&accepted.key, id))
             .map(|accepted| accepted.frame.clone())
     }
     pub fn presentation_uploads(&self, key: &Arc<RequestKey>) -> Vec<(DisplayId, ImageFrame)> {
-        if self.requested.as_ref() != Some(key) || !key.text_current() {
+        if self.requested.as_ref() != Some(key) || !key.inputs_current() {
             return vec![];
         }
         self.candidates
@@ -879,7 +975,7 @@ impl CompositeController {
         image: &Arc<RenderImage>,
     ) {
         if self.requested.as_ref() == Some(key)
-            && key.text_current()
+            && key.inputs_current()
             && self
                 .candidates
                 .get(id)
@@ -894,7 +990,7 @@ impl CompositeController {
     pub fn publish_presentation(&mut self, key: &Arc<RequestKey>) -> Option<Vec<ImageFrame>> {
         if self.requested.as_ref() != Some(key)
             || self.completed.as_ref() != Some(key)
-            || !key.text_current()
+            || !key.inputs_current()
             || !self.errors.is_empty()
             || !self.blocked_uploads.is_empty()
         {
@@ -968,9 +1064,9 @@ impl CompositeController {
         self.accepted
             .get(id)
             .filter(|a| {
-                self.requested
-                    .as_ref()
-                    .is_some_and(|k| k.compatible(&a.key, id))
+                self.requested.as_ref().is_some_and(|k| {
+                    k.inputs_current() && a.key.inputs_current() && k.compatible(&a.key, id)
+                })
             })
             .map(|a| a.frame.clone())
     }
@@ -2443,7 +2539,7 @@ mod tests {
         let result = work.run();
         assert!(result[0].1.as_ref().unwrap().is_some());
         bridge.invalidate();
-        assert!(!first.text_current());
+        assert!(!first.inputs_current());
         controller.finish(first.clone(), result);
         assert!(controller.candidates.is_empty());
         let fresh = Arc::new((*key(&e)).clone().with_text_backend(Some(&bridge)));
@@ -2867,3 +2963,6 @@ mod affine_text_tests;
 
 #[cfg(test)]
 mod presentation_tests;
+
+#[cfg(test)]
+mod custom_tests;

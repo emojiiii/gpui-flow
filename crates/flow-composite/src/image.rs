@@ -11,6 +11,7 @@ use std::{
 #[derive(Debug)]
 pub struct StaticImage {
     pub(crate) pixmap: tiny_skia::Pixmap,
+    pub(crate) allocation_bytes: u64,
 }
 impl StaticImage {
     pub fn from_straight_bgra(
@@ -40,6 +41,9 @@ impl StaticImage {
         let mut rgba = Vec::new();
         rgba.try_reserve_exact(data.len())
             .map_err(|_| CompositeError::AllocationFailed)?;
+        if rgba.capacity() as u64 > limits.max_surface_bytes {
+            return Err(CompositeError::WorkingSetLimit);
+        }
         for bgra in data.as_chunks::<4>().0 {
             let p = tiny_skia::ColorU8::from_rgba(bgra[2], bgra[1], bgra[0], bgra[3]).premultiply();
             rgba.extend_from_slice(&[p.red(), p.green(), p.blue(), p.alpha()]);
@@ -47,6 +51,7 @@ impl StaticImage {
         let size =
             tiny_skia::IntSize::from_wh(width, height).ok_or(CompositeError::InvalidImage)?;
         Ok(Self {
+            allocation_bytes: rgba.capacity() as u64,
             pixmap: tiny_skia::Pixmap::from_vec(rgba, size).ok_or(CompositeError::InvalidImage)?,
         })
     }
@@ -72,7 +77,7 @@ impl StaticImage {
         if data.len() as u64 != bytes {
             return Err(CompositeError::InvalidImage);
         }
-        if bytes > limits.max_surface_bytes {
+        if data.capacity() as u64 > limits.max_surface_bytes {
             return Err(CompositeError::WorkingSetLimit);
         }
         if data
@@ -86,6 +91,7 @@ impl StaticImage {
         let size =
             tiny_skia::IntSize::from_wh(width, height).ok_or(CompositeError::InvalidImage)?;
         Ok(Self {
+            allocation_bytes: data.capacity() as u64,
             pixmap: tiny_skia::Pixmap::from_vec(data, size).ok_or(CompositeError::InvalidImage)?,
         })
     }
@@ -95,8 +101,9 @@ impl StaticImage {
     pub fn height(&self) -> u32 {
         self.pixmap.height()
     }
+    /// Retained allocation including spare Vec capacity, not just visible pixel bytes.
     pub fn byte_len(&self) -> u64 {
-        self.pixmap.data().len() as u64
+        self.allocation_bytes
     }
     pub fn premultiplied_rgba(&self) -> &[u8] {
         self.pixmap.data()

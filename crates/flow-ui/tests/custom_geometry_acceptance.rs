@@ -200,8 +200,13 @@ fn custom_rejects_entire_required_domain_without_sibling_or_native_fallback() {
         .unwrap();
     let rejected = scene_units(editor.scene(), CompositeLimits::default()).unwrap();
     assert_eq!(rejected.len(), 2);
-    assert!(matches!(&rejected[0], SceneUnit::Rejected(issue)
-        if issue.object.as_str() == "root" && issue.error == CompositeError::UnsupportedShape("custom".into())));
+    let SceneUnit::Domain(domain) = &rejected[0] else {
+        panic!("complete pixel domain expected");
+    };
+    assert_eq!(
+        missing_pixels(domain),
+        CompositeError::CustomBackendRequired("custom".into())
+    );
     assert_eq!(rejected[1], SceneUnit::Native("outside".into()));
     // The valid document edit is kept; only output for the complete domain rejects.
     assert_eq!(
@@ -226,19 +231,37 @@ fn owned_canvas_custom_rejection_never_produces_partial_output_or_mutates_input(
     let engine = engine();
     let before = engine.scene().clone();
     let revision = engine.revision();
+    let domain = owned_canvas(
+        engine.scene(),
+        CanvasBackdrop {
+            color: Color::WHITE,
+            grid: None,
+        },
+        CompositeLimits::default(),
+    )
+    .unwrap();
     assert_eq!(
-        owned_canvas(
-            engine.scene(),
-            CanvasBackdrop {
-                color: Color::WHITE,
-                grid: None
-            },
-            CompositeLimits::default()
-        ),
-        Err(CompositeError::UnsupportedShape("custom".into()))
+        missing_pixels(&domain),
+        CompositeError::CustomBackendRequired("custom".into())
     );
     assert_eq!(engine.scene(), &before);
     assert_eq!(engine.revision(), revision);
+}
+
+fn missing_pixels(source: &DomainSource) -> CompositeError {
+    let bounds = Bounds::new(Point::ZERO, Size::new(250., 150.));
+    rasterize(
+        source,
+        RasterViewport {
+            world_to_screen: Affine::IDENTITY,
+            canvas_bounds: bounds,
+            content_mask: bounds,
+            device_scale: 1.,
+        },
+        &mut PixelBudget::new(CompositeLimits::default(), 0).unwrap(),
+        &AtomicBool::new(false),
+    )
+    .unwrap_err()
 }
 
 fn path_domain(scene: &Scene) -> DomainSource {

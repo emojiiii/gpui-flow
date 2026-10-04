@@ -135,7 +135,7 @@ Build planning allowances are estimates; actual costs belong in the execution re
 
 - No external GPUI/native backdrop erase or framebuffer readback; only supported captured parent surfaces and OwnedCanvas's explicit document/background ownership
 - Path supports geometric leaves, Group child-contour intersections and the own contours of Box/Frame/Image/Canvas; the compact `compositing` example exercises these additions. Custom uses its validated fallback contours; Text still rejects with `UnsupportedPathEraser`. There is no union-of-children, bounds-rectangle or glyph-alpha substitution
-- Custom Pixel remains an unsupported captured producer; this fixture does not install a custom renderer
+- Custom Pixel requires the separate [CPU producer bridge](custom-element-protocol.md#explicit-custom-cpu-pixels); this geometric fixture does not install one, and native renderer registration alone supplies no CPU pixels
 - Pixel Text/Image/Canvas and supported effect alpha remain covered by focused production CPU/host tests, not this initial geometric native fixture. It intentionally has no same-App text bridge and no remote image pipeline
 - No claim of upstream Leafer browser pixel equivalence, full mask layout/hit policy, grayscale/path masks, Box phase parity, pixel picking, mixed SVG erase encoding, or Canvas draw of a bare eraser root
 - No arbitrary cancellation/budget controls for a live SceneView, private controller inspection, public GPU fence, screenshot encoder, or newly invented API

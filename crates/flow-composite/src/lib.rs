@@ -2,11 +2,12 @@
 //!
 //! A domain is all-or-nothing: unsupported descendants, unsafe coordinates or
 //! exhausted budgets return an error before an output can be published. Native
-//! custom renderers must remain outside these domains. Image and text ink pixels
+//! custom renderers remain independent of explicit Custom CPU inputs. Image, Custom and text ink pixels
 //! are supplied by the host, never fetched, decoded or shaped by this crate.
 mod background;
 mod blur;
 mod canvas_surface;
+mod custom;
 mod image;
 mod nonseparable;
 mod plan;
@@ -17,6 +18,7 @@ mod shadow;
 mod text;
 mod vector;
 pub use canvas_surface::*;
+pub use custom::*;
 pub use image::*;
 pub use plan::*;
 pub use raster::*;
@@ -107,6 +109,14 @@ pub enum CompositeError {
     InvalidImage,
     ImageEncoding(String),
     TextBackendRequired(DisplayId),
+    CustomBackendRequired(DisplayId),
+    CustomPending(DisplayId),
+    CustomRasterization {
+        object: DisplayId,
+        reason: String,
+    },
+    UnsupportedCustomEffect(DisplayId),
+    UnsupportedCustomExport(DisplayId),
     UnsupportedTextStyle(DisplayId),
     TextRasterization {
         text: DisplayId,
@@ -254,3 +264,6 @@ mod background_tests;
 
 #[cfg(test)]
 mod mask_mode_tests;
+
+#[cfg(test)]
+mod custom_tests;

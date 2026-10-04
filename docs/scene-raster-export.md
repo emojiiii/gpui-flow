@@ -111,7 +111,7 @@ For already prepared inputs, `encode_with_inputs` accepts
   collection's existing accounting; cross-collection sharing is conservative
 
 Missing visible Image/Canvas inputs, failed inputs, missing text backends,
-unsupported styles, visible Custom, geometry errors, cancellation and exhausted
+unsupported styles, visible Custom pixel producers (`UnsupportedCustomExport`, even when a SceneView CPU bridge is registered), geometry errors, cancellation and exhausted
 budgets reject the entire result. Visible unsupported/missing producers outside
 the crop also reject: the full captured scene must be renderable. Invisible or
 zero-opacity subtrees follow the existing skip contract. Empty Text ink can be

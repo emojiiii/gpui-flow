@@ -290,6 +290,27 @@ impl DomainSource {
             && self.clips == other.clips
             && same(&self.root, &other.root)
     }
+    /// Visible Custom pixel producers; geometric Path operations never call a producer.
+    pub fn customs(&self) -> Vec<(&DisplayObject, Affine)> {
+        fn visit<'a>(node: &'a DomainNode, out: &mut Vec<(&'a DisplayObject, Affine)>) {
+            if !node.object.visible
+                || node.object.style.opacity == 0.
+                || node.object.mask == MaskMode::Path
+                || node.object.eraser == EraserMode::Path
+            {
+                return;
+            }
+            if matches!(node.object.shape, Shape::Custom(_)) {
+                out.push((&node.object, node.world_transform));
+            }
+            for child in &node.children {
+                visit(child, out);
+            }
+        }
+        let mut out = Vec::new();
+        visit(&self.root, &mut out);
+        out
+    }
     pub fn images(&self) -> Vec<(&DisplayId, &gpui_flow_scene::display::Image)> {
         fn visit<'a>(
             node: &'a DomainNode,
@@ -597,7 +618,15 @@ fn capture(
     if o.style.has_inner_shadows() {
         crate::shadow::validate_inner_shape(&o.id, &o.shape)?;
     }
+    if matches!(o.shape, Shape::Custom(_))
+        && (o.style.has_blur() || o.style.has_scale_fixed_strokes())
+    {
+        return Err(CompositeError::UnsupportedCustomEffect(o.id.clone()));
+    }
     let points = match &o.shape {
+        Shape::Custom(c) => c.contours.iter().fold(0usize, |count, contour| {
+            count.saturating_add(contour.points.len())
+        }),
         Shape::Path(p) => p.commands.len(),
         Shape::Pen(p) => p.path.commands.len(),
         Shape::Polygon(p) => p.points.len(),
@@ -611,7 +640,6 @@ fn capture(
         | Shape::Text(_)
         | Shape::Box(_)
         | Shape::Frame(_) => 0,
-        other => return Err(CompositeError::UnsupportedShape(other.tag().into())),
     };
     counts.points = counts.points.saturating_add(points);
     if points > limits.max_points || counts.points > limits.max_total_points {

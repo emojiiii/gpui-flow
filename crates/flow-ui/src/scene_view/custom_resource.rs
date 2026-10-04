@@ -1,5 +1,25 @@
 use super::*;
 impl SceneView {
+    /// Explicit CPU capability, independent of native DisplayRenderer. Every call,
+    /// including re-registering the same Arc, revokes all old snapshots for this kind.
+    pub fn set_custom_rasterizer(
+        &mut self,
+        kind: impl Into<String>,
+        producer: Option<std::sync::Arc<dyn crate::display::CustomRasterizer>>,
+        cx: &mut Context<Self>,
+    ) {
+        self.custom_rasterizers.set(kind.into(), producer);
+        cx.notify();
+    }
+    /// Call after host-owned producer state changes without changing scene properties.
+    pub fn invalidate_custom_rasterizer(&mut self, kind: &str, cx: &mut Context<Self>) -> bool {
+        let changed = self.custom_rasterizers.invalidate(kind);
+        if changed {
+            cx.notify();
+        }
+        changed
+    }
+
     pub fn resize_inner_tool(
         &mut self,
         token: gpui_flow_interaction::scene::ToolSessionToken,

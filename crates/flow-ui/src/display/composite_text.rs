@@ -200,14 +200,16 @@ impl TextPreparation<'_> {
                         raster.height as f32 / (self.viewport.device_scale * m.d),
                     ),
                 );
-                let bytes = raster.premul_rgba.len() as u64;
                 let image = StaticImage::from_premultiplied_rgba(
                     raster.width,
                     raster.height,
                     raster.premul_rgba,
                     self.limits,
                 )?;
-                *self.source_bytes += bytes;
+                if image.byte_len() > capacity {
+                    return Err(CompositeError::WorkingSetLimit);
+                }
+                *self.source_bytes += image.byte_len();
                 exact_local_clip = space.exact_local_clip;
                 Ok(Some(Arc::new(TextImage {
                     image: Arc::new(image),

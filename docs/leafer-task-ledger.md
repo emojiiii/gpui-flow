@@ -27,7 +27,7 @@
 | INT-06 | 交互 / [拖动约束与高级视口](drag-viewport-constraints.md) | 有界已验证 | 固定世界/父局部矩形drag bounds、可开关网格/边缘吸附、viewport min/max及惯性取消 | 固定矩形AABB及有限惯性；多指归EVT-03，无自动寻路/物理碰撞；持鼠Escape/guide像素仅模型覆盖，6个源文件仅mtime来源证据 |
 | APP-01 | 外观 / [有序填充与渐变](appearance.md) | 有界已验证 | 多层矢量fill、实色/线性/径向、多stop、透明度与缓存/DPR预算 | Text/Image多paint不在此项支持子集 |
 | APP-02 | 外观 / [高级描边](stroke-alignment.md) | 有界已验证 | cap/join/miter/dash、闭合及开放轮廓内外对齐、scale-fixed；bounds/hit/paint同源 | 有界共享mesh支持cap/join/miter/dash、闭合/开放对齐及每层scale-fixed；局部shear、模糊Y阈值、部分consumer明确拒绝，Canvas命令仍center-only；无全格式/位等价承诺 |
-| APP-03 | 外观 / [隔离混合与蒙版擦除](mask-modes.md) | 部分实现 | 组透明度/多paint隔离、固定blend集合、mask/erase覆盖关系与hit规则 | 已实现固定blend、五种mask、首marker布局/child-parent命中、Image alpha代理及预算预检、Pixel和几何leaf/Group/Box/Frame/Image/Canvas/Custom轮廓Path擦除；Text Path、Custom像素producer及任意外部backdrop仍缺 |
+| APP-03 | 外观 / [隔离混合与蒙版擦除](mask-modes.md) | 部分实现 | 组透明度/多paint隔离、固定blend集合、mask/erase覆盖关系与hit规则 | 已实现固定blend、五种mask、首marker布局/child-parent命中、Image alpha代理及预算预检、Pixel和几何leaf/Group/Box/Frame/Image/Canvas/Custom轮廓Path擦除；Custom显式CPU像素桥支持mask/Pixel擦除；Text Path及任意外部backdrop仍缺，Custom自身阴影/模糊、scale-fixed描边和像素导出不支持 |
 | APP-04 | 外观 / [阴影与固定滤镜集合](multiple-shadows.md) | 有界已验证 | 已有leaf/group inner/outer多影；必补spread/box/scale-fixed shadow、blur、backgroundBlur及grayscale并有像素/预算测试 | backgroundBlur仅可在拥有完整背景的有界surface执行；不承诺任意宿主backdrop |
 | APP-05 | 外观 / [状态样式与过渡](state-geometry.md) | 有界已验证 | hover/press/focus/selected/disabled、命名状态/继承、每态transition及geometry变化 | 固定实色/opacity、每态timing、x/y及Rect/Ellipse/Text/Image/Box/Frame尺寸；不含任意属性/rotation/scale/skew/更广插值；hard invalidation仍loading，event.local_position仍canonical |
 | APP-06 | 外观 / [GPU局部绘制后端](engine.md) | 未开始 | 后端真正消费persistent damage并有像素等价/工作量对照 | CPU dirty和damage记录已归DAT-04；GPUI当前full-frame |

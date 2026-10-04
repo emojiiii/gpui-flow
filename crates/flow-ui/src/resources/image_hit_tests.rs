@@ -683,6 +683,7 @@ fn coherent_cpu_alpha_hits_use_displayed_frame_and_reject_revoked_generation() {
         &engine,
         Some(&resources),
         None,
+        &crate::display::composite_custom::CustomRasterizers::default(),
         accepted.viewport,
         accepted.window
     ));
@@ -692,6 +693,7 @@ fn coherent_cpu_alpha_hits_use_displayed_frame_and_reject_revoked_generation() {
         &engine,
         Some(&resources),
         None,
+        &crate::display::composite_custom::CustomRasterizers::default(),
         accepted.viewport,
         accepted.window
     ));

@@ -2,11 +2,101 @@
 use gpui::{prelude::*, *};
 use gpui_flow::{
     ControlButton, SceneView, SceneViewEvent,
+    display::{CustomRasterOutput, CustomRasterRequest, CustomRasterizer},
     scene::{
         Affine, BlendMode, Bounds as SceneBounds, Color, Contour, DisplayObject, EraserMode,
         EventKind, MaskMode, Point as ScenePoint, Scene, Shape, Size, Style, display,
     },
 };
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+fn cpu_custom(size: f32) -> Shape {
+    display::Custom::new(
+        "cpu-holes",
+        SceneBounds::new(ScenePoint::ZERO, Size::new(size, size)),
+        vec![Contour {
+            closed: true,
+            points: vec![
+                ScenePoint::ZERO,
+                ScenePoint::new(size, 0.),
+                ScenePoint::new(size, size),
+                ScenePoint::new(0., size),
+            ],
+        }],
+    )
+    .into()
+}
+struct HoleRasterizer(Arc<AtomicBool>);
+impl CustomRasterizer for HoleRasterizer {
+    fn rasterize(
+        &self,
+        request: CustomRasterRequest<'_>,
+    ) -> Result<Option<CustomRasterOutput>, String> {
+        let Shape::Custom(custom) = &request.object.shape else {
+            return Err("expected Custom".into());
+        };
+        let Some(color) = request.object.style.fills().find_map(|p| {
+            if let gpui_flow::scene::Paint::Solid { color } = p {
+                Some(*color)
+            } else {
+                None
+            }
+        }) else {
+            return Ok(None);
+        };
+        let scale = request.world_transform.max_scale()
+            * request.viewport.world_to_screen.max_scale()
+            * request.viewport.device_scale;
+        let width = (custom.bounds.size.width * scale).ceil().max(1.) as u32;
+        let height = (custom.bounds.size.height * scale).ceil().max(1.) as u32;
+        let pixels = u64::from(width) * u64::from(height);
+        if width > request.limits.max_dimension
+            || height > request.limits.max_dimension
+            || pixels > request.max_pixel_work
+            || pixels.saturating_mul(4) > request.max_output_bytes
+        {
+            return Err("host raster budget".into());
+        }
+        let mut rgba = Vec::new();
+        rgba.try_reserve_exact(pixels as usize * 4)
+            .map_err(|_| "allocation")?;
+        let center = if self.0.load(Ordering::Acquire) {
+            0.65
+        } else {
+            0.35
+        };
+        let a = u16::from(color.a);
+        let ink = [
+            (u16::from(color.r) * a / 255) as u8,
+            (u16::from(color.g) * a / 255) as u8,
+            (u16::from(color.b) * a / 255) as u8,
+            color.a,
+        ];
+        for y in 0..height {
+            if request.cancellation.is_cancelled() {
+                return Err("cancelled".into());
+            }
+            for x in 0..width {
+                let dx = x as f32 / width as f32 - center;
+                let dy = y as f32 / height as f32 - 0.5;
+                rgba.extend_from_slice(if dx * dx + dy * dy < 0.18 * 0.18 {
+                    &[0; 4]
+                } else {
+                    &ink
+                });
+            }
+        }
+        Ok(Some(CustomRasterOutput {
+            width,
+            height,
+            premul_rgba: rgba,
+            local_bounds: custom.bounds,
+            pixel_work: pixels,
+        }))
+    }
+}
 fn custom_diamond(size: f32) -> Shape {
     display::Custom::new(
         "path-contour",
@@ -86,6 +176,12 @@ fn document() -> Scene {
             .with_style(Style::fill(Color::hex(0x4060ff))),
         "mask",
     );
+    let mut pixel_cut = DisplayObject::new("cpu-pixel-cut", cpu_custom(180.))
+        .with_transform(Affine::translation(55., 35.))
+        .with_style(Style::fill(Color::WHITE))
+        .with_eraser(EraserMode::Pixel);
+    pixel_cut.visible = false;
+    add(pixel_cut, "mask");
     let mut path_cut = DisplayObject::new("path-cut", display::Group::new())
         .with_transform(Affine::translation(70., 60.))
         .with_eraser(EraserMode::Path);
@@ -137,12 +233,20 @@ struct Lab {
     view: Entity<SceneView>,
     _events: Subscription,
     last_hit: String,
+    cpu_enabled: bool,
+    cpu_shift: Arc<AtomicBool>,
 }
 impl Lab {
     fn new(cx: &mut Context<Self>) -> Self {
+        let cpu_shift = Arc::new(AtomicBool::new(false));
         let view = cx.new(|cx| {
             let mut v = SceneView::new(document(), cx).unwrap();
             v.show_grid = false;
+            v.set_custom_rasterizer(
+                "cpu-holes",
+                Some(Arc::new(HoleRasterizer(cpu_shift.clone()))),
+                cx,
+            );
             v.set_editable(false, cx);
             v
         });
@@ -160,9 +264,57 @@ impl Lab {
         });
         Self {
             view,
+            cpu_enabled: true,
+            cpu_shift,
             _events: events,
             last_hit: "Click the masked content to inspect the routed target".into(),
         }
+    }
+    fn cpu_mode(&mut self, pixel: bool, cx: &mut Context<Self>) {
+        self.view.update(cx, |view, cx| {
+            view.editor
+                .transaction(|scene| {
+                    scene.update_object(&"ellipse-mask".into(), |o| {
+                        o.shape = cpu_custom(240.);
+                        o.style.fill = Some(Color::WHITE.into());
+                        o.style.opacity = 1.;
+                        o.visible = !pixel;
+                        o.mask = if pixel {
+                            MaskMode::None
+                        } else {
+                            MaskMode::Alpha
+                        };
+                    })?;
+                    scene.update_object(&"cpu-pixel-cut".into(), |o| o.visible = pixel)?;
+                    Ok(())
+                })
+                .unwrap();
+            eprintln!(
+                "Custom CPU mode={}",
+                if pixel { "Pixel eraser" } else { "Alpha mask" }
+            );
+            cx.notify();
+        });
+        cx.notify();
+    }
+    fn toggle_cpu(&mut self, cx: &mut Context<Self>) {
+        self.cpu_enabled = !self.cpu_enabled;
+        let producer = self
+            .cpu_enabled
+            .then(|| Arc::new(HoleRasterizer(self.cpu_shift.clone())) as Arc<dyn CustomRasterizer>);
+        self.view.update(cx, |v, cx| {
+            v.set_custom_rasterizer("cpu-holes", producer, cx)
+        });
+        eprintln!("Custom CPU producer enabled={}", self.cpu_enabled);
+        cx.notify();
+    }
+    fn invalidate_cpu(&mut self, cx: &mut Context<Self>) {
+        self.cpu_shift.fetch_xor(true, Ordering::AcqRel);
+        self.view.update(cx, |v, cx| {
+            v.invalidate_custom_rasterizer("cpu-holes", cx);
+        });
+        eprintln!("Custom CPU aperture shifted; producer invalidated");
+        cx.notify();
     }
     fn toggle_erasers(&mut self, cx: &mut Context<Self>) {
         self.view.update(cx, |view, cx| {
@@ -281,6 +433,12 @@ impl Render for Lab {
                 .child(ControlButton::new("hit-children", "Hit children").on_click(cx.listener(|this,_,_,cx|this.edit("mask",|o|o.hit_children = !o.hit_children,cx))))
                 .child(ControlButton::new("custom-mask", "Custom Path mask").on_click(cx.listener(|this,_,_,cx|this.toggle_custom_mask(cx))))
                 .child(div().text_sm().child(status)))
+            .child(div().h(px(44.)).px_4().flex().items_center().gap_2()
+                .child(ControlButton::new("cpu-alpha", "CPU Alpha holes").on_click(cx.listener(|this,_,_,cx|this.cpu_mode(false,cx))))
+                .child(ControlButton::new("cpu-pixel", "CPU Pixel holes").on_click(cx.listener(|this,_,_,cx|this.cpu_mode(true,cx))))
+                .child(ControlButton::new("cpu-enabled", "CPU on / off").on_click(cx.listener(|this,_,_,cx|this.toggle_cpu(cx))))
+                .child(ControlButton::new("cpu-invalidate", "Shift + invalidate").on_click(cx.listener(|this,_,_,cx|this.invalidate_cpu(cx))))
+                .child(div().text_sm().child(format!("CPU bridge={} · {:?}",self.cpu_enabled,self.view.read(cx).composite_diagnostics))))
             .child(div().flex_1().min_h_0().overflow_hidden().child(self.view.clone()))
             .child(div().h(px(64.)).px_4().flex().flex_col().text_sm().child(hit_status).child("Alpha/Grayscale use paint; Path uses geometry. Hide the sole marker to restore ordinary content bounds. Undo restores edits."))
     }
@@ -294,7 +452,7 @@ fn main() {
                 WindowOptions {
                     window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
                         None,
-                        size(px(1040.), px(620.)),
+                        size(px(1160.), px(690.)),
                         cx,
                     ))),
                     ..Default::default()

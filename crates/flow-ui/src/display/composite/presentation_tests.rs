@@ -185,7 +185,14 @@ fn coherent_key_rejects_canonical_owner_viewport_resource_and_destroy_changes() 
     let mut engine = engine();
     let first = key(&engine);
     let current = |engine: &SceneEngine, key: &RequestKey| {
-        key.presentation_current(engine, None, None, key.viewport, key.window)
+        key.presentation_current(
+            engine,
+            None,
+            None,
+            &CustomRasterizers::default(),
+            key.viewport,
+            key.window,
+        )
     };
     assert!(current(&engine, &first));
     let other_engine = SceneEngine::new(engine.scene().clone()).unwrap();
@@ -202,9 +209,23 @@ fn coherent_key_rejects_canonical_owner_viewport_resource_and_destroy_changes() 
             2 => viewport.content_mask.size.height -= 1.,
             _ => viewport.device_scale = 2.,
         }
-        assert!(!first.presentation_current(&engine, None, None, viewport, first.window));
+        assert!(!first.presentation_current(
+            &engine,
+            None,
+            None,
+            &CustomRasterizers::default(),
+            viewport,
+            first.window
+        ));
     }
-    assert!(!first.presentation_current(&engine, None, None, first.viewport, first.window + 1));
+    assert!(!first.presentation_current(
+        &engine,
+        None,
+        None,
+        &CustomRasterizers::default(),
+        first.viewport,
+        first.window + 1
+    ));
     engine
         .transaction(|scene| scene.update_object(&"r".into(), |object| object.style.opacity = 0.7))
         .unwrap();

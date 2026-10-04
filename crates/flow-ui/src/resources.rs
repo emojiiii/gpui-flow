@@ -268,6 +268,38 @@ impl SceneResourceAdapter {
             .then(|| self.custom.bytes(ticket))
             .flatten()
     }
+    pub(crate) fn composite_custom(
+        &self,
+        engine: &SceneEngine,
+        object: &gpui_flow_scene::DisplayObject,
+    ) -> crate::display::composite_custom::CustomObservation {
+        use crate::display::composite_custom::CustomObservation;
+        use gpui_flow_composite::CompositeError;
+        let ticket = engine
+            .handle(&object.id)
+            .and_then(|h| self.tracker.ticket(engine, h));
+        let cancellation = ticket.and_then(|t| self.tracker.cancellation_token(engine, t));
+        let bytes = match ticket.and_then(|t| self.tracker.state(engine, t).map(|state| (t, state)))
+        {
+            Some((ticket, ResourceState::Loaded)) => self
+                .custom
+                .bytes(ticket)
+                .map(Some)
+                .ok_or_else(|| CompositeError::CustomPending(object.id.clone())),
+            Some((_, ResourceState::Failed(reason))) => Err(CompositeError::CustomRasterization {
+                object: object.id.clone(),
+                reason,
+            }),
+            Some((_, ResourceState::Cancelled(_))) => Err(CompositeError::Superseded),
+            _ => Err(CompositeError::CustomPending(object.id.clone())),
+        };
+        CustomObservation {
+            backend: None,
+            ticket,
+            cancellation,
+            bytes,
+        }
+    }
     pub fn image_load_event(
         &self,
         engine: &SceneEngine,

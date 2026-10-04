@@ -40,8 +40,10 @@ impl CanvasSurface {
         let [w, h] = config
             .pixel_size()
             .map_err(CompositeError::InvalidGeometry)?;
+        let pixmap = allocate(w, h, limits, 0)?;
         let pixels = Arc::new(StaticImage {
-            pixmap: allocate(w, h, limits, 0)?,
+            allocation_bytes: pixmap.data().len() as u64,
+            pixmap,
         });
         Ok(Self {
             config,
@@ -104,7 +106,10 @@ impl CanvasSurface {
             .ok_or(CompositeError::WorkLimit)
     }
     fn publish(&mut self, pixmap: Pixmap, generation: u64) {
-        self.pixels = Arc::new(StaticImage { pixmap });
+        self.pixels = Arc::new(StaticImage {
+            allocation_bytes: pixmap.data().len() as u64,
+            pixmap,
+        });
         self.generation = generation;
     }
     fn scale(&self) -> Affine {

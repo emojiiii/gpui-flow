@@ -47,7 +47,8 @@ impl SceneView {
                 window.window_handle().window_id().as_u64(),
             )
             .with_resources(&self.editor.engine, self.resources.as_ref())
-            .with_text_backend(self.text_rasterizer.as_ref()),
+            .with_text_backend(self.text_rasterizer.as_ref())
+            .with_custom_rasterizers(&self.custom_rasterizers),
         );
         Some(key)
     }
@@ -97,7 +98,7 @@ impl SceneView {
         canvas(
             |_, _, _| (),
             move |bounds, _, window, cx| {
-                if !key.text_current()
+                if !key.inputs_current()
                     || window.window_handle().window_id().as_u64() != key.window
                     || geometry(bounds, viewport, window) != key.viewport
                 {
@@ -116,7 +117,15 @@ impl SceneView {
                                 .presentation_frame(&key, &id)
                                 .map(|frame| (frame, false, None));
                         }
-                        if this.compositing.requested.as_ref() != Some(&key) {
+                        if !key.presentation_current(
+                            &this.editor.engine,
+                            this.resources.as_ref(),
+                            this.text_rasterizer.as_ref(),
+                            &this.custom_rasterizers,
+                            key.viewport,
+                            key.window,
+                        ) || this.compositing.requested.as_ref() != Some(&key)
+                        {
                             return None;
                         }
                         this.compositing.frame(&id).map(|(frame, candidate)| {

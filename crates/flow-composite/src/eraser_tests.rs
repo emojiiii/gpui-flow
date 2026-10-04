@@ -1074,18 +1074,37 @@ fn custom_contours_never_admit_a_painted_cpu_producer() {
         insert(&mut s, rect("later", 0., 0., 40., 40., Color::WHITE), "g");
         let before = s.clone();
         let units = scene_units(&s, CompositeLimits::default()).unwrap();
-        assert!(matches!(&units[..], [SceneUnit::Rejected(issue)]
-            if issue.object == "g".into() && issue.error == CompositeError::UnsupportedShape("custom".into())));
+        let [SceneUnit::Domain(domain)] = &units[..] else {
+            panic!("Custom pixel domain expected");
+        };
         assert_eq!(
-            owned_canvas(
-                &s,
-                CanvasBackdrop {
-                    color: Color::WHITE,
-                    grid: None
-                },
-                CompositeLimits::default()
-            ),
-            Err(CompositeError::UnsupportedShape("custom".into()))
+            rasterize(
+                domain,
+                viewport(),
+                &mut PixelBudget::new(CompositeLimits::default(), 0).unwrap(),
+                &AtomicBool::new(false)
+            )
+            .unwrap_err(),
+            CompositeError::CustomBackendRequired("custom".into())
+        );
+        let canvas = owned_canvas(
+            &s,
+            CanvasBackdrop {
+                color: Color::WHITE,
+                grid: None,
+            },
+            CompositeLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            rasterize(
+                &canvas,
+                viewport(),
+                &mut PixelBudget::new(CompositeLimits::default(), 0).unwrap(),
+                &AtomicBool::new(false)
+            )
+            .unwrap_err(),
+            CompositeError::CustomBackendRequired("custom".into())
         );
         assert_eq!(s, before);
     }

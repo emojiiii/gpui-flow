@@ -1,4 +1,6 @@
-use crate::{CompositeError, CompositeLimits, DomainNode, ImageInputs, StaticImage, TextInputs};
+use crate::{
+    CompositeError, CompositeLimits, CustomInputs, DomainNode, ImageInputs, StaticImage, TextInputs,
+};
 use gpui_flow_scene::{
     Affine, BlendMode, ClipRegion, EraserMode, FillRule, MaskMode, Paint, Shape,
     display::PathCommand,
@@ -428,6 +430,7 @@ impl Preparation {
         out.push(paint);
         Ok(())
     }
+    #[cfg(test)]
     pub fn node(
         &mut self,
         source: &DomainNode,
@@ -435,14 +438,26 @@ impl Preparation {
         images: &ImageInputs,
         texts: &TextInputs,
     ) -> Result<PreparedNode, CompositeError> {
-        self.node_at(source, limits, images, texts, 0, false)
+        self.node_with_custom(source, limits, images, texts, &CustomInputs::default())
     }
+    pub fn node_with_custom(
+        &mut self,
+        source: &DomainNode,
+        limits: CompositeLimits,
+        images: &ImageInputs,
+        texts: &TextInputs,
+        customs: &CustomInputs,
+    ) -> Result<PreparedNode, CompositeError> {
+        self.node_at(source, limits, images, texts, customs, 0, false)
+    }
+    #[allow(clippy::too_many_arguments)]
     fn node_at(
         &mut self,
         source: &DomainNode,
         limits: CompositeLimits,
         images: &ImageInputs,
         texts: &TextInputs,
+        customs: &CustomInputs,
         depth: usize,
         reference_required: bool,
     ) -> Result<PreparedNode, CompositeError> {
@@ -695,7 +710,34 @@ impl Preparation {
         let mut paints = Vec::new();
         let mut fill_count = 0;
         let mut image_paint = None;
-        if matches!(object.shape, Shape::Text(_)) {
+        if let Shape::Custom(custom) = &object.shape {
+            if object.style.has_blur() || object.style.has_scale_fixed_strokes() {
+                return Err(CompositeError::UnsupportedCustomEffect(object.id.clone()));
+            }
+            if let Some(ink) = customs.get(&object.id)? {
+                ink.validate(custom.bounds, limits)?;
+                let b = ink.local_bounds;
+                let rect =
+                    tiny_skia::Rect::from_xywh(b.origin.x, b.origin.y, b.size.width, b.size.height)
+                        .ok_or_else(|| {
+                            CompositeError::InvalidGeometry("custom ink bounds".into())
+                        })?;
+                let path = PathBuilder::from_rect(rect);
+                self.add_path(&path, source.world_transform, limits)?;
+                image_paint = Some(ImagePaint {
+                    own_clip: None,
+                    smooth: true,
+                    texture_to_local: Affine::translation(b.origin.x, b.origin.y)
+                        * Affine::scale(
+                            b.size.width / ink.image.width() as f32,
+                            b.size.height / ink.image.height() as f32,
+                        ),
+                    image: ink.image.clone(),
+                    path,
+                    world: source.world_transform,
+                });
+            }
+        } else if matches!(object.shape, Shape::Text(_)) {
             // A complete narrow subset. Never silently ignore unsupported paint.
             if object.style.strokes().next().is_some()
                 || object.style.fills().count() > 1
@@ -888,7 +930,17 @@ impl Preparation {
         let children = source
             .children
             .iter()
-            .map(|child| self.node_at(child, limits, images, texts, depth + 1, reference_required))
+            .map(|child| {
+                self.node_at(
+                    child,
+                    limits,
+                    images,
+                    texts,
+                    customs,
+                    depth + 1,
+                    reference_required,
+                )
+            })
             .collect::<Result<_, _>>()?;
         let mut children_bounds = self.bounds.take();
         if child_clip.is_some() {

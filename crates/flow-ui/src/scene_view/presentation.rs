@@ -35,7 +35,7 @@ pub(super) fn view_matches(
     actual: gpui_flow_composite::RasterViewport,
     window: u64,
 ) -> bool {
-    key.text_current() && key.window == window && key.viewport == actual
+    key.inputs_current() && key.window == window && key.viewport == actual
 }
 fn upload_container(upload: impl IntoElement) -> gpui::Div {
     // Div supplies opacity to all descendants even at fractional origin/DPR.
@@ -121,6 +121,7 @@ impl SceneView {
                 &self.editor.engine,
                 self.resources.as_ref(),
                 self.text_rasterizer.as_ref(),
+                &self.custom_rasterizers,
                 viewport,
                 snapshot.key.window,
             )
