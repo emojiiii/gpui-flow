@@ -295,13 +295,11 @@ impl SceneView {
         };
         let focused = input.state.read(cx).focus_handle(cx).is_focused(window)
             || input.panel_focus.contains_focused(window, cx);
-        // Explicit policy for closing mid-composition: commit retains latest
-        // visible preedit; cancel restores the session baseline. Do not ask a
-        // dropped platform callback to complete a replacement session.
-        let value = input.state.update(cx, |state, cx| {
-            state.unmark_text(window, cx);
-            state.value().to_string()
-        });
+        // Commit retains visible preedit; cancel restores the session baseline.
+        // A rejected close must keep the mark and local undo transaction intact:
+        // the next IME commit still needs to replace that range, not the caret.
+        let state = input.state.clone();
+        let value = state.read(cx).value().to_string();
         let before = self.editor.engine.revision();
         let result = if let Some(tools) = &mut self.tools {
             if cancel {
@@ -343,6 +341,9 @@ impl SceneView {
             }
         };
         if self.text_input.is_none() {
+            // Only the discarded input is unmarked. This is local cleanup, not
+            // an OS-level reset or a guarantee about later platform callbacks.
+            state.update(cx, |state, cx| state.unmark_text(window, cx));
             self.semantic_text_closed(focused);
             if focused {
                 window.focus(&self.focus, cx);
@@ -512,3 +513,7 @@ impl SceneView {
         )
     }
 }
+
+#[cfg(all(test, target_os = "linux"))]
+#[path = "text_edit_native_tests.rs"]
+mod native_tests;

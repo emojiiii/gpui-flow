@@ -87,7 +87,7 @@ CI 配置目标为 Ubuntu 24.04、macOS 15 和 Windows（windows-latest / MSVC�
 
 ## 程序焦点边界
 
-已有显式/队列focus、不可取消Blur/Focus通知、related target和GPUI一次同步，不包含Tab遍历、焦点圈规则、IME/可访问性、自动waitLeafer挂载等待或操作系统激活。256动作预算终止监听器焦点循环；详见[focus-routing.md](focus-routing.md)
+已有显式/队列focus、不可取消Blur/Focus通知、related target和GPUI一次同步；可选[场景语义导航](scene-accessibility.md)提供有界语义树、Tab遍历与焦点圈，真实AT操作和平台IME候选仍未完整验证。不包含自动waitLeafer挂载等待或操作系统激活。256动作预算终止监听器焦点循环；详见[focus-routing.md](focus-routing.md)
 
 反向行/列与反向换行已支持；其语义是遍历/行序反转，坐标轴起点仍由正常justify/align决定。已有独立flow-text/GPUI纯文本内在测量；新Taffy 0.13.0私有适配器处理普通行内grow/间距/安全对齐/stretch，保留Flow分行、reverse、所有权/事务及f64数值域fallback。13项兼容回归及既有自动尺寸/响应布局测试通过；任意输入收敛、舍入等价和大规模性能仍无保证。仍没有CSS flex-shrink、百分比尺寸或完整富文本排版；upstream shrinkContent指padding内容bounds处理。
 

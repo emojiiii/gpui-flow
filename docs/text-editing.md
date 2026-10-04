@@ -72,10 +72,13 @@ remeasure as part of the same ordinary engine change.
   retains ownership of the released view
 
 Kit may keep preedit local without a Change notification during IME composition.
-A programmatic switch to another target is rejected while a marked range exists;
-finish the composition first. Done/blur explicitly unmarks the Kit state and keeps its latest
-visible value, including preedit. Escape/Cancel unmarks and rolls back the whole
-session. An allowed target switch flushes the old input before replacing it and emits a
+A programmatic switch to another Text, custom/outer tool or Image crop editor is
+rejected while a marked range exists; finish the composition first. Done/blur
+keeps the latest visible value, including preedit. Escape/Cancel rolls back the
+whole session. The input is unmarked only when that session is actually discarded;
+a rejected close preserves its marked range, selection and local undo transaction
+so the next candidate commit can still replace the preedit. An allowed target
+switch flushes the old input before replacing it and emits a
 document-change event for the flush. This policy does not promise that the
 platform chose a conversion candidate. Local `unmark_text` is not an OS-level IME
 reset: late native commits are routed by the platform's current input handler,
@@ -151,6 +154,22 @@ The executable example is `cargo run --locked -p flow-studio --bin text_editing`
 Optional `-- --trace` logs lifecycle metadata and change notifications, not text
 contents. The headless API example is
 `cargo run --locked --manifest-path docs/examples/Cargo.toml --bin text_editing`.
+
+A private Linux adapter regression uses a real Window and the locked Kit
+Textarea's `EntityInputHandler` to script Unicode preedit, rejected Done/blur,
+candidate replacement, successful Done/Cancel, crop switching and single-step
+history. It is ignored by default because it opens a native window, then quits
+automatically. Run it on a desktop with:
+
+```bash
+cargo test --locked -p gpui-flow --lib scene_view::text_edit::native_tests::ime_close_rejection_and_crop_switch -- --exact --ignored --test-threads=1 --nocapture
+```
+
+These are scripted adapter calls, not OS input-method candidate delivery; they
+do not verify candidate popups or platform reset behavior.
+On 2026-10-04 the Linux desktop run passed all assertions and exited 0 (one
+adapter test); the UI library/test build, strict Clippy and formatting also
+passed. No input-method engine was installed for native candidate testing.
 
 Not verified here: real native IME/candidate interactions (including programmatic
 composition interruption), arbitrary host normalization policies in a native

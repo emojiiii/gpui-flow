@@ -87,7 +87,7 @@ impl SceneView {
                 "crop target is locked or non-invertible".into(),
             ));
         }
-        self.finish_text_editor(window, cx);
+        self.flush_text_for_tool_switch(window, cx)?;
         if self.inner_tool_active() {
             return Err(SceneInteractionError::InvalidInput(
                 "finish text composition before cropping".into(),
