@@ -267,11 +267,7 @@ impl TextMeasurer for Metrics {
         } else {
             40.
         };
-        let lines = if r.wrap_width.is_some_and(|w| w < width) {
-            2
-        } else {
-            1
-        };
+        let lines = r.paragraph_breaks() + 1 + usize::from(r.wrap_width.is_some_and(|w| w < width));
         Ok(TextMetrics {
             width: r.wrap_width.map_or(width, |w| w.min(width)),
             height: r.block_height(lines),
@@ -345,6 +341,45 @@ fn baseline_respects_padding_scale_and_reverse() {
     assert_eq!(pos(&scene, "b"), Point::new(5., 5.));
     assert_eq!(pos(&scene, "a"), Point::new(85., 20.));
     assert_eq!(size(&scene, "root").height, 80.);
+}
+#[test]
+fn autowidth_baseline_includes_fixed_height_slack_padding_and_scale() {
+    for height in [30., 90.] {
+        for (align, factor) in [
+            (display::TextVerticalAlign::Top, 0.),
+            (display::TextVerticalAlign::Middle, 0.5),
+            (display::TextVerticalAlign::Bottom, 1.),
+        ] {
+            let (mut scene, mut layout, metrics) = texts();
+            layout.texts.insert("a".into(), TextSizing::AutoWidth);
+            scene
+                .update_object(&"a".into(), |o| {
+                    o.transform = Affine::scale(2., 2.);
+                    let Shape::Text(t) = &mut o.shape else {
+                        panic!()
+                    };
+                    t.content = "a\n".into();
+                    t.para_spacing = 7.;
+                    t.size.height = height;
+                    t.padding = [3., 5., 7., 11.];
+                    t.vertical_align = align;
+                    t.auto_size_align = true;
+                    t.align = display::TextAlign::Center;
+                })
+                .unwrap();
+            let measured = layout.with_text_measurer(metrics);
+            measured.apply_to_scene(&mut scene).unwrap();
+            // Two 20-unit lines + one 7-unit paragraph gap; excess is clipped
+            // without a negative alignment offset when the fixed box is short.
+            let offset = (height - 10. - 47.).max(0.) * factor;
+            let baseline = (3. + offset + 15.) * 2.;
+            assert_eq!(size(&scene, "a"), Size::new(56., height));
+            assert_eq!(pos(&scene, "a").y, 5.);
+            assert_eq!(pos(&scene, "b").y, 5. + baseline - 12.);
+            assert_eq!(pos(&scene, "a").y + baseline, pos(&scene, "b").y + 12.);
+            assert!(measured.arranged(&scene).unwrap().1.changed.is_empty());
+        }
+    }
 }
 #[test]
 fn wrapped_baselines_have_independent_origins() {

@@ -302,7 +302,7 @@ impl FlowLayout {
                         &baselines,
                     )?;
                 }
-                // Parent width allocation can change wrapping; settle text again
+                // Parent inline-axis allocation can change wrapping; settle text again
                 // before measuring the next candidate pass.
                 text::measure(&mut next, &texts, measurer)?;
                 report.passes = pass + 1;

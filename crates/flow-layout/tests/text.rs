@@ -26,6 +26,14 @@ impl TextMeasurer for FixtureMetrics {
                     lines: 0,
                 });
             }
+            5 => {
+                return Ok(TextMetrics {
+                    width: 40.,
+                    height: r.line_height * 2.,
+                    line_height: r.line_height,
+                    lines: 2,
+                });
+            }
             _ => {}
         }
         // Known fixture outcomes; this is deliberately not a text-width algorithm.
@@ -64,7 +72,7 @@ fn fixture(sizing: TextSizing) -> (Scene, FlowLayout, Arc<FixtureMetrics>) {
     let mut text = display::Text::new("fixture", Size::new(80., 50.));
     text.font_size = 20.;
     text.line_height = 1.5;
-    text.wrap = sizing != TextSizing::Natural;
+    text.wrap = sizing == TextSizing::AutoHeight;
     scene
         .insert(DisplayObject::new("text", text), Some("frame".into()), None)
         .unwrap();
@@ -559,5 +567,36 @@ fn failed_text_measurement_preserves_owned_edit_and_last_accepted_content() {
     backend.mode.store(0, Ordering::SeqCst);
     assert!(editor.cancel_edit_session(token));
     assert_eq!(text(editor.scene()).content, "fixture");
+    assert!(!editor.undo());
+}
+
+#[test]
+fn horizontal_autowidth_keeps_height_handles_empty_text_and_rejects_extra_backend_lines() {
+    let (mut scene, layout, backend) = fixture(TextSizing::AutoWidth);
+    let measured = layout.with_text_measurer(backend.clone());
+    for (content, width) in [
+        ("fixture", 40.),
+        ("long fixture", 120.),
+        ("", 1.),
+        ("fixture\n", 40.),
+    ] {
+        edit(&mut scene, |t| t.content = content.into()).unwrap();
+        measured.apply_to_scene(&mut scene).unwrap();
+        assert_eq!(text(&scene).size, Size::new(width, 50.));
+        assert_eq!(height(&scene), 70.);
+        assert!(measured.arranged(&scene).unwrap().1.changed.is_empty());
+    }
+    let mut editor = SceneEditor::new(scene.clone()).unwrap();
+    let revision = editor.engine.revision();
+    backend.mode.store(5, Ordering::SeqCst);
+    assert!(
+        measured
+            .transaction_editor(&mut editor, |s| edit(s, |t| t.content = "fixture".into()))
+            .unwrap_err()
+            .to_string()
+            .contains("backend metrics disagree")
+    );
+    assert_eq!(editor.scene(), &scene);
+    assert_eq!(editor.engine.revision(), revision);
     assert!(!editor.undo());
 }

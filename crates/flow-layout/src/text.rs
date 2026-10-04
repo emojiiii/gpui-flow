@@ -9,14 +9,24 @@ use std::{
     sync::Arc,
 };
 
-/// Natural measures an unwrapped width and height. AutoHeight preserves the
-/// physical fixed/parent-allocated width. Horizontal modes use Text.wrap at
-/// that width; vertical modes support AutoHeight only with wrap=false.
+/// Natural measures both physical axes without wrapping. AutoHeight preserves
+/// fixed/parent-allocated width; AutoWidth preserves fixed/parent-allocated
+/// height. Wrapping is allowed only when measurement does not own the inline
+/// axis: horizontal AutoHeight or vertical AutoWidth.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TextSizing {
     Natural,
     AutoHeight,
+    AutoWidth,
+}
+impl TextSizing {
+    fn owns_width(self) -> bool {
+        self != Self::AutoHeight
+    }
+    fn owns_height(self) -> bool {
+        self != Self::AutoWidth
+    }
 }
 // Compatibility exports: the measurement contract lives in the standalone crate.
 pub use gpui_flow_text::{TextMeasureRequest, TextMeasurer, TextMetrics};
@@ -33,6 +43,12 @@ pub(super) fn validate(layout: &FlowLayout, scene: &Scene) -> Result<(), FlowErr
             return Err(invalid(
                 id,
                 "vertical AutoHeight requires wrap=false; measured height cannot also be its wrap axis",
+            ));
+        }
+        if *sizing == TextSizing::AutoWidth && !text.writing_mode.is_vertical() && text.wrap {
+            return Err(invalid(
+                id,
+                "horizontal AutoWidth requires wrap=false; measured width cannot also be its wrap axis",
             ));
         }
         if *sizing == TextSizing::Natural && text.wrap {
@@ -58,7 +74,7 @@ pub(super) fn validate(layout: &FlowLayout, scene: &Scene) -> Result<(), FlowErr
                 || item.height_percent.is_some()
                 || item.min_height.is_some()
                 || item.max_height.is_some();
-            if height || (*sizing == TextSizing::Natural && width) {
+            if (sizing.owns_height() && height) || (sizing.owns_width() && width) {
                 return Err(invalid(
                     id,
                     "measured text dimension is also allocated by its parent",
@@ -90,6 +106,9 @@ pub(super) fn measure(
         metrics.validate().map_err(|e| invalid(id, e))?;
         let expected_height = request.block_height(metrics.lines);
         if metrics.lines <= request.paragraph_breaks()
+            || (*sizing == TextSizing::AutoWidth
+                && !text.writing_mode.is_vertical()
+                && metrics.lines != request.paragraph_breaks() + 1)
             || metrics.line_height != request.line_height
             || !expected_height.is_finite()
             || ((if text.writing_mode.is_vertical() {
@@ -106,10 +125,12 @@ pub(super) fn measure(
             ));
         }
         let mut size = text.size;
-        if *sizing == TextSizing::Natural {
+        if sizing.owns_width() {
             size.width = metrics.width.max(1.) + text.padding[1] + text.padding[3];
         }
-        size.height = metrics.height + text.padding[0] + text.padding[2];
+        if sizing.owns_height() {
+            size.height = metrics.height + text.padding[0] + text.padding[2];
+        }
         let origin = if text.auto_size_align {
             use gpui_flow_scene::display::{TextAlign, TextVerticalAlign};
             let inline_origin = |content: f32, outer: f32, leading: f32| match text.align {
@@ -125,16 +146,20 @@ pub(super) fn measure(
             };
             if text.writing_mode.is_vertical() {
                 gpui_flow_scene::Point::new(
-                    if *sizing == TextSizing::Natural {
+                    if sizing.owns_width() {
                         cross_origin(metrics.width, size.width, text.padding[3])
                     } else {
                         0.
                     },
-                    inline_origin(metrics.height, size.height, text.padding[0]),
+                    if sizing.owns_height() {
+                        inline_origin(metrics.height, size.height, text.padding[0])
+                    } else {
+                        0.
+                    },
                 )
             } else {
                 gpui_flow_scene::Point::new(
-                    if *sizing == TextSizing::Natural {
+                    if sizing.owns_width() {
                         inline_origin(
                             size.width - text.padding[1] - text.padding[3],
                             size.width,
@@ -143,7 +168,11 @@ pub(super) fn measure(
                     } else {
                         0.
                     },
-                    cross_origin(metrics.height, size.height, text.padding[0]),
+                    if sizing.owns_height() {
+                        cross_origin(metrics.height, size.height, text.padding[0])
+                    } else {
+                        0.
+                    },
                 )
             }
         } else {
@@ -179,8 +208,14 @@ fn request(text: &gpui_flow_scene::display::Text, sizing: TextSizing) -> TextMea
         word_spacing: text.word_spacing,
         para_indent: text.para_indent,
         line_height: text.font_size * text.line_height,
-        wrap_width: if sizing == TextSizing::AutoHeight && text.wrap {
-            Some(text.content_bounds().size.width)
+        wrap_width: if sizing != TextSizing::Natural && text.wrap {
+            // Backend wrap_width is an inline advance. Padding stays physical:
+            // horizontal uses width - left/right; vertical uses height - top/bottom.
+            Some(if text.writing_mode.is_vertical() {
+                text.content_bounds().size.height
+            } else {
+                text.content_bounds().size.width
+            })
         } else {
             None
         },
@@ -226,10 +261,30 @@ pub(super) fn baselines(
                     "backend returned a baseline outside the first line box",
                 ));
             }
-            // Measured Text owns its complete line-box height, so there is no
-            // extra vertical-align slack. Padding and positive scale are real.
-            let baseline =
-                (f64::from(text.padding[0]) + f64::from(baseline)) * f64::from(object.transform.d);
+            // Horizontal AutoWidth keeps a fixed height. It cannot soft-wrap,
+            // so hard paragraphs determine its block height exactly. Match the
+            // painter's nonnegative alignment slack, including clipped overflow.
+            let offset = if layout.texts[child] == TextSizing::AutoWidth {
+                let align = match text.vertical_align {
+                    gpui_flow_scene::display::TextVerticalAlign::Top => {
+                        gpui_flow_text::VerticalAlign::Top
+                    }
+                    gpui_flow_scene::display::TextVerticalAlign::Middle => {
+                        gpui_flow_text::VerticalAlign::Middle
+                    }
+                    gpui_flow_scene::display::TextVerticalAlign::Bottom => {
+                        gpui_flow_text::VerticalAlign::Bottom
+                    }
+                };
+                align.offset(
+                    text.content_bounds().size.height,
+                    request.block_height(request.paragraph_breaks() + 1),
+                )
+            } else {
+                0.
+            };
+            let baseline = (f64::from(text.padding[0]) + f64::from(offset) + f64::from(baseline))
+                * f64::from(object.transform.d);
             if !baseline.is_finite() || baseline > f64::from(f32::MAX) {
                 return Err(invalid(child, "text baseline overflow"));
             }

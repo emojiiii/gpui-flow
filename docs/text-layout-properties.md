@@ -81,9 +81,11 @@ Fixed boxes and `Natural` measured sizing are supported. Physical measurement,
 auto-size alignment, local bounds, undo/redo, resource readiness and painting use
 the same axis placement. Vertical `AutoHeight` supports `wrap=false`: it preserves
 physical width and derives height, with auto alignment changing only the y origin.
-Vertical wrapped `AutoHeight` still rejects because it would own its wrap axis;
-vertical first-baseline alignment remains unsupported. Third-party measurers must
-opt into `measure_writing_mode`; its default rejects new modes. See
+For wrapped vertical text, `AutoWidth` instead preserves physical height, wraps
+within its top/bottom padding and measures width; auto alignment changes only x.
+Horizontal `AutoWidth` requires `wrap=false`. Neither mode may measure its own
+wrap axis, and vertical first-baseline alignment remains unsupported. Third-party
+measurers must opt into `measure_writing_mode`; its default rejects new modes. See
 [measurement ownership](text-measurement.md) for padding and parent constraints.
 
 All four modes support Clip, end Ellipsis, underline and strikethrough (including

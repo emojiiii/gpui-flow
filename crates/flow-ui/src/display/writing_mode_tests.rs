@@ -554,3 +554,63 @@ fn vertical_autoheight_uses_native_unwrapped_height_and_preserves_physical_width
         }
     }
 }
+
+#[test]
+fn vertical_autowidth_uses_native_wrapped_columns_and_keeps_physical_height() {
+    use gpui_flow_layout::{FlowLayout, TextSizing};
+    use gpui_flow_scene::{DisplayObject, Point, Scene, Shape, Size, display};
+    use std::sync::Arc;
+    let app = gpui_kit::platform::headless();
+    let backend = Arc::new(GpuiTextMeasurer::new(app.text_system()));
+    for (scene_mode, mode) in [
+        (display::TextWritingMode::Y, WritingMode::Y),
+        (display::TextWritingMode::YReverse, WritingMode::YReverse),
+    ] {
+        for (content, wrap, expected_width, expected_height) in [
+            ("", true, 18., 18.),
+            ("AB\n", true, 43., 36.),
+            ("ABAB\n", true, 61., 36.),
+            ("ABAB\n", false, 43., 72.),
+        ] {
+            let mut r = request(content);
+            r.line_height = 18.;
+            r.para_spacing = 7.;
+            r.wrap_width = wrap.then_some(36.);
+            let native = backend.measure_writing_mode(&r, mode).unwrap();
+            assert_eq!(
+                (native.width, native.height),
+                (expected_width, expected_height)
+            );
+            let mut text = display::Text::new(content, Size::new(100., 46.));
+            text.font_family = r.font_family;
+            text.font_size = 18.;
+            text.line_height = 1.;
+            text.para_spacing = 7.;
+            text.padding = [3., 5., 7., 11.];
+            text.wrap = wrap;
+            text.writing_mode = scene_mode;
+            text.auto_size_align = true;
+            text.align = display::TextAlign::End;
+            text.vertical_align = display::TextVerticalAlign::Middle;
+            let mut scene = Scene::new();
+            scene
+                .insert(DisplayObject::new("t", text), None, None)
+                .unwrap();
+            let mut layout = FlowLayout::default();
+            layout.texts.insert("t".into(), TextSizing::AutoWidth);
+            let measured = layout.with_text_measurer(backend.clone());
+            measured.apply_to_scene(&mut scene).unwrap();
+            let Shape::Text(text) = &scene.get(&"t".into()).unwrap().object.shape else {
+                panic!()
+            };
+            assert_eq!(text.size, Size::new(expected_width + 16., 46.));
+            assert_eq!(
+                text.layout_origin,
+                Point::new(-expected_width / 2. - 11., 0.)
+            );
+            assert_eq!(text.content_bounds().size, Size::new(native.width, 36.));
+            assert_eq!(text.content, content);
+            assert!(measured.arranged(&scene).unwrap().1.changed.is_empty());
+        }
+    }
+}

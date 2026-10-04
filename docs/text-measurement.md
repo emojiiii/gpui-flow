@@ -21,10 +21,16 @@ and a positive explicit size.
   `wrap=true`, otherwise measure without wrapping. Vertical `Y`/`YReverse`
   require `wrap=false`; their height is also the inline wrap axis, so wrapped
   AutoHeight is rejected rather than reinterpreted as automatic width
+- `TextSizing::AutoWidth`: preserve the explicit or parent-allocated physical
+  height; measure width. Vertical `Y`/`YReverse` may wrap into columns at the
+  content height. Horizontal `X`/`XReverse` require `wrap=false`, because width
+  is their inline wrap axis. JSON stores this explicit mode as `"auto_width"`
 
-Measured height cannot also be allocated by parent grow/basis/stretch/min/max.
-Natural width has the same ownership restriction. AutoHeight width may be
-allocated, for example by a column container's Stretch. Text is measured before
+A measured axis cannot also be allocated by parent grow/basis/stretch,
+percentage or min/max. Natural owns both axes, AutoHeight owns height, and
+AutoWidth owns width. The preserved axis may be allocated, for example
+AutoHeight width by column Stretch or AutoWidth height by row Stretch.
+Content/grow/stretch/percentage cycles remain rejected. Text is measured before
 and after parent allocation, then existing bounded measure/arrange passes settle
 text and content-sized ancestors. Conflicting ownership, invalid metrics and
 non-convergence fail on a private candidate.
@@ -34,14 +40,24 @@ inserted only between hard-newline paragraphs, never soft-wrap rows.
 Empty text retains one line;
 a final newline retains another empty line. In horizontal modes, native empty-text
 width is zero; Natural scene geometry uses a minimum width of 1 to preserve the
-scene's positive bounds contract. AutoHeight retains its supplied width even for empty text.
+scene's positive bounds contract. Horizontal AutoWidth uses the same width
+minimum and retains its supplied height; AutoHeight retains its supplied width.
 In vertical modes, metrics are physical: column line boxes and paragraph spacing
 contribute to width; the longest column advance determines height (the native
 backend retains at least one font-size of height for empty content). AutoHeight
 does not widen its supplied width to fit those columns. With `auto_size_align`,
 vertical AutoHeight changes only the y origin through Start/Center/End, with
-Start/End reversed for `YReverse`; x origin remains zero. Natural continues to
-measure and anchor both axes. Four-side padding always uses physical sides.
+Start/End reversed for `YReverse`; x origin remains zero. AutoWidth changes only
+x origin: vertical modes use Top/Middle/Bottom cross alignment; horizontal modes
+use Start/Center/End with reverse-aware edges. Its y origin stays zero regardless
+of inline alignment. Natural continues to measure and anchor both axes.
+Four-side padding is always physical `[top, right, bottom, left]`: measured width
+adds left/right, measured height adds top/bottom. The backend's `wrap_width`
+means the inline limit, so vertical AutoWidth sends fixed height minus top/bottom.
+Horizontal AutoWidth baseline alignment includes nonnegative Top/Middle/Bottom
+slack inside the fixed content height, then top padding and positive scale.
+Its unwrapped backend must report exactly one line per hard-newline paragraph;
+additional soft lines are rejected atomically. Vertical baseline remains unsupported.
 Horizontal width is the shaper's layout advance, not glyph ink or stroke bounds.
 Individual glyphs can overhang or be taller than a configured line box; painting clips to the
 explicit text rectangle. Start/Center/End use GPUI's line alignment within that
@@ -106,6 +122,13 @@ sizes, revision and history intact. A failed edit also leaves current animation
 playback active; a successful edit respects the existing separate playback/edit
 Undo boundaries. Undo/Redo restores exact snapshots without remeasuring them.
 
+Text tools use the same reactive measurement and snapshot history. Fixed-box
+resize commands require the final box to equal their requested dimensions:
+AutoWidth height-only dragging is accepted when width stays unchanged; a rewrap
+that changes width is atomically rejected, as are measured-width overrides.
+Edit the fixed height through the reactive model/parent allocation to rewrap.
+Font-size resize succeeds only when measured geometry matches the scaled request.
+
 Binding and font service are runtime configuration. Serialize `layout()` in
 FlowDocument and recreate the backend/binding in the host after loading. Destroyed
 handles do not give replacement Text IDs old measurement authority; reset removes
@@ -147,7 +170,8 @@ cache keys.
 ```bash
 cargo test --locked -p gpui-flow-layout --test text
 cargo test --locked -p gpui-flow-layout -p gpui-flow-interaction --test text_vertical_autoheight
-cargo test --locked -p gpui-flow --lib vertical_autoheight
+cargo test --locked -p gpui-flow-layout --test advanced autowidth
+cargo test --locked -p gpui-flow --lib vertical_auto
 cargo run --locked -p flow-studio --bin text_measure_probe  # no window
 cargo run --locked -p flow-studio --bin measured_text       # interactive example
 ```
