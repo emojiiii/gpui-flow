@@ -2494,6 +2494,7 @@ dependencies = [
  "gpui-flow-engine",
  "gpui-flow-layout",
  "gpui-flow-scene",
+ "gpui-flow-text",
  "serde_json",
 ]
 

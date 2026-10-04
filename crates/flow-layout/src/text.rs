@@ -10,7 +10,8 @@ use std::{
 };
 
 /// Natural measures an unwrapped width and height. AutoHeight preserves the
-/// fixed/parent-allocated width and uses the Text.wrap policy at that width.
+/// physical fixed/parent-allocated width. Horizontal modes use Text.wrap at
+/// that width; vertical modes support AutoHeight only with wrap=false.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TextSizing {
@@ -28,10 +29,10 @@ pub(super) fn validate(layout: &FlowLayout, scene: &Scene) -> Result<(), FlowErr
         let Shape::Text(text) = &node.object.shape else {
             return Err(invalid(id, "text sizing requires Text"));
         };
-        if *sizing == TextSizing::AutoHeight && text.writing_mode.is_vertical() {
+        if *sizing == TextSizing::AutoHeight && text.writing_mode.is_vertical() && text.wrap {
             return Err(invalid(
                 id,
-                "vertical writing mode requires fixed-box or Natural sizing; AutoHeight would own its wrap axis",
+                "vertical AutoHeight requires wrap=false; measured height cannot also be its wrap axis",
             ));
         }
         if *sizing == TextSizing::Natural && text.wrap {
@@ -124,7 +125,11 @@ pub(super) fn measure(
             };
             if text.writing_mode.is_vertical() {
                 gpui_flow_scene::Point::new(
-                    cross_origin(metrics.width, size.width, text.padding[3]),
+                    if *sizing == TextSizing::Natural {
+                        cross_origin(metrics.width, size.width, text.padding[3])
+                    } else {
+                        0.
+                    },
                     inline_origin(metrics.height, size.height, text.padding[0]),
                 )
             } else {

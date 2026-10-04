@@ -74,7 +74,7 @@ fn vertical_natural_measurement_uses_physical_dimensions_and_atomic_geometry_his
     assert_eq!(editor.scene(), &after);
 }
 #[test]
-fn vertical_autoheight_and_legacy_backend_are_explicit_failures_without_mutation() {
+fn vertical_wrapped_autoheight_and_legacy_backend_are_explicit_failures_without_mutation() {
     struct Horizontal;
     impl TextMeasurer for Horizontal {
         fn measure(&self, _: &TextMeasureRequest) -> Result<TextMetrics, String> {
@@ -92,6 +92,17 @@ fn vertical_autoheight_and_legacy_backend_are_explicit_failures_without_mutation
     );
     assert_eq!(editor.scene(), &before);
     layout.texts.insert("t".into(), TextSizing::AutoHeight);
+    editor
+        .transaction(|scene| {
+            scene.update_object(&"t".into(), |object| {
+                let Shape::Text(text) = &mut object.shape else {
+                    unreachable!()
+                };
+                text.wrap = true;
+            })
+        })
+        .unwrap();
+    let before = editor.scene().clone();
     assert!(
         layout
             .with_text_measurer(Arc::new(AxisMetrics))

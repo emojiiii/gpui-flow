@@ -477,7 +477,7 @@
       "title": "Text固定排版属性",
       "status": "partial",
       "acceptance": "已有font/wrap/align/padding/ellipsis/italic/decoration/affine；必补letterSpacing、wordSpacing、paraIndent、paraSpacing、textCase、writingMode和autoSizeAlign",
-      "boundary": "已补间距/缩进/autoSizeAlign及直立cluster四轴writingMode、整cluster ellipsis和轴向双线装饰；纵向AutoHeight/baseline明确拒绝，完整组合仍部分",
+      "boundary": "已补间距/缩进/autoSizeAlign、四轴writingMode/ellipsis/装饰及纵排无wrap AutoHeight；纵排wrap AutoHeight和baseline明确拒绝，完整组合仍部分",
       "reference_doc": "docs/text-layout-properties.md",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/interface/src/ICommonAttr.ts",

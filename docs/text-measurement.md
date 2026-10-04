@@ -17,7 +17,10 @@ and a positive explicit size.
 
 - `TextSizing::Natural`: measure both axes without wrapping; requires `wrap=false`
 - `TextSizing::AutoHeight`: preserve the explicit or parent-allocated width;
-  measure height using that width when `wrap=true`, otherwise without wrapping
+  measure physical height. Horizontal `X`/`XReverse` use that width when
+  `wrap=true`, otherwise measure without wrapping. Vertical `Y`/`YReverse`
+  require `wrap=false`; their height is also the inline wrap axis, so wrapped
+  AutoHeight is rejected rather than reinterpreted as automatic width
 
 Measured height cannot also be allocated by parent grow/basis/stretch/min/max.
 Natural width has the same ownership restriction. AutoHeight width may be
@@ -29,11 +32,18 @@ non-convergence fail on a private candidate.
 Each logical line box is `font_size * line_height`. Additional `para_spacing` is
 inserted only between hard-newline paragraphs, never soft-wrap rows.
 Empty text retains one line;
-a final newline retains another empty line. Native empty-text width is zero;
-Natural scene geometry uses a minimum width of 1 to preserve the scene's positive
-bounds contract. AutoHeight retains its supplied width even for empty text.
-Width is the shaper's layout advance, not glyph ink or stroke bounds. Individual
-glyphs can overhang or be taller than a configured line box; painting clips to the
+a final newline retains another empty line. In horizontal modes, native empty-text
+width is zero; Natural scene geometry uses a minimum width of 1 to preserve the
+scene's positive bounds contract. AutoHeight retains its supplied width even for empty text.
+In vertical modes, metrics are physical: column line boxes and paragraph spacing
+contribute to width; the longest column advance determines height (the native
+backend retains at least one font-size of height for empty content). AutoHeight
+does not widen its supplied width to fit those columns. With `auto_size_align`,
+vertical AutoHeight changes only the y origin through Start/Center/End, with
+Start/End reversed for `YReverse`; x origin remains zero. Natural continues to
+measure and anchor both axes. Four-side padding always uses physical sides.
+Horizontal width is the shaper's layout advance, not glyph ink or stroke bounds.
+Individual glyphs can overhang or be taller than a configured line box; painting clips to the
 explicit text rectangle. Start/Center/End use GPUI's line alignment within that
 same rectangle.
 
@@ -64,8 +74,11 @@ The model/layout crate has no GPUI dependency. `TextMeasurer: Send + Sync` accep
 an owned `TextMeasureRequest` and returns validated `TextMetrics`. Implementations
 must be deterministic for the current font environment; callbacks may run more
 than once. Metrics must use the requested absolute line height and report
-`height = request.block_height(lines)`: absolute line height times visual rows
-plus `para_spacing` times hard-newline count. Shape the presentation string from
+`height = request.block_height(lines)` for horizontal modes, or
+`width = request.block_height(lines)` for vertical modes: absolute line height
+times visual rows/columns plus `para_spacing` times hard-newline count.
+Vertical measurement uses the opt-in `measure_writing_mode` callback; legacy
+backends still reject it explicitly. Shape the presentation string from
 `request.text_case.presentation(&request.content)` without changing canonical
 content. They must not commit edits or produce external
 side effects from `measure`.
@@ -133,6 +146,8 @@ cache keys.
 
 ```bash
 cargo test --locked -p gpui-flow-layout --test text
+cargo test --locked -p gpui-flow-layout -p gpui-flow-interaction --test text_vertical_autoheight
+cargo test --locked -p gpui-flow --lib vertical_autoheight
 cargo run --locked -p flow-studio --bin text_measure_probe  # no window
 cargo run --locked -p flow-studio --bin measured_text       # interactive example
 ```

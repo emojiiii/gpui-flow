@@ -79,9 +79,12 @@ Padding and clipping remain in physical x/y coordinates.
 
 Fixed boxes and `Natural` measured sizing are supported. Physical measurement,
 auto-size alignment, local bounds, undo/redo, resource readiness and painting use
-the same axis placement. Vertical `AutoHeight` and first-baseline alignment reject
-because those consumers own/assume a horizontal line axis. Third-party measurers
-must opt into `measure_writing_mode`; its default rejects new modes.
+the same axis placement. Vertical `AutoHeight` supports `wrap=false`: it preserves
+physical width and derives height, with auto alignment changing only the y origin.
+Vertical wrapped `AutoHeight` still rejects because it would own its wrap axis;
+vertical first-baseline alignment remains unsupported. Third-party measurers must
+opt into `measure_writing_mode`; its default rejects new modes. See
+[measurement ownership](text-measurement.md) for padding and parent constraints.
 
 All four modes support Clip, end Ellipsis, underline and strikethrough (including
 both decorations together). Axis ellipsis removes only complete native source
