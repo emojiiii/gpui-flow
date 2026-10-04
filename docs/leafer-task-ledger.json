@@ -7,8 +7,8 @@
     "leafer_in": "3eb445bf34debb638766615282224b77108bf610"
   },
   "counts": {
-    "bounded_verified": 43,
-    "partial": 2,
+    "bounded_verified": 44,
+    "partial": 1,
     "not_started": 0,
     "needs_verification": 0,
     "in_progress": 0
@@ -177,7 +177,7 @@
       "title": "设备元数据与复合手势",
       "status": "partial",
       "acceptance": "pointer type/buttons/time/pressure、触摸多指、tap/double/longpress的稳定事件契约",
-      "boundary": "已实现有界16-contact host路由、buttons/time/pressure、tap/double/longpress及取消；Linux鼠标原生已验，GPUI原始多指/pen硬件入口仍受限",
+      "boundary": "已验证有界16-contact host路由、buttons/time/pressure、tap/double/longpress及取消和Linux鼠标；native touch/pen按2026-10-04用户指示user_deferred，本阶段不实施、不计实现通过，保留typed host契约",
       "reference_doc": "docs/pointer-gestures.md",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/interaction/interaction/src/Interaction.ts",
@@ -189,9 +189,9 @@
       "id": "EVT-04",
       "category": "事件",
       "title": "IME与无障碍输入",
-      "status": "partial",
+      "status": "bounded_verified",
       "acceptance": "中文输入组合/切换/失焦、Tab可达与语义树，定义受支持平台验收",
-      "boundary": "Kit Textarea及可选场景语义树、Tab与受保护Focus/Text动作已接入；复杂可见性明确拒绝，真实AT与平台IME候选仍未完整验证",
+      "boundary": "Linux X11/Fcitx Pinyin真实组合候选/中英切换/失焦及会话历史、双向Tab/焦点圈与AT-SPI语义树/Text Click已验；修复Label value平台名称；复杂可见性拒绝，独立AT Focus、其他IME/平台及纯程序化原生组合中断未验，GraphicsObject状态映射限制明确",
       "reference_doc": "docs/scene-accessibility.md",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/editor/src/tool/InnerEditor.ts",

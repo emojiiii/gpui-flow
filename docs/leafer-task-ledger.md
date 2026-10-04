@@ -1,6 +1,6 @@
 # Leafer固定45项任务表
 
-状态：43项有界已验证、2项部分实现、0项未开始。固定ID、验收集合与边界保留；任务数不代表工时或全部上游API兼容。机器可读定义见[任务表JSON](leafer-task-ledger.json)。
+状态：44项有界已验证、1项部分实现、0项未开始。剩余EVT-03原生touch/pen范围为用户明确后置（user_deferred），不计实现通过；本阶段必做范围已完成。固定ID、验收集合与边界保留；任务数不代表工时或全部上游API兼容。机器可读定义见[任务表JSON](leafer-task-ledger.json)。
 
 功能实现、必要回归和简明契约按模块提交。逐次运行日志、截图、备份收据及历史验收JSON不进入源码仓库；既有提交历史不改写。测试方法见[本地验证](testing.md)。
 
@@ -17,8 +17,8 @@
 | LIF-03 | 生命周期 / [加载取消与媒体资源桥](owned-resource-loading.md) | 有界已验证 | 共享加载字节预算、无引用任务硬取消、媒体统一代际票据和错误传播 | 显式owned本地PNG/JPEG/GIF/WebP worker与FFmpeg媒体共享池；外部GPUI cache、URI和GPU内存不在硬取消/字节保证内 |
 | EVT-01 | 事件 / [树路由与默认动作顺序](focus-keyboard-validation.md) | 有界已验证 | capture/target/bubble、once/off、监听队列和prevent-default；原生适配器trace与纯路由一致 | 限定现有鼠标/默认动作与精确trace；设备扩展归EVT-03，不声称全浏览器事件兼容 |
 | EVT-02 | 事件 / [键盘与程序焦点](focus-keyboard-validation.md) | 有界已验证 | KeyDown/Up、重复/Space、Focus/Blur重定向、窗口失焦清理及实例隔离 | 不把Kit文本输入当完整IME/a11y |
-| EVT-03 | 事件 / [设备元数据与复合手势](pointer-gestures.md) | 部分实现 | pointer type/buttons/time/pressure、触摸多指、tap/double/longpress的稳定事件契约 | 已实现有界16-contact host路由、buttons/time/pressure、tap/double/longpress及取消；Linux鼠标原生已验，GPUI原始多指/pen硬件入口仍受限 |
-| EVT-04 | 事件 / [IME与无障碍输入](scene-accessibility.md) | 部分实现 | 中文输入组合/切换/失焦、Tab可达与语义树，定义受支持平台验收 | Kit Textarea及可选场景语义树、Tab与受保护Focus/Text动作已接入；复杂可见性明确拒绝，真实AT与平台IME候选仍未完整验证 |
+| EVT-03 | 事件 / [设备元数据与复合手势](pointer-gestures.md) | 部分实现 | pointer type/buttons/time/pressure、触摸多指、tap/double/longpress的稳定事件契约 | 已验证有界16-contact host路由、buttons/time/pressure、tap/double/longpress及取消和Linux鼠标；native touch/pen按2026-10-04用户指示user_deferred，本阶段不实施、不计实现通过，保留typed host契约 |
+| EVT-04 | 事件 / [IME与无障碍输入](scene-accessibility.md) | 有界已验证 | 中文输入组合/切换/失焦、Tab可达与语义树，定义受支持平台验收 | Linux X11/Fcitx Pinyin真实组合候选/中英切换/失焦及会话历史、双向Tab/焦点圈与AT-SPI语义树/Text Click已验；修复Label value平台名称；复杂可见性拒绝，独立AT Focus、其他IME/平台及纯程序化原生组合中断未验，GraphicsObject状态映射限制明确 |
 | INT-01 | 交互 / [外部选择移动缩放旋转](text-transform-tools.md) | 有界已验证 | 单选/共享root、多选、Image和能力开启Text的仿射手柄；撤销/取消/只读/陈旧capture | Custom及未支持样式拒绝；不改intrinsic尺寸 |
 | INT-02 | 交互 / [内在尺寸编辑](intrinsic-resize.md) | 有界已验证 | 按组件定义尺寸/内容/字体resize策略，与布局所有权及单Undo一致 | 内置组件有界尺寸/坐标/Group内容策略及Text盒子/字体模式；布局拥有的覆盖原子拒绝，Text测量须精确相等；退化Line用端点工具，Custom另有正式协议 |
 | INT-03 | 交互 / [Text内容编辑会话](text-editing.md) | 有界已验证 | 可选内容panel、一次文档Undo、Done/Cancel/blur/target切换、身份和只读保护 | 不是WYSIWYG；IME专项归EVT-04 |

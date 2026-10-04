@@ -169,11 +169,24 @@ These are scripted adapter calls, not OS input-method candidate delivery; they
 do not verify candidate popups or platform reset behavior.
 On 2026-10-04 the Linux desktop run passed all assertions and exited 0 (one
 adapter test); the UI library/test build, strict Clippy and formatting also
-passed. No input-method engine was installed for native candidate testing.
+passed. This earlier adapter run did not include an OS input-method engine.
 
-Not verified here: real native IME/candidate interactions (including programmatic
-composition interruption), arbitrary host normalization policies in a native
-window, full accessibility/DPI matrices, Windows/macOS, and edited-text pan/zoom/
+Later native candidate verification on 2026-10-04 used Linux X11 with Fcitx
+5.1.12, Pinyin 5.1.8 and libime 1.1.10, privately extracted from Debian packages
+verified against signed repository metadata. Actual key input displayed
+candidates and committed Chinese using Space and a digit; Shift switched to English. Done followed by one document
+Undo/Redo restored the complete session. Active preedit was exercised with Done,
+Cancel, two-stage IME/session Escape, host target switch, canvas blur and window
+deactivation, followed by reopening and fresh candidate commits. No stale
+candidate or cross-target edit was observed. Done/blur kept the visible pinyin
+preedit, consistent with the policy above, rather than choosing a conversion
+candidate. The mouse-driven target switch lost input focus first; it did not
+exercise the distinct purely programmatic marked-range rejection. Flow and
+Fcitx exited 0 and the private session was stopped.
+
+Not verified here: other IMEs, Wayland, purely programmatic native composition
+interruption, arbitrary host normalization policies in a native window, full
+accessibility/DPI matrices, Windows/macOS, and edited-text pan/zoom/
 transform combinations. Source-level safeguards and model fixtures do not prove
 those platform behaviors. GitHub Actions and deployment were not run.
 
@@ -194,5 +207,5 @@ For future platform validation, extend the recorded checks with:
 7. Pan/zoom while closed, measured reflow, changed frame size and transformed Text
    remain visibly canvas behavior; no WYSIWYG fidelity claim for panel text
 
-Cross-platform input, clipboard, accessibility and native IME validation are still
-required even after headless tests and linking pass.
+Other-platform input, clipboard, accessibility and IME validation remain
+unverified; the Linux X11/Fcitx observations do not establish those behaviors.

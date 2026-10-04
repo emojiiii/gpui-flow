@@ -940,6 +940,15 @@ impl Element for SemanticElement {
     }
     fn write_a11y_info(&self, node: &mut accesskit::Node) {
         self.proxy.write_a11y_info(node);
+        // AccessKit Label names come from value (including on AT-SPI), not
+        // label. Keep the projection's name precedence without publishing
+        // duplicate label/value properties for retained Text.
+        if node.role() == Role::Label
+            && let Some(label) = node.label().map(str::to_owned)
+        {
+            node.set_value(label);
+            node.clear_label();
+        }
         if self.disabled {
             node.set_disabled();
         }
@@ -1069,6 +1078,55 @@ mod tests {
     fn project(state: &mut AccessibilityState, editor: &SceneEditor, host: &ScenePluginHost) {
         let frame = frame(editor);
         state.project(&frame, editor.scene(), editor, host, key(editor, &frame));
+    }
+    #[test]
+    fn accesskit_text_name_uses_value_without_duplicate_label() {
+        // Exercise the actual Element writer, not only projection metadata:
+        // AccessKit's Label contract makes AT-SPI read value as the name.
+        for label in ["Editable scene text", "Hello 世界 e\u{301} 👋", ""] {
+            for (disabled, read_only) in [(false, false), (false, true), (true, true)] {
+                let element = SemanticElement {
+                    proxy: div()
+                        .id("text")
+                        .role(Role::Label)
+                        .aria_label(label)
+                        .aria_description("Retained text")
+                        .aria_selected(true)
+                        .accessibility_id("flow-scene-text"),
+                    disabled,
+                    read_only,
+                };
+                let mut node = accesskit::Node::new(element.a11y_role().unwrap());
+                element.write_a11y_info(&mut node);
+                assert_eq!(node.role(), Role::Label);
+                assert_eq!(node.value(), Some(label));
+                assert_eq!(node.label(), None);
+                assert_eq!(node.description(), Some("Retained text"));
+                assert_eq!(node.author_id(), Some("flow-scene-text"));
+                assert_eq!(node.is_selected(), Some(true));
+                assert_eq!(node.is_disabled(), disabled);
+                assert_eq!(node.is_read_only(), read_only);
+            }
+        }
+    }
+    #[test]
+    fn accesskit_non_text_name_stays_label_and_preserves_disabled_flag() {
+        for role in [Role::GraphicsObject, Role::Group] {
+            let element = SemanticElement {
+                proxy: div().id("object").role(role).aria_label("Locked object"),
+                disabled: true,
+                read_only: false,
+            };
+            let mut node = accesskit::Node::new(element.a11y_role().unwrap());
+            element.write_a11y_info(&mut node);
+            assert_eq!(node.role(), role);
+            assert_eq!(node.label(), Some("Locked object"));
+            assert_eq!(node.value(), None);
+            assert!(node.is_disabled());
+            assert!(!node.is_read_only());
+            assert!(!node.supports_action(AccessibleAction::Focus));
+            assert!(!node.supports_action(AccessibleAction::Click));
+        }
     }
     #[test]
     fn stable_identity_survives_frames_and_offscreen_roundtrip_but_not_remount_replace_or_reset() {

@@ -68,8 +68,14 @@ router queue and lifecycle validation as other tree events.
 
 ## Native GPUI boundary
 
+On 2026-10-04 the user deferred native touch and pen input for this desktop
+application. EVT-03 retains its original acceptance and partial status, with
+this sub-scope recorded as `user_deferred`, not implemented or verified. Existing
+mouse/keyboard and typed host input support remains in the current scope.
+
+
 The Cargo lock pins GPUI to
-[`10d005166a9f9e079d55ebfb700035f3860c3e71`](https://github.com/longbridge/gpui-fast/tree/10d005166a9f9e079d55ebfb700035f3860c3e71).
+[`26b0dccc97ebd14bbf9715741b6688132ba69491`](https://github.com/longbridge/gpui-fast/tree/26b0dccc97ebd14bbf9715741b6688132ba69491).
 Its mouse down/move/up structs have no native timestamp or full held-button mask.
 All three Flow adapters share one normalizer: monotonic `Instant` receipt time,
 buttons tracked from observed transitions, and a reset on cancellation/focus loss.

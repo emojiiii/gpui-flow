@@ -1,9 +1,10 @@
 # Opt-in scene accessibility and semantic navigation
 
-EVT04 remains **partial**. This slice implements real AccessKit scene nodes and
-bounded keyboard/AT activation. Native IME candidates and Windows/macOS are not
-claimed verified. Build, model tests and real platform adapter checks are
-separate evidence; a node-builder test is not an AT-SPI/UIA/AX acceptance test.
+EVT04 is **bounded_verified** for the recorded Linux X11/Fcitx/AT-SPI scope.
+This slice implements real AccessKit scene nodes and bounded keyboard/AT
+activation. Windows/macOS, other IMEs and independent AT Focus remain unverified.
+Build, model tests and real platform adapter checks are separate evidence;
+a node-builder test is not an AT-SPI/UIA/AX acceptance test.
 
 ## Host API and native example
 
@@ -35,6 +36,23 @@ Proxies have no mouse handlers, tracked FocusHandle or Tab index. They use GPUI'
 ordinary real-node role/action path; synthetic children are not used. A small
 Element wrapper delegates the Div lifecycle and adds AccessKit disabled/read-only
 flags, which the public Div builder does not expose. It creates no extra hitbox.
+For Text, it moves the resolved semantic name to `Node::value` and leaves
+`Node::label` unset, as required by the locked
+[AccessKit 0.24.1 Label contract](https://docs.rs/accesskit/0.24.1/accesskit/struct.Node.html#method.label).
+The role stays Label and name precedence is unchanged; other roles retain their
+label property. AT-SPI 0.19.1 reads Label names from value, so a GPUI debug
+`aria.label` alone did not establish that the platform could read the Text name.
+
+The locked AT-SPI adapter also has a state-mapping limitation: its
+`NodeWrapper::state` emits Enabled/Sensitive for roles outside
+`accesskit_consumer` 0.38.0's read-only-supported set, including GraphicsObject,
+even when AccessKit has the disabled flag. Thus a locked graphics object can show
+Enabled/Sensitive in Accerciser while exposing neither Actions nor Focusable.
+Flow keeps the correct role and disabled flag, omits its actions, skips it during
+navigation and rejects live activation. It does not substitute a control role or
+patch the platform adapter to disguise this limitation. Label read-only state is
+likewise not an AT-SPI ReadOnly-state guarantee; removal of Click/OpenText and the
+live edit gate enforce the policy.
 
 ## Input and defaults
 
@@ -118,7 +136,10 @@ faults are not a semantic visibility guarantee.
 
 ## Regression and platform boundaries
 
-Focused model/controller tests cover real upload admission/publication/failure,
+Focused AccessKit-node tests assert Text value/label placement (including Unicode,
+empty names and disabled/read-only state) and unchanged non-Text names/flags.
+They do not exercise an external platform adapter. Model/controller tests cover
+real upload admission/publication/failure,
 retained state-style bounds and active-target candidates, view invalidation,
 identity replacement/remount/reset and offscreen reuse, budgets, rejected/native
 unsupported content, conservative clipping, locked/read-only policy, modifier /
@@ -129,8 +150,8 @@ not substitutes for native adapter testing.
 Native acceptance should separately inspect the real platform tree, request AT
 Focus and Text activation, traverse both external controls in both directions,
 observe the focus outline, close/reopen Text with Done/Cancel, and release the
-window. Real IME candidate interruption and Windows/macOS remain unverified;
-EVT04 is not closed by this module alone.
+window. The observations below cover only the named Linux stack; independent
+AT Focus, other IMEs and Windows/macOS remain unverified.
 
 Local validation (2026-10-04): 27 routing and 333 UI regressions passed, plus
 focused checks after the native fixes, strict checks, formatting and example
@@ -139,6 +160,25 @@ the reverse order, locked-node skipping, Text activation and Done/Cancel return.
 Native checks caught the explicitly tracked FocusHandle's Tab-stop configuration
 and a post-focus redraw issue; both were corrected. The final check showed the
 focus outline after external entry and Cancel without moving the pointer.
-The available platform reported `a11y active=false`, and the UI tool returned an
-X11 window shell rather than an accessibility tree. Real AT tree/Focus/Click
-requests were therefore **not verified**; neither were native IME candidates.
+That earlier run reported `a11y active=false` and only an X11 shell, so it did
+not establish AT tree/actions or native IME behavior. Later validation used
+privately extracted Debian Accerciser 3.46.2-3 and its official Interface Viewer.
+The scoped bootstrap used private resources, suppressed global hotkeys and
+disabled the optional screen highlight (an upstream missing-toolkit-version
+error); Viewer/Action logic was unchanged. Actual AT-SPI inspection found the
+scene tree and caught the missing Text value corrected here. The final native
+run read the correct Text name, performed Click/OpenText, entered text after
+activating Flow, completed Done and observed the updated platform name and
+returned focus outline. An earlier Click/Cancel check restored the baseline.
+Read-only removed Click; locked objects exposed no action or focusable state,
+with the upstream state-flag limitation described above. Both final processes
+exited 0 and the temporary accessibility enable flag was restored to false.
+
+The corrected writer passed 10 focused accessibility tests (including its two
+new regressions), strict checks, formatting and both example links. Independent
+AT Component.grabFocus was not exercised: the official Viewer has no such
+control, and the direct UI tool still returned an X11 shell for Flow. It is not
+inferred from Click or the internal focus trace. Actual Chinese composition,
+candidate commit, language switch, focus interruption and history observations
+are recorded in [Text sessions](text-editing.md); they establish only the named
+Linux X11/Fcitx boundary.
