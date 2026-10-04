@@ -1,6 +1,17 @@
 use super::*;
 use gpui_flow_interaction::{CanvasCommand, InteractionError};
 
+pub(super) fn validate_host_document(
+    document: &model::FlowDocument,
+    validator: Option<&FlowDocumentValidator>,
+) -> Result<(), String> {
+    document.validate().map_err(|e| e.to_string())?;
+    if let Some(validator) = validator {
+        validator(document)?;
+    }
+    Ok(())
+}
+
 impl FlowCanvas {
     pub fn is_file_busy(&self) -> bool {
         self.file_busy
@@ -17,11 +28,16 @@ impl FlowCanvas {
     }
     /// Persist to an explicit host-approved path without relying on a desktop portal.
     pub fn save_to_path(&mut self, path: impl Into<std::path::PathBuf>, cx: &mut Context<Self>) {
+        let document = self.editor.document();
+        if let Err(error) = validate_host_document(&document, self.document_validator.as_ref()) {
+            self.message = format!("Save failed: {error}");
+            cx.notify();
+            return;
+        }
         if !self.begin_file_operation(cx) {
             return;
         }
         let path = path.into();
-        let document = self.editor.document();
         cx.spawn(async move |this, cx| {
             let result = cx
                 .background_executor()
@@ -75,10 +91,15 @@ impl FlowCanvas {
             self.save_to_path(path, cx);
             return;
         }
+        let document = self.editor.document();
+        if let Err(error) = validate_host_document(&document, self.document_validator.as_ref()) {
+            self.message = format!("Save failed: {error}");
+            cx.notify();
+            return;
+        }
         if !self.begin_file_operation(cx) {
             return;
         }
-        let document = self.editor.document();
         let directory = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
         let dialog = cx.prompt_for_new_path(&directory, Some("canvas.flow.json"));
         cx.spawn(async move |this, cx| {
@@ -176,6 +197,14 @@ impl FlowCanvas {
         cx: &mut Context<Self>,
     ) -> Result<(), InteractionError> {
         let graph = Graph::from_json(json)?;
+        validate_host_document(
+            &model::FlowDocument {
+                graph: graph.clone(),
+                viewport: self.editor.viewport,
+            },
+            self.document_validator.as_ref(),
+        )
+        .map_err(InteractionError::InvalidInput)?;
         self.cancel_interaction(cx);
         self.execute_command(CanvasCommand::ImportGraph(graph), cx)?;
         self.reset_document_runtime();
@@ -187,6 +216,8 @@ impl FlowCanvas {
         document: model::FlowDocument,
         cx: &mut Context<Self>,
     ) -> Result<(), InteractionError> {
+        validate_host_document(&document, self.document_validator.as_ref())
+            .map_err(InteractionError::InvalidInput)?;
         self.cancel_interaction(cx);
         self.execute_command(CanvasCommand::LoadDocument(document), cx)?;
         self.reset_document_runtime();
@@ -201,5 +232,27 @@ impl FlowCanvas {
         self.input_node = None;
         self.input = None;
         self.input_subscription = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ::core::prelude::v1::test;
+    #[test]
+    fn host_document_contract_validates_without_mutation_or_legacy_changes() {
+        let document = model::FlowDocument::default();
+        assert!(validate_host_document(&document, None).is_ok());
+        let reject: FlowDocumentValidator = Arc::new(|_| Err("unknown host type".into()));
+        assert_eq!(
+            validate_host_document(&document, Some(&reject)),
+            Err("unknown host type".into())
+        );
+        let never: FlowDocumentValidator =
+            Arc::new(|_| panic!("invalid core document reaches host"));
+        let mut invalid = document.clone();
+        invalid.viewport.zoom = f32::NAN;
+        assert!(validate_host_document(&invalid, Some(&never)).is_err());
+        assert_eq!(document, model::FlowDocument::default());
     }
 }

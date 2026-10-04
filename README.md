@@ -59,6 +59,8 @@ Group/Box/Frame外阴影使用完整子树alpha，包含子阴影、mask结果�
 
 ```bash
 cargo run --locked -p flow-studio
+# 独立创作画布：图片/文字/自定义卡片、严格类型连线、数据映射
+cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative
 cargo run --locked -p flow-studio --bin primitives
 cargo run --locked -p flow-studio --bin stroke_alignment
 cargo run --locked -p flow-studio --bin composition
@@ -202,3 +204,5 @@ Text presentation case and hard-newline paragraph spacing now share native/CPU l
 Native acceptance receipts: [focus/keyboard exact input replay](docs/focus-keyboard-validation.md), [resource readiness and paint](docs/resource-lifecycle-validation.md), and [Custom geometry and host renderers](docs/custom-geometry-validation.md). These include exact-source, automatic-test and physical-window evidence separately.
 
 [Scene PNG/JPEG/lossless WebP export](docs/scene-raster-export.md) uses current resources and the same-App text bridge; `scene_export` demonstrates independent decoded previews. [Bounded nested timelines](docs/animation-timeline.md) combine serial/parallel property animations under one explicit parent clock and Undo transaction.
+
+[Flow Creative](crates/flow-creative/README.md) 提供可复用创作画布与显式 records→Graph 映射；原节点 Studio 保留。

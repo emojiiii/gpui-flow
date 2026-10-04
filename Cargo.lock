@@ -2462,6 +2462,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "gpui-flow-creative"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "gpui-flow",
+ "gpui-flow-core",
+ "gpui-flow-interaction",
+ "gpui-kit",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "gpui-flow-editor"
 version = "0.1.0"
 dependencies = [

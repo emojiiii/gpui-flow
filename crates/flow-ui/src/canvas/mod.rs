@@ -13,6 +13,10 @@ pub enum FlowEvent {
     RunChanged(String),
 }
 impl EventEmitter<FlowEvent> for FlowCanvas {}
+/// Optional host document contract, checked before persistence replaces state.
+pub type FlowDocumentValidator =
+    Arc<dyn Fn(&model::FlowDocument) -> Result<(), String> + Send + Sync>;
+
 /// Host-owned reusable view. Subscribe to `FlowEvent` for persistence/inspector integration.
 /// Canvas coordinates are independent of window origin and account for pan and zoom.
 pub struct FlowCanvas {
@@ -33,6 +37,7 @@ pub struct FlowCanvas {
     /// Optional host-owned path used by Save/Open instead of native dialogs.
     pub document_path: Option<std::path::PathBuf>,
     file_busy: bool,
+    document_validator: Option<FlowDocumentValidator>,
     focus: FocusHandle,
     space_held: bool,
     native_pointer: crate::native_pointer::NativePointerState,
@@ -60,6 +65,20 @@ mod render;
 mod workflow;
 
 impl FlowCanvas {
+    /// Install a domain contract without changing the existing document. Runtime-only.
+    pub fn set_document_validator(
+        &mut self,
+        validator: Option<FlowDocumentValidator>,
+    ) -> Result<(), String> {
+        persistence::validate_host_document(&self.editor.document(), validator.as_ref())?;
+        self.document_validator = validator;
+        Ok(())
+    }
+    /// Latest interaction/persistence message for host-owned editor shells.
+    pub fn status_message(&self) -> &str {
+        &self.message
+    }
+
     pub fn new(graph: Graph, cx: &mut Context<Self>) -> Result<Self, model::GraphError> {
         let editor = Editor::new(graph)?;
         cx.spawn(async move |this, cx| {
@@ -118,6 +137,7 @@ impl FlowCanvas {
             show_grid: true,
             document_path: None,
             file_busy: false,
+            document_validator: None,
             focus: cx.focus_handle(),
             space_held: false,
             native_pointer: Default::default(),
