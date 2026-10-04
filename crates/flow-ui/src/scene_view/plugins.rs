@@ -98,6 +98,11 @@ impl SceneView {
         }
         self.interaction_window = Some(id);
         self.subscriptions.clear();
+        self.subscriptions.push(
+            cx.on_focus(&self.focus.clone(), window, |this, window, cx| {
+                this.semantic_enter(window, cx);
+            }),
+        );
         self.subscriptions.push(cx.on_focus_out(
             &self.focus.clone(),
             window,

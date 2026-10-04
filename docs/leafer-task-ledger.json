@@ -7,8 +7,8 @@
     "leafer_in": "3eb445bf34debb638766615282224b77108bf610"
   },
   "counts": {
-    "bounded_verified": 41,
-    "partial": 3,
+    "bounded_verified": 42,
+    "partial": 2,
     "not_started": 1,
     "needs_verification": 0,
     "in_progress": 0
@@ -191,8 +191,8 @@
       "title": "IME与无障碍输入",
       "status": "partial",
       "acceptance": "中文输入组合/切换/失焦、Tab可达与语义树，定义受支持平台验收",
-      "boundary": "Kit Textarea提供基础；平台IME边界明确未验",
-      "reference_doc": "docs/text-editing.md",
+      "boundary": "Kit Textarea及可选场景语义树、Tab与受保护Focus/Text动作已接入；复杂可见性明确拒绝，真实AT与平台IME候选仍未完整验证",
+      "reference_doc": "docs/scene-accessibility.md",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-in/blob/3eb445bf34debb638766615282224b77108bf610/packages/editor/src/tool/InnerEditor.ts",
         "symbols_or_contract": "InnerEditor生命周期；IME/a11y是宿主平台验收，不声称OSS含完整协议"
@@ -317,9 +317,9 @@
       "id": "APP-03",
       "category": "外观",
       "title": "隔离混合与蒙版擦除",
-      "status": "partial",
+      "status": "bounded_verified",
       "acceptance": "组透明度/多paint隔离、固定blend集合、mask/erase覆盖关系与hit规则",
-      "boundary": "已实现固定blend、五种mask、首marker布局/child-parent命中、Image alpha代理及预算预检、Pixel和几何leaf/Group/Box/Frame/Image/Canvas/Custom轮廓Path擦除；Custom显式CPU像素桥支持mask/Pixel擦除；Text Path及任意外部backdrop仍缺，Custom自身阴影/模糊、scale-fixed描边和像素导出不支持",
+      "boundary": "已实现固定blend、五种mask、首marker布局/child-parent命中、Image alpha代理及预算预检、Pixel和几何leaf/Group/Box/Frame/Image/Canvas/Custom轮廓Path擦除；Custom显式CPU像素桥支持mask/Pixel擦除；Text几何Path及任意外部host backdrop明确不支持，Custom自身阴影/模糊、scale-fixed描边和像素导出不支持",
       "reference_doc": "docs/mask-modes.md",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/mask/src/index.ts",

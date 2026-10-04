@@ -21,15 +21,20 @@ Custom Path masks use validated fallback contours in their original local coordi
 including concavity, winding holes and implicit closure. Empty Custom contours clip
 to empty, irrespective of declared bounds. Text geometric paths remain unsupported;
 no glyph outline is replaced with a text box. Custom ordinary paint, Alpha, Grayscale,
-Clipping and ClippingPath still reject the complete CPU domain because contours do
-not provide the native host renderer’s pixels. The Path compositor needs no Custom
-resource pixels; existing host preparation can still resolve a declared resource key.
+Clipping and ClippingPath require the [explicit host CPU bridge](custom-element-protocol.md#explicit-custom-cpu-pixels);
+missing input rejects the complete domain. Contours never stand in for native host
+renderer pixels. The Path compositor needs no Custom resource pixels; existing host
+preparation can still resolve a declared resource key.
 
 Native JSON uses snake_case. Leafer JSON exchange still explicitly rejects masks.
 The compositor keeps conservative effect/allocation bounds, independently of the
-logical bounds below. Arbitrary external host backdrops and Text Path erasers remain outside this
-increment, so APP-03 remains partial. Container geometry is described in the
-[Path eraser contract](scene-erasers.md).
+logical bounds below. Arbitrary external host backdrops and Text geometric Path
+consumers remain explicit unsupported boundaries. They do not extend the fixed
+APP-03 acceptance set beyond its supported isolation, blend, mask/eraser and hit
+contracts. Pinned [Leafer Text.__drawRenderPath](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/Text.ts#L184)
+sets the canvas font; it does not supply glyph contours. No universal no-op or
+browser-equivalence claim follows from that. Container geometry is described in
+the [Path eraser contract](scene-erasers.md).
 
 ## Layout and picking
 

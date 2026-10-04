@@ -24,6 +24,8 @@ pub enum EventKind {
     Wheel,
     KeyDown,
     KeyUp,
+    /// Non-pointer request from scene keyboard navigation or assistive technology.
+    SemanticAction,
     Custom(String),
 }
 /// Normalized platform metadata. Logical coordinates live in SceneEvent; native
@@ -43,8 +45,26 @@ pub enum PointerDevice {
     Pen,
     Unknown,
 }
+/// The bounded scene semantic defaults. Neither changes selection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SemanticAction {
+    Focus,
+    OpenText,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SemanticSource {
+    Keyboard,
+    AssistiveTechnology,
+    /// A canvas native-focus notification (including host focus or Text return),
+    /// for which the native adapter does not expose an originating device.
+    NativeFocus,
+}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum EventInput {
+    Semantic {
+        action: SemanticAction,
+        source: SemanticSource,
+    },
     Pointer {
         pointer_id: u64,
         device: PointerDevice,

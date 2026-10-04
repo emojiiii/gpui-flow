@@ -63,6 +63,20 @@ pub(super) struct Presentations {
     admitted: Option<Rc<Snapshot>>,
 }
 impl Presentations {
+    fn discard_invalid(&mut self, valid: impl Fn(&Rc<Snapshot>) -> bool) {
+        if self.displayed.as_ref().is_some_and(|s| !valid(s))
+            || self.admitted.as_ref().is_some_and(|s| !valid(s))
+        {
+            self.displayed = None;
+            self.admitted = None;
+        }
+    }
+    fn displayed_frame(&self) -> (render::StateFrame, Option<Arc<RequestKey>>, bool) {
+        self.displayed
+            .as_ref()
+            .map(|snapshot| (snapshot.frame.clone(), Some(snapshot.key.clone()), true))
+            .unwrap_or_else(|| (Default::default(), None, true))
+    }
     fn publish(
         &mut self,
         controller: &mut crate::display::composite::CompositeController,
@@ -204,7 +218,11 @@ impl SceneView {
             self.presentations.admitted = None;
             return (Default::default(), None, true);
         }
-        if !self.presentations.active && self.state_styles.is_empty() && !fixed {
+        if !self.presentations.active
+            && self.state_styles.is_empty()
+            && !fixed
+            && !self.accessibility_enabled()
+        {
             if let Some(key) = key {
                 self.request_composite_key(key, None, window, cx);
             }
@@ -227,10 +245,7 @@ impl SceneView {
                 .admitted
                 .as_ref()
                 .is_some_and(|s| !valid(s));
-        if hard_invalid {
-            self.presentations.displayed = None;
-            self.presentations.admitted = None;
-        }
+        self.presentations.discard_invalid(|_| !hard_invalid);
         // Publication is before constructing any native or CPU elements. The
         // previous paint phase uploaded the whole candidate batch invisibly.
         if let Some(retired) = self.presentations.publish(&mut self.compositing) {
@@ -288,11 +303,7 @@ impl SceneView {
                     .retire(image, window, cx.entity().downgrade());
             }
         }
-        self.presentations
-            .displayed
-            .as_ref()
-            .map(|snapshot| (snapshot.frame.clone(), Some(snapshot.key.clone()), true))
-            .unwrap_or_else(|| (Default::default(), None, true))
+        self.presentations.displayed_frame()
     }
     pub(super) fn presentation_upload_element(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let key = self.presentations.admitted.as_ref().map(|s| s.key.clone());
@@ -575,6 +586,100 @@ mod tests {
             controller.presentation_uploaded(&key, &id, &frame.image);
         }
         gate.publish(controller).unwrap();
+    }
+    #[::core::prelude::v1::test]
+    fn semantics_and_active_descendant_follow_real_publication_upload_failure_and_view_revocation()
+    {
+        let (editor, mut styles, router) = fixture();
+        let host = gpui_flow_interaction::scene::ScenePluginHost::with_defaults();
+        let mut semantics = super::super::accessibility::AccessibilityState::default();
+        semantics.configure(Some(SceneAccessibility::new("Drawing")));
+        let target = editor.engine.handle(&"r".into()).unwrap();
+        let mut controller = crate::display::composite::CompositeController::default();
+        let first = snapshot(&editor, &mut styles, &router, 0);
+        let mut gate = Presentations {
+            active: true,
+            displayed: None,
+            admitted: Some(first.clone()),
+        };
+        let project =
+            |gate: &Presentations,
+             semantics: &mut super::super::accessibility::AccessibilityState| {
+                let (frame, key, _) = gate.displayed_frame();
+                if let Some(key) = key {
+                    let geometry = gate
+                        .displayed
+                        .as_ref()
+                        .unwrap()
+                        .geometry
+                        .as_ref()
+                        .unwrap_or(&editor.engine);
+                    semantics.project(&frame, geometry.scene(), &editor, &host, key);
+                } else {
+                    semantics.clear_projection();
+                }
+            };
+        controller.request_coherent(first.key.clone(), false);
+        let work = controller.take_work().unwrap();
+        controller.finish(work.key.clone(), work.run());
+        assert!(gate.publish(&mut controller).is_none());
+        project(&gate, &mut semantics);
+        assert!(semantics.inspect(Some(target)).is_empty());
+        publish(&mut gate, &mut controller);
+        project(&gate, &mut semantics);
+        let inspect = |semantics: &super::super::accessibility::AccessibilityState| {
+            semantics
+                .inspect(Some(target))
+                .into_iter()
+                .find(|(handle, _, _)| *handle == target)
+                .unwrap()
+        };
+        assert_eq!(inspect(&semantics).1.size.width, 20.);
+        assert!(inspect(&semantics).2);
+        for id in ["r", "native"] {
+            styles
+                .select_state(
+                    &editor.engine,
+                    editor.engine.handle(&id.into()).unwrap(),
+                    Some("wide"),
+                )
+                .unwrap();
+        }
+        snapshot(&editor, &mut styles, &router, 1);
+        let candidate = snapshot(&editor, &mut styles, &router, 501);
+        gate.admitted = Some(candidate.clone());
+        controller.request_coherent(candidate.key.clone(), true);
+        let work = controller.take_work().unwrap();
+        controller.finish(work.key.clone(), work.run());
+        assert!(gate.publish(&mut controller).is_none());
+        project(&gate, &mut semantics);
+        assert_eq!(inspect(&semantics).1.size.width, 20.);
+        controller.upload_failed(
+            &candidate.key,
+            &"g".into(),
+            "injected upload rejection".into(),
+        );
+        assert!(gate.publish(&mut controller).is_none());
+        project(&gate, &mut semantics);
+        assert_eq!(inspect(&semantics).1.size.width, 20.);
+        assert!(inspect(&semantics).2);
+        let final_sample = snapshot(&editor, &mut styles, &router, 1001);
+        assert!(gate.needs_admission(&final_sample.key, &final_sample.frame, true));
+        gate.admitted = Some(final_sample.clone());
+        controller.request_coherent(final_sample.key.clone(), true);
+        let work = controller.take_work().unwrap();
+        controller.finish(work.key.clone(), work.run());
+        publish(&mut gate, &mut controller);
+        project(&gate, &mut semantics);
+        assert_eq!(inspect(&semantics).1.size.width, 60.);
+        assert!(inspect(&semantics).2);
+        // The same actual viewport/window gate encloses content and all proxies.
+        let mut moved = final_sample.key.viewport;
+        moved.device_scale = 2.;
+        gate.discard_invalid(|snapshot| view_matches(&snapshot.key, moved, snapshot.key.window));
+        project(&gate, &mut semantics);
+        assert!(semantics.inspect(Some(target)).is_empty());
+        assert!(gate.admitted.is_none() && gate.displayed.is_none());
     }
     #[::core::prelude::v1::test]
     fn coherent_state_clock_and_retargets_do_not_starve_cpu_or_split_hit_and_native_paint() {

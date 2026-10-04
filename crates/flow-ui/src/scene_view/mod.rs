@@ -1,4 +1,6 @@
 //! Retained-scene canvas, independent of node graphs, media runners and Studio chrome.
+mod accessibility;
+pub use accessibility::{SceneAccessibility, SceneAccessibilityIssue};
 mod canvas_commands;
 mod composite;
 pub(crate) mod export;
@@ -34,6 +36,8 @@ pub enum SceneViewEvent {
     FlowFrame(FlowFrameEvent),
     SelectionChanged,
     Pointer(Box<SceneEvent>),
+    /// Cancelable non-pointer keyboard/assistive-technology request.
+    Semantic(Box<SceneEvent>),
     /// Opt-in completed input snapshot; no history is retained by the view.
     InputTrace(Box<SceneInputTrace>),
     Resource(gpui_flow_engine::ResourceEvent),
@@ -66,6 +70,7 @@ pub struct SceneView {
     pub compositing_pending: bool,
     pub(crate) compositing: crate::display::composite::CompositeController,
     presentations: presentation::Presentations,
+    accessibility: accessibility::AccessibilityState,
     composite_geometry: Option<gpui_flow_composite::RasterViewport>,
     text_rasterizer: Option<std::sync::Arc<gpui_flow_text::GpuiTextRasterizer>>,
     custom_rasterizers: crate::display::composite_custom::CustomRasterizers,
@@ -135,6 +140,7 @@ impl SceneView {
             compositing_pending: false,
             compositing: Default::default(),
             presentations: Default::default(),
+            accessibility: Default::default(),
             composite_geometry: None,
             text_rasterizer: None,
             custom_rasterizers: Default::default(),

@@ -1,6 +1,8 @@
 //! Tree listeners run before default behaviors. Gesture cleanup is mandatory even
 //! when pointer-up is prevented; callbacks cannot strand an editor transaction.
 mod focus;
+mod semantic;
+pub use semantic::{SemanticDefault, SemanticDispatch};
 mod pointer;
 use super::{ScenePluginHost, action_queue::SceneAction};
 use crate::{CanvasEvent, DispatchReport, HitTarget, KeyCode, PointerIdentity};

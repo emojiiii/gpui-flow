@@ -137,7 +137,9 @@ impl SceneView {
         if let Some(operation) = operation {
             self.emit_input_trace(operation, &report, cx);
         }
-        let allowed = report.errors.is_empty() && !report.default.default_prevented;
+        let allowed = report.errors.is_empty()
+            && report.default.errors.is_empty()
+            && !report.default.default_prevented;
         self.apply_routed_report(report, cx);
         if !self.interactions.needs_navigation_frame() && !self.router.needs_gesture_frame() {
             self.navigation_frames.cancel();
@@ -151,7 +153,14 @@ impl SceneView {
     ) {
         self.pending_native_focus |= report.focus_requested;
         for event in report.events {
-            cx.emit(SceneViewEvent::Pointer(Box::new(event)));
+            if matches!(
+                event.input,
+                Some(gpui_flow_scene::EventInput::Semantic { .. })
+            ) {
+                cx.emit(SceneViewEvent::Semantic(Box::new(event)));
+            } else {
+                cx.emit(SceneViewEvent::Pointer(Box::new(event)));
+            }
         }
         if let Some(error) = report.errors.last() {
             self.interaction_error = Some(error.clone());
@@ -162,10 +171,20 @@ impl SceneView {
     /// Focus an attached live element without selecting it. Returns false if the
     /// native window declines focus (for example when focus is disabled), or if
     /// a queued listener action removes the logical target during notification.
-    /// This does not activate an OS window or implement Tab/IME/accessibility.
+    /// This does not activate an OS window. Optional scene semantics call this
+    /// same focus path; IME remains owned by the native Textarea.
     pub fn focus_element(
         &mut self,
         handle: gpui_flow_engine::ElementHandle,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Result<bool, gpui_flow_engine::EngineError> {
+        self.focus_element_with_semantic(handle, None, window, cx)
+    }
+    pub(super) fn focus_element_with_semantic(
+        &mut self,
+        handle: gpui_flow_engine::ElementHandle,
+        permit: Option<input::scene::SemanticDefault>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Result<bool, gpui_flow_engine::EngineError> {
@@ -188,13 +207,23 @@ impl SceneView {
             );
             return Ok(false);
         }
-        let report =
+        let semantic = permit.is_some();
+        let report = if let Some(permit) = permit {
+            self.router.set_focus_after_semantic(
+                &mut self.editor,
+                &mut self.interactions,
+                permit,
+            )?
+        } else {
             self.router
-                .set_focus(&mut self.editor, &mut self.interactions, Some(handle))?;
+                .set_focus(&mut self.editor, &mut self.interactions, Some(handle))?
+        };
+        let clean = report.errors.is_empty() && report.default.errors.is_empty();
         self.emit_input_trace(SceneInputOperation::Focus(id), &report, cx);
         self.apply_routed_report(report, cx);
         self.pending_native_focus = false;
-        let accepted = self.router.focused(&self.editor.engine) == Some(handle);
+        let accepted =
+            self.router.focused(&self.editor.engine) == Some(handle) && (!semantic || clean);
         if self.router.focused(&self.editor.engine).is_none() && self.focus.is_focused(window) {
             window.blur(cx);
         }
@@ -361,7 +390,12 @@ impl SceneView {
             cx,
         );
     }
-    pub(super) fn key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
+    pub(super) fn key(
+        &mut self,
+        event: &KeyDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.image_crop_editor_active()
             && (event.keystroke.key == "enter"
                 || (event.keystroke.key == "escape" && !self.interactions.has_capture()))
@@ -372,13 +406,20 @@ impl SceneView {
         if self.inner_tool_active() {
             return;
         }
-        self.plugin_event(
+        let allowed = self.plugin_event(
             input::CanvasEvent::KeyDown {
                 key: key_code(event.keystroke.key.as_str()),
                 modifiers: modifiers(event.keystroke.modifiers, self.router.space_held()),
             },
             cx,
         );
+        if allowed {
+            self.semantic_key(event, window, cx);
+        } else if self.accessibility_enabled()
+            && matches!(event.keystroke.key.as_str(), "tab" | "enter")
+        {
+            cx.stop_propagation();
+        }
         cx.notify();
     }
     pub(super) fn key_up(&mut self, event: &KeyUpEvent, cx: &mut Context<Self>) {

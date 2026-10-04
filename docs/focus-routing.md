@@ -82,7 +82,9 @@ does not request focus on every render. If a queued request is declined by GPUI,
 logical focus clears and interaction_error records the failure. A later genuine
 FocusLost clears pending synchronization, and a delayed focus-out notification is
 ignored if the view already regained native focus. OS window activation is not
-requested. This is not Tab navigation, IME, accessibility or an OS-wide focus manager.
+requested. These primitives are not an OS-wide focus manager. The optional
+[scene semantic adapter](scene-accessibility.md) builds real AccessKit nodes and
+Tab navigation on this path; IME remains owned by the native Textarea.
 
 The native state_styles example has Focus card / Clear focus controls alongside
 hover/press/disabled, transitions and Undo/Redo. Compilation and headless tests do

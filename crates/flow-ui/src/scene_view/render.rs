@@ -273,6 +273,8 @@ impl Render for SceneView {
         }
         let key = self.composite_key(domains, window);
         let (frame, composite_key, coherent) = self.coherent_presentation(frame, key, window, cx);
+        self.project_accessibility(&frame, composite_key.clone());
+        self.complete_semantic_entry(window, cx);
         // Semantic recovery can clear an upload/domain error without starting a
         // job (an unchanged accepted frame is reusable). Re-evaluate after the
         // reset so playback wakes even when no worker completion will notify us.
@@ -479,6 +481,7 @@ impl Render for SceneView {
             })
             .when(!managed_layer, |view| view.track_focus(&self.focus))
             .child(background);
+        view = self.semantic_root(view, cx);
         let mut content = div().absolute().size_full();
         let objects = frame
             .objects
@@ -551,6 +554,7 @@ impl Render for SceneView {
                 };
             }
         }
+        content = content.children(self.semantic_elements(cx, self.focus.is_focused(window)));
         view = if coherent {
             view.child(self.presentation_content(
                 content.into_any_element(),
@@ -709,7 +713,7 @@ impl Render for SceneView {
                 .on_scroll_wheel(cx.listener(|this, event, _, cx| this.scroll(event, cx)))
                 .on_key_down(cx.listener(|this, event, window, cx| {
                     if this.focus.is_focused(window) {
-                        this.key(event, cx);
+                        this.key(event, window, cx);
                     }
                 }))
                 .on_key_up(cx.listener(|this, event, window, cx| {

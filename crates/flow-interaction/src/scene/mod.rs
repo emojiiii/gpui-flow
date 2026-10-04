@@ -43,7 +43,9 @@ pub type SceneDispatchReport = crate::DispatchReport;
 pub type SceneInteractionError = crate::InteractionError;
 
 mod router;
-pub use router::{RoutedReport, SceneEventRouter, SceneInteractionState};
+pub use router::{
+    RoutedReport, SceneEventRouter, SceneInteractionState, SemanticDefault, SemanticDispatch,
+};
 
 mod state_style;
 pub use state_style::*;

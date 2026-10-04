@@ -342,8 +342,11 @@ impl SceneView {
                 false
             }
         };
-        if focused && self.text_input.is_none() {
-            window.focus(&self.focus, cx);
+        if self.text_input.is_none() {
+            self.semantic_text_closed(focused);
+            if focused {
+                window.focus(&self.focus, cx);
+            }
         }
         self.emit_tool_changes(before, cx);
         Self::repaint_text_editor(window, cx);

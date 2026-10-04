@@ -156,6 +156,7 @@ cargo +1.98.1 run --locked -p flow-studio
 - [元素实例、属性变更与事件引擎](docs/engine.md)
 - [属性动画、播放控制与Undo历史](docs/animation.md)
 - [键盘事件、Space导航与释放清理](docs/keyboard-routing.md)
+- [可选场景语义、真实AccessKit节点与双向Tab导航](docs/scene-accessibility.md)（Focus/OpenText与displayed-frame门控；EVT04仍partial，IME/跨平台另验）
 - [视觉行列布局与边界](docs/flow-layout.md)
 - [多层填充、描边与外观边界](docs/appearance.md)
 - [Box/Frame显式绘制阶段、兼容性与验证状态](docs/container-paint-order.md)
