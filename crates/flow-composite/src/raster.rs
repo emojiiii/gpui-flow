@@ -638,6 +638,11 @@ impl Raster<'_> {
         .ok_or(CompositeError::AllocationFailed)?;
         self.budget.write(self.pixels * 2)?;
         mask.fill_path(&path.path, path.rule, true, transform(a));
+        if !node.erase_clips.is_empty() {
+            let intersection = self.path_mask(&node.erase_clips, Some(&mask))?;
+            self.budget.in_use -= self.pixels;
+            mask = intersection;
+        }
         for (y, row) in target
             .data_mut()
             .chunks_mut(self.width as usize * 4)

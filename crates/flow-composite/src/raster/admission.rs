@@ -83,6 +83,30 @@ impl Admission<'_> {
             Ok(())
         }
     }
+    fn path_mask(
+        &mut self,
+        paths: &[Option<crate::vector::VectorPaint>],
+    ) -> Result<(), CompositeError> {
+        self.check()?;
+        self.budget.reserve(self.pixels)?;
+        if self.track_initialization {
+            self.budget.write(self.pixels)?;
+        }
+        self.budget.write(self.pixels)?;
+        for path in paths {
+            if path.is_some() {
+                self.budget.reserve(self.pixels)?;
+                if self.track_initialization {
+                    self.budget.write(self.pixels)?;
+                }
+                self.budget.write(self.pixels * 2)?;
+                self.budget.in_use -= self.pixels;
+            } else {
+                self.budget.write(self.pixels)?;
+            }
+        }
+        Ok(())
+    }
     fn node(
         &mut self,
         node: &PreparedNode,
@@ -103,6 +127,10 @@ impl Admission<'_> {
                     self.budget.write(self.pixels)?;
                 }
                 self.budget.write(self.pixels * 2)?;
+                if !node.erase_clips.is_empty() {
+                    self.path_mask(&node.erase_clips)?;
+                    self.budget.in_use -= self.pixels;
+                }
                 self.budget.in_use -= self.pixels;
             }
             return Ok(());
@@ -317,23 +345,7 @@ impl Admission<'_> {
                     .position(|c| c.mask != MaskMode::None)
                     .map_or(node.children.len(), |n| i + 1 + n);
                 if child.opacity > 0. {
-                    self.budget.reserve(self.pixels)?;
-                    if self.track_initialization {
-                        self.budget.write(self.pixels)?;
-                    }
-                    self.budget.write(self.pixels)?;
-                    for path in &child.mask_paths {
-                        if path.is_some() {
-                            self.budget.reserve(self.pixels)?;
-                            if self.track_initialization {
-                                self.budget.write(self.pixels)?;
-                            }
-                            self.budget.write(self.pixels * 2)?;
-                            self.budget.in_use -= self.pixels;
-                        } else {
-                            self.budget.write(self.pixels)?;
-                        }
-                    }
+                    self.path_mask(&child.mask_paths)?;
                     if child.opacity < 1. {
                         self.budget.reserve(self.pixels * 4)?;
                         if self.track_initialization {

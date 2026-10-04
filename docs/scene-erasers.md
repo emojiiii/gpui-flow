@@ -10,7 +10,24 @@ Engine `PropertyKey::Eraser` has default `"none"` and invalidates PAINT | GEOMET
 
 Pixel uses the complete rendered alpha of currently supported producers: geometric vectors, supported image/Canvas snapshots, supported same-backend text ink, and Group/Box/Frame contents and supported effects. Its source is first drawn once on a transparent surface. Destination premultiplied RGB and alpha are multiplied by `1 - source_alpha * object_opacity * inherited_clip_coverage`. Source RGB never colors the destination. Artistic blend settings are overridden for Pixel. Fill/stroke overlaps and child overlaps receive object opacity once after combination.
 
-Path currently accepts only Rect, Ellipse, Line, Polygon, Star, Path and Pen. It clears the antialiased filled geometric contour with the configured fill rule, intersected with the inherited clip. It does not use fill visibility/alpha, strokes or effects. Positive object opacity only gates rendering and does not attenuate clearing; zero opacity and hidden state disable clearing. Open contours implicitly close for filling, winding holes remain holes, and a straight Line has no filled area. Path on Group, Box, Frame, Text, Image, Canvas or Custom rejects a captured domain with `UnsupportedPathEraser`; it never substitutes glyph alpha or a layout rectangle. Custom Pixel producers retain the existing unsupported-producer error.
+Path clears antialiased filled geometry intersected with the inherited clip. Vector
+leaves retain their fill rule, implicit closure and winding holes; a straight Line
+has no filled area. Box/Frame use their own rounded contour without descendants.
+Image/Canvas use their rounded rectangle/path geometry without loading pixels or
+creating a producer request. Text/Custom reject with `UnsupportedPathEraser`; no
+glyph box or pixel alpha is substituted.
+
+Group Path erasure intersects its visible positive-opacity child contours, then
+clears within its retained geometric bounds. Nested Groups recurse; Box/Frame
+children contribute only their own contour. Hidden child geometry can still set
+those retained bounds, matching the existing layout contract. An empty Group has
+no clear area; an empty leaf contour in an intersection clears nothing. Active
+mask prefixes retain stable z-order when computing the Group clear bounds.
+
+Path ignores fill visibility/alpha, strokes and effects. Positive object opacity
+gates the operation without attenuating it; zero opacity and hidden state disable
+clearing. Custom Pixel producers retain their existing unsupported-producer error.
+
 
 ## Ownership, isolation and order
 
@@ -55,32 +72,15 @@ The behavior follows UI `1e11641d3ea6b0211c83447268a90b8d58feec25` and core `1d7
 - [MaskModule flush order](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/mask/src/index.ts#L59), [LeafBoundsHelper aggregate exclusion](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/display-module/helper/src/LeafBoundsHelper.ts#L10)
 - [Branch clip behavior](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/display-module/display-module/src/BranchRender.ts#L74), [Text path preparation](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/Text.ts#L184), [Picker traversal](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/partner/selector/src/Picker.ts#L148)
 
-Focused source fixtures live in `flow-composite/src/eraser_tests.rs`, Scene/Engine `tests/erasers.rs`, and UI composite presentation tests. They cover alpha/opacity/order, direct-parent ownership, hidden markers, Path geometry, literal mask schedules, actual producer alpha, root backdrop retention, explicit consumer failures, bounds/hit/history parity, admission rollback and publication invalidation. Validation results must be recorded separately after executing the commands; source fixtures are not a native-window result. No native eraser window, upstream browser fixture, macOS/Windows or cross-platform pixel equivalence is claimed here.
+Focused source fixtures live in `flow-composite/src/eraser_tests.rs`, Scene/Engine `tests/erasers.rs`, and UI composite presentation tests. They cover alpha/opacity/order, direct-parent ownership, hidden markers, Path geometry, literal mask schedules, actual producer alpha, root backdrop retention, explicit consumer failures, bounds/hit/history parity, admission rollback and publication invalidation. CPU assertions are separate from desktop JPEG observations. No upstream browser execution or cross-platform pixel equivalence is claimed.
 
-### Local headless checkpoint, 2026-10-03
+Run `cargo test -p gpui-flow-composite eraser_tests` for exact CPU coverage and
+budget/retention rollback, and the Scene/Engine `erasers` integration tests for
+bounds, picking and history. Group intersections also share geometric clip
+admission with Path masks; related mask tests protect that shared schedule.
 
-The following completed under the existing locked dependency graph, offline, jobs=1, incremental disabled and test debug info disabled:
-
-```sh
-cargo test --locked --offline -j1 -p gpui-flow-scene -p gpui-flow-engine -p gpui-flow-composite
-cargo clippy --locked --offline -j1 -p gpui-flow-scene -p gpui-flow-engine -p gpui-flow-composite --all-targets -- -D warnings
-```
-
-All three affected crates' tests and doctests passed, with their existing ignored tests still ignored; strict Clippy passed. The new effect fixtures cover Pixel Group/Box/Frame outer and inner shadows at full/half opacity, and Path ignoring actual outer/inner effects. An independent review caught and corrected a Pixel container shadow-capture guard that had rejected full-opacity erasers; a first-run affine fixture was corrected to capture the shared parent containing the expected outside sibling. The failed-run log was retained and the corrected full suites passed.
-
-Budget fixtures prove pre-admission failure and retained-byte rollback, and cancellation coverage explicitly includes pre-cancelled requests. Per-row cancellation is implemented, but this checkpoint does not inject deterministic mid-row cancellation or GPU-upload failure. The added UI publication fixture was checked separately below. Native-window behavior is not included in these results.
-
-### Local UI publication and strict-check checkpoint, 2026-10-03
-
-The targeted publication test passed (one test, other UI tests filtered), and strict all-target Clippy passed for the same explicit Studio/native feature graph:
-
-```sh
-cargo test --locked --offline -j1 -p gpui-flow -p flow-studio --features gpui-flow/canvas-stroke-text,flow-studio/outline-font-binding-x11 --lib eraser_mode_changes
-cargo clippy --locked --offline -j1 -p gpui-flow -p flow-studio --features gpui-flow/canvas-stroke-text,flow-studio/outline-font-binding-x11 --all-targets -- -D warnings
-```
-
-The test exercises the production controller's incompatible-frame withdrawal, cancellation and rejection of late successful work, None/Pixel/Path transitions, and acceptance only after the matching upload receipt. It creates no native App/Window and does not perform an actual GPU upload; it is controller-state coverage. Native eraser window checks, other UI runtime tests, upstream-browser execution and cross-platform equivalence remain unclaimed.
-
-The machine-readable summary (historical record in Git history)
-records the 778 affected-crate passes, three existing ignored tests, focused UI
-result, exact commands, source hashes, original failure and review correction.
+The Linux `compositing` example’s **Path erasers** control toggles a Group
+intersection and Image/Canvas/Box/Frame contours without producer resources.
+Its native smoke check observed all five clear regions, Undo restoration and a
+repeated activation before normal close. Exact coverage and limits remain CPU
+regressions; these visible results are not cross-platform pixel guarantees.

@@ -134,7 +134,7 @@ Build planning allowances are estimates; actual costs belong in the execution re
 ## Explicit remaining limits
 
 - No external GPUI/native backdrop erase or framebuffer readback; only supported captured parent surfaces and OwnedCanvas's explicit document/background ownership
-- Path supports current geometric leaves only. Group/Box/Frame/Text/Image/Canvas/Custom Path producers reject with `UnsupportedPathEraser`; no union-of-children, glyph-alpha, or rectangle substitution
+- Path supports geometric leaves, Group child-contour intersections and the own contours of Box/Frame/Image/Canvas; the compact `compositing` example exercises these additions. Text/Custom still reject with `UnsupportedPathEraser`; there is no union-of-children or glyph-alpha substitution
 - Custom Pixel remains an unsupported captured producer; this fixture does not install a custom renderer
 - Pixel Text/Image/Canvas and supported effect alpha remain covered by focused production CPU/host tests, not this initial geometric native fixture. It intentionally has no same-App text bridge and no remote image pipeline
 - No claim of upstream Leafer browser pixel equivalence, full mask layout/hit policy, grayscale/path masks, Box phase parity, pixel picking, mixed SVG erase encoding, or Canvas draw of a bare eraser root

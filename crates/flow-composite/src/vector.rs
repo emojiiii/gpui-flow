@@ -29,6 +29,8 @@ pub(crate) struct PreparedNode {
     pub eraser: EraserMode,
     pub has_eraser_children: bool,
     pub erase_path: Option<VectorPaint>,
+    /// Group Path erasure intersects child contours before clearing its bounds.
+    pub erase_clips: Vec<Option<VectorPaint>>,
     /// Sequential geometric intersections; None is an empty leaf contour.
     pub mask_paths: Vec<Option<VectorPaint>>,
     pub paints: Vec<VectorPaint>,
@@ -367,11 +369,12 @@ impl Preparation {
         }
         Ok(())
     }
-    fn mask_geometry(
+    fn geometric_clips(
         &mut self,
         source: &DomainNode,
         limits: CompositeLimits,
         out: &mut Vec<Option<VectorPaint>>,
+        unsupported: fn(gpui_flow_scene::DisplayId) -> CompositeError,
     ) -> Result<(), CompositeError> {
         let object = &source.object;
         if !object.visible || object.style.opacity == 0. {
@@ -381,14 +384,14 @@ impl Preparation {
             // Leafer Branch.__clip intersects child contours, rather than
             // treating the branch's bounding rectangle as a filled path.
             for child in &source.children {
-                self.mask_geometry(child, limits, out)?;
+                self.geometric_clips(child, limits, out, unsupported)?;
             }
             return Ok(());
         }
         let contour = match &object.shape {
             Shape::Image(image) => path(&Shape::Rect(image.rect()))?,
             Shape::Text(_) | Shape::Custom(_) => {
-                return Err(CompositeError::UnsupportedPathMask(object.id.clone()));
+                return Err(unsupported(object.id.clone()));
             }
             shape => path(shape)?,
         };
@@ -436,6 +439,7 @@ impl Preparation {
         }
         let resolved;
         let object = if source.object.mask != MaskMode::Path
+            && source.object.eraser != EraserMode::Path
             && source.object.style.has_scale_fixed_strokes()
         {
             resolved = source
@@ -479,6 +483,7 @@ impl Preparation {
                 eraser: object.eraser,
                 has_eraser_children,
                 erase_path: None,
+                erase_clips: vec![],
                 mask_paths: vec![],
                 paints: vec![],
                 fill_count: 0,
@@ -496,7 +501,12 @@ impl Preparation {
             self.reference_geometry(source, limits, depth, true)?;
             let prior_bounds = self.bounds.take();
             let mut mask_paths = Vec::new();
-            self.mask_geometry(source, limits, &mut mask_paths)?;
+            self.geometric_clips(
+                source,
+                limits,
+                &mut mask_paths,
+                CompositeError::UnsupportedPathMask,
+            )?;
             let bounds = self.bounds.take();
             self.bounds = prior_bounds; // a nonpainting mask cannot enlarge ink
             return Ok(PreparedNode {
@@ -516,6 +526,7 @@ impl Preparation {
                 eraser: EraserMode::None,
                 has_eraser_children: false,
                 erase_path: None,
+                erase_clips: vec![],
                 mask_paths,
                 paints: vec![],
                 fill_count: 0,
@@ -545,12 +556,48 @@ impl Preparation {
         let previous_bounds = self.bounds.take();
         let mut mask_paths = Vec::new();
         if object.mask == MaskMode::ClippingPath {
-            self.mask_geometry(source, limits, &mut mask_paths)?;
+            self.geometric_clips(
+                source,
+                limits,
+                &mut mask_paths,
+                CompositeError::UnsupportedPathMask,
+            )?;
             self.bounds = None; // clip geometry is not an alpha producer
         }
         if object.eraser == EraserMode::Path {
-            let erase_path = if let Some(path) = path(&object.shape)? {
-                self.add_path(&path, source.world_transform, limits)?;
+            let mut erase_clips = Vec::new();
+            for child in &source.children {
+                self.reference_geometry(child, limits, depth + 1, false)?;
+            }
+            let (contour, world) = if matches!(object.shape, Shape::Group(_)) {
+                self.geometric_clips(
+                    source,
+                    limits,
+                    &mut erase_clips,
+                    CompositeError::UnsupportedPathEraser,
+                )?;
+                let contour = reference_bounds(source, self.logical_camera.unwrap_or(1.), true)?;
+                if let Some(bounds) = contour {
+                    (
+                        path(&Shape::Rect(gpui_flow_scene::display::Rect::new(
+                            bounds.size.width,
+                            bounds.size.height,
+                        )))?,
+                        source.world_transform
+                            * Affine::translation(bounds.origin.x, bounds.origin.y),
+                    )
+                } else {
+                    (None, source.world_transform)
+                }
+            } else {
+                let contour = match &object.shape {
+                    Shape::Image(image) => path(&Shape::Rect(image.rect()))?,
+                    shape => path(shape)?,
+                };
+                (contour, source.world_transform)
+            };
+            let erase_path = if let Some(path) = contour {
+                self.add_path(&path, world, limits)?;
                 Some(VectorPaint {
                     path,
                     paint: VectorSource::Scene(tiny_skia::Paint::default()),
@@ -558,7 +605,7 @@ impl Preparation {
                         FillRule::EvenOdd => tiny_skia::FillRule::EvenOdd,
                         FillRule::NonZero => tiny_skia::FillRule::Winding,
                     },
-                    world: source.world_transform,
+                    world,
                 })
             } else {
                 None
@@ -584,7 +631,8 @@ impl Preparation {
                 eraser: object.eraser,
                 has_eraser_children: false,
                 erase_path,
-                mask_paths: vec![],
+                erase_clips,
+                mask_paths,
                 paints: vec![],
                 fill_count: 0,
                 children_before_inner: true,
@@ -964,6 +1012,7 @@ impl Preparation {
             eraser: object.eraser,
             has_eraser_children,
             erase_path: None,
+            erase_clips: vec![],
             mask_paths,
             fill_count,
             children_before_inner: !matches!(object.shape, Shape::Box(_) | Shape::Frame(_))

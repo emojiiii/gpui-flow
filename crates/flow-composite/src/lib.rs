@@ -113,7 +113,7 @@ pub enum CompositeError {
         reason: String,
     },
     UnsupportedExternalBackdrop,
-    /// Path erasure currently accepts only geometric vector leaves.
+    /// Path erasure requires a supported geometric contour, not producer alpha.
     UnsupportedPathEraser(DisplayId),
     UnsupportedPathMask(DisplayId),
     UnsupportedTransform,

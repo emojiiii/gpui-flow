@@ -3,7 +3,8 @@ use gpui::{prelude::*, *};
 use gpui_flow::{
     ControlButton, SceneView, SceneViewEvent,
     scene::{
-        Affine, BlendMode, Color, DisplayObject, EventKind, MaskMode, Scene, Size, Style, display,
+        Affine, BlendMode, Color, DisplayObject, EraserMode, EventKind, MaskMode, Scene, Shape,
+        Size, Style, display,
     },
 };
 fn document() -> Scene {
@@ -69,6 +70,50 @@ fn document() -> Scene {
             .with_style(Style::fill(Color::hex(0x4060ff))),
         "mask",
     );
+    let mut path_cut = DisplayObject::new("path-cut", display::Group::new())
+        .with_transform(Affine::translation(70., 60.))
+        .with_eraser(EraserMode::Path);
+    path_cut.visible = false;
+    add(path_cut, "mask");
+    for (id, x) in [("clip-a", 0.), ("clip-b", 40.)] {
+        add(
+            DisplayObject::new(id, display::Ellipse::new(90., 90.))
+                .with_transform(Affine::translation(x, 0.)),
+            "path-cut",
+        );
+    }
+    for (id, shape, x, y) in [
+        (
+            "image-cut",
+            Shape::from(display::Image::new("geometry-only", Size::new(30., 30.))),
+            65.,
+            165.,
+        ),
+        (
+            "canvas-cut",
+            display::Canvas::new(30., 30.).into(),
+            170.,
+            35.,
+        ),
+        (
+            "box-cut",
+            display::Box::new(30., 30.).rounded(7.).into(),
+            170.,
+            170.,
+        ),
+        (
+            "frame-cut",
+            display::Frame::new(30., 30.).rounded(7.).into(),
+            75.,
+            25.,
+        ),
+    ] {
+        let mut cut = DisplayObject::new(id, shape)
+            .with_transform(Affine::translation(x, y))
+            .with_eraser(EraserMode::Path);
+        cut.visible = false;
+        add(cut, "mask");
+    }
     s
 }
 struct Lab {
@@ -101,6 +146,34 @@ impl Lab {
             _events: events,
             last_hit: "Click the masked content to inspect the routed target".into(),
         }
+    }
+    fn toggle_erasers(&mut self, cx: &mut Context<Self>) {
+        self.view.update(cx, |view, cx| {
+            let visible = !view
+                .editor
+                .scene()
+                .get(&"path-cut".into())
+                .unwrap()
+                .object
+                .visible;
+            view.editor
+                .transaction(|scene| {
+                    for id in [
+                        "path-cut",
+                        "image-cut",
+                        "canvas-cut",
+                        "box-cut",
+                        "frame-cut",
+                    ] {
+                        scene.update_object(&id.into(), |object| object.visible = visible)?;
+                    }
+                    Ok(())
+                })
+                .unwrap();
+            eprintln!("geometric path erasers visible={visible}");
+            cx.notify();
+        });
+        cx.notify();
     }
     fn edit(&mut self, id: &str, f: impl FnOnce(&mut DisplayObject), cx: &mut Context<Self>) {
         self.view.update(cx, |v, cx| {
@@ -162,6 +235,7 @@ impl Render for Lab {
                 .child(ControlButton::new("opacity","Opacity 50% / 100%").on_click(cx.listener(|this,_,_,cx|this.edit("opacity",|o|o.style.opacity=if o.style.opacity==0.5 {1.} else {0.5},cx))))
                 .child(ControlButton::new("blend","Multiply / Screen").on_click(cx.listener(|this,_,_,cx|this.edit("blend-blue",|o|o.style.blend_mode=if o.style.blend_mode==BlendMode::Multiply {BlendMode::Screen} else {BlendMode::Multiply},cx))))
                 .child(ControlButton::new("mask","Mask alpha 100% / 50%").on_click(cx.listener(|this,_,_,cx|this.edit("ellipse-mask",|o|o.style.opacity=if o.style.opacity==1. {0.5} else {1.},cx))))
+                .child(ControlButton::new("path-erasers","Path erasers").on_click(cx.listener(|this,_,_,cx|this.toggle_erasers(cx))))
                 .child(ControlButton::new("undo","Undo").on_click(cx.listener(|this,_,_,cx|{this.view.update(cx,|v,cx|{v.editor.undo();cx.notify();});cx.notify();}))))
             .child(div().h(px(48.)).px_4().flex().items_center().gap_2()
                 .child(ControlButton::new("mask-mode", "Next mask mode").on_click(cx.listener(|this,_,_,cx|this.edit("ellipse-mask",|o|o.mask=match o.mask {MaskMode::Alpha=>MaskMode::Grayscale,MaskMode::Grayscale=>MaskMode::Path,MaskMode::Path=>MaskMode::Clipping,MaskMode::Clipping=>MaskMode::ClippingPath,_=>MaskMode::Alpha},cx))))

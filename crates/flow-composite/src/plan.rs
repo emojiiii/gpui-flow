@@ -212,6 +212,7 @@ impl DomainSource {
     pub(crate) fn has_scale_fixed_strokes(&self) -> bool {
         fn visit(node: &DomainNode) -> bool {
             node.object.mask != MaskMode::Path
+                && node.object.eraser != EraserMode::Path
                 && (node.object.style.has_scale_fixed_strokes() || node.children.iter().any(visit))
         }
         visit(&self.root)
@@ -228,6 +229,7 @@ impl DomainSource {
             if !node.object.visible
                 || node.object.style.opacity == 0.
                 || node.object.mask == MaskMode::Path
+                || node.object.eraser == EraserMode::Path
             {
                 return;
             }
@@ -296,6 +298,7 @@ impl DomainSource {
             if !node.object.visible
                 || node.object.style.opacity == 0.
                 || node.object.mask == MaskMode::Path
+                || node.object.eraser == EraserMode::Path
             {
                 return;
             }
@@ -335,6 +338,7 @@ impl DomainSource {
             if !node.object.visible
                 || node.object.style.opacity == 0.
                 || node.object.mask == MaskMode::Path
+                || node.object.eraser == EraserMode::Path
             {
                 return;
             }
@@ -535,6 +539,15 @@ fn capture(
         return capture_reference(scene, id, parent, limits, counts, depth);
     }
     validate_eraser(o)?;
+    if o.eraser == EraserMode::Path {
+        if o.mask != MaskMode::None {
+            counts.masks += 1;
+            if counts.masks > limits.max_mask_runs {
+                return Err(CompositeError::InputLimit);
+            }
+        }
+        return capture_reference(scene, id, parent, limits, counts, depth);
+    }
     counts.nodes += 1;
     if counts.nodes > limits.max_nodes {
         return Err(CompositeError::InputLimit);
@@ -750,6 +763,11 @@ pub(crate) fn validate_eraser(object: &DisplayObject) -> Result<(), CompositeErr
                 | Shape::Star(_)
                 | Shape::Path(_)
                 | Shape::Pen(_)
+                | Shape::Group(_)
+                | Shape::Box(_)
+                | Shape::Frame(_)
+                | Shape::Image(_)
+                | Shape::Canvas(_)
         )
     {
         return Err(CompositeError::UnsupportedPathEraser(object.id.clone()));
@@ -781,9 +799,8 @@ fn capture_reference(
     let object = &node.object;
     charge_reference_points(&object.shape, limits, counts)?;
     let world_transform = parent * object.transform;
-    let children = node
-        .children
-        .iter()
+    let children = ordered(scene, &node.children)
+        .into_iter()
         .map(|id| capture_reference(scene, id, world_transform, limits, counts, depth + 1))
         .collect::<Result<_, _>>()?;
     Ok(DomainNode {

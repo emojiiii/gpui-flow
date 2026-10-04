@@ -13,7 +13,7 @@
     "needs_verification": 0,
     "in_progress": 0
   },
-  "as_of": "2026-10-03",
+  "as_of": "2026-10-04",
   "tasks": [
     {
       "id": "DAT-01",
@@ -319,7 +319,7 @@
       "title": "隔离混合与蒙版擦除",
       "status": "partial",
       "acceptance": "组透明度/多paint隔离、固定blend集合、mask/erase覆盖关系与hit规则",
-      "boundary": "已实现固定blend、五种mask、首marker布局/child-parent命中、Image alpha代理及预算预检、Pixel和leaf Path擦除；Path容器/Text、Custom和任意外部backdrop仍缺",
+      "boundary": "已实现固定blend、五种mask、首marker布局/child-parent命中、Image alpha代理及预算预检、Pixel及几何leaf/Group/Box/Frame/Image/Canvas Path擦除；Text Path、Custom和任意外部backdrop仍缺",
       "reference_doc": "docs/mask-modes.md",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/mask/src/index.ts",

@@ -22,8 +22,9 @@ continue to use existing producers. No glyph outline is replaced with a text box
 
 Native JSON uses snake_case. Leafer JSON exchange still explicitly rejects masks.
 The compositor keeps conservative effect/allocation bounds, independently of the
-logical bounds below. Arbitrary external host backdrops and container/Text Path
-erasers remain outside this increment, so APP-03 remains partial.
+logical bounds below. Arbitrary external host backdrops and Text Path erasers remain outside this
+increment, so APP-03 remains partial. Container geometry is described in the
+[Path eraser contract](scene-erasers.md).
 
 ## Layout and picking
 

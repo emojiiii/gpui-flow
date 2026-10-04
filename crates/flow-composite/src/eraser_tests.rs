@@ -468,12 +468,7 @@ fn erasers_reject_external_backdrops_unsupported_paths_svg_and_bare_canvas_captu
         matches!(SceneExportPlan::new(&s, request, CompositeLimits::default()), Err(CompositeError::UnsupportedShape(message)) if message == "SVG erasers")
     );
     let shapes: Vec<Shape> = vec![
-        display::Group::new().into(),
-        display::Box::new(20., 20.).into(),
-        display::Frame::new(20., 20.).into(),
         display::Text::new("x", Size::new(20., 20.)).into(),
-        display::Image::new("missing", Size::new(20., 20.)).into(),
-        display::Canvas::new(20., 20.).into(),
         display::Custom::new(
             "custom",
             Bounds::new(Point::ZERO, Size::new(20., 20.)),
@@ -692,4 +687,152 @@ fn pixel_containers_erase_complete_outer_and_inner_shadow_alpha_at_full_and_half
             }
         }
     }
+}
+
+fn path_group_scene() -> Scene {
+    let mut s = scene();
+    let mut group = DisplayObject::new("erase", display::Group::new())
+        .with_eraser(EraserMode::Path)
+        .with_transform(Affine::translation(5., 2.));
+    group.style.opacity = 0.01;
+    insert(&mut s, group, "g");
+    for (id, x, y) in [("a", 5., 5.), ("b", 15., 10.)] {
+        let mut child = rect(id, x, y, 20., 20., Color::TRANSPARENT);
+        child.style.fill = None;
+        insert(&mut s, child, "erase");
+    }
+    s
+}
+#[test]
+fn path_group_eraser_intersects_child_contours_in_parent_space() {
+    let s = path_group_scene();
+    let f = render(&domain(&s));
+    assert_eq!(at(&f, 22, 15), [0; 4]);
+    assert_eq!(at(&f, 12, 15), [255, 0, 0, 255]);
+    assert_eq!(at(&f, 32, 15), [255, 0, 0, 255]);
+    let mut unchanged_extent = s.clone();
+    unchanged_extent.remove(&"erase".into()).unwrap();
+    let reference =
+        capture_subtree(&unchanged_extent, &"g".into(), CompositeLimits::default()).unwrap();
+    assert_eq!(f.screen_bounds, render(&reference).screen_bounds);
+    let mut invalid = s.clone();
+    invalid
+        .update_object(&"b".into(), |o| {
+            o.shape = display::Text::new("no proxy", Size::new(20., 20.)).into();
+        })
+        .unwrap();
+    let source = domain(&invalid);
+    assert!(source.text_sources().is_empty());
+    assert!(
+        matches!(rasterize(&source, viewport(), &mut PixelBudget::new(CompositeLimits::default(), 0).unwrap(), &AtomicBool::new(false)), Err(CompositeError::UnsupportedPathEraser(id)) if id == "b".into())
+    );
+}
+#[test]
+fn path_rectangular_producers_and_containers_use_own_contour_without_resources() {
+    let shapes: Vec<Shape> = vec![
+        display::Box::new(20., 20.).into(),
+        display::Frame::new(20., 20.).into(),
+        display::Image::new("not-loaded", Size::new(20., 20.)).into(),
+        display::Canvas::new(20., 20.).into(),
+    ];
+    for shape in shapes {
+        let mut s = scene();
+        let branch = matches!(shape, Shape::Box(_) | Shape::Frame(_));
+        insert(
+            &mut s,
+            DisplayObject::new("erase", shape)
+                .with_transform(Affine::translation(10., 10.))
+                .with_eraser(EraserMode::Path),
+            "g",
+        );
+        if branch {
+            insert(
+                &mut s,
+                rect("outside-child", 22., 0., 8., 10., Color::WHITE),
+                "erase",
+            );
+        }
+        let source = domain(&s);
+        assert!(source.images().is_empty());
+        assert!(source.canvases().is_empty());
+        assert!(source.text_sources().is_empty());
+        let frame = render(&source);
+        assert_eq!(at(&frame, 20, 20), [0; 4]);
+        assert_eq!(at(&frame, 5, 5), [255, 0, 0, 255]);
+        assert_eq!(at(&frame, 35, 15), [255, 0, 0, 255]);
+    }
+}
+#[test]
+fn path_group_empty_contours_and_hidden_children_keep_literal_clip_behavior() {
+    let mut s = path_group_scene();
+    s.update_object(&"b".into(), |o| {
+        o.shape = display::Line::new(Point::ZERO, Point::new(20., 20.)).into()
+    })
+    .unwrap();
+    assert_eq!(at(&render(&domain(&s)), 22, 15), [255, 0, 0, 255]);
+    let mut s = path_group_scene();
+    s.update_object(&"b".into(), |o| o.visible = false).unwrap();
+    assert_eq!(at(&render(&domain(&s)), 12, 15), [0; 4]);
+    s.remove(&"a".into()).unwrap();
+    s.remove(&"b".into()).unwrap();
+    assert_eq!(at(&render(&domain(&s)), 22, 15), [255, 0, 0, 255]);
+}
+#[test]
+fn path_group_intersection_admission_counts_all_scratch_before_writing() {
+    let source = domain(&path_group_scene());
+    let mut budget = PixelBudget::new(CompositeLimits::default(), 17).unwrap();
+    let frame = rasterize(&source, viewport(), &mut budget, &AtomicBool::new(false))
+        .unwrap()
+        .unwrap();
+    let (peak, work) = (budget.peak_bytes(), budget.surface_writes());
+    budget.discard_frame(frame);
+    assert_eq!(budget.retained_bytes(), 17);
+    for limits in [
+        CompositeLimits {
+            max_surface_bytes: peak - 1,
+            ..Default::default()
+        },
+        CompositeLimits {
+            max_surface_writes: work - 1,
+            ..Default::default()
+        },
+    ] {
+        let mut budget = PixelBudget::new(limits, 17).unwrap();
+        assert!(rasterize(&source, viewport(), &mut budget, &AtomicBool::new(false)).is_err());
+        assert_eq!(budget.retained_bytes(), 17);
+        assert_eq!(budget.surface_writes(), 0);
+    }
+    let mut budget = PixelBudget::new(CompositeLimits::default(), 17).unwrap();
+    assert!(matches!(
+        rasterize(&source, viewport(), &mut budget, &AtomicBool::new(true)),
+        Err(CompositeError::Superseded)
+    ));
+    assert_eq!(budget.retained_bytes(), 17);
+}
+
+#[test]
+fn path_group_clear_bounds_follow_stable_first_marker_order() {
+    let mut s = scene();
+    insert(
+        &mut s,
+        DisplayObject::new("erase", display::Group::new()).with_eraser(EraserMode::Path),
+        "g",
+    );
+    insert(
+        &mut s,
+        rect("contour", 0., 0., 30., 30., Color::WHITE),
+        "erase",
+    );
+    let mut hidden =
+        rect("hidden-first", 60., 0., 10., 10., Color::WHITE).with_mask(MaskMode::Alpha);
+    hidden.visible = false;
+    hidden.z_index = -1;
+    insert(&mut s, hidden, "erase");
+    let mut active = rect("active", 0., 0., 30., 30., Color::WHITE).with_mask(MaskMode::Alpha);
+    active.z_index = 1;
+    insert(&mut s, active, "erase");
+    assert_eq!(at(&render(&domain(&s)), 10, 10), [255, 0, 0, 255]);
+    s.update_object(&"hidden-first".into(), |o| o.z_index = 2)
+        .unwrap();
+    assert_eq!(at(&render(&domain(&s)), 10, 10), [0; 4]);
 }
