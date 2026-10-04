@@ -24,7 +24,7 @@ fn document() -> (Scene, FlowLayout) {
     for (id, title, x, y) in [
         ("paragraph-title", "Spacing + first-row indent", 35., 24.),
         ("anchor-title", "Auto-size anchor", 420., 24.),
-        ("origin-label", "Fixed local origin (+)", 470., 315.),
+        ("origin-label", "Fixed local origin (+)", 470., 380.),
     ] {
         label(&mut scene, id, title, x, y);
     }
@@ -47,7 +47,7 @@ fn document() -> (Scene, FlowLayout) {
         let shape = display::Rect::new(width, height);
         insert(&mut scene, id, shape, x, y, 0x537fb3);
     }
-    let mut anchor = display::Text::new("Centered label\nshort row", SceneSize::new(240., 80.));
+    let mut anchor = display::Text::new("Center\nlabel", SceneSize::new(240., 80.));
     anchor.font_family = "DejaVu Sans".into();
     anchor.font_size = 22.;
     anchor.line_height = 1.4;
@@ -70,6 +70,7 @@ fn text<'a>(scene: &'a Scene, id: &str) -> &'a display::Text {
 enum Action {
     Toggle,
     Mode,
+    Formatting,
     Undo,
     Redo,
     Reject,
@@ -151,6 +152,40 @@ impl Lab {
                         .unwrap();
                     "Changed axis: upright native clusters, Natural bounds reflowed"
                 }
+                Action::Formatting => {
+                    let enabled = text(view.editor.scene(), "paragraph").overflow
+                        != display::TextOverflow::Ellipsis;
+                    view.editor
+                        .transaction(|scene| {
+                            for id in ["paragraph", "anchor"] {
+                                scene.update_object(&id.into(), |object| {
+                                    let Shape::Text(text) = &mut object.shape else {
+                                        unreachable!()
+                                    };
+                                    text.overflow = if enabled {
+                                        display::TextOverflow::Ellipsis
+                                    } else {
+                                        display::TextOverflow::Clip
+                                    };
+                                    text.decoration = if enabled {
+                                        display::TextDecoration::UnderlineStrikethrough
+                                    } else {
+                                        display::TextDecoration::None
+                                    };
+                                    if id == "paragraph" {
+                                        text.wrap = !enabled;
+                                    }
+                                })?;
+                            }
+                            Ok(())
+                        })
+                        .unwrap();
+                    if enabled {
+                        "Ellipsis + underline/strike; paragraph unwrapped to expose overflow"
+                    } else {
+                        "Clip + no decoration; paragraph wrapping restored"
+                    }
+                }
                 Action::Undo => {
                     view.editor.undo();
                     "Undo"
@@ -188,8 +223,10 @@ impl Render for Lab {
         let paragraph = text(scene, "paragraph");
         let anchor = text(scene, "anchor");
         let values = format!(
-            "Mode {:?} · letters {} · words {} · indent {} · auto align {} · local origin ({:.1}, {:.1})",
+            "Mode {:?} · {:?} · {:?} · letters {} · words {} · indent {} · auto align {} · origin ({:.1}, {:.1})",
             paragraph.writing_mode,
+            paragraph.overflow,
+            paragraph.decoration,
             paragraph.letter_spacing,
             paragraph.word_spacing,
             paragraph.para_indent,
@@ -201,6 +238,7 @@ impl Render for Lab {
         for (id, title, action) in [
             ("toggle", "Apply / reset layout", Action::Toggle),
             ("mode", "Next writing mode", Action::Mode),
+            ("formatting", "Ellipsis + lines", Action::Formatting),
             ("undo", "Undo", Action::Undo),
             ("redo", "Redo", Action::Redo),
             ("reject", "Reject -1", Action::Reject),

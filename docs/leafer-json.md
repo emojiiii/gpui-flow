@@ -105,7 +105,9 @@ Text supports `textAlign` left/center/right, `verticalAlign` top/middle/bottom,
 none/under/delete/under-delete. Flow has no unclipped `textOverflow: show`, so
 input must explicitly select hide or ellipsis. Text auto sizing, default `show`,
 `break` wrapping, title/small caps, arbitrary overflow strings, font-weight names,
-vertical/reverse writing modes and decoration objects are rejected. The implemented
+and decoration objects are rejected. Flow supports `writingMode` x/x-reverse/y/y-reverse
+with upright native clusters, including ellipsis and decoration; the pinned Leafer
+runtime does not implement non-horizontal presentation. These axes and implemented
 nonnegative letter/word spacing, paragraph indentation and auto-size alignment
 fields use the [Text layout contract](text-layout-properties.md). Numeric line height is in
 pixels and becomes Flow's font-size multiplier; percent-unit objects preserve a

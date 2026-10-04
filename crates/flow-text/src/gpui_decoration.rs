@@ -16,6 +16,71 @@ pub struct DecorationLayout {
     pub rects: Vec<[f32; 4]>,
     pub allocated_bytes: usize,
 }
+impl DecorationRequest {
+    pub(crate) fn thickness(&self) -> f32 {
+        (self.font_size / 11. * self.device_scale).round().max(1.) / self.device_scale
+    }
+    pub(crate) fn snap(&self, value: f32) -> f32 {
+        (value * self.device_scale).round() / self.device_scale
+    }
+    fn validate(&self) -> Result<(), String> {
+        if !self.font_size.is_finite()
+            || self.font_size <= 0.
+            || !self.line_height.is_finite()
+            || self.line_height <= 0.
+            || !self.device_scale.is_finite()
+            || self.device_scale <= 0.
+            || self
+                .bounds
+                .iter()
+                .any(|v| !v.is_finite() || v.abs() > 1_000_000.)
+            || self.bounds[2] <= 0.
+            || self.bounds[3] <= 0.
+        {
+            return Err("invalid text decoration geometry".into());
+        }
+        Ok(())
+    }
+}
+/// Admission shared by horizontal and axis decorations, including actual Vec capacity.
+pub(crate) fn reserve_decorations(
+    rows: usize,
+    r: &DecorationRequest,
+    max_bytes: usize,
+) -> Result<DecorationLayout, String> {
+    if r.decoration == TextDecoration::None {
+        return Ok(DecorationLayout {
+            rects: vec![],
+            allocated_bytes: 0,
+        });
+    }
+    r.validate()?;
+    if rows > 8192 {
+        return Err("text decoration row limit (8192)".into());
+    }
+    let count = rows
+        * if r.decoration == TextDecoration::UnderlineStrikethrough {
+            2
+        } else {
+            1
+        };
+    if count * std::mem::size_of::<[f32; 4]>() > max_bytes {
+        return Err("text working-set limit".into());
+    }
+    let mut rects = Vec::new();
+    rects
+        .try_reserve_exact(count)
+        .map_err(|_| "text decoration allocation")?;
+    let allocated_bytes = rects.capacity() * std::mem::size_of::<[f32; 4]>();
+    if allocated_bytes > max_bytes {
+        return Err("text working-set limit".into());
+    }
+    Ok(DecorationLayout {
+        rects,
+        allocated_bytes,
+    })
+}
+
 pub fn layout_decorations(
     shaped: &TextBoxShape,
     r: &DecorationRequest,
@@ -23,25 +88,9 @@ pub fn layout_decorations(
 ) -> Result<DecorationLayout, String> {
     use TextDecoration::*;
     if r.decoration == None {
-        return Ok(DecorationLayout {
-            rects: vec![],
-            allocated_bytes: 0,
-        });
+        return reserve_decorations(0, r, max_bytes);
     }
-    if !r.font_size.is_finite()
-        || r.font_size <= 0.
-        || !r.line_height.is_finite()
-        || r.line_height <= 0.
-        || !r.device_scale.is_finite()
-        || r.device_scale <= 0.
-        || r.bounds
-            .iter()
-            .any(|v| !v.is_finite() || v.abs() > 1_000_000.)
-        || r.bounds[2] <= 0.
-        || r.bounds[3] <= 0.
-    {
-        return Err("invalid text decoration geometry".into());
-    }
+    r.validate()?;
     let glyphs: usize = shaped
         .lines
         .iter()
@@ -56,26 +105,13 @@ pub fn layout_decorations(
         .iter()
         .map(|l| l.wrap_boundaries.len() + 1)
         .sum::<usize>();
-    if rows > 8192 {
-        return Err("text decoration row limit (8192)".into());
-    }
-    let count = rows
-        * if r.decoration == UnderlineStrikethrough {
-            2
-        } else {
-            1
-        };
-    let allocated_bytes = count * std::mem::size_of::<[f32; 4]>();
-    if allocated_bytes > max_bytes {
-        return Err("text working-set limit".into());
-    }
-    let mut rects = Vec::new();
-    rects
-        .try_reserve_exact(count)
-        .map_err(|_| "text decoration allocation")?;
+    let DecorationLayout {
+        mut rects,
+        allocated_bytes,
+    } = reserve_decorations(rows, r, max_bytes)?;
     let block_y = r.bounds[1] + r.vertical_align.offset(r.bounds[3], shaped.block_height);
-    let thickness = (r.font_size / 11. * r.device_scale).round().max(1.) / r.device_scale;
-    let snap = |v: f32| (v * r.device_scale).round() / r.device_scale;
+    let thickness = r.thickness();
+    let snap = |v: f32| r.snap(v);
     if shaped.lines.len() != shaped.line_offsets.len() {
         return Err("text line offsets disagree with shaped paragraphs".into());
     }

@@ -6,6 +6,10 @@ use crate::{
 use gpui::{Hsla, WindowTextSystem, WrappedLine};
 use std::mem::size_of;
 
+mod overflow;
+pub use overflow::shape_axis_in_box;
+pub(crate) use overflow::shape_axis_in_box_checked;
+
 const MAX_ITEMS: usize = 8192;
 
 #[derive(Clone, Copy, Debug)]
@@ -14,6 +18,18 @@ struct Row {
     end: usize,
     inline: f32,
     cross: f32,
+    // Use the same count-based arithmetic as measured block extents. Adding a
+    // line height to the rounded start can put an exact-fit row outside its box.
+    cross_end: f32,
+    cluster_start: usize,
+    cluster_end: usize,
+    indent: f32,
+    baseline: f32,
+}
+#[derive(Clone, Copy, Debug)]
+struct ClusterEnd {
+    glyph_end: usize,
+    inline: f32,
 }
 #[derive(Clone, Copy)]
 struct Cluster {
@@ -29,6 +45,7 @@ struct Cluster {
 pub struct AxisLayout {
     glyphs: Vec<GlyphPlacement>,
     rows: Vec<Row>,
+    cluster_ends: Vec<ClusterEnd>,
     mode: WritingMode,
     metrics: TextMetrics,
     allocated_bytes: usize,
@@ -47,26 +64,12 @@ impl AxisLayout {
         cross_align: crate::VerticalAlign,
         mut visitor: impl FnMut(GlyphPlacement) -> Result<(), E>,
     ) -> Result<PlacementStats, E> {
-        let vertical = self.mode.is_vertical();
-        let available_inline = bounds[if vertical { 3 } else { 2 }];
-        let available_cross = bounds[if vertical { 2 } else { 3 }];
-        let block_cross = if vertical {
-            self.metrics.width
-        } else {
-            self.metrics.height
-        };
-        let cross = cross_align.offset(available_cross, block_cross);
         for row in &self.rows {
-            let free = available_inline - row.inline;
-            let inline = match (align, self.mode.is_reverse()) {
-                (gpui::TextAlign::Center, _) => free * 0.5,
-                (gpui::TextAlign::Left, false) | (gpui::TextAlign::Right, true) => 0.,
-                _ => free,
-            };
+            let origin = self.row_origin(row, bounds, align, cross_align);
             for glyph in &self.glyphs[row.start..row.end] {
                 let mut glyph = *glyph;
-                glyph.origin[0] += bounds[0] + if vertical { cross } else { inline };
-                glyph.origin[1] += bounds[1] + if vertical { inline } else { cross };
+                glyph.origin[0] += origin[0];
+                glyph.origin[1] += origin[1];
                 if glyph.origin.iter().any(|n| !n.is_finite()) {
                     return Err(String::from("invalid axis glyph origin").into());
                 }
@@ -77,6 +80,101 @@ impl AxisLayout {
             glyphs: self.glyphs.len(),
             rows: self.rows.len(),
         })
+    }
+    // The same physical alignment offset positions glyphs and decorations.
+    fn row_origin(
+        &self,
+        row: &Row,
+        bounds: [f32; 4],
+        align: gpui::TextAlign,
+        cross_align: crate::VerticalAlign,
+    ) -> [f32; 2] {
+        let vertical = self.mode.is_vertical();
+        let available_inline = bounds[if vertical { 3 } else { 2 }];
+        let available_cross = bounds[if vertical { 2 } else { 3 }];
+        let block_cross = if vertical {
+            self.metrics.width
+        } else {
+            self.metrics.height
+        };
+        let cross = cross_align.offset(available_cross, block_cross);
+        let free = available_inline - row.inline;
+        let inline = match (align, self.mode.is_reverse()) {
+            (gpui::TextAlign::Center, _) => free * 0.5,
+            (gpui::TextAlign::Left, false) | (gpui::TextAlign::Right, true) => 0.,
+            _ => free,
+        };
+        [
+            bounds[0] + if vertical { cross } else { inline },
+            bounds[1] + if vertical { inline } else { cross },
+        ]
+    }
+
+    pub(crate) fn decorations(
+        &self,
+        request: &crate::gpui_decoration::DecorationRequest,
+        max_bytes: usize,
+    ) -> Result<crate::gpui_decoration::DecorationLayout, String> {
+        use crate::TextDecoration;
+        let mut output =
+            crate::gpui_decoration::reserve_decorations(self.rows.len(), request, max_bytes)?;
+        if request.decoration == TextDecoration::None {
+            return Ok(output);
+        }
+        let vertical = self.mode.is_vertical();
+        let thickness = request.thickness();
+        for row in &self.rows {
+            if row.start == row.end || row.inline <= row.indent {
+                continue;
+            }
+            let origin =
+                self.row_origin(row, request.bounds, request.align, request.vertical_align);
+            let inline = origin[usize::from(vertical)]
+                + if self.mode.is_reverse() {
+                    0.
+                } else {
+                    row.indent
+                };
+            let cross = origin[usize::from(!vertical)] + row.cross;
+            let length = row.inline - row.indent;
+            let positions = [
+                matches!(
+                    request.decoration,
+                    TextDecoration::Underline | TextDecoration::UnderlineStrikethrough
+                )
+                .then_some(if vertical {
+                    (request.line_height + request.font_size) * 0.5
+                } else {
+                    row.baseline + request.font_size * 0.15
+                }),
+                matches!(
+                    request.decoration,
+                    TextDecoration::Strikethrough | TextDecoration::UnderlineStrikethrough
+                )
+                .then_some(if vertical {
+                    request.line_height * 0.5
+                } else {
+                    row.baseline - request.font_size * 0.35
+                }),
+            ];
+            for position in positions.into_iter().flatten() {
+                let start = request.snap(inline);
+                let end = request.snap(inline + length);
+                let side = request.snap(cross + position);
+                let rect = if vertical {
+                    [side, start, thickness, end - start]
+                } else {
+                    [start, side, end - start, thickness]
+                };
+                if rect.iter().any(|v| !v.is_finite() || v.abs() > 1_000_000.) {
+                    return Err("unsupported text decoration placement".into());
+                }
+                if end > start {
+                    output.rects.push(rect);
+                }
+            }
+        }
+        Ok(output)
     }
 }
 
@@ -157,12 +255,14 @@ fn from_lines(
             .into());
     }
     let rows_capacity = (count + lines.len()).min(MAX_ITEMS);
-    let planned = count * (size_of::<GlyphPlacement>() + size_of::<Cluster>())
+    let planned = count
+        * (size_of::<GlyphPlacement>() + size_of::<Cluster>() + size_of::<ClusterEnd>())
         + rows_capacity * size_of::<Row>()
         + source_bytes;
     admit(planned)?;
     let mut glyphs = Vec::<GlyphPlacement>::new();
     let mut clusters = Vec::<Cluster>::new();
+    let mut cluster_ends = Vec::<ClusterEnd>::new();
     let mut rows = Vec::<Row>::new();
     glyphs
         .try_reserve_exact(count)
@@ -170,10 +270,14 @@ fn from_lines(
     clusters
         .try_reserve_exact(count)
         .map_err(|_| "text axis allocation failed".to_owned())?;
+    cluster_ends
+        .try_reserve_exact(count)
+        .map_err(|_| "text axis allocation failed".to_owned())?;
     rows.try_reserve_exact(rows_capacity)
         .map_err(|_| "text axis allocation failed".to_owned())?;
     let actual = glyphs.capacity() * size_of::<GlyphPlacement>()
         + clusters.capacity() * size_of::<Cluster>()
+        + cluster_ends.capacity() * size_of::<ClusterEnd>()
         + rows.capacity() * size_of::<Row>()
         + source_bytes;
     if actual != planned {
@@ -181,8 +285,11 @@ fn from_lines(
     }
     let mut max_inline = 0f32;
     for (paragraph, line) in lines.iter().enumerate() {
-        let mut cross =
-            rows.len() as f32 * request.line_height + paragraph as f32 * request.para_spacing;
+        let cross_offset = |rows: usize| {
+            rows as f32 * request.line_height + paragraph as f32 * request.para_spacing
+        };
+        let mut cross = cross_offset(rows.len());
+        let mut cross_end = cross_offset(rows.len() + 1);
         clusters.clear();
         let layout = &line.unwrapped_layout;
         let baseline = ((if mode.is_vertical() {
@@ -253,7 +360,9 @@ fn from_lines(
         }
         let mut row_start = glyphs.len() - clusters.iter().map(|c| c.end - c.start).sum::<usize>();
         let mut row_clusters = 0;
-        let mut inline = request.para_indent;
+        let mut row_cluster_start = cluster_ends.len();
+        let mut indent = request.para_indent;
+        let mut inline = indent;
         for cluster in &clusters {
             let extent = if mode.is_vertical() {
                 request.font_size
@@ -280,14 +389,21 @@ fn from_lines(
                         end: cluster.start,
                         inline,
                         cross,
+                        cross_end,
+                        cluster_start: row_cluster_start,
+                        cluster_end: cluster_ends.len(),
+                        indent,
+                        baseline,
                     },
                     mode,
                 )?;
                 max_inline = max_inline.max(inline);
-                cross = rows.len() as f32 * request.line_height
-                    + paragraph as f32 * request.para_spacing;
+                cross = cross_offset(rows.len());
+                cross_end = cross_offset(rows.len() + 1);
                 row_start = cluster.start;
                 row_clusters = 0;
+                row_cluster_start = cluster_ends.len();
+                indent = 0.;
                 inline = 0.;
             }
             for glyph in &mut glyphs[cluster.start..cluster.end] {
@@ -310,6 +426,10 @@ fn from_lines(
                 }
             }
             inline += advance;
+            cluster_ends.push(ClusterEnd {
+                glyph_end: cluster.end,
+                inline,
+            });
             row_clusters += 1;
         }
         finish_row(
@@ -320,6 +440,11 @@ fn from_lines(
                 end: count_so_far(&clusters, row_start),
                 inline,
                 cross,
+                cross_end,
+                cluster_start: row_cluster_start,
+                cluster_end: cluster_ends.len(),
+                indent,
+                baseline,
             },
             mode,
         )?;
@@ -341,11 +466,13 @@ fn from_lines(
         lines: rows.len(),
     };
     metrics.validate()?;
-    let allocated_bytes =
-        glyphs.capacity() * size_of::<GlyphPlacement>() + rows.capacity() * size_of::<Row>();
+    let allocated_bytes = glyphs.capacity() * size_of::<GlyphPlacement>()
+        + rows.capacity() * size_of::<Row>()
+        + cluster_ends.capacity() * size_of::<ClusterEnd>();
     Ok(AxisLayout {
         glyphs,
         rows,
+        cluster_ends,
         mode,
         metrics,
         allocated_bytes,
@@ -360,7 +487,11 @@ fn finish_row(
     row: Row,
     mode: WritingMode,
 ) -> Result<(), WritingModeError> {
-    if rows.len() >= MAX_ITEMS || !row.inline.is_finite() || !row.cross.is_finite() {
+    if rows.len() >= MAX_ITEMS
+        || !row.inline.is_finite()
+        || !row.cross.is_finite()
+        || !row.cross_end.is_finite()
+    {
         return Err("text axis row/geometry limit (8192)".to_owned().into());
     }
     if mode.is_reverse() {
@@ -377,7 +508,7 @@ mod tests {
     use super::*;
     use gpui::{FontId, GlyphId, LineLayout, ShapedGlyph, ShapedRun, WrappedLineLayout, point, px};
     use std::{ops::DerefMut, sync::Arc};
-    fn request() -> TextMeasureRequest {
+    pub(super) fn request() -> TextMeasureRequest {
         TextMeasureRequest {
             content: "ab".into(),
             font_family: "geometry-fixture".into(),
@@ -395,7 +526,7 @@ mod tests {
     }
     // Deliberately specified cluster geometry tests placement only. Native font
     // shaping and real pixels are tested by flow-ui's writing_mode_tests.
-    fn line() -> WrappedLine {
+    pub(super) fn line() -> WrappedLine {
         let mut line = WrappedLine::default();
         line.text = "ab".into();
         *line.deref_mut() = Arc::new(WrappedLineLayout {
@@ -527,6 +658,48 @@ mod tests {
                 UnsupportedWritingMode::NativeClusterOrder
             ))
         ));
+    }
+    #[test]
+    fn axis_decorations_follow_alignment_direction_indent_and_device_grid() {
+        use crate::{TextDecoration, VerticalAlign, gpui_decoration::DecorationRequest};
+        for (mode, expected) in [
+            (
+                WritingMode::XReverse,
+                [[55., 62., 26., 1.], [55., 57., 26., 1.]],
+            ),
+            (WritingMode::Y, [[50., 11., 1., 24.], [45., 11., 1., 24.]]),
+            (
+                WritingMode::YReverse,
+                [[50., 79., 1., 24.], [45., 79., 1., 24.]],
+            ),
+        ] {
+            let plan = layout(mode, None);
+            let mut request = DecorationRequest {
+                decoration: TextDecoration::UnderlineStrikethrough,
+                font_size: 10.,
+                line_height: 14.,
+                bounds: [5., 7., 80., 100.],
+                align: gpui::TextAlign::Left,
+                vertical_align: VerticalAlign::Middle,
+                device_scale: 1.,
+            };
+            let output = plan.decorations(&request, 32).unwrap();
+            assert_eq!(output.rects, expected);
+            assert_eq!(output.allocated_bytes, 32);
+            assert!(plan.decorations(&request, 31).is_err());
+            request.device_scale = 1.25;
+            for rect in plan.decorations(&request, 32).unwrap().rects {
+                assert!(rect.iter().all(|v| (v * 1.25).fract().abs() < 0.00001));
+            }
+            let mut blank = line();
+            blank.text = "".into();
+            let wrapped = Arc::get_mut(blank.deref_mut()).unwrap();
+            let native = Arc::get_mut(&mut wrapped.unwrapped_layout).unwrap();
+            native.runs.clear();
+            native.width = px(0.);
+            let empty = from_lines(&[blank], &self::request(), mode, 0, &mut |_| Ok(())).unwrap();
+            assert!(empty.decorations(&request, 32).unwrap().rects.is_empty());
+        }
     }
     #[test]
     fn fractional_line_boxes_use_the_same_count_formula_as_measured_layout() {

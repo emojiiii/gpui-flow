@@ -83,9 +83,27 @@ the same axis placement. Vertical `AutoHeight` and first-baseline alignment reje
 because those consumers own/assume a horizontal line axis. Third-party measurers
 must opt into `measure_writing_mode`; its default rejects new modes.
 
-Nondefault modes currently require Clip and no decoration. The model rejects
-unavailable combinations atomically and the raster API returns typed Unsupported
-errors. They use the same App's actual glyph raster backend through the bounded
+All four modes support Clip, end Ellipsis, underline and strikethrough (including
+both decorations together). Axis ellipsis removes only complete native source
+clusters and appends the same native `...` marker used by horizontal ellipsis.
+Retained source glyph IDs, fonts and intra-cluster offsets are unchanged; the marker
+is shaped separately, so no new kerning or ligature crosses its boundary. Every
+inline-overflowing visible row/column is shortened; cross-axis overflow forces a
+marker on the last fully visible row/column (at least the first is retained).
+A marker that cannot fit with paragraph indentation is kept whole and physically
+clipped. Original cross-axis block extent and paragraph offsets survive truncation,
+so removing hidden rows/columns never recenters the visible block.
+
+Decorations follow the inline axis and exclude paragraph indentation, including
+at the opposite end in reverse modes. X-reverse uses the displayed row's native
+baseline offsets. Y modes place underline at the right edge of the centered
+nominal font-size cell and strikethrough at the column center; this is Flow's
+explicit upright-axis convention, not OpenType vertical decoration metrics.
+Decoration thickness and endpoints share horizontal text's device-pixel snapping,
+color, clipping and raster work limits. Empty rows/columns have no decoration;
+visible ellipsis markers are decorated. Measurement remains based on source layout.
+
+Nondefault modes use the same App's actual glyph raster backend through the bounded
 CPU compositor for native presentation and raster/SVG export. A missing bridge
 is an explicit failure. Direct native `DisplayElement` reports a required
 compositing domain. No glyph rectangle proxy, font replacement, glyph mirroring
@@ -102,13 +120,16 @@ indices, bitmap and decoration storage, including simultaneously live ellipsis
 source/probe/output copies. Existing source expansion, raster, outline, work,
 font-epoch and cancellation gates remain in force. Default horizontal unstyled Clip text
 keeps the existing native path. Axis plans additionally admit at most 8192 rows
-and charge owned glyph/row/cluster storage before allocation; font epochs,
-cancellation, pixel-work and working-set limits remain shared with horizontal text.
+and charge owned glyph/row/cluster storage before allocation, including simultaneously
+live source, native marker and ellipsis output plans. Font epochs, cancellation,
+pixel-work and working-set limits remain shared with horizontal text.
 
 Focused regressions cover model/import/registry rejection, reactive reflow and
 history, asymmetric auto alignment, nonzero-origin resize anchors, native cluster
 advances, cache isolation, first-row wrapping/ellipsis, exact CPU glyph translation,
-owned storage admission, glyph limits and cancellation. These are local Linux font
+owned storage admission, glyph limits and cancellation. Axis formatting checks cover retained ligature and
+combining clusters, marker placement in both directions, paragraph/wrap offsets,
+narrow-marker clipping, snapped decoration geometry and native raster ink. These are local Linux font
 checks, not cross-platform glyph or pixel guarantees. The compact native example below supplements these shared-layout checks with
 visible property changes and history controls.
 
@@ -141,3 +162,15 @@ The axis-mode Linux smoke run cycled all four modes, reflowed the Natural label,
 restored mode/bounds with Undo/Redo and rejected negative spacing atomically,
 then exited normally. Vertical labels can overlap the example’s fixed annotations;
 this does not establish typography for every script or every property combination.
+
+**Ellipsis + lines** toggles end ellipsis with underline and strikethrough for
+both samples, and temporarily disables paragraph wrapping to expose inline
+overflow in every mode. Toggle again to restore Clip, no decoration and paragraph
+wrapping. Undo/Redo includes these formatting changes. The Natural sample uses the shorter two-line “Center / label” text; the
+fixed-origin annotation sits below its vertical bounds.
+
+Axis ellipsis uses the same count-based line-box endpoints as intrinsic
+measurement. A box exactly equal to a fractional measured block does not acquire
+an ellipsis. For multi-row/column blocks, a one-ULP smaller cross-axis extent
+still omits the last complete row/column; the existing minimum-one-row rule stays
+in force for very small boxes.

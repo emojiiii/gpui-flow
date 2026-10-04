@@ -1,8 +1,9 @@
 use gpui::{Hsla, TextAlign, WindowTextSystem};
 use gpui_flow_text::{
-    GpuiTextMeasurer, GpuiTextRasterizer, TextMeasureRequest, TextMeasurer, TextOverflow,
-    TextRasterRequest, UnsupportedWritingMode, WritingMode, WritingModeError,
-    gpui_backend::shape_text, gpui_writing_mode::shape_axis,
+    GpuiTextMeasurer, GpuiTextRasterizer, TextDecoration, TextMeasureRequest, TextMeasurer,
+    TextOverflow, TextRasterRequest, WritingMode, WritingModeError,
+    gpui_backend::shape_text,
+    gpui_writing_mode::{shape_axis, shape_axis_in_box},
 };
 use std::sync::atomic::AtomicBool;
 
@@ -149,21 +150,6 @@ fn writing_mode_raster_paints_real_upright_glyphs_and_keeps_cancellation_and_lim
                 )
                 .is_err()
         );
-        let mut invalid = r.clone();
-        invalid.overflow = TextOverflow::Ellipsis;
-        assert_eq!(
-            bridge
-                .rasterize_writing_mode(
-                    &invalid,
-                    mode,
-                    bridge.epoch(),
-                    &AtomicBool::new(false),
-                    2_000_000,
-                    &mut 1_000_000
-                )
-                .unwrap_err(),
-            WritingModeError::Unsupported(UnsupportedWritingMode::Ellipsis)
-        );
     }
 }
 
@@ -190,6 +176,8 @@ fn writing_mode_routes_scene_and_standalone_consumers_without_horizontal_fallbac
         text.font_size = 18.;
         text.padding = [4.; 4];
         text.writing_mode = mode;
+        text.overflow = display::TextOverflow::Ellipsis;
+        text.decoration = display::TextDecoration::UnderlineStrikethrough;
         scene
             .insert(
                 DisplayObject::new("t", text).with_style(Style::fill(Color::WHITE)),
@@ -254,5 +242,263 @@ fn writing_mode_routes_scene_and_standalone_consumers_without_horizontal_fallbac
             .filter(|p| p[3] > 0)
             .count();
         assert!(ink > 50 && ink < (frame.width * frame.height) as usize / 2);
+    }
+}
+
+#[test]
+fn writing_mode_ellipsis_keeps_native_ligature_and_combining_clusters_with_real_decorated_ink() {
+    let (app, bridge) = GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let system = WindowTextSystem::new(app.text_system());
+    let content = "office e\u{301} ABCDEFGHIJKLMN";
+    let native = shape_text(&system, &request(content), Hsla::default()).unwrap();
+    let mut clusters: Vec<(usize, f32, usize)> = vec![];
+    for glyph in native[0].runs().iter().flat_map(|run| &run.glyphs) {
+        if let Some(last) = clusters.last_mut().filter(|last| last.0 == glyph.index) {
+            last.2 += 1;
+        } else {
+            clusters.push((glyph.index, f32::from(glyph.position.x), 1));
+        }
+    }
+    let combining = content.find("e\u{301}").unwrap();
+    let keep = clusters
+        .iter()
+        .position(|cluster| cluster.0 == combining)
+        .unwrap()
+        + 1;
+    let kept_glyphs: usize = clusters[..keep].iter().map(|cluster| cluster.2).sum();
+    let spaces = clusters[..keep]
+        .iter()
+        .filter(|cluster| content[cluster.0..].starts_with(' '))
+        .count();
+    let marker_native = shape_text(&system, &request("..."), Hsla::default()).unwrap();
+    let marker_glyphs: usize = marker_native[0]
+        .runs()
+        .iter()
+        .map(|run| run.glyphs.len())
+        .sum();
+    for mode in [WritingMode::XReverse, WritingMode::Y, WritingMode::YReverse] {
+        let mut r = raster_request(content);
+        r.text.letter_spacing = 2.;
+        r.text.word_spacing = 3.;
+        r.text.para_indent = 4.;
+        r.overflow = TextOverflow::Ellipsis;
+        let mut marker_request = request("...");
+        marker_request.letter_spacing = r.text.letter_spacing;
+        let marker = shape_axis(&system, &marker_request, mode).unwrap();
+        let marker_inline = if mode.is_vertical() {
+            marker.metrics().height
+        } else {
+            marker.metrics().width
+        };
+        let retained_inline = r.text.para_indent
+            + spaces as f32 * r.text.word_spacing
+            + keep as f32 * r.text.letter_spacing
+            + if mode.is_vertical() {
+                keep as f32 * r.text.font_size
+            } else {
+                clusters[keep].1
+            };
+        let available = retained_inline + marker_inline + 0.01;
+        r.bounds = if mode.is_vertical() {
+            [5., 7., 80., available]
+        } else {
+            [5., 7., available, 80.]
+        };
+        r.clip = r.bounds;
+        let plan = shape_axis_in_box(&system, &r.text, mode, r.overflow, r.bounds[2], r.bounds[3])
+            .unwrap();
+        assert_eq!(plan.metrics().lines, 1);
+        let mut images = vec![];
+        for decoration in [
+            TextDecoration::None,
+            TextDecoration::Underline,
+            TextDecoration::Strikethrough,
+            TextDecoration::UnderlineStrikethrough,
+        ] {
+            r.decoration = decoration;
+            let out = bridge
+                .rasterize_writing_mode(
+                    &r,
+                    mode,
+                    bridge.epoch(),
+                    &AtomicBool::new(false),
+                    2_000_000,
+                    &mut 1_000_000,
+                )
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                out.glyphs,
+                kept_glyphs + marker_glyphs,
+                "{mode:?} {decoration:?}"
+            );
+            assert_eq!(out.rows, 1);
+            assert!(
+                out.premul_rgba
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .any(|pixel| pixel[3] > 0)
+            );
+            images.push(out.premul_rgba);
+        }
+        for image in &images[1..] {
+            assert_ne!(
+                image, &images[0],
+                "{mode:?} decorations must paint actual ink"
+            );
+        }
+        assert_ne!(images[1], images[2]);
+        assert_ne!(images[1], images[3]);
+        r.device_scale = 1.25;
+        r.clip = [
+            r.bounds[0] + 1.,
+            r.bounds[1] + 2.,
+            r.bounds[2] - 2.,
+            r.bounds[3] - 4.,
+        ];
+        let clipped = bridge
+            .rasterize_writing_mode(
+                &r,
+                mode,
+                bridge.epoch(),
+                &AtomicBool::new(false),
+                2_000_000,
+                &mut 1_000_000,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(clipped.glyphs, kept_glyphs + marker_glyphs);
+        for (cancelled, budget, work, error) in [
+            (true, 2_000_000, 1_000_000, "text snapshot superseded"),
+            (false, 16, 1_000_000, "text working-set limit"),
+            (false, 2_000_000, 0, "text pixel work limit"),
+        ] {
+            assert_eq!(
+                bridge
+                    .rasterize_writing_mode(
+                        &r,
+                        mode,
+                        bridge.epoch(),
+                        &AtomicBool::new(cancelled),
+                        budget,
+                        &mut { work }
+                    )
+                    .unwrap_err(),
+                WritingModeError::Invalid(error.into())
+            );
+        }
+    }
+}
+
+#[test]
+fn writing_mode_narrow_ellipsis_preserves_native_marker_then_clips_and_marks_last_visible_column() {
+    let (_app, bridge) =
+        GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let paint = |r: &TextRasterRequest, mode| {
+        bridge
+            .rasterize_writing_mode(
+                r,
+                mode,
+                bridge.epoch(),
+                &AtomicBool::new(false),
+                2_000_000,
+                &mut 1_000_000,
+            )
+            .unwrap()
+            .unwrap()
+    };
+    for mode in [WritingMode::XReverse, WritingMode::Y, WritingMode::YReverse] {
+        let mut r = raster_request("AB");
+        r.text.para_indent = 2.;
+        r.overflow = TextOverflow::Ellipsis;
+        r.decoration = TextDecoration::UnderlineStrikethrough;
+        r.bounds = if mode.is_vertical() {
+            [0., 0., 40., 8.]
+        } else {
+            [0., 0., 8., 40.]
+        };
+        r.clip = r.bounds;
+        let ellipsis = paint(&r, mode);
+        r.text.content = "...".into();
+        r.overflow = TextOverflow::Clip;
+        let marker = paint(&r, mode);
+        assert_eq!(ellipsis.glyphs, marker.glyphs);
+        assert_eq!(ellipsis.premul_rgba, marker.premul_rgba);
+        r.text.content = "ABCD\nEF".into();
+        r.text.para_indent = 0.;
+        r.text.wrap_width = Some(36.);
+        r.overflow = TextOverflow::Ellipsis;
+        r.bounds = if mode.is_vertical() {
+            [0., 0., 24., 36.]
+        } else {
+            [0., 0., 36., 24.]
+        };
+        r.clip = r.bounds;
+        let wrapped = paint(&r, mode);
+        assert_eq!(wrapped.rows, 1);
+        assert!(wrapped.glyphs >= marker.glyphs);
+        assert!(
+            wrapped
+                .premul_rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .any(|pixel| pixel[3] > 0)
+        );
+    }
+}
+
+#[test]
+fn writing_mode_fractional_exact_fit_ellipsis_matches_clip_layout_and_pixels() {
+    let (app, bridge) = GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let system = WindowTextSystem::new(app.text_system());
+    for mode in [WritingMode::XReverse, WritingMode::Y, WritingMode::YReverse] {
+        for (paragraphs, line_height, para_spacing, wrap_width) in [
+            (4, 24.1, 0., None),
+            (7, 24.1, 0., None),
+            (7, 16.8, 0.3, Some(36.)),
+        ] {
+            let content = std::iter::repeat_n("ABAB", paragraphs)
+                .collect::<Vec<_>>()
+                .join("\n");
+            let mut r = raster_request(&content);
+            r.text.line_height = line_height;
+            r.text.para_spacing = para_spacing;
+            r.text.wrap_width = wrap_width;
+            r.decoration = TextDecoration::UnderlineStrikethrough;
+            let source = shape_axis(&system, &r.text, mode).unwrap();
+            r.bounds = [0., 0., source.metrics().width, source.metrics().height];
+            r.clip = r.bounds;
+            let ellipsis = shape_axis_in_box(
+                &system,
+                &r.text,
+                mode,
+                TextOverflow::Ellipsis,
+                r.bounds[2],
+                r.bounds[3],
+            )
+            .unwrap();
+            assert_eq!(ellipsis.metrics(), source.metrics(), "{mode:?}");
+            let paint = |r: &TextRasterRequest| {
+                bridge
+                    .rasterize_writing_mode(
+                        r,
+                        mode,
+                        bridge.epoch(),
+                        &AtomicBool::new(false),
+                        2_000_000,
+                        &mut 1_000_000,
+                    )
+                    .unwrap()
+                    .unwrap()
+            };
+            let clip = paint(&r);
+            r.overflow = TextOverflow::Ellipsis;
+            let ellipsis = paint(&r);
+            assert_eq!(ellipsis.rows, clip.rows, "{mode:?}");
+            assert_eq!(ellipsis.glyphs, clip.glyphs, "{mode:?}");
+            assert_eq!(ellipsis.premul_rgba, clip.premul_rgba, "{mode:?}");
+        }
     }
 }

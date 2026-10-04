@@ -38,7 +38,7 @@
 | ELM-01 | 元素 / [矢量原语与实际几何](ellipse-arcs.md) | 有界已验证 | Rect/Ellipse/Line/Polygon/Star/Path/Pen各独立模块；四角/弧环/数据API贯通bounds/hit/CPU | 不包含通用点编辑器或完整SVG文档 |
 | ELM-02 | 元素 / [Path距离查询与显式定位](path-placement.md) | 有界已验证 | Kurbo局部弧长/切线、世界点、显式目标定位；自依赖/祖先/奇异/陈旧拒绝 | 持续动画绑定归ANI-02 |
 | ELM-03 | 元素 / [Group Box Frame容器裁切](container-corners.md) | 有界已验证 | 分离组件/paint phases/四角、嵌套真实clip，bounds/hit/CPU/native一致受能力限制 | 不扩大Custom/特殊effect能力 |
-| ELM-04 | 元素 / [Text固定排版属性](text-layout-properties.md) | 部分实现 | 已有font/wrap/align/padding/ellipsis/italic/decoration/affine；必补letterSpacing、wordSpacing、paraIndent、paraSpacing、textCase、writingMode和autoSizeAlign | 已补间距/缩进/autoSizeAlign及直立cluster四轴writingMode；新轴ellipsis/decoration、纵向AutoHeight/baseline明确拒绝，完整组合仍部分 |
+| ELM-04 | 元素 / [Text固定排版属性](text-layout-properties.md) | 部分实现 | 已有font/wrap/align/padding/ellipsis/italic/decoration/affine；必补letterSpacing、wordSpacing、paraIndent、paraSpacing、textCase、writingMode和autoSizeAlign | 已补间距/缩进/autoSizeAlign及直立cluster四轴writingMode、整cluster ellipsis和轴向双线装饰；纵向AutoHeight/baseline明确拒绝，完整组合仍部分 |
 | ELM-05 | 元素 / [Image真实帧与几何呈现](image-corners.md) | 有界已验证 | 静态/动画帧、fit、四角及仿射/复杂clip，真实CPU像素和资源代际 | alpha hit/crop内编辑归ELM-06；解码与URL权限归宿主 |
 | ELM-06 | 元素 / [Image像素命中与内编辑](image-crop.md) | 有界已验证 | decoded-alpha hit阈值/缩放/当前帧和crop内工具必须一致且可撤销 | OSS未找到Image专属crop inner editor；属于框架明确扩展，不虚称上游已有 |
 | ELM-07 | 元素 / [Canvas拥有像素与生命周期](canvas-component.md) | 有界已验证 | 独立配置、运行时surface、DPR/smooth/safe-resize/clear/draw/snapshot、代际释放 | 像素不进文档/Undo；非整视图OwnedCanvas |

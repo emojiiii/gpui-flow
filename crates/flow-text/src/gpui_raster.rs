@@ -201,18 +201,6 @@ impl GpuiTextRasterizer {
                 crate::UnsupportedWritingMode::Backend,
             ));
         }
-        if mode != crate::WritingMode::X {
-            if request.overflow != crate::TextOverflow::Clip {
-                return Err(crate::WritingModeError::Unsupported(
-                    crate::UnsupportedWritingMode::Ellipsis,
-                ));
-            }
-            if request.decoration != crate::TextDecoration::None {
-                return Err(crate::WritingModeError::Unsupported(
-                    crate::UnsupportedWritingMode::Decoration,
-                ));
-            }
-        }
         catch_unwind(AssertUnwindSafe(|| {
             self.rasterize_inner(request, mode, epoch, cancelled, max_bytes, remaining_work)
         }))
@@ -316,8 +304,13 @@ impl GpuiTextRasterizer {
         } else {
             (
                 None,
-                Some(crate::gpui_writing_mode::shape_axis_checked(
-                    &system, &r.text, mode, &mut admit,
+                Some(crate::gpui_writing_mode::shape_axis_in_box_checked(
+                    &system,
+                    &r.text,
+                    mode,
+                    r.overflow,
+                    [r.bounds[2], r.bounds[3]],
+                    &mut admit,
                 )?),
             )
         };
@@ -332,25 +325,25 @@ impl GpuiTextRasterizer {
         if shape_bytes > max_bytes {
             return Err("text working-set limit".into());
         }
+        let decoration_request = crate::gpui_decoration::DecorationRequest {
+            decoration: r.decoration,
+            font_size: r.text.font_size,
+            line_height: r.text.line_height,
+            bounds: r.bounds,
+            align: r.align,
+            vertical_align: r.vertical_align,
+            device_scale: r.device_scale,
+        };
         let decorations = if let Some(shaped) = &shaped {
             crate::gpui_decoration::layout_decorations(
                 shaped,
-                &crate::gpui_decoration::DecorationRequest {
-                    decoration: r.decoration,
-                    font_size: r.text.font_size,
-                    line_height: r.text.line_height,
-                    bounds: r.bounds,
-                    align: r.align,
-                    vertical_align: r.vertical_align,
-                    device_scale: r.device_scale,
-                },
+                &decoration_request,
                 max_bytes.saturating_sub(shape_bytes),
             )?
         } else {
-            crate::gpui_decoration::DecorationLayout {
-                rects: vec![],
-                allocated_bytes: 0,
-            }
+            axis.as_ref()
+                .expect("axis layout")
+                .decorations(&decoration_request, max_bytes.saturating_sub(shape_bytes))?
         };
         let base_bytes = shape_bytes + decorations.allocated_bytes;
         out.peak_bytes = base_bytes.max(shaping_peak);

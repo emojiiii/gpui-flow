@@ -211,7 +211,7 @@ fn computed_origin_cannot_be_lost_through_explicit_size_leafer_export() {
 }
 
 #[test]
-fn flow_axis_modes_roundtrip_and_reject_unavailable_style_combinations_atomically() {
+fn flow_axis_modes_roundtrip_styled_combinations_and_reject_invalid_content_atomically() {
     for (mode, spelling) in [
         (TextWritingMode::XReverse, "x-reverse"),
         (TextWritingMode::Y, "y"),
@@ -229,30 +229,48 @@ fn flow_axis_modes_roundtrip_and_reject_unavailable_style_combinations_atomicall
         value.writing_mode = mode;
         value.validate().unwrap();
         assert_eq!(serde_json::from_value::<Text>(json!(value)).unwrap(), value);
-        let mut scene = scene;
-        let before = scene.clone();
-        assert!(
-            scene
-                .update_object(&"t".into(), |o| {
-                    let Shape::Text(text) = &mut o.shape else {
-                        unreachable!()
-                    };
-                    text.overflow = gpui_flow_scene::display::TextOverflow::Ellipsis;
-                })
-                .is_err()
-        );
-        assert_eq!(scene, before);
-        assert!(
-            scene
-                .update_object(&"t".into(), |o| {
-                    let Shape::Text(text) = &mut o.shape else {
-                        unreachable!()
-                    };
-                    text.decoration = gpui_flow_scene::display::TextDecoration::Underline;
-                })
-                .is_err()
-        );
-        assert_eq!(scene, before);
+        for overflow in [
+            gpui_flow_scene::display::TextOverflow::Clip,
+            gpui_flow_scene::display::TextOverflow::Ellipsis,
+        ] {
+            for decoration in [
+                gpui_flow_scene::display::TextDecoration::None,
+                gpui_flow_scene::display::TextDecoration::Underline,
+                gpui_flow_scene::display::TextDecoration::Strikethrough,
+                gpui_flow_scene::display::TextDecoration::UnderlineStrikethrough,
+            ] {
+                let mut styled = scene.clone();
+                styled
+                    .update_object(&"t".into(), |object| {
+                        let Shape::Text(text) = &mut object.shape else {
+                            unreachable!()
+                        };
+                        text.overflow = overflow;
+                        text.decoration = decoration;
+                    })
+                    .unwrap();
+                assert_eq!(
+                    Scene::from_leafer_json(&styled.to_leafer_json().unwrap()).unwrap(),
+                    styled
+                );
+                assert_eq!(
+                    serde_json::from_value::<Text>(json!(scene_text(&styled))).unwrap(),
+                    *scene_text(&styled)
+                );
+                let before = styled.clone();
+                assert!(
+                    styled
+                        .update_object(&"t".into(), |object| {
+                            let Shape::Text(text) = &mut object.shape else {
+                                unreachable!()
+                            };
+                            text.content = "a".repeat(65_537);
+                        })
+                        .is_err()
+                );
+                assert_eq!(styled, before);
+            }
+        }
         value.content = "a".repeat(65_537);
         assert!(value.validate().is_err());
     }

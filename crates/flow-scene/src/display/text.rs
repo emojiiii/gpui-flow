@@ -176,13 +176,6 @@ impl Text {
         )
     }
     pub fn validate(&self) -> Result<(), String> {
-        if self.writing_mode != TextWritingMode::X
-            && (self.overflow != TextOverflow::Clip || self.decoration != TextDecoration::None)
-        {
-            return Err(
-                "axis writing modes currently require clip overflow and no decoration".into(),
-            );
-        }
         if (self.overflow == TextOverflow::Ellipsis
             || self.decoration != TextDecoration::None
             || self.text_case != TextCase::None
