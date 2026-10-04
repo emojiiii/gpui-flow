@@ -44,7 +44,8 @@ pub type SceneInteractionError = crate::InteractionError;
 
 mod router;
 pub use router::{
-    RoutedReport, SceneEventRouter, SceneInteractionState, SemanticDefault, SemanticDispatch,
+    PointerGestureProfile, RoutedReport, SceneEventRouter, SceneInteractionState, SemanticDefault,
+    SemanticDispatch,
 };
 
 mod state_style;

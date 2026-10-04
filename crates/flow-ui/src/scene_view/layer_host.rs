@@ -50,7 +50,7 @@ impl SceneView {
             return false;
         }
         self.focus_lost(cx);
-        self.router = SceneEventRouter::new();
+        self.router = SceneEventRouter::with_gesture_profile(self.router.gesture_profile());
         self.pending_native_focus = false;
         self.subscriptions.clear();
         self.interaction_window = None;
@@ -65,7 +65,7 @@ impl SceneView {
         let _ = self.cancel_flow_frame(cx);
         self.focus_lost(cx);
         // Close outstanding action senders. Reattachment cannot replay old input.
-        self.router = SceneEventRouter::new();
+        self.router = SceneEventRouter::with_gesture_profile(self.router.gesture_profile());
         self.pending_native_focus = false;
         self.layer_host = LayerHostState::Standalone;
         cx.notify();
@@ -77,7 +77,7 @@ impl SceneView {
         self.navigation_frames.cancel();
         let _ = self.set_flow_frame_queue(None, cx);
         self.focus_lost(cx);
-        self.router = SceneEventRouter::new();
+        self.router = SceneEventRouter::with_gesture_profile(self.router.gesture_profile());
         if let Some(mut tools) = self.tools.take() {
             let _ = tools.dispose(&mut self.editor, &mut self.interactions);
         }

@@ -631,3 +631,45 @@ fn public_close_reason_always_restores_outer_without_a_following_open() {
         assert!(lab.tools.is_enabled());
     }
 }
+
+#[test]
+fn escape_policy_keeps_one_undo_step_but_explicit_cancel_still_discards() {
+    for behavior in [TextEscapeBehavior::Cancel, TextEscapeBehavior::Finish] {
+        let mut lab = Lab::new();
+        let token = lab.open(lab.a);
+        lab.set(token, "kept on close");
+        assert!(
+            behavior
+                .close(&mut lab.tools, &mut lab.editor, &mut lab.host, token)
+                .unwrap()
+        );
+        assert!(
+            !behavior
+                .close(&mut lab.tools, &mut lab.editor, &mut lab.host, token)
+                .unwrap()
+        );
+        match behavior {
+            TextEscapeBehavior::Cancel => {
+                assert_eq!(lab.text(lab.a), "a");
+                assert!(!lab.editor.undo());
+            }
+            TextEscapeBehavior::Finish => {
+                assert_eq!(lab.text(lab.a), "kept on close");
+                assert!(lab.editor.undo());
+                assert_eq!(lab.text(lab.a), "a");
+                assert!(!lab.editor.undo());
+                assert!(lab.editor.redo());
+                assert_eq!(lab.text(lab.a), "kept on close");
+            }
+        }
+        let token = lab.open(lab.a);
+        let baseline = lab.text(lab.a).to_owned();
+        lab.set(token, "explicit cancellation");
+        assert!(
+            lab.tools
+                .cancel(&mut lab.editor, &mut lab.host, token)
+                .unwrap()
+        );
+        assert_eq!(lab.text(lab.a), baseline);
+    }
+}

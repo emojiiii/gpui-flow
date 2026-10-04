@@ -149,6 +149,30 @@ impl SceneToolRegistry {
 pub struct TextSessionToken(EditSessionToken);
 /// Shared opaque ownership token; the Text name remains source-compatible.
 pub type ToolSessionToken = TextSessionToken;
+/// Text Escape is independently configurable; an explicit Cancel always rolls back.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum TextEscapeBehavior {
+    #[default]
+    Cancel,
+    /// Close and retain edits as one undo step, like the pinned Leafer editor.
+    Finish,
+}
+impl TextEscapeBehavior {
+    /// Headless adapters can use the same policy as SceneView's native panel.
+    pub fn close(
+        self,
+        tools: &mut SceneToolController,
+        editor: &mut SceneEditor,
+        host: &mut ScenePluginHost,
+        token: TextSessionToken,
+    ) -> Result<bool, InteractionError> {
+        match self {
+            Self::Cancel => tools.cancel(editor, host, token),
+            Self::Finish => tools.finish(editor, host, token),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolCloseReason {
     Done,
@@ -188,8 +212,8 @@ struct ToolSession {
 }
 /// Optional controller; construct one per SceneEditor and explicitly dispose it.
 /// Ordinary editor/engine edits revoke the session and retain its last owned
-/// change as one undo step, separately from the external change. Escape rolls
-/// back only a still-owned baseline (intentionally unlike Leafer's close).
+/// change as one undo step, separately from the external change. Adapters choose
+/// Escape semantics with TextEscapeBehavior; explicit cancel keeps ownership checks.
 pub struct SceneToolController {
     registry: SceneToolRegistry,
     outer: String,

@@ -7,6 +7,45 @@ const SLOP: f32 = 4.0;
 const LONG_PRESS_MS: u64 = 500;
 const DOUBLE_TAP_MS: u64 = 300;
 
+/// Opt-in timing for the existing, bounded pointer recognizer. The Leafer
+/// option affects mouse input only; pen/touch retain Flow's current contract.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum PointerGestureProfile {
+    #[default]
+    Flow,
+    /// 2px motion slop, 800ms long press, and 120ms delayed singles when a
+    /// DoubleTap/DoubleClick listener is on the target's ancestor path.
+    /// Delayed doubles require two short releases (<170ms each) on the same
+    /// live target within 120ms; no global/cross-target JS timer semantics.
+    LeaferMouse,
+}
+impl PointerGestureProfile {
+    fn leafer_mouse(self, device: PointerDevice) -> bool {
+        self == Self::LeaferMouse && device == PointerDevice::Mouse
+    }
+    fn moved(self, device: PointerDevice, distance: f32) -> bool {
+        if self.leafer_mouse(device) {
+            distance > 2.0
+        } else {
+            distance >= SLOP
+        }
+    }
+    fn long_press_ms(self, device: PointerDevice) -> u64 {
+        if self.leafer_mouse(device) {
+            800
+        } else {
+            LONG_PRESS_MS
+        }
+    }
+    fn double_tap_ms(self, device: PointerDevice) -> u64 {
+        if self.leafer_mouse(device) {
+            120
+        } else {
+            DOUBLE_TAP_MS
+        }
+    }
+}
+
 pub(super) struct Contact {
     pub target: Option<ElementHandle>,
     pub epoch: u64,
@@ -20,10 +59,13 @@ pub(super) struct Contact {
 pub(super) struct Tap {
     pub target: ElementHandle,
     pub epoch: u64,
+    identity: PointerIdentity,
     device: PointerDevice,
     position: Point,
+    world_position: Point,
     up_time: u64,
     up_sequence: u64,
+    pending_input: Option<EventInput>,
 }
 impl SceneEventRouter {
     /// Whether this identity has an accepted contact, including background.
@@ -49,14 +91,21 @@ impl SceneEventRouter {
             return false;
         }
         self.clock_millis = Some(now);
-        self.recent_taps
-            .retain(|tap| now.saturating_sub(tap.up_time) <= DOUBLE_TAP_MS);
+        let profile = self.gesture_profile;
+        self.recent_taps.retain(|tap| {
+            tap.pending_input.is_some()
+                || now.saturating_sub(tap.up_time) <= profile.double_tap_ms(tap.device)
+        });
         true
     }
-    /// True only while a timed, unmoved primary contact can become a long press.
-    /// The native adapter schedules bounded frame callbacks while this is true.
+    /// True while a contact can become a long press or a delayed single tap
+    /// is pending. The native adapter schedules bounded frame callbacks.
     pub fn needs_gesture_frame(&self) -> bool {
         self.contacts.values().any(Self::long_press_candidate)
+            || self
+                .recent_taps
+                .iter()
+                .any(|tap| tap.pending_input.is_some())
     }
     fn long_press_candidate(contact: &Contact) -> bool {
         !contact.moved
@@ -85,17 +134,45 @@ impl SceneEventRouter {
             self.clear_keys();
         }
         self.retire_invalid(editor, host, &mut out);
+        self.emit_pending_taps(editor, now, &mut out);
         self.emit_long_presses(editor, now, &mut out);
         self.finish_dispatch(editor, host, &mut out, &mut 256, true);
         out
     }
+    fn emit_pending_taps(&mut self, editor: &mut SceneEditor, now: u64, out: &mut RoutedReport) {
+        let mut due = Vec::new();
+        self.recent_taps.retain_mut(|tap| {
+            if tap.pending_input.is_some() && now.saturating_sub(tap.up_time) >= 120 {
+                due.push((
+                    tap.target,
+                    tap.epoch,
+                    tap.world_position,
+                    tap.pending_input.take(),
+                ));
+                false
+            } else {
+                true
+            }
+        });
+        let position = self.position;
+        for (target, epoch, at, input) in due {
+            if Self::current(&editor.engine, target, epoch) {
+                self.position = editor.viewport.world_to_screen(at);
+                self.emit(editor, Some(target), EventKind::Tap, input.clone(), out);
+                self.emit(editor, Some(target), EventKind::Click, input, out);
+            }
+        }
+        self.position = position;
+    }
     fn emit_long_presses(&mut self, editor: &mut SceneEditor, now: u64, out: &mut RoutedReport) {
+        let profile = self.gesture_profile;
         let due: Vec<_> = self
             .contacts
             .iter_mut()
             .filter_map(|(_, contact)| {
                 if Self::long_press_candidate(contact)
-                    && now.saturating_sub(contact.down.timestamp_millis?) >= LONG_PRESS_MS
+                    && now.saturating_sub(contact.down.timestamp_millis?)
+                        >= profile.long_press_ms(contact.down.device)
                 {
                     contact.long_pressed = true;
                     Some((contact.target, contact.last.clone()))
@@ -117,6 +194,35 @@ impl SceneEventRouter {
             );
         }
         self.position = position;
+    }
+    fn flush_mouse_single(&mut self, editor: &mut SceneEditor, out: &mut RoutedReport) {
+        let Some(index) = self
+            .recent_taps
+            .iter()
+            .position(|tap| tap.device == PointerDevice::Mouse && tap.pending_input.is_some())
+        else {
+            return;
+        };
+        let tap = self.recent_taps.remove(index).unwrap();
+        if Self::current(&editor.engine, tap.target, tap.epoch) {
+            let position = self.position;
+            self.position = editor.viewport.world_to_screen(tap.world_position);
+            self.emit(
+                editor,
+                Some(tap.target),
+                EventKind::Tap,
+                tap.pending_input.clone(),
+                out,
+            );
+            self.emit(
+                editor,
+                Some(tap.target),
+                EventKind::Click,
+                tap.pending_input,
+                out,
+            );
+            self.position = position;
+        }
     }
     pub(super) fn cancel_contacts(
         &mut self,
@@ -164,7 +270,8 @@ impl SceneEventRouter {
         // Cancellation breaks the click sequence. A delayed up can never revive it.
         if identity.is_some() {
             self.recent_taps.retain(|tap| {
-                !cancelled_targets.contains(&(tap.device, Some(tap.target), tap.epoch))
+                !(tap.pending_input.is_some() && Some(tap.identity) == identity)
+                    && !cancelled_targets.contains(&(tap.device, Some(tap.target), tap.epoch))
             });
         } else {
             self.recent_taps.clear();
@@ -229,6 +336,9 @@ impl SceneEventRouter {
         budget: &mut usize,
     ) {
         let pointer = event.pointer().unwrap().clone();
+        if let Some(now) = pointer.timestamp_millis {
+            self.emit_pending_taps(editor, now, out);
+        }
         let identity = pointer.identity();
         self.position = pointer.position;
         let hit = match &pointer.hit {
@@ -270,8 +380,14 @@ impl SceneEventRouter {
             return;
         }
         if let Some(contact) = self.contacts.get_mut(&identity) {
-            contact.moved |= contact.down.position.distance(pointer.position) >= SLOP || chord;
+            contact.moved |= self.gesture_profile.moved(
+                pointer.device,
+                contact.down.position.distance(pointer.position),
+            ) || chord;
             contact.last = pointer.clone();
+            if contact.moved && self.gesture_profile.leafer_mouse(pointer.device) {
+                self.recent_taps.retain(|tap| tap.identity != identity);
+            }
             if !is_up
                 && !is_down
                 && contact
@@ -369,12 +485,72 @@ impl SceneEventRouter {
                 .down
                 .timestamp_millis
                 .zip(pointer.timestamp_millis)
-                .is_none_or(|(down, up)| up.saturating_sub(down) < LONG_PRESS_MS);
+                .is_none_or(|(down, up)| {
+                    up.saturating_sub(down) < self.gesture_profile.long_press_ms(pointer.device)
+                });
         if !eligible {
+            if self.gesture_profile.leafer_mouse(pointer.device) {
+                self.recent_taps.retain(|tap| tap.identity != identity);
+            }
             return;
         }
         let target = hit.unwrap();
-        // Every tap is immediate. A double is an additional notification after
+        if self.gesture_profile.leafer_mouse(pointer.device) {
+            let timed = contact.down.timestamp_millis.zip(pointer.timestamp_millis);
+            let has_double = [EventKind::DoubleTap, EventKind::DoubleClick]
+                .iter()
+                .any(|kind| editor.engine.has_listener_on_path(target, kind));
+            if let Some((down_time, up_time)) = timed
+                && has_double
+                && up_time.saturating_sub(down_time) < 170
+            {
+                let prior = self.recent_taps.iter().position(|tap| {
+                    tap.pending_input.is_some()
+                        && tap.device == identity.device
+                        && tap.target == target
+                        && tap.epoch == contact.epoch
+                        && contact.down_sequence > tap.up_sequence
+                        && down_time >= tap.up_time
+                        && up_time.saturating_sub(tap.up_time) < 120
+                        && tap.position.distance(pointer.position) <= 2.0
+                });
+                if let Some(index) = prior {
+                    self.recent_taps.remove(index);
+                    self.emit(
+                        editor,
+                        Some(target),
+                        EventKind::DoubleTap,
+                        input.clone(),
+                        out,
+                    );
+                    self.emit(editor, Some(target), EventKind::DoubleClick, input, out);
+                } else {
+                    // At most one pending mouse single; a new target is an
+                    // independent click and must not silently discard the old one.
+                    self.flush_mouse_single(editor, out);
+                    if self.recent_taps.len() == MAX_CONTACTS {
+                        self.recent_taps.pop_front();
+                    }
+                    self.recent_taps.push_back(Tap {
+                        target,
+                        epoch: contact.epoch,
+                        identity,
+                        device: identity.device,
+                        position: pointer.position,
+                        world_position: editor.viewport.screen_to_world(pointer.position),
+                        up_time,
+                        up_sequence: self.sequence,
+                        pending_input: input,
+                    });
+                }
+            } else {
+                self.flush_mouse_single(editor, out);
+                self.emit(editor, Some(target), EventKind::Tap, input.clone(), out);
+                self.emit(editor, Some(target), EventKind::Click, input, out);
+            }
+            return;
+        }
+        // Every legacy Flow tap is immediate. A double is an additional notification after
         // the second tap; no delayed single-tap callbacks or hidden timers.
         self.emit(editor, Some(target), EventKind::Tap, input.clone(), out);
         self.emit(editor, Some(target), EventKind::Click, input.clone(), out);
@@ -408,10 +584,13 @@ impl SceneEventRouter {
                 self.recent_taps.push_back(Tap {
                     target,
                     epoch: contact.epoch,
+                    identity,
                     device: identity.device,
                     position: pointer.position,
+                    world_position: editor.viewport.screen_to_world(pointer.position),
                     up_time,
                     up_sequence: self.sequence,
+                    pending_input: None,
                 });
             }
         }

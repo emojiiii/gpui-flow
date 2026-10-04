@@ -174,7 +174,14 @@ pub(crate) fn container(
                 .unwrap_or(if input.grow > 0.0 { 0.0 } else { current_main });
         let main = basis.clamp(main_min, main_max);
         let cross = current_cross.clamp(cross_min, cross_max);
-        let addition = main + if line.items.is_empty() { 0.0 } else { gap };
+        let addition = main
+            + if line.items.is_empty()
+                || style.wrap_gap_policy == crate::WrapGapPolicy::LeaferExcludePendingGap
+            {
+                0.0
+            } else {
+                gap
+            };
         if wrap && !line.items.is_empty() && line.main + addition > available_main {
             lines.push(line);
             line = Line::default();

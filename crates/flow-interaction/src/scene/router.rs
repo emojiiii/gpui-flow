@@ -11,10 +11,12 @@ use gpui_flow_engine::{ElementHandle, EngineError, InstanceState, SceneEngine};
 use gpui_flow_scene::{
     DisplayId, EventInput, EventKind, InputModifiers, Point, PointerDevice, SceneEvent,
 };
+pub use pointer::PointerGestureProfile;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 #[derive(Default)]
 pub struct SceneEventRouter {
+    gesture_profile: PointerGestureProfile,
     contacts: BTreeMap<PointerIdentity, pointer::Contact>,
     default_pointer: Option<PointerIdentity>,
     recent_taps: VecDeque<pointer::Tap>,
@@ -50,6 +52,16 @@ pub struct SceneInteractionState {
 impl SceneEventRouter {
     pub fn new() -> Self {
         Self::default()
+    }
+    /// Choose a profile before accepting input. Existing documents are not changed.
+    pub fn with_gesture_profile(profile: PointerGestureProfile) -> Self {
+        Self {
+            gesture_profile: profile,
+            ..Self::default()
+        }
+    }
+    pub fn gesture_profile(&self) -> PointerGestureProfile {
+        self.gesture_profile
     }
     pub fn action_sender(&self) -> super::SceneActionSender {
         self.actions.sender.clone()

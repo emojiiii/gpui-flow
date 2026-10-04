@@ -4,6 +4,8 @@ mod accessibility;
 mod gpu_damage;
 pub use accessibility::{SceneAccessibility, SceneAccessibilityIssue};
 mod canvas_commands;
+mod compatibility;
+pub use compatibility::{LeaferCompatibilityProfile, LeaferPlainContainerContext};
 mod composite;
 pub(crate) mod export;
 mod flow_layout;
@@ -102,6 +104,7 @@ pub struct SceneView {
     pub interaction_error: Option<String>,
     tools: Option<gpui_flow_interaction::scene::SceneToolController>,
     text_input: Option<text_edit::TextInputSession>,
+    text_escape_behavior: gpui_flow_interaction::scene::TextEscapeBehavior,
     tool_widgets: custom_tool::ToolWidgets,
 }
 impl SceneView {
@@ -177,6 +180,7 @@ impl SceneView {
             interaction_error: None,
             tools: None,
             text_input: None,
+            text_escape_behavior: Default::default(),
             tool_widgets: Default::default(),
         }
     }

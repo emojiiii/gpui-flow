@@ -170,6 +170,27 @@ fn exercise_adapter(
     assert!(!view.editor.undo(), "cancelled preedit created history");
     expected_closes.push((token, ToolCloseReason::Cancelled));
 
+    view.set_text_escape_behavior(gpui_flow_interaction::scene::TextEscapeBehavior::Finish, cx);
+    let (token, input) = begin_preedit(view, "保留", window, cx);
+    assert!(view.escape_text_editor(window, cx));
+    assert!(!view.escape_text_editor(window, cx));
+    assert_eq!(snapshot(&input, window, cx).1, None);
+    assert_single_undo(view, "A🙂保留");
+    expected_closes.push((token, ToolCloseReason::Done));
+
+    // Explicit Cancel still rolls back under the finish-on-Escape profile.
+    let (token, input) = begin_preedit(view, "取消", window, cx);
+    assert!(view.cancel_text_editor(window, cx));
+    assert_eq!(snapshot(&input, window, cx).1, None);
+    assert_eq!(text(view), BASELINE);
+    assert!(!view.editor.undo());
+    expected_closes.push((token, ToolCloseReason::Cancelled));
+    view.set_text_escape_behavior(gpui_flow_interaction::scene::TextEscapeBehavior::Cancel, cx);
+    let (token, _) = begin_preedit(view, "取消", window, cx);
+    assert!(view.escape_text_editor(window, cx));
+    assert_eq!(text(view), BASELINE);
+    expected_closes.push((token, ToolCloseReason::Cancelled));
+
     let (token, input) = begin_preedit(view, "wen", window, cx);
     let before = snapshot(&input, window, cx);
     let document = view.editor.scene().clone();

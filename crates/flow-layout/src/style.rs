@@ -198,6 +198,23 @@ impl ContentBoundsPolicy {
     }
 }
 
+/// Whether fixed-gap wrapping counts the gap before the next item.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WrapGapPolicy {
+    /// Legacy Flow: the next item and its preceding gap must fit.
+    #[default]
+    IncludePendingGap,
+    /// Pinned Leafer flowX/flowY: test accumulated size plus the next item;
+    /// append the gap only after accepting that item. A line may overflow by a gap.
+    LeaferExcludePendingGap,
+}
+impl WrapGapPolicy {
+    fn is_include(&self) -> bool {
+        *self == Self::IncludePendingGap
+    }
+}
+
 /// Box/Frame content layout, in the container's intrinsic local units.
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -223,6 +240,8 @@ pub struct FlowStyle {
     #[serde(skip_serializing_if = "GapMode::is_fixed")]
     pub line_gap_mode: GapMode,
     pub wrap: bool,
+    #[serde(skip_serializing_if = "WrapGapPolicy::is_include")]
+    pub wrap_gap_policy: WrapGapPolicy,
     /// Reverse completed line placement on the cross axis. Ignored when actual
     /// wrapping is disabled; does not reverse children within a line.
     pub wrap_reverse: bool,

@@ -261,9 +261,32 @@ impl SceneView {
         self.close_text_editor(false, ToolCloseReason::Done, window, cx)
     }
     /// Roll back this session only while its ownership remains current.
-    /// Unlike Leafer's close-on-Escape behavior, this intentionally cancels.
+    /// This explicit Cancel action rolls back under every compatibility profile.
     pub fn cancel_text_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         self.close_text_editor(true, ToolCloseReason::Cancelled, window, cx)
+    }
+    /// Configure only Escape; the explicit Cancel button retains rollback semantics.
+    pub fn set_text_escape_behavior(
+        &mut self,
+        behavior: gpui_flow_interaction::scene::TextEscapeBehavior,
+        cx: &mut Context<Self>,
+    ) {
+        self.text_escape_behavior = behavior;
+        cx.notify();
+    }
+    pub fn text_escape_behavior(&self) -> gpui_flow_interaction::scene::TextEscapeBehavior {
+        self.text_escape_behavior
+    }
+    /// Native Escape entrypoint, also available to hosts forwarding key input.
+    pub fn escape_text_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        match self.text_escape_behavior {
+            gpui_flow_interaction::scene::TextEscapeBehavior::Cancel => {
+                self.cancel_text_editor(window, cx)
+            }
+            gpui_flow_interaction::scene::TextEscapeBehavior::Finish => {
+                self.finish_text_editor(window, cx)
+            }
+        }
     }
     fn text_panel_contains_focus(&self, window: &Window, cx: &App) -> bool {
         self.text_input.as_ref().is_some_and(|input| {
@@ -466,12 +489,16 @@ impl SceneView {
                                 })),
                         ),
                 )
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(rgb(theme.muted))
-                        .child("Escape cancels · Tab moves focus · Use clipboard shortcuts"),
-                )
+                .child(div().text_xs().text_color(rgb(theme.muted)).child(
+                    match self.text_escape_behavior {
+                        gpui_flow_interaction::scene::TextEscapeBehavior::Cancel => {
+                            "Escape cancels · Tab moves focus · Use clipboard shortcuts"
+                        }
+                        gpui_flow_interaction::scene::TextEscapeBehavior::Finish => {
+                            "Escape saves and closes · Tab moves focus · Cancel discards changes"
+                        }
+                    },
+                ))
                 .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
                 .on_mouse_move(|_, _, cx| cx.stop_propagation())
                 .on_mouse_up(MouseButton::Left, |_, _, cx| cx.stop_propagation())
@@ -489,7 +516,7 @@ impl SceneView {
                 })
                 .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
                     if event.keystroke.key.as_str() == "escape" {
-                        this.cancel_text_editor(window, cx);
+                        this.escape_text_editor(window, cx);
                         cx.stop_propagation();
                     } else if event.keystroke.key.as_str() == "tab"
                         && !event.keystroke.modifiers.control

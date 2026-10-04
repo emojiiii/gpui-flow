@@ -209,6 +209,13 @@ impl EventDispatcher {
         );
         id
     }
+    /// Read-only listener lookup used by host gesture recognition. Both capture
+    /// and bubble listeners count; once listeners disappear after dispatch.
+    pub fn has_listener_on_path(&self, path: &[DisplayId], kind: &EventKind) -> bool {
+        self.listeners
+            .values()
+            .any(|listener| &listener.kind == kind && path.contains(&listener.node))
+    }
     pub fn contains_listener(&self, id: ListenerId) -> bool {
         self.listeners.contains_key(&id)
     }

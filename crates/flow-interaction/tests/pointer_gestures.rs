@@ -536,3 +536,158 @@ fn timer_reconciles_external_document_writes_before_recognition() {
         15.
     );
 }
+
+fn leafer_lab(double: bool) -> Lab {
+    let mut lab = Lab::new();
+    // Recognition-only fixtures must not start a scene drag at a different slop.
+    lab.host = ScenePluginHost::new();
+    lab.router = SceneEventRouter::with_gesture_profile(PointerGestureProfile::LeaferMouse);
+    if double {
+        let a = lab.editor.engine.handle(&"a".into()).unwrap();
+        lab.editor
+            .engine
+            .on(a, EventKind::DoubleClick, Default::default(), |_| {})
+            .unwrap();
+    }
+    lab
+}
+
+#[test]
+fn leafer_mouse_delays_only_with_double_listener_and_emits_single_at_boundary() {
+    let mut lab = leafer_lab(false);
+    let immediate = lab.tap(pointer(PointerDevice::Mouse, 0, "a", 0), 30);
+    assert_eq!(count(&immediate, EventKind::Tap), 1);
+    assert!(!lab.router.needs_gesture_frame());
+    let mut lab = leafer_lab(true);
+    let pending = lab.tap(pointer(PointerDevice::Mouse, 0, "a", 0), 30);
+    assert_eq!(count(&pending, EventKind::Tap), 0);
+    assert!(lab.router.needs_gesture_frame());
+    assert!(lab.tick(149).events.is_empty());
+    let due = lab.tick(150);
+    assert_eq!(kinds(&due), [EventKind::Tap, EventKind::Click]);
+    assert_eq!(due.events[0].timestamp_millis, Some(150));
+    assert!(!lab.router.needs_gesture_frame());
+    assert!(lab.tick(151).events.is_empty());
+}
+
+#[test]
+fn leafer_mouse_double_suppresses_both_singles_and_does_not_overlap_triple() {
+    let mut lab = leafer_lab(true);
+    lab.tap(pointer(PointerDevice::Mouse, 0, "a", 0), 20);
+    let double = lab.tap(pointer(PointerDevice::Mouse, 0, "a", 60), 80);
+    assert_eq!(count(&double, EventKind::Tap), 0);
+    assert_eq!(count(&double, EventKind::Click), 0);
+    assert_eq!(count(&double, EventKind::DoubleTap), 1);
+    assert_eq!(count(&double, EventKind::DoubleClick), 1);
+    assert!(!lab.router.needs_gesture_frame());
+    let third = lab.tap(pointer(PointerDevice::Mouse, 0, "a", 100), 120);
+    assert_eq!(count(&third, EventKind::DoubleTap), 0);
+    assert_eq!(count(&lab.tick(240), EventKind::Tap), 1);
+}
+
+#[test]
+fn leafer_mouse_has_170ms_short_release_qualification_and_800ms_long_press() {
+    let mut lab = leafer_lab(true);
+    let slow = lab.tap(pointer(PointerDevice::Mouse, 0, "a", 0), 170);
+    assert_eq!(count(&slow, EventKind::Tap), 1);
+    assert!(!lab.router.needs_gesture_frame());
+    lab.send(CanvasEvent::PointerDown(pointer(
+        PointerDevice::Mouse,
+        0,
+        "a",
+        200,
+    )));
+    assert_eq!(count(&lab.tick(999), EventKind::LongPress), 0);
+    assert_eq!(count(&lab.tick(1000), EventKind::LongPress), 1);
+    assert_eq!(count(&lab.tick(1001), EventKind::LongPress), 0);
+    let up = lab.send(CanvasEvent::PointerUp(release(
+        pointer(PointerDevice::Mouse, 0, "a", 200),
+        1002,
+    )));
+    assert_eq!(count(&up, EventKind::Tap), 0);
+}
+
+#[test]
+fn leafer_mouse_slop_is_strictly_over_two_and_pen_keeps_legacy_recognition() {
+    for (distance, taps) in [(2.0, 1), (2.01, 0)] {
+        let mut lab = leafer_lab(false);
+        let down = pointer(PointerDevice::Mouse, 0, "a", 0);
+        lab.send(CanvasEvent::PointerDown(down.clone()));
+        let mut up = release(down, 20);
+        up.position.x += distance;
+        assert_eq!(
+            count(&lab.send(CanvasEvent::PointerUp(up)), EventKind::Tap),
+            taps
+        );
+    }
+    let mut lab = leafer_lab(true);
+    let pen = lab.tap(pointer(PointerDevice::Pen, 1, "a", 0), 20);
+    assert_eq!(count(&pen, EventKind::Tap), 1);
+    assert!(!lab.router.needs_gesture_frame());
+}
+
+#[test]
+fn leafer_pending_single_retires_on_cancel_blur_and_replaced_instance() {
+    for cancel in [0, 1, 2] {
+        let mut lab = leafer_lab(true);
+        let mouse = pointer(PointerDevice::Mouse, 0, "a", 0);
+        lab.tap(mouse.clone(), 20);
+        match cancel {
+            0 => {
+                lab.send(CanvasEvent::PointerCancelFor(mouse.identity()));
+            }
+            1 => {
+                lab.send(CanvasEvent::FocusLost);
+            }
+            _ => {
+                lab.editor.load_scene(lab.editor.scene().clone()).unwrap();
+            }
+        }
+        assert_eq!(count(&lab.tick(140), EventKind::Tap), 0);
+        assert!(!lab.router.needs_gesture_frame());
+    }
+}
+
+#[test]
+fn leafer_listener_lookup_includes_ancestors_and_respects_removal() {
+    let mut lab = leafer_lab(false);
+    let a = lab.editor.engine.handle(&"a".into()).unwrap();
+    lab.editor
+        .engine
+        .transaction(|scene| {
+            scene.insert(
+                DisplayObject::new("parent", display::Group::new()),
+                None,
+                None,
+            )?;
+            scene.reparent(&"a".into(), Some("parent".into()), None, true)
+        })
+        .unwrap();
+    let parent = lab.editor.engine.handle(&"parent".into()).unwrap();
+    let listener = lab
+        .editor
+        .engine
+        .on(
+            parent,
+            EventKind::DoubleTap,
+            gpui_flow_scene::ListenerOptions {
+                capture: true,
+                once: true,
+            },
+            |_| {},
+        )
+        .unwrap();
+    assert!(
+        lab.editor
+            .engine
+            .has_listener_on_path(a, &EventKind::DoubleTap)
+    );
+    assert!(lab.editor.engine.off(listener));
+    assert!(
+        !lab.editor
+            .engine
+            .has_listener_on_path(a, &EventKind::DoubleTap)
+    );
+    let immediate = lab.tap(pointer(PointerDevice::Mouse, 0, "a", 0), 20);
+    assert_eq!(count(&immediate, EventKind::Tap), 1);
+}

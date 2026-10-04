@@ -947,6 +947,15 @@ impl SceneEngine {
         key.descriptor()
             .ok_or_else(|| EngineError::Property("unknown property".into()))
     }
+    /// Whether an attached target's current ancestor path has a listener of
+    /// this kind. Stale/detached handles cannot arm delayed native input.
+    pub fn has_listener_on_path(&self, handle: ElementHandle, kind: &EventKind) -> bool {
+        self.instance(handle)
+            .ok()
+            .filter(|instance| instance.state == InstanceState::Attached)
+            .and_then(|instance| self.scene.ancestor_path(&instance.id).ok())
+            .is_some_and(|path| self.dispatcher.has_listener_on_path(&path, kind))
+    }
     pub fn listener_count(&self) -> usize {
         self.dispatcher.len()
     }
