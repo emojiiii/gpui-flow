@@ -1,7 +1,7 @@
 use super::*;
 use gpui_flow_scene::{
-    Affine, BlendMode, Bounds, Color, DisplayObject, EraserMode, FillRule, MaskMode, Point, Scene,
-    Shape, Size, Stroke, Style, display,
+    Affine, BlendMode, Bounds, Color, Contour, DisplayObject, EraserMode, FillRule, MaskMode,
+    Point, Scene, Shape, Size, Stroke, Style, display,
 };
 use std::sync::{Arc, atomic::AtomicBool};
 
@@ -467,26 +467,16 @@ fn erasers_reject_external_backdrops_unsupported_paths_svg_and_bare_canvas_captu
     assert!(
         matches!(SceneExportPlan::new(&s, request, CompositeLimits::default()), Err(CompositeError::UnsupportedShape(message)) if message == "SVG erasers")
     );
-    let shapes: Vec<Shape> = vec![
-        display::Text::new("x", Size::new(20., 20.)).into(),
-        display::Custom::new(
-            "custom",
-            Bounds::new(Point::ZERO, Size::new(20., 20.)),
-            vec![],
-        )
-        .into(),
-    ];
-    for shape in shapes {
-        let mut s = scene();
-        insert(
-            &mut s,
-            DisplayObject::new("erase", shape).with_eraser(EraserMode::Path),
-            "g",
-        );
-        assert!(
-            matches!(&scene_units(&s, CompositeLimits::default()).unwrap()[0], SceneUnit::Rejected(i) if i.error == CompositeError::UnsupportedPathEraser("erase".into()))
-        );
-    }
+    let mut s = scene();
+    insert(
+        &mut s,
+        DisplayObject::new("erase", display::Text::new("x", Size::new(20., 20.)))
+            .with_eraser(EraserMode::Path),
+        "g",
+    );
+    assert!(
+        matches!(&scene_units(&s, CompositeLimits::default()).unwrap()[0], SceneUnit::Rejected(i) if i.error == CompositeError::UnsupportedPathEraser("erase".into()))
+    );
 }
 #[test]
 fn pixel_erasers_use_actual_image_canvas_and_text_alpha() {
@@ -835,4 +825,272 @@ fn path_group_clear_bounds_follow_stable_first_marker_order() {
     s.update_object(&"hidden-first".into(), |o| o.z_index = 2)
         .unwrap();
     assert_eq!(at(&render(&domain(&s)), 10, 10), [0; 4]);
+}
+
+fn custom_contours() -> display::Custom {
+    display::Custom::new(
+        "geometry-only",
+        Bounds::new(Point::new(5., 5.), Size::new(30., 25.)),
+        vec![
+            Contour {
+                // Concave, intentionally open. Filled geometry closes implicitly.
+                points: vec![
+                    Point::new(5., 5.),
+                    Point::new(35., 5.),
+                    Point::new(35., 15.),
+                    Point::new(20., 15.),
+                    Point::new(20., 30.),
+                    Point::new(5., 30.),
+                ],
+                closed: false,
+            },
+            Contour {
+                points: vec![
+                    Point::new(8., 8.),
+                    Point::new(13., 8.),
+                    Point::new(13., 13.),
+                    Point::new(8., 13.),
+                ],
+                closed: true,
+            },
+        ],
+    )
+}
+fn geometric_marker(shape: impl Into<Shape>, mask: bool) -> DisplayObject {
+    let object = DisplayObject::new("geometry", shape);
+    if mask {
+        object.with_mask(MaskMode::Path)
+    } else {
+        object.with_eraser(EraserMode::Path)
+    }
+}
+fn geometric_scene(mask: bool) -> Scene {
+    let mut s = scene();
+    if mask {
+        s.remove(&"red".into()).unwrap();
+    }
+    s
+}
+fn finish_geometric_scene(s: &mut Scene, mask: bool) {
+    if mask {
+        insert(s, rect("red", 0., 0., 40., 40., Color::rgb(255, 0, 0)), "g");
+    }
+}
+fn red_if(covered: bool) -> [u8; 4] {
+    if covered { [255, 0, 0, 255] } else { [0; 4] }
+}
+
+#[test]
+fn custom_path_masks_and_erasers_keep_real_contours_origin_fill_rules_and_empty_area() {
+    for mask in [false, true] {
+        for (rule, reverse_hole, hole) in [
+            (FillRule::EvenOdd, false, true),
+            (FillRule::NonZero, false, false),
+            (FillRule::NonZero, true, true),
+        ] {
+            let mut custom = custom_contours();
+            if reverse_hole {
+                custom.contours[1].points.reverse();
+            }
+            let mut marker = geometric_marker(custom, mask);
+            marker.style.fill = None;
+            marker.style.opacity = if mask { 1. } else { 0.01 };
+            marker.style.fill_rule = rule;
+            marker.style.stroke = Some(Stroke::new(Color::WHITE, 10.));
+            marker.style.shadow = Some(gpui_flow_scene::Shadow::new(5., 0., 3., Color::WHITE));
+            let mut s = geometric_scene(mask);
+            insert(&mut s, marker, "g");
+            finish_geometric_scene(&mut s, mask);
+            let source = capture_subtree(&s, &"g".into(), CompositeLimits::default()).unwrap();
+            let f = render(&source);
+            for (x, y, covered) in [
+                (8, 20, true),
+                (27, 22, false),
+                (2, 10, false),
+                (10, 10, !hole),
+            ] {
+                assert_eq!(at(&f, x, y), red_if(covered == mask));
+            }
+            // Empty fallback geometry never turns the declared rectangle into coverage.
+            s.update_object(&"geometry".into(), |o| {
+                if let Shape::Custom(c) = &mut o.shape {
+                    c.contours.clear();
+                }
+            })
+            .unwrap();
+            let empty =
+                render(&capture_subtree(&s, &"g".into(), CompositeLimits::default()).unwrap());
+            assert_eq!(at(&empty, 8, 20), red_if(!mask));
+        }
+    }
+}
+
+#[test]
+fn custom_path_group_intersections_keep_affine_and_ancestor_clips() {
+    for mask in [false, true] {
+        let mut s = scene();
+        s.remove(&"red".into()).unwrap();
+        insert(
+            &mut s,
+            DisplayObject::new("clip", display::Frame::new(24., 30.))
+                .with_transform(Affine::translation(5., 5.) * Affine::scale(1.5, 1.))
+                .with_style(Style {
+                    fill: None,
+                    ..Default::default()
+                }),
+            "g",
+        );
+        insert(
+            &mut s,
+            DisplayObject::new("inner", display::Group::new()),
+            "clip",
+        );
+        if !mask {
+            insert(
+                &mut s,
+                rect("red", 0., 0., 40., 40., Color::rgb(255, 0, 0)),
+                "inner",
+            );
+        }
+        insert(
+            &mut s,
+            geometric_marker(display::Group::new(), mask),
+            "inner",
+        );
+        insert(
+            &mut s,
+            DisplayObject::new("custom", custom_contours())
+                .with_transform(Affine::translation(2., 0.)),
+            "geometry",
+        );
+        insert(
+            &mut s,
+            rect("intersection", 0., 0., 40., 22., Color::WHITE),
+            "geometry",
+        );
+        if mask {
+            insert(
+                &mut s,
+                rect("red", 0., 0., 40., 40., Color::rgb(255, 0, 0)),
+                "inner",
+            );
+        }
+        let f = render(&capture_subtree(&s, &"g".into(), CompositeLimits::default()).unwrap());
+        assert_eq!(at(&f, 20, 23), red_if(mask)); // Inside both contours.
+        assert_eq!(at(&f, 20, 30), red_if(!mask)); // Outside Group intersection.
+        assert_eq!(at(&f, 8, 23), red_if(!mask)); // Outside Custom, inside declared frame.
+        assert_eq!(at(&f, 45, 15), [0; 4]); // Custom extends beyond ancestor clip.
+        s.update_object(&"custom".into(), |o| {
+            if let Shape::Custom(c) = &mut o.shape {
+                c.contours.clear();
+            }
+        })
+        .unwrap();
+        let f = render(&capture_subtree(&s, &"g".into(), CompositeLimits::default()).unwrap());
+        assert_eq!(at(&f, 20, 23), red_if(!mask));
+    }
+}
+
+#[test]
+fn custom_path_point_limits_cover_all_contours_and_retained_hidden_references() {
+    for mask in [false, true] {
+        for group in [false, true] {
+            let mut s = geometric_scene(mask);
+            if group {
+                insert(&mut s, geometric_marker(display::Group::new(), mask), "g");
+                insert(
+                    &mut s,
+                    DisplayObject::new("custom", custom_contours()),
+                    "geometry",
+                );
+                let mut hidden = DisplayObject::new("hidden", custom_contours());
+                hidden.visible = false;
+                insert(&mut s, hidden, "geometry");
+            } else {
+                insert(&mut s, geometric_marker(custom_contours(), mask), "g");
+            }
+            finish_geometric_scene(&mut s, mask);
+            let exact = CompositeLimits {
+                max_points: 10,
+                max_total_points: if group { 20 } else { 10 },
+                ..Default::default()
+            };
+            let src = capture_subtree(&s, &"g".into(), exact).unwrap();
+            assert!(
+                rasterize(
+                    &src,
+                    viewport(),
+                    &mut PixelBudget::new(exact, 17).unwrap(),
+                    &AtomicBool::new(false)
+                )
+                .is_ok()
+            );
+            for limits in [
+                CompositeLimits {
+                    max_points: 9,
+                    ..exact
+                },
+                CompositeLimits {
+                    max_total_points: exact.max_total_points - 1,
+                    ..exact
+                },
+            ] {
+                assert!(matches!(
+                    capture_subtree(&s, &"g".into(), limits),
+                    Err(CompositeError::InputLimit)
+                ));
+                let mut budget = PixelBudget::new(limits, 17).unwrap();
+                assert!(matches!(
+                    rasterize(&src, viewport(), &mut budget, &AtomicBool::new(false)),
+                    Err(CompositeError::InputLimit)
+                ));
+                assert_eq!(budget.retained_bytes(), 17);
+                assert_eq!(budget.surface_writes(), 0);
+            }
+        }
+    }
+}
+
+#[test]
+fn custom_contours_never_admit_a_painted_cpu_producer() {
+    for (mask, eraser) in [
+        (MaskMode::None, EraserMode::None),
+        (MaskMode::None, EraserMode::Pixel),
+        (MaskMode::Alpha, EraserMode::None),
+        (MaskMode::Grayscale, EraserMode::None),
+        (MaskMode::Clipping, EraserMode::None),
+        (MaskMode::ClippingPath, EraserMode::None),
+    ] {
+        let mut s = scene();
+        s.update_object(&"g".into(), |o| o.style.opacity = 0.5)
+            .unwrap();
+        insert(
+            &mut s,
+            DisplayObject::new("custom", custom_contours())
+                .with_mask(mask)
+                .with_eraser(eraser),
+            "g",
+        );
+        insert(&mut s, rect("later", 0., 0., 40., 40., Color::WHITE), "g");
+        let before = s.clone();
+        let units = scene_units(&s, CompositeLimits::default()).unwrap();
+        assert!(matches!(&units[..], [SceneUnit::Rejected(issue)]
+            if issue.object == "g".into() && issue.error == CompositeError::UnsupportedShape("custom".into())));
+        assert_eq!(
+            owned_canvas(
+                &s,
+                CanvasBackdrop {
+                    color: Color::WHITE,
+                    grid: None
+                },
+                CompositeLimits::default()
+            ),
+            Err(CompositeError::UnsupportedShape("custom".into()))
+        );
+        assert_eq!(s, before);
+    }
+    assert!(matches!(
+        crate::vector::path(&Shape::Custom(custom_contours())),
+        Err(CompositeError::UnsupportedShape(_))
+    ));
 }

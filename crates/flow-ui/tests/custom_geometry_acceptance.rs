@@ -2,7 +2,8 @@
 use gpui::{AnyElement, App, Window};
 use gpui_flow::{
     composite::{
-        CanvasBackdrop, CompositeError, CompositeLimits, SceneUnit, owned_canvas, scene_units,
+        CanvasBackdrop, CompositeError, CompositeLimits, CpuFrame, DomainSource, PixelBudget,
+        RasterViewport, SceneUnit, owned_canvas, rasterize, scene_units,
     },
     core::Viewport,
     display::{DisplayRegistry, DisplayRenderer, RenderObject},
@@ -12,12 +13,12 @@ use gpui_flow::{
         PropertySchema, SceneEngine,
     },
     scene::{
-        Affine, Bounds, Color, Contour, DisplayObject, HitTestOptions, Point, Scene, Shape, Size,
-        Style, display,
+        Affine, Bounds, Color, Contour, DisplayObject, EraserMode, HitTestOptions, MaskMode, Point,
+        Scene, Shape, Size, Style, display,
     },
 };
 use serde_json::{Value, json};
-use std::sync::Arc;
+use std::sync::{Arc, atomic::AtomicBool};
 
 fn engine() -> SceneEngine {
     let mut registry = ElementRegistry::default();
@@ -238,4 +239,104 @@ fn owned_canvas_custom_rejection_never_produces_partial_output_or_mutates_input(
     );
     assert_eq!(engine.scene(), &before);
     assert_eq!(engine.revision(), revision);
+}
+
+fn path_domain(scene: &Scene) -> DomainSource {
+    let mut units = scene_units(scene, CompositeLimits::default()).unwrap();
+    assert_eq!(units.len(), 2);
+    assert_eq!(units[1], SceneUnit::Native("outside".into()));
+    let SceneUnit::Domain(source) = units.remove(0) else {
+        panic!("Custom Path geometry must remain in the complete root domain")
+    };
+    assert_eq!(source.root_id().as_str(), "root");
+    *source
+}
+fn path_pixels(source: &DomainSource) -> CpuFrame {
+    let bounds = Bounds::new(Point::ZERO, Size::new(150., 120.));
+    rasterize(
+        source,
+        RasterViewport {
+            world_to_screen: Affine::IDENTITY,
+            canvas_bounds: bounds,
+            content_mask: bounds,
+            device_scale: 1.,
+        },
+        &mut PixelBudget::new(CompositeLimits::default(), 0).unwrap(),
+        &AtomicBool::new(false),
+    )
+    .unwrap()
+    .unwrap()
+}
+fn pixel(frame: &CpuFrame, x: u32, y: u32) -> [u8; 4] {
+    let x = x as f32 - frame.screen_bounds.origin.x;
+    let y = y as f32 - frame.screen_bounds.origin.y;
+    if x < 0. || y < 0. || x >= frame.width as f32 || y >= frame.height as f32 {
+        return [0; 4];
+    }
+    frame.premul_rgba[((y as u32 * frame.width + x as u32) * 4) as usize..][..4]
+        .try_into()
+        .unwrap()
+}
+
+#[test]
+fn dynamic_custom_path_masks_and_erasers_rebuild_pixels_and_undo_without_stale_placement() {
+    for mask in [false, true] {
+        let mut engine = engine();
+        engine
+            .transaction(|scene| {
+                scene.remove(&"sibling".into())?;
+                scene.update_object(&"custom".into(), |o| {
+                    o.style.fill = None;
+                    if mask {
+                        o.mask = MaskMode::Path;
+                    } else {
+                        o.eraser = EraserMode::Path;
+                    }
+                })?;
+                scene.insert(
+                    DisplayObject::new("ink", display::Rect::new(140., 110.))
+                        .with_style(Style::fill(Color::WHITE)),
+                    Some("root".into()),
+                    if mask { None } else { Some(0) },
+                )?;
+                Ok(())
+            })
+            .unwrap();
+        let mut editor = SceneEditor::from_engine(engine);
+        let handle = editor.engine.handle(&"custom".into()).unwrap();
+        let before_scene = editor.scene().clone();
+        let before = path_domain(editor.scene());
+        let small = path_pixels(&before);
+        assert_eq!(pixel(&small, 110, 50), if mask { [0; 4] } else { [255; 4] });
+        assert_eq!(pixel(&small, 70, 40), if mask { [255; 4] } else { [0; 4] });
+        editor
+            .set_property(handle, PropertyKey::Custom("radius".into()), json!(40.))
+            .unwrap();
+        assert!(
+            editor.engine.last_change().dirty[&"custom".into()]
+                .contains(DirtyFlags::GEOMETRY | DirtyFlags::HIT | DirtyFlags::PAINT)
+        );
+        let grown = path_domain(editor.scene());
+        assert!(!before.placement_eq(&grown));
+        let large = path_pixels(&grown);
+        assert_eq!(pixel(&large, 110, 50), if mask { [255; 4] } else { [0; 4] });
+        assert_eq!(pixel(&large, 52, 22), if mask { [0; 4] } else { [255; 4] });
+        assert_eq!(
+            editor.engine.world_bounds(&"custom".into()).unwrap(),
+            editor.scene().world_bounds(&"custom".into()).unwrap()
+        );
+        assert_eq!(
+            editor.engine.local_bounds(&"root".into()).unwrap(),
+            editor.scene().local_bounds(&"root".into()).unwrap()
+        );
+        assert!(editor.undo());
+        assert_eq!(editor.scene(), &before_scene);
+        assert_eq!(editor.engine.handle(&"custom".into()).unwrap(), handle);
+        let restored = path_domain(editor.scene());
+        assert_eq!(restored, before);
+        assert_eq!(path_pixels(&restored).premul_rgba, small.premul_rgba);
+        assert!(editor.redo());
+        assert_eq!(path_domain(editor.scene()), grown);
+        assert_eq!(path_pixels(&grown).premul_rgba, large.premul_rgba);
+    }
 }

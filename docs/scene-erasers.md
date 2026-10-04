@@ -14,8 +14,10 @@ Path clears antialiased filled geometry intersected with the inherited clip. Vec
 leaves retain their fill rule, implicit closure and winding holes; a straight Line
 has no filled area. Box/Frame use their own rounded contour without descendants.
 Image/Canvas use their rounded rectangle/path geometry without loading pixels or
-creating a producer request. Text/Custom reject with `UnsupportedPathEraser`; no
-glyph box or pixel alpha is substituted.
+creating a producer request. Custom uses its validated fallback contours, including
+nonzero local bounds origins, concavity, winding holes and implicit closure. Empty
+Custom contours clear nothing; bounds never substitute a rectangle. Text rejects
+with `UnsupportedPathEraser`; no glyph box or pixel alpha is substituted.
 
 Group Path erasure intersects its visible positive-opacity child contours, then
 clears within its retained geometric bounds. Nested Groups recurse; Box/Frame
@@ -27,6 +29,11 @@ mask prefixes retain stable z-order when computing the Group clear bounds.
 Path ignores fill visibility/alpha, strokes and effects. Positive object opacity
 gates the operation without attenuating it; zero opacity and hidden state disable
 clearing. Custom Pixel producers retain their existing unsupported-producer error.
+The same applies to ordinary Custom paint and self-painting masks: fallback geometry
+does not represent complete host-renderer pixels. Custom Path compositing itself
+needs no resource pixels, but host preparation may still resolve declared resource
+keys. Every contour point, including retained hidden reference geometry, is charged
+at capture and rechecked against the raster request’s potentially tighter limits.
 
 
 ## Ownership, isolation and order
@@ -80,7 +87,10 @@ bounds, picking and history. Group intersections also share geometric clip
 admission with Path masks; related mask tests protect that shared schedule.
 
 The Linux `compositing` example’s **Path erasers** control toggles a Group
-intersection and Image/Canvas/Box/Frame contours without producer resources.
-Its native smoke check observed all five clear regions, Undo restoration and a
-repeated activation before normal close. Exact coverage and limits remain CPU
+intersection and Image/Canvas/Box/Frame contours, plus a Custom diamond from
+explicit contours. **Custom Path mask** toggles a larger Custom diamond mask
+and the original ellipse/Alpha marker. Neither fixture Custom declares a resource
+key or substitutes native-renderer pixels.
+Its native smoke check observed all six clear regions, Custom/ellipse mask
+switching and Undo restoration before normal close. Exact coverage and limits remain CPU
 regressions; these visible results are not cross-platform pixel guarantees.

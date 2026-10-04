@@ -263,10 +263,14 @@ pub(crate) fn path(shape: &Shape) -> Result<Option<Path>, CompositeError> {
     ) {
         return Err(CompositeError::UnsupportedShape(shape.tag().into()));
     }
-    let mut b = PathBuilder::new();
     // These primitive contours have existing bounded generation (no Bezier
     // flattening). Curve paths above go directly into the mature scan converter.
-    for c in shape.flatten(0.1) {
+    Ok(contour_path(&shape.flatten(0.1)))
+}
+
+fn contour_path(contours: &[gpui_flow_scene::Contour]) -> Option<Path> {
+    let mut b = PathBuilder::new();
+    for c in contours {
         if let Some(first) = c.points.first() {
             b.move_to(first.x, first.y);
             for p in &c.points[1..] {
@@ -277,7 +281,17 @@ pub(crate) fn path(shape: &Shape) -> Result<Option<Path>, CompositeError> {
             }
         }
     }
-    Ok(b.finish())
+    b.finish()
+}
+
+/// Geometry-only operations may use serialized Custom contours, but these are
+/// not a pixel producer for the host renderer or a self-painting mask.
+fn geometric_path(shape: &Shape) -> Result<Option<Path>, CompositeError> {
+    match shape {
+        Shape::Custom(custom) => Ok(contour_path(&custom.contours)),
+        Shape::Image(image) => path(&Shape::Rect(image.rect())),
+        shape => path(shape),
+    }
 }
 impl Preparation {
     pub fn with_lowered_geometry(budget: Option<gpui_flow_scene::StrokeGeometryBudget>) -> Self {
@@ -358,6 +372,9 @@ impl Preparation {
             Shape::Pen(p) => p.path.commands.len(),
             Shape::Polygon(p) => p.points.len(),
             Shape::Star(p) => p.points.saturating_mul(2),
+            Shape::Custom(c) => c.contours.iter().fold(0usize, |count, contour| {
+                count.saturating_add(contour.points.len())
+            }),
             _ => 0,
         };
         self.source_points = self.source_points.saturating_add(count);
@@ -389,11 +406,10 @@ impl Preparation {
             return Ok(());
         }
         let contour = match &object.shape {
-            Shape::Image(image) => path(&Shape::Rect(image.rect()))?,
-            Shape::Text(_) | Shape::Custom(_) => {
+            Shape::Text(_) => {
                 return Err(unsupported(object.id.clone()));
             }
-            shape => path(shape)?,
+            shape => geometric_path(shape)?,
         };
         let paint = if let Some(path) = contour {
             self.add_path(&path, source.world_transform, limits)?;
@@ -544,6 +560,9 @@ impl Preparation {
             Shape::Pen(p) => p.path.commands.len(),
             Shape::Polygon(p) => p.points.len(),
             Shape::Star(p) => p.points.saturating_mul(2),
+            Shape::Custom(c) => c.contours.iter().fold(0usize, |count, contour| {
+                count.saturating_add(contour.points.len())
+            }),
             _ => 0,
         };
         self.source_points = self.source_points.saturating_add(count);
@@ -590,10 +609,7 @@ impl Preparation {
                     (None, source.world_transform)
                 }
             } else {
-                let contour = match &object.shape {
-                    Shape::Image(image) => path(&Shape::Rect(image.rect()))?,
-                    shape => path(shape)?,
-                };
+                let contour = geometric_path(&object.shape)?;
                 (contour, source.world_transform)
             };
             let erase_path = if let Some(path) = contour {

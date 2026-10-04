@@ -768,6 +768,7 @@ pub(crate) fn validate_eraser(object: &DisplayObject) -> Result<(), CompositeErr
                 | Shape::Frame(_)
                 | Shape::Image(_)
                 | Shape::Canvas(_)
+                | Shape::Custom(_)
         )
     {
         return Err(CompositeError::UnsupportedPathEraser(object.id.clone()));
@@ -827,6 +828,9 @@ fn charge_reference_points(
         Shape::Pen(p) => p.path.commands.len(),
         Shape::Polygon(p) => p.points.len(),
         Shape::Star(p) => p.points.saturating_mul(2),
+        Shape::Custom(c) => c.contours.iter().fold(0usize, |count, contour| {
+            count.saturating_add(contour.points.len())
+        }),
         _ => 0,
     };
     counts.points = counts.points.saturating_add(points);

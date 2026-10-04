@@ -108,7 +108,9 @@ impl Shape {
         }
     }
     /// Flatten in local units. Text/image return their layout rectangles rather
-    /// than glyph outlines or decoded pixels. Group has no intrinsic geometry.
+    /// than glyph outlines or decoded pixels. Custom returns its validated
+    /// fallback contours unchanged; declared bounds are not filled geometry.
+    /// Group has no intrinsic geometry.
     pub fn flatten(&self, tolerance: f32) -> Vec<Contour> {
         match self {
             Self::Rect(s) => vec![s.flatten(tolerance)],

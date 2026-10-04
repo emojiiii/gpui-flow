@@ -57,6 +57,12 @@ serialized fallback paint. Registry tests do not fabricate a native window or
 claim a renderer callback ran. Actual native callback and pixels are established
 only by the physical script below.
 
+The shared Custom acceptance test also exercises dynamic Path-mask and Path-eraser
+pixels through the real SceneEngine/SceneEditor: radius edits invalidate retained
+placement, change coverage, and Undo/Redo restore exact geometry and pixels. Scene
+and Engine bounds remain consistent. This is CPU/adapter evidence, separate from
+the earlier native renderer probe below.
+
 ## Two-view native probe and receipts
 
 Run the frozen linked `custom_geometry_trace` binary in the native display
@@ -145,8 +151,12 @@ Record each unperformed step as unverified.
   opacity and paint capabilities themselves; registering one does not add a CPU
   pixel producer. Arbitrary widgets, resources and host renderer effects are not
   verified by this vector-body probe
-- Visible Custom remains unsupported inside required CPU or OwnedCanvas domains;
-  this increment verifies whole-domain failure, rather than adding compositing
+- Ordinary painted Custom remains unsupported inside required CPU or OwnedCanvas
+  domains, including Pixel erasers and Alpha/Grayscale/Clipping/ClippingPath masks.
+  Geometry-only Path masks and Path erasers now consume validated fallback contours;
+  this does not add a native-renderer pixel producer. Empty contours mean no covered
+  area, and declared bounds are never a filled substitute. Host resource preparation
+  may still run for a declared resource key, independently of Path compositing
 - Specialized hit callbacks must stay within declared bounds. This probe uses
   generated fallback hit geometry; the hollow custom callback is covered only
   by the independent engine test

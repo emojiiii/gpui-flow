@@ -17,8 +17,13 @@ once. Group Path masks intersect their visible positive-opacity child contours;
 Box/Frame use their own contour, and Image uses its rounded layout rectangle
 without requiring decoded pixels. Empty leaf paths clip to empty; a Group with
 no contributing paths adds no clip. Winding rules and affine transforms apply.
-Text/Custom geometric paths are explicitly unsupported; alpha/grayscale modes
-continue to use existing producers. No glyph outline is replaced with a text box.
+Custom Path masks use validated fallback contours in their original local coordinates,
+including concavity, winding holes and implicit closure. Empty Custom contours clip
+to empty, irrespective of declared bounds. Text geometric paths remain unsupported;
+no glyph outline is replaced with a text box. Custom ordinary paint, Alpha, Grayscale,
+Clipping and ClippingPath still reject the complete CPU domain because contours do
+not provide the native host renderer’s pixels. The Path compositor needs no Custom
+resource pixels; existing host preparation can still resolve a declared resource key.
 
 Native JSON uses snake_case. Leafer JSON exchange still explicitly rejects masks.
 The compositor keeps conservative effect/allocation bounds, independently of the

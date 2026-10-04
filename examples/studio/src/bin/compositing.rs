@@ -3,16 +3,32 @@ use gpui::{prelude::*, *};
 use gpui_flow::{
     ControlButton, SceneView, SceneViewEvent,
     scene::{
-        Affine, BlendMode, Color, DisplayObject, EraserMode, EventKind, MaskMode, Scene, Shape,
-        Size, Style, display,
+        Affine, BlendMode, Bounds as SceneBounds, Color, Contour, DisplayObject, EraserMode,
+        EventKind, MaskMode, Point as ScenePoint, Scene, Shape, Size, Style, display,
     },
 };
+fn custom_diamond(size: f32) -> Shape {
+    display::Custom::new(
+        "path-contour",
+        SceneBounds::new(ScenePoint::ZERO, Size::new(size, size)),
+        vec![Contour {
+            points: vec![
+                ScenePoint::new(size * 0.5, 0.),
+                ScenePoint::new(size, size * 0.5),
+                ScenePoint::new(size * 0.5, size),
+                ScenePoint::new(0., size * 0.5),
+            ],
+            closed: true,
+        }],
+    )
+    .into()
+}
 fn document() -> Scene {
     let mut s = Scene::new();
     for (id, label, x) in [
         ("opacity", "Whole-group opacity 50%", 50.),
         ("blend", "Multiply on internal yellow", 365.),
-        ("mask", "Mask modes: ellipse", 680.),
+        ("mask", "Mask modes: ellipse / Custom", 680.),
     ] {
         let mut group = DisplayObject::new(id, display::Group::new())
             .with_transform(Affine::translation(x, 90.));
@@ -107,6 +123,7 @@ fn document() -> Scene {
             75.,
             25.,
         ),
+        ("custom-cut", custom_diamond(30.), 170., 100.),
     ] {
         let mut cut = DisplayObject::new(id, shape)
             .with_transform(Affine::translation(x, y))
@@ -164,6 +181,7 @@ impl Lab {
                         "canvas-cut",
                         "box-cut",
                         "frame-cut",
+                        "custom-cut",
                     ] {
                         scene.update_object(&id.into(), |object| object.visible = visible)?;
                     }
@@ -174,6 +192,25 @@ impl Lab {
             cx.notify();
         });
         cx.notify();
+    }
+    fn toggle_custom_mask(&mut self, cx: &mut Context<Self>) {
+        self.edit(
+            "ellipse-mask",
+            |object| {
+                let custom = matches!(object.shape, Shape::Custom(_));
+                object.shape = if custom {
+                    display::Ellipse::new(240., 240.).into()
+                } else {
+                    custom_diamond(240.)
+                };
+                object.mask = if custom {
+                    MaskMode::Alpha
+                } else {
+                    MaskMode::Path
+                };
+            },
+            cx,
+        );
     }
     fn edit(&mut self, id: &str, f: impl FnOnce(&mut DisplayObject), cx: &mut Context<Self>) {
         self.view.update(cx, |v, cx| {
@@ -242,6 +279,7 @@ impl Render for Lab {
                 .child(ControlButton::new("mask-fill", "Paint / no paint").on_click(cx.listener(|this,_,_,cx|this.edit("ellipse-mask",|o|o.style.fill=if o.style.fill.is_some(){None}else{Some(Color::hex(0xff3030).into())},cx))))
                 .child(ControlButton::new("mask-visible", "Show / hide marker").on_click(cx.listener(|this,_,_,cx|this.edit("ellipse-mask",|o|o.visible = !o.visible,cx))))
                 .child(ControlButton::new("hit-children", "Hit children").on_click(cx.listener(|this,_,_,cx|this.edit("mask",|o|o.hit_children = !o.hit_children,cx))))
+                .child(ControlButton::new("custom-mask", "Custom Path mask").on_click(cx.listener(|this,_,_,cx|this.toggle_custom_mask(cx))))
                 .child(div().text_sm().child(status)))
             .child(div().flex_1().min_h_0().overflow_hidden().child(self.view.clone()))
             .child(div().h(px(64.)).px_4().flex().flex_col().text_sm().child(hit_status).child("Alpha/Grayscale use paint; Path uses geometry. Hide the sole marker to restore ordinary content bounds. Undo restores edits."))

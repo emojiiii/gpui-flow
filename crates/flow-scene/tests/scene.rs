@@ -779,7 +779,8 @@ fn custom_element_retains_identity_data_and_fallback_geometry() {
     };
     assert_eq!(custom.kind, "application/badge");
     assert_eq!(custom.data["label"], json!("Ready"));
-    assert_eq!(custom.contours, vec![contour]);
+    assert_eq!(custom.contours, vec![contour.clone()]);
+    assert_eq!(Shape::Custom(custom.clone()).flatten(0.1), vec![contour]);
     assert!(
         restored
             .hit_test(Point::new(50.0, 30.0), HitTestOptions::default())
