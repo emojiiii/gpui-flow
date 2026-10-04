@@ -150,7 +150,44 @@ pub trait TextMeasurer: Send + Sync {
     fn first_baseline(&self, _request: &TextMeasureRequest) -> Result<f32, String> {
         Err("text backend does not provide first-baseline metrics".into())
     }
+    /// Horizontal modes retain the legacy first-line-box baseline. Vertical
+    /// modes opt into the first logical paragraph's first upright cluster's
+    /// horizontal alphabetic baseline, relative to the content-box top after
+    /// inline alignment. This is not an OpenType vertical or column baseline.
+    /// `available_inline` is the positive content width (X) or height (Y).
+    fn first_baseline_writing_mode(
+        &self,
+        request: &TextMeasureRequest,
+        mode: WritingMode,
+        available_inline: f32,
+        _align: InlineAlign,
+    ) -> Result<f32, WritingModeError> {
+        validate_baseline_inline(available_inline)?;
+        if mode.is_vertical() {
+            Err(WritingModeError::Unsupported(
+                UnsupportedWritingMode::Backend,
+            ))
+        } else {
+            self.first_baseline(request).map_err(Into::into)
+        }
+    }
     fn invalidate(&self) {}
+}
+
+/// Logical inline alignment; Start/End reverse with the writing mode.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum InlineAlign {
+    #[default]
+    Start,
+    Center,
+    End,
+}
+
+fn validate_baseline_inline(available: f32) -> Result<(), WritingModeError> {
+    if !available.is_finite() || available <= 0. {
+        return Err("baseline inline extent must be finite and positive".into());
+    }
+    Ok(())
 }
 
 /// Alignment of a clipped text block. Overflow remains top-aligned, matching
@@ -195,6 +232,56 @@ mod alignment_tests {
             assert_eq!(align.offset(20., 40.), 0.);
             assert_eq!(align.offset(20., 20.), 0.);
             assert_eq!(align.offset(f32::INFINITY, 20.), 0.);
+        }
+    }
+    #[test]
+    fn legacy_baseline_hook_supports_horizontal_only_and_checks_inline_extent() {
+        use super::*;
+        struct Legacy;
+        impl TextMeasurer for Legacy {
+            fn measure(&self, _: &TextMeasureRequest) -> Result<TextMetrics, String> {
+                unreachable!()
+            }
+            fn first_baseline(&self, _: &TextMeasureRequest) -> Result<f32, String> {
+                Ok(7.)
+            }
+        }
+        let r = TextMeasureRequest {
+            content: "a".into(),
+            font_family: "fixture".into(),
+            font_size: 10.,
+            font_weight: 400,
+            italic: false,
+            line_height: 12.,
+            text_case: TextCase::None,
+            para_spacing: 0.,
+            letter_spacing: 0.,
+            word_spacing: 0.,
+            para_indent: 0.,
+            wrap_width: None,
+        };
+        for mode in [WritingMode::X, WritingMode::XReverse] {
+            assert_eq!(
+                Legacy.first_baseline_writing_mode(&r, mode, 20., InlineAlign::End),
+                Ok(7.)
+            );
+        }
+        for mode in [WritingMode::Y, WritingMode::YReverse] {
+            assert_eq!(
+                Legacy.first_baseline_writing_mode(&r, mode, 20., InlineAlign::Start),
+                Err(WritingModeError::Unsupported(
+                    UnsupportedWritingMode::Backend
+                ))
+            );
+        }
+        for mode in [WritingMode::X, WritingMode::Y] {
+            for available in [0., -1., f32::NAN, f32::INFINITY] {
+                assert!(
+                    Legacy
+                        .first_baseline_writing_mode(&r, mode, available, InlineAlign::Start)
+                        .is_err()
+                );
+            }
         }
     }
 }

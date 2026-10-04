@@ -57,7 +57,7 @@ means the inline limit, so vertical AutoWidth sends fixed height minus top/botto
 Horizontal AutoWidth baseline alignment includes nonnegative Top/Middle/Bottom
 slack inside the fixed content height, then top padding and positive scale.
 Its unwrapped backend must report exactly one line per hard-newline paragraph;
-additional soft lines are rejected atomically. Vertical baseline remains unsupported.
+additional soft lines are rejected atomically.
 Horizontal width is the shaper's layout advance, not glyph ink or stroke bounds.
 Individual glyphs can overhang or be taller than a configured line box; painting clips to the
 explicit text rectangle. Start/Center/End use GPUI's line alignment within that
@@ -98,6 +98,43 @@ backends still reject it explicitly. Shape the presentation string from
 `request.text_case.presentation(&request.content)` without changing canonical
 content. They must not commit edits or produce external
 side effects from `measure`.
+
+### Bounded upright first baseline
+
+Measured Text in `Row`/`RowReverse` can opt into `AlignItems::Baseline` for all
+four writing modes, including fixed-height `AutoWidth`. The source-compatible
+`first_baseline_writing_mode(request, mode, available_inline, InlineAlign)` hook
+returns a physical y distance. `available_inline` must be finite and positive:
+content width for X modes, content height for Y modes. Its default delegates
+horizontal modes to the existing `first_baseline` hook and explicitly rejects
+vertical modes. Existing backend implementations and metric literals still compile.
+
+For Y/YReverse, the value is the horizontal alphabetic baseline of the first
+logical paragraph's first upright native cluster, relative to the content-box
+top after Start/Center/End inline alignment. The native backend uses the same
+`AxisLayout` source plan and row-alignment arithmetic as painting. Native
+ascent/descent are centered in a font-size cell, not the cross-axis line height;
+native per-glyph offsets do not redefine the cluster's alphabetic baseline.
+Indent, spacing, wrapping and reverse placement use the **first column's**
+advance, even when another column determines the measured maximum height.
+Cross-axis Top/Middle/Bottom alignment does not move this horizontal baseline.
+
+An empty first paragraph never borrows a later paragraph's glyph or baseline.
+It uses that native empty line's font metrics in a virtual font-size cell, with
+query-only advance `para_indent + font_size`. This adds no glyph and changes
+neither painting nor intrinsic measurement. The native cell baseline must lie
+within its cell, and the positioned vertical baseline must lie within the
+content height. Tight fonts/boxes or excessive indentation that violate these
+bounds fail explicitly without clamping. This does not support every font/box,
+OpenType vertical baselines, column baseline alignment, or arbitrary transforms.
+
+Layout adds physical top padding and positive y scale. It does not add
+`layout_origin` again: arrangement already accounts for the geometric box origin.
+Baseline queries retain original-source semantics under clip/ellipsis; removed
+ink and replacement markers do not change the intrinsic baseline. The public
+`AxisLayout::first_baseline` query retains that source reference even on an
+ellipsis plan. GPUI checks font epochs around shaping; errors, panics, stale fonts
+and invalid returned baselines abort the whole scene/revision/history candidate.
 
 The native crate exports `GpuiTextMeasurer`. Bind it to the **same**
 `App::text_system()` used by rendering:
@@ -171,6 +208,10 @@ cache keys.
 cargo test --locked -p gpui-flow-layout --test text
 cargo test --locked -p gpui-flow-layout -p gpui-flow-interaction --test text_vertical_autoheight
 cargo test --locked -p gpui-flow-layout --test advanced autowidth
+cargo test --locked -p gpui-flow-layout --test advanced vertical_baseline
+cargo test --locked -p gpui-flow --lib vertical_baseline
+cargo test --locked -p gpui-flow --lib vertical_first_baseline
+cargo test --locked -p gpui-flow --lib vertical_empty_first_paragraph
 cargo test --locked -p gpui-flow --lib vertical_auto
 cargo run --locked -p flow-studio --bin text_measure_probe  # no window
 cargo run --locked -p flow-studio --bin measured_text       # interactive example

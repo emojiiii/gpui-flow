@@ -81,7 +81,7 @@ formation. Flow's explicit fractions follow that bounded definite-parent rule.
 
 `AlignItems::Baseline`, including `FlowItem.align_self`, aligns each participating
 text's first alphabetic baseline within its own row. The item must be Text with
-explicit `TextSizing::Natural` or `AutoHeight`, in a Row/RowReverse, and have a
+explicit `TextSizing::Natural`, `AutoHeight` or `AutoWidth`, in a Row/RowReverse, and have a
 positive axis-aligned transform. Mixed nontext rows can opt those other items
 into Start/Center/End separately. Column baseline, synthesized baselines for
 nontext boxes, rotated text, and rich inline baseline groups are not implemented.
@@ -95,6 +95,15 @@ as `gpui_raster`, with panic handling and a font-cache epoch check. Baselines
 outside the first line box are rejected, including extremely tight line heights
 that would require supporting out-of-box baselines. This bounded rule does not
 claim full CSS baseline alignment.
+
+The mode-aware `first_baseline_writing_mode` hook preserves that horizontal
+contract and explicitly opts into Y/Y-reverse source baselines. It uses the first
+logical paragraph and its own inline advance, not the longest column. Empty
+first paragraphs use native empty-line metrics without inserting a glyph. The
+vertical baseline must lie inside its native font-size cell and the content box;
+unsupported backends or out-of-box results reject the transaction. Horizontal
+AutoWidth additionally includes its fixed-height Top/Middle/Bottom alignment
+slack. See [text measurement](text-measurement.md) for the complete bounded API.
 
 Layout adds text top padding, maps through the positive y scale, and measures a
 line as max ascent plus max descent. Mixed font sizes/padding therefore do not

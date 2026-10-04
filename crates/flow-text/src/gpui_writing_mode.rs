@@ -49,6 +49,9 @@ pub struct AxisLayout {
     mode: WritingMode,
     metrics: TextMetrics,
     allocated_bytes: usize,
+    // Retain source semantics even when an ellipsis plan replaces its rows.
+    source_first_row: Row,
+    baseline_cell: f32,
 }
 impl AxisLayout {
     pub fn metrics(&self) -> &TextMetrics {
@@ -56,6 +59,57 @@ impl AxisLayout {
     }
     pub fn allocated_bytes(&self) -> usize {
         self.allocated_bytes
+    }
+    /// Source first baseline, excluding physical padding and layout origin.
+    /// Y modes use the first logical paragraph's first upright native cluster,
+    /// with native ascent/descent centered in its font-size cell. An empty first
+    /// paragraph uses a virtual cell and never borrows a later paragraph's glyph.
+    /// Its query-only advance is indent + font size; no glyph or paint advance is
+    /// added. Out-of-cell or out-of-content-box baselines are explicitly rejected.
+    /// Horizontal modes return the baseline within the first line box.
+    pub fn first_baseline(
+        &self,
+        available_inline: f32,
+        align: crate::InlineAlign,
+    ) -> Result<f32, WritingModeError> {
+        crate::validate_baseline_inline(available_inline)?;
+        let mut row = self.source_first_row;
+        if !row.baseline.is_finite() || !(0. ..=self.baseline_cell).contains(&row.baseline) {
+            return Err("native baseline is outside its first cell".into());
+        }
+        if !self.mode.is_vertical() {
+            return Ok(row.baseline);
+        }
+        if row.start == row.end {
+            row.inline = row.indent + self.baseline_cell;
+        }
+        let align = match align {
+            crate::InlineAlign::Start => gpui::TextAlign::Left,
+            crate::InlineAlign::Center => gpui::TextAlign::Center,
+            crate::InlineAlign::End => gpui::TextAlign::Right,
+        };
+        let origin = self.row_origin(
+            &row,
+            [0., 0., self.metrics.width, available_inline],
+            align,
+            crate::VerticalAlign::Top,
+        );
+        // Keep the exact f32 operation order used by cluster placement,
+        // finish_row, and visit. Reassociating these sums moves fractional ink.
+        let mut baseline = upright_inline_position(
+            row.baseline,
+            row.indent,
+            self.baseline_cell,
+            self.mode.is_reverse(),
+        );
+        if self.mode.is_reverse() {
+            baseline += row.inline;
+        }
+        baseline += origin[1];
+        if !baseline.is_finite() || !(0. ..=available_inline).contains(&baseline) {
+            return Err("native first baseline is outside the content box".into());
+        }
+        Ok(baseline)
     }
     pub(crate) fn visit<E: From<String>>(
         &self,
@@ -410,11 +464,8 @@ fn from_lines(
                 let local_x = glyph.origin[0] - cluster.x;
                 if mode.is_vertical() {
                     glyph.origin[0] = cross + (request.line_height - cluster.width) * 0.5 + local_x;
-                    glyph.origin[1] += if mode.is_reverse() {
-                        -inline - extent
-                    } else {
-                        inline
-                    };
+                    glyph.origin[1] =
+                        upright_inline_position(glyph.origin[1], inline, extent, mode.is_reverse());
                 } else {
                     glyph.origin[0] = local_x
                         + if mode.is_reverse() {
@@ -469,6 +520,7 @@ fn from_lines(
     let allocated_bytes = glyphs.capacity() * size_of::<GlyphPlacement>()
         + rows.capacity() * size_of::<Row>()
         + cluster_ends.capacity() * size_of::<ClusterEnd>();
+    let source_first_row = *rows.first().ok_or("native text has no first row")?;
     Ok(AxisLayout {
         glyphs,
         rows,
@@ -476,10 +528,19 @@ fn from_lines(
         mode,
         metrics,
         allocated_bytes,
+        source_first_row,
+        baseline_cell: if mode.is_vertical() {
+            request.font_size
+        } else {
+            request.line_height
+        },
     })
 }
 fn count_so_far(clusters: &[Cluster], empty: usize) -> usize {
     clusters.last().map_or(empty, |c| c.end)
+}
+fn upright_inline_position(baseline: f32, inline: f32, extent: f32, reverse: bool) -> f32 {
+    baseline + if reverse { -inline - extent } else { inline }
 }
 fn finish_row(
     rows: &mut Vec<Row>,
@@ -639,6 +700,144 @@ mod tests {
         assert_eq!(start[0], [40., 101.]);
         assert_eq!(end[0], [40., 29.]);
         assert_eq!(start[1][0] - start[0][0], 2.);
+    }
+    #[test]
+    fn first_baseline_uses_first_column_advance_native_cell_and_shared_glyph_alignment() {
+        use crate::InlineAlign;
+        for (mode, baselines) in [
+            (WritingMode::Y, [12., 48., 84.]),
+            (WritingMode::YReverse, [94., 58., 22.]),
+        ] {
+            let plan = layout(mode, None);
+            for ((align, native_align), expected) in [
+                (InlineAlign::Start, gpui::TextAlign::Left),
+                (InlineAlign::Center, gpui::TextAlign::Center),
+                (InlineAlign::End, gpui::TextAlign::Right),
+            ]
+            .into_iter()
+            .zip(baselines)
+            {
+                assert_eq!(plan.first_baseline(100., align).unwrap(), expected);
+                let mut placed = vec![];
+                plan.visit(
+                    [5., 7., 80., 100.],
+                    native_align,
+                    crate::VerticalAlign::Bottom,
+                    |g| {
+                        placed.push(g.origin);
+                        Ok::<_, String>(())
+                    },
+                )
+                .unwrap();
+                assert_eq!(placed[0][1], 7. + expected);
+                assert_eq!(placed[1][1], 7. + expected);
+            }
+            let mut r = request();
+            r.wrap_width = Some(24.);
+            let plan = from_lines(&[line()], &r, mode, 0, &mut |_| Ok(())).unwrap();
+            // Two one-cell columns: first advance 16, second 12. Native cell
+            // baseline stays 8; reverse first cell is at y=2 before alignment.
+            assert_eq!(
+                plan.first_baseline(40., InlineAlign::End).unwrap(),
+                if mode.is_reverse() { 10. } else { 36. }
+            );
+            // A longer following paragraph changes maxInline, never first-row slack.
+            r.wrap_width = None;
+            r.content = "\nab".into();
+            let mut blank = line();
+            blank.text = "".into();
+            let wrapped = Arc::get_mut(blank.deref_mut()).unwrap();
+            let native = Arc::get_mut(&mut wrapped.unwrapped_layout).unwrap();
+            native.runs.clear();
+            native.width = px(0.);
+            let plan = from_lines(&[blank, line()], &r, mode, 0, &mut |_| Ok(())).unwrap();
+            assert_eq!(plan.metrics.height, 28.);
+            for (align, expected) in [InlineAlign::Start, InlineAlign::Center, InlineAlign::End]
+                .into_iter()
+                .zip(if mode.is_reverse() {
+                    [94., 51., 8.]
+                } else {
+                    [12., 55., 98.]
+                })
+            {
+                assert_eq!(plan.first_baseline(100., align).unwrap(), expected);
+            }
+        }
+    }
+    #[test]
+    fn baseline_rejects_invalid_extents_and_native_cells_without_using_member_offsets() {
+        for mode in [WritingMode::Y, WritingMode::YReverse] {
+            let mut native = line();
+            let wrapped = Arc::get_mut(native.deref_mut()).unwrap();
+            let metrics = Arc::get_mut(&mut wrapped.unwrapped_layout).unwrap();
+            metrics.runs[0].glyphs[0].position.y = px(3.);
+            let r = request();
+            let plan = from_lines(&[native], &r, mode, 0, &mut |_| Ok(())).unwrap();
+            assert_eq!(
+                plan.first_baseline(100., crate::InlineAlign::End).unwrap(),
+                if mode.is_reverse() { 22. } else { 84. }
+            );
+            for extent in [0., -1., f32::NAN, f32::INFINITY] {
+                assert!(
+                    plan.first_baseline(extent, crate::InlineAlign::Start)
+                        .is_err()
+                );
+            }
+            let mut r = r.clone();
+            r.para_indent = 100.;
+            let plan = from_lines(&[line()], &r, mode, 0, &mut |_| Ok(())).unwrap();
+            assert!(
+                plan.first_baseline(10., crate::InlineAlign::Start)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("content box")
+            );
+            let mut native = line();
+            let wrapped = Arc::get_mut(native.deref_mut()).unwrap();
+            Arc::get_mut(&mut wrapped.unwrapped_layout).unwrap().ascent = px(40.);
+            let plan = from_lines(&[native], &request(), mode, 0, &mut |_| Ok(())).unwrap();
+            assert!(
+                plan.first_baseline(100., crate::InlineAlign::Start)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("first cell")
+            );
+        }
+    }
+    #[test]
+    fn fractional_baseline_matches_placement_operation_order_exactly() {
+        for mode in [WritingMode::Y, WritingMode::YReverse] {
+            let mut r = request();
+            r.font_size = 18.3;
+            r.line_height = 24.5;
+            r.para_indent = 0.1;
+            r.letter_spacing = 27.45;
+            let mut line = line();
+            let wrapped = Arc::get_mut(line.deref_mut()).unwrap();
+            let native = Arc::get_mut(&mut wrapped.unwrapped_layout).unwrap();
+            native.font_size = px(18.3);
+            native.ascent = px(12.3);
+            native.descent = px(14.4);
+            let plan = from_lines(&[line], &r, mode, 0, &mut |_| Ok(())).unwrap();
+            for (align, gpui_align) in [
+                (crate::InlineAlign::Start, gpui::TextAlign::Left),
+                (crate::InlineAlign::Center, gpui::TextAlign::Center),
+                (crate::InlineAlign::End, gpui::TextAlign::Right),
+            ] {
+                let mut placed = vec![];
+                plan.visit(
+                    [0., 0., 100., 121.7],
+                    gpui_align,
+                    crate::VerticalAlign::Top,
+                    |g| {
+                        placed.push(g.origin[1]);
+                        Ok::<_, String>(())
+                    },
+                )
+                .unwrap();
+                assert_eq!(plan.first_baseline(121.7, align).unwrap(), placed[0]);
+            }
+        }
     }
     #[test]
     fn axis_admission_and_native_reverse_order_fail_before_owned_plan_can_escape() {

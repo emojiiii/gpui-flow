@@ -241,30 +241,51 @@ pub(super) fn baselines(
             let Shape::Text(text) = &object.shape else {
                 unreachable!("validated baseline Text")
             };
-            if text.writing_mode.is_vertical() {
-                return Err(invalid(
-                    child,
-                    "vertical writing mode does not expose a horizontal first baseline",
-                ));
-            }
             let request = request(text, layout.texts[child]);
             request.validate().map_err(|e| invalid(child, e))?;
             let backend = backend.ok_or_else(|| {
                 invalid(child, "baseline alignment requires a measurement backend")
             })?;
-            let baseline = catch_unwind(AssertUnwindSafe(|| backend.first_baseline(&request)))
-                .map_err(|_| invalid(child, "text baseline backend panicked"))?
-                .map_err(|e| invalid(child, e))?;
-            if !baseline.is_finite() || !(0.0..=request.line_height).contains(&baseline) {
+            let vertical = text.writing_mode.is_vertical();
+            let content = text.content_bounds().size;
+            let align = match text.align {
+                gpui_flow_scene::display::TextAlign::Start => gpui_flow_text::InlineAlign::Start,
+                gpui_flow_scene::display::TextAlign::Center => gpui_flow_text::InlineAlign::Center,
+                gpui_flow_scene::display::TextAlign::End => gpui_flow_text::InlineAlign::End,
+            };
+            let baseline = catch_unwind(AssertUnwindSafe(|| {
+                backend.first_baseline_writing_mode(
+                    &request,
+                    writing_mode(text.writing_mode),
+                    if vertical {
+                        content.height
+                    } else {
+                        content.width
+                    },
+                    align,
+                )
+            }))
+            .map_err(|_| invalid(child, "text baseline backend panicked"))?
+            .map_err(|e| invalid(child, e.to_string()))?;
+            let limit = if vertical {
+                content.height
+            } else {
+                request.line_height
+            };
+            if !baseline.is_finite() || !(0.0..=limit).contains(&baseline) {
                 return Err(invalid(
                     child,
-                    "backend returned a baseline outside the first line box",
+                    if vertical {
+                        "backend returned a baseline outside the content box"
+                    } else {
+                        "backend returned a baseline outside the first line box"
+                    },
                 ));
             }
             // Horizontal AutoWidth keeps a fixed height. It cannot soft-wrap,
             // so hard paragraphs determine its block height exactly. Match the
             // painter's nonnegative alignment slack, including clipped overflow.
-            let offset = if layout.texts[child] == TextSizing::AutoWidth {
+            let offset = if !vertical && layout.texts[child] == TextSizing::AutoWidth {
                 let align = match text.vertical_align {
                     gpui_flow_scene::display::TextVerticalAlign::Top => {
                         gpui_flow_text::VerticalAlign::Top
@@ -283,6 +304,8 @@ pub(super) fn baselines(
             } else {
                 0.
             };
+            // Distances are relative to the geometric box top. Arrangement
+            // already removes its layout_origin when setting the transform.
             let baseline = (f64::from(text.padding[0]) + f64::from(offset) + f64::from(baseline))
                 * f64::from(object.transform.d);
             if !baseline.is_finite() || baseline > f64::from(f32::MAX) {

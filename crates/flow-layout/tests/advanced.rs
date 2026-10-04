@@ -342,6 +342,201 @@ fn baseline_respects_padding_scale_and_reverse() {
     assert_eq!(pos(&scene, "a"), Point::new(85., 20.));
     assert_eq!(size(&scene, "root").height, 80.);
 }
+
+#[derive(Default)]
+struct VerticalBaselineMetrics {
+    failure: AtomicUsize,
+    calls: Mutex<
+        Vec<(
+            gpui_flow_text::WritingMode,
+            f32,
+            gpui_flow_text::InlineAlign,
+        )>,
+    >,
+}
+impl TextMeasurer for VerticalBaselineMetrics {
+    fn measure(&self, r: &TextMeasureRequest) -> Result<TextMetrics, String> {
+        Metrics::default().measure(r)
+    }
+    fn measure_writing_mode(
+        &self,
+        r: &TextMeasureRequest,
+        mode: gpui_flow_text::WritingMode,
+    ) -> Result<TextMetrics, gpui_flow_text::WritingModeError> {
+        if !mode.is_vertical() {
+            return self.measure(r).map_err(Into::into);
+        }
+        // Named transaction fixture: two columns, first advance 40, longest 60.
+        Ok(TextMetrics {
+            width: r.block_height(2),
+            height: 60.,
+            line_height: r.line_height,
+            lines: 2,
+        })
+    }
+    fn first_baseline_writing_mode(
+        &self,
+        r: &TextMeasureRequest,
+        mode: gpui_flow_text::WritingMode,
+        available: f32,
+        align: gpui_flow_text::InlineAlign,
+    ) -> Result<f32, gpui_flow_text::WritingModeError> {
+        use gpui_flow_text::InlineAlign;
+        if !mode.is_vertical() {
+            return Metrics::default().first_baseline(r).map_err(Into::into);
+        }
+        self.calls.lock().unwrap().push((mode, available, align));
+        match self.failure.load(Ordering::SeqCst) {
+            1 => return Err("native fonts unavailable".into()),
+            2 => panic!("vertical baseline panic"),
+            3 => return Ok(f32::NAN),
+            4 => return Ok(available + 1.),
+            5 => return Ok(-1.),
+            _ => {}
+        }
+        let slack = match (align, mode.is_reverse()) {
+            (InlineAlign::Center, _) => (available - 40.) / 2.,
+            (InlineAlign::Start, false) | (InlineAlign::End, true) => 0.,
+            _ => available - 40.,
+        };
+        Ok(slack + if mode.is_reverse() { 30. } else { 20. })
+    }
+}
+
+#[test]
+fn vertical_baseline_rows_use_mode_box_alignment_padding_scale_and_geometric_origin() {
+    use gpui_flow_text::{InlineAlign, WritingMode};
+    for (scene_mode, mode) in [
+        (display::TextWritingMode::Y, WritingMode::Y),
+        (display::TextWritingMode::YReverse, WritingMode::YReverse),
+    ] {
+        for sizing in [
+            TextSizing::Natural,
+            TextSizing::AutoHeight,
+            TextSizing::AutoWidth,
+        ] {
+            for (align, inline_align, y, reverse_y) in [
+                (display::TextAlign::Start, InlineAlign::Start, 20., 50.),
+                (display::TextAlign::Center, InlineAlign::Center, 30., 40.),
+                (display::TextAlign::End, InlineAlign::End, 40., 30.),
+            ] {
+                for direction in [FlowDirection::Row, FlowDirection::RowReverse] {
+                    let (mut scene, mut layout, _) = texts();
+                    layout.containers.get_mut(&"root".into()).unwrap().direction = direction;
+                    layout.texts.insert("a".into(), sizing);
+                    scene
+                        .update_object(&"a".into(), |o| {
+                            o.transform = Affine::scale(2., 2.);
+                            let Shape::Text(t) = &mut o.shape else {
+                                panic!()
+                            };
+                            t.writing_mode = scene_mode;
+                            t.size.height = 110.;
+                            t.padding = [3., 0., 7., 0.];
+                            t.para_indent = 5.;
+                            t.auto_size_align = true;
+                            t.align = align;
+                            t.vertical_align = display::TextVerticalAlign::Bottom;
+                            t.wrap = sizing == TextSizing::AutoWidth;
+                        })
+                        .unwrap();
+                    let backend = Arc::new(VerticalBaselineMetrics::default());
+                    let measured = layout.with_text_measurer(backend.clone());
+                    measured.apply_to_scene(&mut scene).unwrap();
+                    let available = if sizing == TextSizing::AutoWidth {
+                        100.
+                    } else {
+                        60.
+                    };
+                    let base = if mode.is_reverse() { reverse_y } else { y }
+                        + if sizing != TextSizing::AutoWidth {
+                            0.
+                        } else {
+                            match (inline_align, mode.is_reverse()) {
+                                (InlineAlign::Center, _) => 20.,
+                                (InlineAlign::Start, false) | (InlineAlign::End, true) => 0.,
+                                _ => 40.,
+                            }
+                        };
+                    assert!(
+                        backend
+                            .calls
+                            .lock()
+                            .unwrap()
+                            .iter()
+                            .all(|call| *call == (mode, available, inline_align))
+                    );
+                    let a = &scene.get(&"a".into()).unwrap().object;
+                    let Shape::Text(t) = &a.shape else { panic!() };
+                    let world_baseline = a.transform.ty + (t.content_bounds().origin.y + base) * 2.;
+                    assert_eq!(world_baseline, pos(&scene, "b").y + 12.);
+                    assert_eq!(pos(&scene, "b").y, 5. + (3. + base) * 2. - 12.);
+                    assert!(measured.arranged(&scene).unwrap().1.changed.is_empty());
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn vertical_baseline_failures_preserve_scene_revision_and_history_then_recover() {
+    for mode in [
+        display::TextWritingMode::Y,
+        display::TextWritingMode::YReverse,
+    ] {
+        let (mut scene, layout, _) = texts();
+        scene
+            .update_object(&"a".into(), |o| {
+                let Shape::Text(t) = &mut o.shape else {
+                    panic!()
+                };
+                t.writing_mode = mode;
+            })
+            .unwrap();
+        let backend = Arc::new(VerticalBaselineMetrics::default());
+        let measured = layout.with_text_measurer(backend.clone());
+        measured.apply_to_scene(&mut scene).unwrap();
+        let mut editor = SceneEditor::new(scene.clone()).unwrap();
+        measured.install_reactive(&mut editor.engine).unwrap();
+        let revision = editor.engine.revision();
+        for failure in 1..=5 {
+            backend.failure.store(failure, Ordering::SeqCst);
+            assert!(
+                editor
+                    .transaction(|s| s.update_object(&"a".into(), |o| {
+                        let Shape::Text(t) = &mut o.shape else {
+                            panic!()
+                        };
+                        t.font_size = 22.;
+                    }))
+                    .is_err()
+            );
+            assert_eq!(editor.scene(), &scene);
+            assert_eq!(editor.engine.revision(), revision);
+            assert!(!editor.undo());
+        }
+        backend.failure.store(0, Ordering::SeqCst);
+        editor
+            .transaction(|s| {
+                s.update_object(&"a".into(), |o| {
+                    let Shape::Text(t) = &mut o.shape else {
+                        panic!()
+                    };
+                    t.font_size = 22.;
+                })
+            })
+            .unwrap();
+        let after = editor.scene().clone();
+        let calls = backend.calls.lock().unwrap().len();
+        backend.failure.store(1, Ordering::SeqCst);
+        assert!(editor.undo());
+        assert_eq!(editor.scene(), &scene);
+        assert!(!editor.undo());
+        assert!(editor.redo());
+        assert_eq!(editor.scene(), &after);
+        assert_eq!(backend.calls.lock().unwrap().len(), calls);
+    }
+}
 #[test]
 fn autowidth_baseline_includes_fixed_height_slack_padding_and_scale() {
     for height in [30., 90.] {

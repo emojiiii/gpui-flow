@@ -39,7 +39,7 @@ pub enum AlignItems {
     End,
     Stretch,
     /// Align measured first text baselines within each row. Text must have an
-    /// explicit TextSizing and a backend providing first_baseline.
+    /// explicit TextSizing and a backend providing first_baseline_writing_mode.
     Baseline,
 }
 

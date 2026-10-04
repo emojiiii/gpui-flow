@@ -2,7 +2,7 @@
 use gpui::{prelude::*, *};
 use gpui_flow::{
     ControlButton, GpuiTextMeasurer, GpuiTextRasterizer, SceneView,
-    layout::{FlowLayout, TextSizing},
+    layout::{AlignItems as FlowAlign, FlowLayout, FlowStyle, Insets, TextSizing},
     scene::{Affine, Color, DisplayObject, Scene, Shape, Size as SceneSize, Style, display},
 };
 use std::sync::Arc;
@@ -58,6 +58,55 @@ fn document() -> (Scene, FlowLayout) {
     insert(&mut scene, "anchor", anchor, 590., 210., 0x91e3cf);
     let mut layout = FlowLayout::default();
     layout.texts.insert("anchor".into(), TextSizing::Natural);
+    label(
+        &mut scene,
+        "baseline-title",
+        "Native baseline: X / axis / Y-reverse",
+        35.,
+        425.,
+    );
+    insert(
+        &mut scene,
+        "baseline-row",
+        display::Frame::new(760., 140.),
+        35.,
+        460.,
+        0x17273b,
+    );
+    layout.containers.insert(
+        "baseline-row".into(),
+        FlowStyle {
+            align_items: FlowAlign::Baseline,
+            gap: 80.,
+            padding: Insets::all(16.),
+            ..Default::default()
+        },
+    );
+    for (id, mode, color) in [
+        ("baseline-x", display::TextWritingMode::X, 0xf4d38e),
+        ("baseline-axis", display::TextWritingMode::Y, 0x91e3cf),
+        (
+            "baseline-reverse",
+            display::TextWritingMode::YReverse,
+            0xb7b5ff,
+        ),
+    ] {
+        let mut text = display::Text::new("Ag", SceneSize::new(120., 80.));
+        text.font_family = "DejaVu Sans".into();
+        text.font_size = 26.;
+        text.line_height = 1.4;
+        text.padding = [6., 8., 6., 8.];
+        text.wrap = false;
+        text.writing_mode = mode;
+        scene
+            .insert(
+                DisplayObject::new(id, text).with_style(Style::fill(Color::hex(color))),
+                Some("baseline-row".into()),
+                None,
+            )
+            .unwrap();
+        layout.texts.insert(id.into(), TextSizing::Natural);
+    }
     (scene, layout)
 }
 fn text<'a>(scene: &'a Scene, id: &str) -> &'a display::Text {
@@ -134,7 +183,7 @@ impl Lab {
                     use display::TextWritingMode::*;
                     view.editor
                         .transaction(|scene| {
-                            for id in ["paragraph", "anchor"] {
+                            for id in ["paragraph", "anchor", "baseline-axis"] {
                                 scene.update_object(&id.into(), |object| {
                                     let Shape::Text(text) = &mut object.shape else {
                                         unreachable!()

@@ -116,4 +116,4 @@ preserves license metadata, rewrites private aliases and exposes exact byte
 identities. It does not register fonts, prove a GPUI FontId binding or enable
 Canvas strokeText. See the [subset, budgets and remaining integration gates](../../docs/static-font-outlines.md).
 
-Spacing and indentation use bounded native clusters; see the [fixed layout contract](../../docs/text-layout-properties.md) for supported values, budgets, and the remaining writing-mode gap.
+Spacing and indentation use bounded native clusters; see the [fixed layout contract](../../docs/text-layout-properties.md) for supported values, budgets, upright writing axes, ellipsis/decoration and bounded first baselines.

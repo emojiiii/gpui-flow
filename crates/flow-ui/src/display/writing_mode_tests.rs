@@ -614,3 +614,307 @@ fn vertical_autowidth_uses_native_wrapped_columns_and_keeps_physical_height() {
         }
     }
 }
+
+#[test]
+fn vertical_baseline_matches_same_app_native_metrics_and_arranged_world_baselines() {
+    use gpui_flow_layout::{
+        AlignItems, AxisSizing, FlowDirection, FlowLayout, FlowStyle, TextSizing,
+    };
+    use gpui_flow_scene::{DisplayObject, Scene, Shape, Size, display};
+    use gpui_flow_text::InlineAlign;
+    use std::sync::Arc;
+    let app = gpui_kit::platform::headless();
+    let system = WindowTextSystem::new(app.text_system());
+    let backend = Arc::new(GpuiTextMeasurer::new(app.text_system()));
+    for (scene_mode, mode) in [
+        (display::TextWritingMode::Y, WritingMode::Y),
+        (display::TextWritingMode::YReverse, WritingMode::YReverse),
+    ] {
+        for sizing in [
+            TextSizing::Natural,
+            TextSizing::AutoHeight,
+            TextSizing::AutoWidth,
+        ] {
+            for content in ["AB\nABCDE", "ABCDE\nAB", "\nAB", ""] {
+                for (align, scene_align) in [
+                    (InlineAlign::Start, display::TextAlign::Start),
+                    (InlineAlign::Center, display::TextAlign::Center),
+                    (InlineAlign::End, display::TextAlign::End),
+                ] {
+                    let mut r = request(content);
+                    r.para_indent = if content.is_empty() { 0. } else { 4. };
+                    r.letter_spacing = 2.;
+                    r.para_spacing = 7.;
+                    r.wrap_width = (sizing == TextSizing::AutoWidth).then_some(70.);
+                    let metrics = backend.measure_writing_mode(&r, mode).unwrap();
+                    let available = if sizing == TextSizing::AutoWidth {
+                        70.
+                    } else {
+                        metrics.height
+                    };
+                    let mut native_request = r.clone();
+                    native_request.wrap_width = None;
+                    native_request.letter_spacing = 0.;
+                    native_request.para_indent = 0.;
+                    let native = shape_text(&system, &native_request, Hsla::default()).unwrap();
+                    let first = &native[0].unwrapped_layout;
+                    let cell = (r.font_size - f32::from(first.ascent) - f32::from(first.descent))
+                        * 0.5
+                        + f32::from(first.ascent);
+                    let mut first_advance = r.para_indent;
+                    let mut last_index = None;
+                    let mut count = 0;
+                    for glyph in first.runs.iter().flat_map(|run| &run.glyphs) {
+                        if last_index == Some(glyph.index) {
+                            continue;
+                        }
+                        let advance = r.font_size + r.letter_spacing;
+                        if r.wrap_width
+                            .is_some_and(|limit| first_advance + advance > limit)
+                            && count > 0
+                        {
+                            break;
+                        }
+                        first_advance += advance;
+                        last_index = Some(glyph.index);
+                        count += 1;
+                    }
+                    if count == 0 {
+                        first_advance = r.para_indent + r.font_size;
+                    }
+                    let slack = match (align, mode.is_reverse()) {
+                        (InlineAlign::Center, _) => (available - first_advance) * 0.5,
+                        (InlineAlign::Start, false) | (InlineAlign::End, true) => 0.,
+                        _ => available - first_advance,
+                    };
+                    let mut expected = cell
+                        + if mode.is_reverse() {
+                            -r.para_indent - r.font_size
+                        } else {
+                            r.para_indent
+                        };
+                    if mode.is_reverse() {
+                        expected += first_advance;
+                    }
+                    expected += slack;
+                    assert_eq!(
+                        backend
+                            .first_baseline_writing_mode(&r, mode, available, align)
+                            .unwrap(),
+                        expected
+                    );
+                    assert_eq!(
+                        shape_axis(&system, &r, mode)
+                            .unwrap()
+                            .first_baseline(available, align)
+                            .unwrap(),
+                        expected
+                    );
+                    for direction in [FlowDirection::Row, FlowDirection::RowReverse] {
+                        let mut scene = Scene::new();
+                        scene
+                            .insert(
+                                DisplayObject::new("p", display::Frame::new(500., 200.)),
+                                None,
+                                None,
+                            )
+                            .unwrap();
+                        for id in ["vertical", "horizontal"] {
+                            let vertical = id == "vertical";
+                            let mut text = display::Text::new(
+                                if vertical { content } else { "A" },
+                                Size::new(140., 80.),
+                            );
+                            text.font_family = r.font_family.clone();
+                            text.font_size = r.font_size;
+                            text.line_height = r.line_height / r.font_size;
+                            text.wrap = vertical && sizing == TextSizing::AutoWidth;
+                            text.auto_size_align = true;
+                            text.padding = [3., 5., 7., 11.];
+                            if vertical {
+                                text.writing_mode = scene_mode;
+                                text.align = scene_align;
+                                text.vertical_align = display::TextVerticalAlign::Middle;
+                                text.para_indent = r.para_indent;
+                                text.letter_spacing = r.letter_spacing;
+                                text.para_spacing = r.para_spacing;
+                            }
+                            scene
+                                .insert(DisplayObject::new(id, text), Some("p".into()), None)
+                                .unwrap();
+                        }
+                        let mut layout = FlowLayout::default();
+                        layout.containers.insert(
+                            "p".into(),
+                            FlowStyle {
+                                direction,
+                                align_items: AlignItems::Baseline,
+                                height_sizing: AxisSizing::content(),
+                                ..Default::default()
+                            },
+                        );
+                        layout.texts.insert("vertical".into(), sizing);
+                        layout
+                            .texts
+                            .insert("horizontal".into(), TextSizing::Natural);
+                        let measured = layout.with_text_measurer(backend.clone());
+                        measured.apply_to_scene(&mut scene).unwrap();
+                        let world_baseline = |id: &str, baseline: f32| {
+                            let object = &scene.get(&id.into()).unwrap().object;
+                            let Shape::Text(text) = &object.shape else {
+                                panic!()
+                            };
+                            object.transform.ty + text.content_bounds().origin.y + baseline
+                        };
+                        let horizontal = backend.first_baseline(&request("A")).unwrap();
+                        assert!(
+                            (world_baseline("vertical", expected)
+                                - world_baseline("horizontal", horizontal))
+                            .abs()
+                                < 0.00002
+                        );
+                        assert!(measured.arranged(&scene).unwrap().1.changed.is_empty());
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn vertical_first_baseline_places_real_first_cluster_at_horizontal_reference_pixels() {
+    use gpui_flow_text::InlineAlign;
+    let (app, bridge) = GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let system = WindowTextSystem::new(app.text_system());
+    let backend = GpuiTextMeasurer::new(app.text_system());
+    let native = shape_text(&system, &request("AB"), Hsla::default()).unwrap();
+    let a = shape_text(&system, &request("A"), Hsla::default()).unwrap();
+    let glyphs: Vec<_> = native[0]
+        .runs()
+        .iter()
+        .flat_map(|run| &run.glyphs)
+        .collect();
+    assert_eq!(glyphs.len(), 2);
+    assert_eq!(
+        f32::from(glyphs[1].position.x),
+        f32::from(a[0].unwrapped_layout.width)
+    );
+    let cell = (18.
+        - f32::from(native[0].unwrapped_layout.ascent)
+        - f32::from(native[0].unwrapped_layout.descent))
+        * 0.5
+        + f32::from(native[0].unwrapped_layout.ascent);
+    for mode in [WritingMode::Y, WritingMode::YReverse] {
+        for (align, native_align) in [
+            (InlineAlign::Start, TextAlign::Left),
+            (InlineAlign::Center, TextAlign::Center),
+            (InlineAlign::End, TextAlign::Right),
+        ] {
+            let mut r = raster_request("AB\nABCDE");
+            r.bounds = [10., 10., 60., 120.];
+            r.text.para_indent = 4.;
+            r.text.letter_spacing = 2.;
+            r.align = native_align;
+            let baseline = backend
+                .first_baseline_writing_mode(&r.text, mode, 120., align)
+                .unwrap();
+            let cell_top = r.bounds[1] + baseline - cell;
+            r.clip = [r.bounds[0], cell_top, r.text.line_height, r.text.font_size];
+            let mut reference = r.clone();
+            reference.text = request("A");
+            reference.text.line_height = 18.;
+            reference.bounds = r.clip;
+            reference.align = TextAlign::Center;
+            let paint = |request: &TextRasterRequest, mode| {
+                bridge
+                    .rasterize_writing_mode(
+                        request,
+                        mode,
+                        bridge.epoch(),
+                        &AtomicBool::new(false),
+                        2_000_000,
+                        &mut 1_000_000,
+                    )
+                    .unwrap()
+                    .unwrap()
+            };
+            let actual = paint(&r, mode);
+            let expected = paint(&reference, WritingMode::X);
+            assert_eq!(
+                (actual.origin, actual.width, actual.height),
+                (expected.origin, expected.width, expected.height)
+            );
+            assert_eq!(actual.premul_rgba, expected.premul_rgba);
+            assert!(
+                actual
+                    .premul_rgba
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .filter(|pixel| pixel[3] != 0)
+                    .count()
+                    > 20
+            );
+        }
+    }
+}
+
+#[test]
+fn vertical_empty_first_paragraph_indent_rejection_is_atomic_with_real_fonts() {
+    use gpui_flow_editor::SceneEditor;
+    use gpui_flow_layout::{AlignItems, FlowLayout, FlowStyle, TextSizing};
+    use gpui_flow_scene::{DisplayObject, Scene, Shape, Size, display};
+    use std::sync::Arc;
+    let app = gpui_kit::platform::headless();
+    let backend = Arc::new(GpuiTextMeasurer::new(app.text_system()));
+    for mode in [
+        display::TextWritingMode::Y,
+        display::TextWritingMode::YReverse,
+    ] {
+        let mut scene = Scene::new();
+        scene
+            .insert(
+                DisplayObject::new("p", display::Frame::new(200., 200.)),
+                None,
+                None,
+            )
+            .unwrap();
+        let mut text = display::Text::new("\nAB", Size::new(80., 40.));
+        text.font_family = "DejaVu Sans".into();
+        text.font_size = 18.;
+        text.writing_mode = mode;
+        text.wrap = true;
+        scene
+            .insert(DisplayObject::new("t", text), Some("p".into()), None)
+            .unwrap();
+        let mut layout = FlowLayout::default();
+        layout.containers.insert(
+            "p".into(),
+            FlowStyle {
+                align_items: AlignItems::Baseline,
+                ..Default::default()
+            },
+        );
+        layout.texts.insert("t".into(), TextSizing::AutoWidth);
+        let measured = layout.with_text_measurer(backend.clone());
+        measured.apply_to_scene(&mut scene).unwrap();
+        let mut editor = SceneEditor::new(scene.clone()).unwrap();
+        measured.install_reactive(&mut editor.engine).unwrap();
+        let revision = editor.engine.revision();
+        assert!(
+            editor
+                .transaction(|s| s.update_object(&"t".into(), |object| {
+                    let Shape::Text(text) = &mut object.shape else {
+                        panic!()
+                    };
+                    text.para_indent = 100.;
+                }))
+                .unwrap_err()
+                .to_string()
+                .contains("content box")
+        );
+        assert_eq!(editor.scene(), &scene);
+        assert_eq!(editor.engine.revision(), revision);
+        assert!(!editor.undo());
+    }
+}

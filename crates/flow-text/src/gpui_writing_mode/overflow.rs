@@ -245,6 +245,8 @@ fn ellipsize(
         mode: original.mode,
         metrics,
         allocated_bytes,
+        source_first_row: original.source_first_row,
+        baseline_cell: original.baseline_cell,
     })
 }
 
@@ -332,6 +334,20 @@ mod tests {
             assert_eq!(narrow.rows[0].baseline, marker.rows[0].baseline);
             assert_eq!(narrow.rows[0].inline, 4. + marker.rows[0].inline);
             assert!(narrow.glyphs.iter().all(|glyph| glyph.glyph_id.0 >= 100));
+            for align in [
+                crate::InlineAlign::Start,
+                crate::InlineAlign::Center,
+                crate::InlineAlign::End,
+            ] {
+                assert_eq!(
+                    narrow.first_baseline(100., align).unwrap(),
+                    original.first_baseline(100., align).unwrap()
+                );
+                assert_eq!(
+                    output.first_baseline(100., align).unwrap(),
+                    original.first_baseline(100., align).unwrap()
+                );
+            }
         }
     }
 

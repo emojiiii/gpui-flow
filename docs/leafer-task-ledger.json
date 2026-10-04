@@ -7,8 +7,8 @@
     "leafer_in": "3eb445bf34debb638766615282224b77108bf610"
   },
   "counts": {
-    "bounded_verified": 40,
-    "partial": 4,
+    "bounded_verified": 41,
+    "partial": 3,
     "not_started": 1,
     "needs_verification": 0,
     "in_progress": 0
@@ -475,9 +475,9 @@
       "id": "ELM-04",
       "category": "元素",
       "title": "Text固定排版属性",
-      "status": "partial",
+      "status": "bounded_verified",
       "acceptance": "已有font/wrap/align/padding/ellipsis/italic/decoration/affine；必补letterSpacing、wordSpacing、paraIndent、paraSpacing、textCase、writingMode和autoSizeAlign",
-      "boundary": "已补间距/缩进/autoSizeAlign、四轴writingMode/ellipsis/装饰及显式AutoHeight/AutoWidth单轴测量；纵排按固定height换列，纵排baseline仍拒绝，完整组合仍部分",
+      "boundary": "非负绝对间距、ASCII空格词距及None/Upper/Lower；四轴为Flow直立cluster扩展，限框内首baseline与已定义尺寸所有权；Linux原生已验，不含bidi/OpenType竖排、富文本或跨平台像素保证",
       "reference_doc": "docs/text-layout-properties.md",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/interface/src/ICommonAttr.ts",

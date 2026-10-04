@@ -37,7 +37,8 @@ support is unchanged; `title` and `small-caps` remain explicit rejections.
 
 `auto_size_align` defaults to false in Flow to preserve existing documents;
 Leafer JSON defaults it to true, matching upstream. It affects axes owned by
-measured layout: both axes for `TextSizing::Natural`, only y for `AutoHeight`.
+measured layout: both axes for `TextSizing::Natural`, only y for `AutoHeight`,
+and only x for `AutoWidth`.
 Fixed-size text is unaffected. Measured layout writes the size and the serializable
 `layout_origin` geometry atomically; it leaves the object's transform unchanged.
 With admitted inner width W (Natural retains Flow's minimum width of 1),
@@ -84,9 +85,13 @@ physical width and derives height, with auto alignment changing only the y origi
 For wrapped vertical text, `AutoWidth` instead preserves physical height, wraps
 within its top/bottom padding and measures width; auto alignment changes only x.
 Horizontal `AutoWidth` requires `wrap=false`. Neither mode may measure its own
-wrap axis, and vertical first-baseline alignment remains unsupported. Third-party
-measurers must opt into `measure_writing_mode`; its default rejects new modes. See
-[measurement ownership](text-measurement.md) for padding and parent constraints.
+wrap axis. Measured Row/RowReverse items may opt into a source first baseline:
+vertical modes align the first logical paragraph’s upright alphabetic baseline,
+including reverse direction and inline alignment. Out-of-cell or out-of-box
+baselines reject; this is not OpenType vertical baseline support. Third-party
+measurers must opt into both mode-aware measurement and baseline hooks; defaults
+reject new modes. See [measurement ownership](text-measurement.md) for empty
+paragraph semantics, padding and parent constraints.
 
 All four modes support Clip, end Ellipsis, underline and strikethrough (including
 both decorations together). Axis ellipsis removes only complete native source
@@ -179,3 +184,9 @@ measurement. A box exactly equal to a fractional measured block does not acquire
 an ellipsis. For multi-row/column blocks, a one-ULP smaller cross-axis extent
 still omits the last complete row/column; the existing minimum-one-row rule stays
 in force for very small boxes.
+
+The example’s lower row places a horizontal reference, a cycling-axis sample and
+a Y-reverse reference on their source first-A baseline. **Next writing mode**
+updates the middle sample through the existing reactive layout, and Undo/Redo
+restores the same geometry. Glyphs stay upright; the source-first A can be the
+bottom glyph in a reversed column.

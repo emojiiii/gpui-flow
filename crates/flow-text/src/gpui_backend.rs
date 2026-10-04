@@ -277,6 +277,47 @@ impl TextMeasurer for GpuiTextMeasurer {
         let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
         cache.invalidate();
     }
+    fn first_baseline_writing_mode(
+        &self,
+        request: &TextMeasureRequest,
+        mode: crate::WritingMode,
+        available_inline: f32,
+        align: crate::InlineAlign,
+    ) -> Result<f32, crate::WritingModeError> {
+        crate::validate_baseline_inline(available_inline)?;
+        if !mode.is_vertical() {
+            return self.first_baseline(request).map_err(Into::into);
+        }
+        request.validate()?;
+        let epoch = self
+            .cache
+            .lock()
+            .map_err(|_| "text metric cache poisoned")?
+            .epoch;
+        let baseline = catch_unwind(AssertUnwindSafe(|| {
+            if self.text_system.all_font_names().is_empty() {
+                return Err(crate::WritingModeError::from(
+                    "native text system has no available fonts",
+                ));
+            }
+            let shaper = WindowTextSystem::new(self.text_system.clone());
+            crate::gpui_writing_mode::shape_axis(&shaper, request, mode)?
+                .first_baseline(available_inline, align)
+        }))
+        .map_err(|_| "native axis baseline shaping failed (font resolution or platform panic)")??;
+        if self
+            .cache
+            .lock()
+            .map_err(|_| "text metric cache poisoned")?
+            .epoch
+            != epoch
+        {
+            return Err(
+                "fonts invalidated during baseline measurement; retry the transaction".into(),
+            );
+        }
+        Ok(baseline)
+    }
 }
 
 #[cfg(test)]
@@ -303,6 +344,7 @@ mod tests {
     // separately covered by the advanced_flow_layout Studio fixture.
     struct BaselinePlatform {
         panic_on_shape: bool,
+        on_shape: Option<Arc<dyn Fn() + Send + Sync>>,
     }
     impl gpui::PlatformTextSystem for BaselinePlatform {
         fn add_fonts(&self, _: Vec<std::borrow::Cow<'static, [u8]>>) -> gpui::Result<()> {
@@ -350,6 +392,9 @@ mod tests {
             runs: &[gpui::FontRun],
         ) -> gpui::LineLayout {
             assert!(!self.panic_on_shape, "deliberate platform shaping panic");
+            if let Some(callback) = &self.on_shape {
+                callback();
+            }
             let mut line = gpui::NoopTextSystem.layout_line(text, size, runs);
             line.ascent = size * 0.75;
             line.descent = size * 0.25;
@@ -368,6 +413,7 @@ mod tests {
         let backend =
             GpuiTextMeasurer::new(Arc::new(TextSystem::new(Arc::new(BaselinePlatform {
                 panic_on_shape: false,
+                on_shape: None,
             }))));
         for content in ["Baseline", "Baseline\nsecond line", ""] {
             let mut input = request(content.into());
@@ -397,6 +443,7 @@ mod tests {
         assert!(empty.first_baseline(&invalid).is_err());
         let panics = GpuiTextMeasurer::new(Arc::new(TextSystem::new(Arc::new(BaselinePlatform {
             panic_on_shape: true,
+            on_shape: None,
         }))));
         assert!(
             panics
@@ -404,6 +451,69 @@ mod tests {
                 .unwrap_err()
                 .contains("platform panic")
         );
+    }
+    #[test]
+    fn vertical_baseline_direct_override_checks_inputs_fonts_panics_and_epoch() {
+        use crate::{InlineAlign, WritingMode};
+        let slot = Arc::new(Mutex::new(None::<Arc<GpuiTextMeasurer>>));
+        let callback_slot = slot.clone();
+        let backend = Arc::new(GpuiTextMeasurer::new(Arc::new(TextSystem::new(Arc::new(
+            BaselinePlatform {
+                panic_on_shape: false,
+                on_shape: Some(Arc::new(move || {
+                    if let Some(backend) = callback_slot.lock().unwrap().take() {
+                        backend.invalidate();
+                    }
+                })),
+            },
+        )))));
+        let input = request("".into());
+        *slot.lock().unwrap() = Some(backend.clone());
+        assert!(
+            backend
+                .first_baseline_writing_mode(&input, WritingMode::Y, 40., InlineAlign::Start)
+                .unwrap_err()
+                .to_string()
+                .contains("fonts invalidated during baseline")
+        );
+        assert!(backend.cache.lock().unwrap().entries.is_empty());
+        for mode in [WritingMode::Y, WritingMode::YReverse] {
+            // Empty native line metrics: ascent=12, descent=4 in a 16-unit cell.
+            assert_eq!(
+                backend
+                    .first_baseline_writing_mode(&input, mode, 40., InlineAlign::Start)
+                    .unwrap(),
+                if mode.is_reverse() { 36. } else { 12. }
+            );
+            for available in [0., -1., f32::NAN, f32::INFINITY] {
+                assert!(
+                    backend
+                        .first_baseline_writing_mode(&input, mode, available, InlineAlign::Start)
+                        .is_err()
+                );
+            }
+            let empty =
+                GpuiTextMeasurer::new(Arc::new(TextSystem::new(Arc::new(gpui::NoopTextSystem))));
+            assert!(
+                empty
+                    .first_baseline_writing_mode(&input, mode, 40., InlineAlign::Start)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("no available fonts")
+            );
+            let panics =
+                GpuiTextMeasurer::new(Arc::new(TextSystem::new(Arc::new(BaselinePlatform {
+                    panic_on_shape: true,
+                    on_shape: None,
+                }))));
+            assert!(
+                panics
+                    .first_baseline_writing_mode(&input, mode, 40., InlineAlign::Start)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("platform panic")
+            );
+        }
     }
     #[test]
     fn italic_is_part_of_the_measurement_cache_key() {
