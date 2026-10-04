@@ -23,6 +23,6 @@ ttf-parser = { version = "=0.25.1", default-features = false, features = ["std"]
 sha2 = { version = "=0.10.9", optional = true }
 getrandom = { version = "=0.3.4", optional = true }
 
-# Same source identity as workspace GPUI; Cargo.lock pins the audited 10d005166a9f revision.
+# Same explicit source identity as workspace GPUI and the controlled backend.
 [target.'cfg(target_os = "linux")'.dependencies]
-gpui_platform = { git = "https://github.com/longbridge/gpui-fast", branch = "main", default-features = false, optional = true }
+gpui_platform = { git = "https://github.com/longbridge/gpui-fast", rev = "26b0dccc97ebd14bbf9715741b6688132ba69491", default-features = false, optional = true }

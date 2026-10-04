@@ -52,3 +52,7 @@ pub use gpui_flow_composite as composite;
 /// Overlapping retained-scene layers with one native input owner.
 pub mod layered_app;
 pub use layered_app::{LayerId, LayerOptions, LayeredApp, LayeredAppError, LayeredAppEvent};
+
+/// Opt-in Linux GPU tile damage adapter and real-backend oracle.
+#[cfg(all(feature = "gpu-damage", target_os = "linux"))]
+pub mod gpu_damage;

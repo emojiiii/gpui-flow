@@ -53,6 +53,8 @@ pub enum StructureKind {
     Added,
     Removed,
     Reparented,
+    /// Order among retained same-parent siblings changed, excluding index
+    /// shifts caused solely by adding, removing or reparenting other nodes.
     Reordered,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -144,6 +146,32 @@ fn position(scene: &Scene, id: &DisplayId) -> (Option<DisplayId>, Option<usize>)
         (None, None)
     }
 }
+/// Compare order only among siblings that survive under the same parent.
+/// Insertions, removals and reparenting shift absolute indices without changing
+/// the retained siblings' paint order. Their own structural records already
+/// invalidate the affected subtrees and refresh parent bounds/effects.
+fn retained_sibling_indices(scene: &Scene, other: &Scene) -> BTreeMap<DisplayId, usize> {
+    let sibling_lists = std::iter::once((None, scene.roots())).chain(
+        scene
+            .nodes()
+            .map(|node| (Some(&node.object.id), node.children.as_slice())),
+    );
+    let mut indices = BTreeMap::new();
+    for (parent, siblings) in sibling_lists {
+        for (index, id) in siblings
+            .iter()
+            .filter(|id| {
+                other
+                    .get(id)
+                    .is_some_and(|node| node.parent.as_ref() == parent)
+            })
+            .enumerate()
+        {
+            indices.insert(id.clone(), index);
+        }
+    }
+    indices
+}
 pub(crate) fn diff(
     old: &Scene,
     new: &Scene,
@@ -163,6 +191,8 @@ pub(crate) fn diff(
         .chain(new.nodes())
         .map(|n| n.object.id.clone())
         .collect();
+    let old_order = retained_sibling_indices(old, new);
+    let new_order = retained_sibling_indices(new, old);
     for id in ids {
         let (a, b) = (old.get(&id), new.get(&id));
         let (old_parent, old_index) = position(old, &id);
@@ -171,7 +201,9 @@ pub(crate) fn diff(
             (None, Some(_)) => Some(StructureKind::Added),
             (Some(_), None) => Some(StructureKind::Removed),
             (Some(_), Some(_)) if old_parent != new_parent => Some(StructureKind::Reparented),
-            (Some(_), Some(_)) if old_index != new_index => Some(StructureKind::Reordered),
+            (Some(_), Some(_)) if old_order.get(&id) != new_order.get(&id) => {
+                Some(StructureKind::Reordered)
+            }
             _ => None,
         };
         if let Some(kind) = kind {

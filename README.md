@@ -6,6 +6,8 @@
 
 当前固定45项进度见[任务表](docs/leafer-task-ledger.md)。已支持有界阴影、[前景模糊](docs/foreground-blur.md)、[拥有背景的模糊](docs/background-blur.md)、[灰度](docs/grayscale.md)、[宿主自定义工具widget](docs/custom-tools.md)及[Text间距、段首缩进和自动尺寸对齐](docs/text-layout-properties.md)；另有[共享预算与可硬取消的本地资源加载](docs/owned-resource-loading.md)。支持集合与明确拒绝范围以各功能契约为准；历史阶段记录不代表当前缺口。
 
+新增可选[Linux GPU 局部绘制](docs/gpu-damage.md)：保留真实GPU tiles，按连续损伤重画，并对普通原生回退保持明确边界。软件wgpu适配器上的12阶段逐字节RGBA与实际提交工作量通过；不宣称硬件加速幅度、总显存硬上限或跨平台验收。
+
 单个叶节点外阴影现已进入同一Scene/engine/CPU路径：矢量fill/stroke、图片透明像素和真实glyph alpha作为源，复用锁定image Gaussian；支持blur/offset/color、整体opacity/blend/clip与Undo。visual effect bounds不改变布局/命中/选择。Custom阴影仍明确不支持；后续新增[有界spread/box/scale-fixed模式](docs/shadow-modes.md)（内阴影见下方切片）；Group/Box/Frame现已扩展为[有界子树阴影](docs/group-shadows.md)；见[契约和预算](docs/compositing.md#bounded-leaf-outer-shadows)，示例`outer_shadows`。本轮786项headless（8项原有忽略）、86项UI、严格Clippy/格式与原生链接通过；真实窗口验过blur/offset/alpha/clip/Undo、拒绝恢复、选择与pan/zoom，详见[叶节点阶段验证](docs/compositing.md#outer-shadow-validation-2026-10-01)。
 
 Group/Box/Frame外阴影使用完整子树alpha，包含子阴影、mask结果、child clip和显式fill/children/stroke阶段；不使用bounding box代替形状。递归scratch/filter工作在任何域像素分配前预预算，深层指数重绘会拒绝。需要外部backdrop的PassThrough后代明确拒绝，Normal仍需显式选择；父effect bounds/damage覆盖子效果且不扩张布局、命中或选择。见[契约、限制和验证](docs/group-shadows.md)，示例`group_shadows`。本批825项headless（8项原有忽略）、91项UI、严格workspace/docs Clippy与格式、文档test targets及原生构建通过；云端真实窗口验过拒绝/Normal恢复、clip/order/alpha/Undo、反复切换、选择与pan/zoom，正常退出0。
@@ -179,7 +181,7 @@ cargo +1.98.1 run --locked -p flow-studio
 
 ## 依赖与实现来源
 
-底层使用 [longbridge/gpui-fast](https://github.com/longbridge/gpui-fast) 的 `main` 分支，实际版本由提交到仓库的 `Cargo.lock` 固定为 `10d005166a9f9e079d55ebfb700035f3860c3e71`。GPUI Kit 固定为 `0067bafcf3160cb871eff2521e98a51e526da175`。本批新增直接复用petgraph 0.8.3、Kurbo 0.11.3、Taffy 0.13.0和Lyon tessellation 1.0.22；headless crate仍不依赖GPUI，数值库不替代本项目文档/身份/事务契约。构建请使用 `--locked`，不要无意更新 lockfile；升级时应同时验证二者兼容性。
+底层 [gpui-fast](https://github.com/longbridge/gpui-fast) 精确固定为 `26b0dccc97ebd14bbf9715741b6688132ba69491`，GPUI Kit 为 `4c7f1350331562436df868c55ac33bebc4c6406c`；官方 gpui-pre facade 复用同一核心。仅 gpui_wgpu 使用保留 Apache 许可的本仓受控桥，支持可选[Linux GPU damage](docs/gpu-damage.md)，不是默认整帧路径或跨平台验收替代。外部宿主也须携带文档中的 root Cargo patch 配置。本批新增直接复用petgraph 0.8.3、Kurbo 0.11.3、Taffy 0.13.0和Lyon tessellation 1.0.22；headless crate仍不依赖GPUI，数值库不替代本项目文档/身份/事务契约。构建请使用 `--locked`，不要无意更新 lockfile；升级时应同时验证二者兼容性。
 
 设计参考 [React Flow 的自定义节点思路](https://reactflow.dev/learn/customization/custom-nodes) 和 [Leafer UI 的画布编辑方式](https://github.com/leaferjs/leafer-ui)，本项目是独立 Rust 实现，不是这些项目的移植，也未声明 API 兼容。当前不为本项目源代码授予开源许可证；各第三方依赖保留其各自许可，分发前需独立审查。
 

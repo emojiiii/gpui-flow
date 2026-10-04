@@ -7,9 +7,9 @@
     "leafer_in": "3eb445bf34debb638766615282224b77108bf610"
   },
   "counts": {
-    "bounded_verified": 42,
+    "bounded_verified": 43,
     "partial": 2,
-    "not_started": 1,
+    "not_started": 0,
     "needs_verification": 0,
     "in_progress": 0
   },
@@ -361,17 +361,15 @@
       "id": "APP-06",
       "category": "外观",
       "title": "GPU局部绘制后端",
-      "status": "not_started",
+      "status": "bounded_verified",
       "acceptance": "后端真正消费persistent damage并有像素等价/工作量对照",
-      "boundary": "CPU dirty和damage记录已归DAT-04；GPUI当前full-frame",
-      "reference_doc": "docs/engine.md",
+      "boundary": "Linux显式开启的不透明矩形native-vector切片；真实wgpu软件适配器12阶段RGBA与提交工作量通过，32tiles/32views及展开预算；CPU场景仍全构造，GPU总内存非硬上限，硬件性能/跨平台/物理多DPR未验",
+      "reference_doc": "docs/gpu-damage.md",
       "upstream_reference": {
         "url": "https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/partner/renderer/src/Renderer.ts",
         "symbols_or_contract": "Renderer damage消费；需要GPUI后端对应能力"
       },
-      "technical_dependencies": [
-        "当前GPUI整帧架构；需后端可消费damage接口/实现，不能仅改Flow字段完成"
-      ]
+      "technical_dependencies": []
     },
     {
       "id": "LAY-01",

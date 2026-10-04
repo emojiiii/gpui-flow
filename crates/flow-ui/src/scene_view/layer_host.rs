@@ -37,6 +37,10 @@ impl SceneView {
         !matches!(self.layer_host, LayerHostState::Standalone)
     }
     pub(crate) fn layer_mount(&mut self, owner: u64, cx: &mut Context<Self>) -> bool {
+        #[cfg(all(feature = "gpu-damage", target_os = "linux"))]
+        if self.gpu_damage.is_some() {
+            return false;
+        }
         if !mountable(&self.layer_host, self.compositing_mode)
             || self.inner_tool_active()
             || self.has_tool_widget()

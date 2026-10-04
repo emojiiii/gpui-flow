@@ -271,6 +271,12 @@ impl Render for SceneView {
         if let Some(resources) = &mut self.resources {
             resources.sample_images(&self.editor.engine, &visible, now, active);
         }
+        #[cfg(all(feature = "gpu-damage", target_os = "linux"))]
+        let gpu_canonical = (self.gpu_damage.is_some()
+            && self.state_styles.is_empty()
+            && frame.resolved_scene.is_none()
+            && frame.objects.len() <= 4096)
+            .then(|| frame.clone());
         let key = self.composite_key(domains, window);
         let (frame, composite_key, coherent) = self.coherent_presentation(frame, key, window, cx);
         self.project_accessibility(&frame, composite_key.clone());
@@ -471,6 +477,14 @@ impl Render for SceneView {
         )
         .absolute()
         .size_full();
+        #[cfg(all(feature = "gpu-damage", target_os = "linux"))]
+        let gpu_eligible = self.gpu_eligible(
+            &frame,
+            !coherent
+                || gpu_canonical
+                    .as_ref()
+                    .is_some_and(|canonical| canonical == &frame),
+        );
         let mut view = div()
             .id("retained-scene")
             .relative()
@@ -479,8 +493,7 @@ impl Render for SceneView {
             .when(!owned_canvas && !managed_layer, |view| {
                 view.bg(rgb(theme.background))
             })
-            .when(!managed_layer, |view| view.track_focus(&self.focus))
-            .child(background);
+            .when(!managed_layer, |view| view.track_focus(&self.focus));
         view = self.semantic_root(view, cx);
         let mut content = div().absolute().size_full();
         let objects = frame
@@ -555,15 +568,41 @@ impl Render for SceneView {
             }
         }
         content = content.children(self.semantic_elements(cx, self.focus.is_focused(window)));
-        view = if coherent {
-            view.child(self.presentation_content(
-                content.into_any_element(),
-                composite_key.clone(),
-                cx,
-            ))
+        let content = if coherent {
+            self.presentation_content(content.into_any_element(), composite_key.clone(), cx)
+                .into_any_element()
         } else {
-            view.child(content)
+            content.into_any_element()
         };
+        #[cfg(all(feature = "gpu-damage", target_os = "linux"))]
+        let content = if let Some(binding) = &self.gpu_damage {
+            // Include an explicit opaque backdrop; outer opacity/unsupported
+            // primitives are rechecked on the actual GPU scene before reuse.
+            let body = div()
+                .absolute()
+                .size_full()
+                .when(!owned_canvas && !managed_layer, |body| {
+                    body.bg(rgb(theme.background))
+                })
+                .child(background)
+                .child(content);
+            binding.element(
+                body.into_any_element(),
+                &self.editor.engine,
+                viewport,
+                theme.background,
+                show_grid.then_some(theme.grid),
+                gpu_eligible,
+            )
+        } else {
+            view = view.child(background);
+            content
+        };
+        #[cfg(not(all(feature = "gpu-damage", target_os = "linux")))]
+        {
+            view = view.child(background);
+        }
+        view = view.child(content);
         view = view.child(overlay);
         if coherent {
             view = view.child(self.presentation_upload_element(cx));

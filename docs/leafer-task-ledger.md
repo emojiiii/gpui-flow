@@ -1,6 +1,6 @@
 # Leafer固定45项任务表
 
-状态：42项有界已验证、2项部分实现、1项未开始。固定ID、验收集合与边界保留；任务数不代表工时或全部上游API兼容。机器可读定义见[任务表JSON](leafer-task-ledger.json)。
+状态：43项有界已验证、2项部分实现、0项未开始。固定ID、验收集合与边界保留；任务数不代表工时或全部上游API兼容。机器可读定义见[任务表JSON](leafer-task-ledger.json)。
 
 功能实现、必要回归和简明契约按模块提交。逐次运行日志、截图、备份收据及历史验收JSON不进入源码仓库；既有提交历史不改写。测试方法见[本地验证](testing.md)。
 
@@ -30,7 +30,7 @@
 | APP-03 | 外观 / [隔离混合与蒙版擦除](mask-modes.md) | 有界已验证 | 组透明度/多paint隔离、固定blend集合、mask/erase覆盖关系与hit规则 | 已实现固定blend、五种mask、首marker布局/child-parent命中、Image alpha代理及预算预检、Pixel和几何leaf/Group/Box/Frame/Image/Canvas/Custom轮廓Path擦除；Custom显式CPU像素桥支持mask/Pixel擦除；Text几何Path及任意外部host backdrop明确不支持，Custom自身阴影/模糊、scale-fixed描边和像素导出不支持 |
 | APP-04 | 外观 / [阴影与固定滤镜集合](multiple-shadows.md) | 有界已验证 | 已有leaf/group inner/outer多影；必补spread/box/scale-fixed shadow、blur、backgroundBlur及grayscale并有像素/预算测试 | backgroundBlur仅可在拥有完整背景的有界surface执行；不承诺任意宿主backdrop |
 | APP-05 | 外观 / [状态样式与过渡](state-geometry.md) | 有界已验证 | hover/press/focus/selected/disabled、命名状态/继承、每态transition及geometry变化 | 固定实色/opacity、每态timing、x/y及Rect/Ellipse/Text/Image/Box/Frame尺寸；不含任意属性/rotation/scale/skew/更广插值；hard invalidation仍loading，event.local_position仍canonical |
-| APP-06 | 外观 / [GPU局部绘制后端](engine.md) | 未开始 | 后端真正消费persistent damage并有像素等价/工作量对照 | CPU dirty和damage记录已归DAT-04；GPUI当前full-frame |
+| APP-06 | 外观 / [GPU局部绘制后端](gpu-damage.md) | 有界已验证 | 后端真正消费persistent damage并有像素等价/工作量对照 | Linux显式开启的不透明矩形native-vector切片；真实wgpu软件适配器12阶段RGBA与提交工作量通过，32tiles/32views及展开预算；CPU场景仍全构造，GPU总内存非硬上限，硬件性能/跨平台/物理多DPR未验 |
 | LAY-01 | 布局 / [固定与内容流式布局](flow-layout.md) | 有界已验证 | row/column、wrap/reverse、padding/gap/grow/minmax、auto-size/嵌套固定点/hidden排除 | 百分比/baseline/shrinkContent归LAY-03；不是CSS完整实现 |
 | LAY-02 | 布局 / [响应派生与事务所有权](reactive-layout.md) | 有界已验证 | 安装binding后普通编辑提交前派生、白名单/有界固定点/冲突拒绝、一次Undo | 不是全局observer/帧合并局部依赖调度 |
 | LAY-03 | 布局 / [高级尺寸与局部调度](advanced-flow-layout.md) | 有界已验证 | 固定父尺寸百分比、shrinkContent、文字baseline行对齐、依赖dirty子树与单帧合并；循环/所有权冲突原子拒绝 | 受父尺寸确定性约束；不实现全CSS布局或无界observer网络 |

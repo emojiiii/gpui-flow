@@ -36,7 +36,7 @@ Graph 的 `CanvasPlugin` 使用相同输入/能力/生命周期协议，但它�
 
 运行 `cargo run --locked -p flow-studio --bin primitives`。右下角 diamond 来自注册的 CustomDefinition，点击后排队修改 radius，几何、bounds、命中与绘制一起变化；Undo 恢复属性。侧栏显示 engine revision 和 dirty 数量。Reset 是新文档，会销毁旧文档监听器；示例为新的 Custom 实例重新安装点击行为，宿主也必须按新句柄注册自己的监听器。
 
-GPUI 仍整帧绘制；damage 是后端可消费的信息，不等于已经做 GPU 局部重绘。现已增加[显式视觉行列布局](flow-layout.md)及[多层矢量填充/描边](appearance.md)。布局支持内容尺寸测量与嵌套固定点，由宿主显式重排、编辑+布局事务或opt-in引擎提交前provider触发，走普通原子变化通道；多层绘制沿用平面、逐 paint 透明度。隔离组透明度/混合、蒙版、擦除、阴影、全局响应式布局调度、状态过渡、完整timeline/运动路径仍未实现；[基础属性动画](animation.md)已接入显式tick与编辑器拥有的安全播放会话。当前已有渐变和视频帧也不能替代这些契约。详见 [实施顺序](engine-contract-plan.md) 与 [支持边界](limitations.md)。
+默认入口仍构造与提交完整原生场景；CPU damage 记录本身不等于 GPU 局部重绘。可选 [Linux GPU damage 后端](gpu-damage.md)消费连续损伤并保留真实 GPU tiles，支持范围、像素/工作量验证及回退约束单独说明。已有[显式视觉行列布局](flow-layout.md)、[多层矢量绘制](appearance.md)、[有界隔离合成](compositing.md)、[蒙版](mask-modes.md)、[擦除](scene-erasers.md)、[响应布局](reactive-layout.md)、[状态呈现](state-styles.md)和[时间线动画](animation-timeline.md)；各模块能力不等于完整 Leafer 或跨平台支持。以[固定任务账本](leafer-task-ledger.md)和[支持边界](limitations.md)为准。
 
 [状态呈现](state-styles.md)通过独立paint-only叠加接入SceneView，不改canonical文档/Undo；实例的attachment_epoch让输入状态无法跨卸载/重挂载复活。
 

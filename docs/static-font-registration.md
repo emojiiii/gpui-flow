@@ -95,10 +95,11 @@ gates.
 ## Audited source assumptions
 
 This implementation depends on the exact GPUI source in Cargo.lock:
-`10d005166a9f9e079d55ebfb700035f3860c3e71`. The optional `gpui_platform`
-dependency uses the same Git source identity as workspace GPUI to avoid duplicate
-incompatible GPUI types; the lockfile, rather than a different Git `rev` query,
-pins both. Re-audit these invariants before updating that lock:
+`26b0dccc97ebd14bbf9715741b6688132ba69491`. The optional `gpui_platform`
+dependency uses the same exact Git `rev` selector as workspace GPUI to avoid
+duplicate incompatible GPUI types; Cargo.lock pins the transitive graph. Never
+mix a floating branch selector with that revision. Re-audit these invariants
+before updating the pins:
 
 - `crates/gpui_platform/src/gpui_platform.rs:57–74` and
   `crates/gpui_linux/src/linux.rs:30–59`: fresh platform/client construction

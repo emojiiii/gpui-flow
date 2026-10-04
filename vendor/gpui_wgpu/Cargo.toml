@@ -1,0 +1,45 @@
+[package]
+name = "gpui_wgpu"
+version = "0.1.0"
+edition = "2024"
+publish = false
+autobenches = false
+license = "Apache-2.0"
+
+[lib]
+path = "src/gpui_wgpu.rs"
+
+[features]
+default = []
+font-kit = ["dep:font-kit"]
+# Explicit construction only; no window, surface, alternate shaders, or mock GPU.
+flow-headless = []
+# Requires the original upstream assets/fonts fixtures, not included here.
+upstream-font-tests = []
+
+[dependencies]
+gpui = { git = "https://github.com/longbridge/gpui-fast", rev = "26b0dccc97ebd14bbf9715741b6688132ba69491", default-features = false }
+collections = { git = "https://github.com/longbridge/gpui-fast", rev = "26b0dccc97ebd14bbf9715741b6688132ba69491" }
+gpui_util = { git = "https://github.com/longbridge/gpui-fast", rev = "26b0dccc97ebd14bbf9715741b6688132ba69491" }
+anyhow = "1.0.86"
+bytemuck = "1"
+cosmic-text = "0.19.0"
+etagere = "0.2"
+itertools = "0.14.0"
+log = { version = "0.4.16", features = ["kv_unstable_serde", "serde"] }
+parking_lot = "0.12.1"
+profiling = "1"
+raw-window-handle = "0.6"
+smallvec = { version = "1.6", features = ["union", "const_new"] }
+swash = "0.2.6"
+unicode-bidi = { version = "0.3.18", default-features = false, features = ["hardcoded-data"] }
+unicode-segmentation = "1.10"
+wgpu = "29.0.4"
+font-kit = { git = "https://github.com/zed-industries/font-kit", rev = "94b0f28166665e8fd2f53ff6d268a14955c82269", package = "zed-font-kit", version = "0.14.1-zed", optional = true }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+web-sys = { version = "0.3", features = ["HtmlCanvasElement"] }
+wgpu = { version = "29.0.4", features = ["webgl"] }
+
+[dev-dependencies]
+naga = { version = "29.0.4", features = ["wgsl-in"] }

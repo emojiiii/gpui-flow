@@ -1,5 +1,7 @@
 //! Retained-scene canvas, independent of node graphs, media runners and Studio chrome.
 mod accessibility;
+#[cfg(all(feature = "gpu-damage", target_os = "linux"))]
+mod gpu_damage;
 pub use accessibility::{SceneAccessibility, SceneAccessibilityIssue};
 mod canvas_commands;
 mod composite;
@@ -87,6 +89,8 @@ pub struct SceneView {
     pub state_style_error: Option<String>,
     state_clock: std::time::Instant,
     layer_host: layer_host::LayerHostState,
+    #[cfg(all(feature = "gpu-damage", target_os = "linux"))]
+    gpu_damage: Option<crate::gpu_damage::Binding>,
     focus: FocusHandle,
     pending_native_focus: bool,
     input_tracing: bool,
@@ -115,6 +119,10 @@ impl SceneView {
                 Err(error) => (None, Some(error.to_string())),
             };
         cx.on_release(|this: &mut Self, cx| {
+            #[cfg(all(feature = "gpu-damage", target_os = "linux"))]
+            if let Some(binding) = this.gpu_damage.take() {
+                binding.dispose(&mut this.editor.engine, cx);
+            }
             this.dispose_tool_widgets(cx);
             if let Some(tools) = &mut this.tools {
                 let _ = tools.dispose(&mut this.editor, &mut this.interactions);
@@ -156,6 +164,8 @@ impl SceneView {
             state_style_error: None,
             state_clock: std::time::Instant::now(),
             layer_host: Default::default(),
+            #[cfg(all(feature = "gpu-damage", target_os = "linux"))]
+            gpu_damage: None,
             focus: cx.focus_handle(),
             pending_native_focus: false,
             input_tracing: false,

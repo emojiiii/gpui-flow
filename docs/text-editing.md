@@ -23,7 +23,7 @@ the input's caret, selection and local history. A native activation uses GPUI's
 it. A prevented routed PointerDown also prevents native activation.
 
 The input is a clearly labelled **Text content** panel. It reuses the pinned
-`gpui-kit` revision `0067bafcf3160cb871eff2521e98a51e526da175` component
+`gpui-kit` revision `4c7f1350331562436df868c55ac33bebc4c6406c` component
 `Textarea` and `TextareaState`. Kit owns the text buffer, shaping, caret/selection,
 clipboard, input-local undo and native text/marked-text handling. No replacement
 text or clipboard framework, dependency or double-click timer is added.
