@@ -15,6 +15,11 @@ pub trait NodeRenderer: Send + Sync {
     fn full_bleed(&self) -> bool {
         false
     }
+    /// Draw content directly on the canvas. Selection and resize affordances
+    /// remain visible; existing renderers retain their normal background.
+    fn transparent_background(&self, _node: &Node) -> bool {
+        false
+    }
     /// Override the external media caption. Empty text hides it; None preserves
     /// the frame's title/geometry caption for existing renderers.
     fn object_caption(&self, _node: &Node) -> Option<SharedString> {

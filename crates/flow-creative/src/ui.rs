@@ -1,3 +1,4 @@
+use crate::TextStyle;
 use crate::*;
 use gpui::{prelude::*, *};
 use gpui_flow::{
@@ -9,7 +10,13 @@ use gpui_flow_interaction::{CanvasCommand, SelectionMode};
 use gpui_kit::base::Button;
 use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
 use serde_json::Value;
-use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
+
+type TextEditCallback = Arc<dyn Fn(NodeId, &mut Window, &mut App) + Send + Sync>;
 
 /// Data contains asset keys only; the host explicitly authorizes local sources.
 #[derive(Clone, Default)]
@@ -17,6 +24,8 @@ pub struct CreativeAssets {
     paths: BTreeMap<String, PathBuf>,
     dimensions: BTreeMap<String, (u32, u32)>,
     models: Arc<model_view::ModelViews>,
+    editing_text: Arc<Mutex<Option<NodeId>>>,
+    begin_text_edit: Option<TextEditCallback>,
 }
 impl CreativeAssets {
     pub fn register(&mut self, key: impl Into<String>, path: impl Into<PathBuf>) {
@@ -39,6 +48,9 @@ struct CardRenderer {
     assets: Arc<CreativeAssets>,
 }
 impl NodeRenderer for CardRenderer {
+    fn transparent_background(&self, node: &Node) -> bool {
+        node.kind == "text"
+    }
     fn object_caption(&self, node: &Node) -> Option<SharedString> {
         if node.kind == "text" {
             return Some("".into());
@@ -98,13 +110,41 @@ impl NodeRenderer for CardRenderer {
                 .into_any_element();
         }
         if node.kind == "text" {
+            let style = TextStyle::from_data(&node.data).unwrap_or_default();
+            let editing = self
+                .assets
+                .editing_text
+                .lock()
+                .is_ok_and(|id| id.as_ref() == Some(&node.id));
+            let id = node.id.clone();
             return div()
+                .id(SharedString::from(format!("text-object-{}", node.id)))
                 .size_full()
-                .p(px(24. * z))
-                .bg(rgb(0xffffff))
-                .text_size(px(21. * z))
+                .px(px(10. * z))
+                .py(px(8. * z))
+                .text_size(px(style.font_size * z))
+                .font_weight(if style.bold {
+                    FontWeight::BOLD
+                } else {
+                    FontWeight::NORMAL
+                })
+                .text_align(text_objects::alignment(style.alignment))
+                .line_height(relative(1.25))
                 .text_color(rgb(0x32343a))
-                .child(node.data["text"].as_str().unwrap_or("").to_string())
+                .when(!editing, |body| {
+                    body.child(node.data["text"].as_str().unwrap_or("").to_string())
+                })
+                .when_some(self.assets.begin_text_edit.clone(), |body, callback| {
+                    body.on_mouse_down(MouseButton::Left, move |event, window, cx| {
+                        // Consume the second down before the canvas acquires its
+                        // drag capture, whose mouse-up handler consumes clicks.
+                        if event.click_count == 2 && !event.modifiers.shift {
+                            cx.stop_propagation();
+                            window.prevent_default();
+                            callback(id.clone(), window, cx);
+                        }
+                    })
+                })
                 .into_any_element();
         }
         let (symbol, background) = match node.kind.as_str() {
@@ -220,6 +260,11 @@ enum Action {
     ImportModel,
     PanTool(bool),
     QuickEdit,
+    EditText,
+    FinishText,
+    TextSize(f32),
+    TextBold,
+    TextAlign(TextAlignment),
     UseReference,
     OriginalRatio,
     Layers,
@@ -281,6 +326,7 @@ pub struct CreativeCanvas {
     show_layers: bool,
     import_model: bool,
     model_views: Arc<model_view::ModelViews>,
+    editing_text: Arc<Mutex<Option<NodeId>>>,
     form_source: Option<(NodeId, String, Value)>,
     deferred_edits: BTreeMap<NodeId, DeferredFormEdit>,
     show_data: bool,
@@ -418,6 +464,7 @@ impl CreativeCanvas {
             show_layers: false,
             import_model: false,
             model_views: Arc::default(),
+            editing_text: Arc::default(),
             form_source: None,
             deferred_edits: BTreeMap::new(),
             show_data: false,
@@ -466,6 +513,7 @@ impl CreativeCanvas {
             return;
         }
         if source.as_ref().map(|s| &s.0) != self.form_source.as_ref().map(|s| &s.0) {
+            self.clear_text_edit();
             self.quick_edit = false;
             self.show_colors = false;
         }
@@ -480,7 +528,9 @@ impl CreativeCanvas {
                 }
             })
             .unwrap_or_default();
-        self.form.update(cx, |s, cx| s.set_value(value, window, cx));
+        if self.form.read(cx).value().as_ref() != value {
+            self.form.update(cx, |s, cx| s.set_value(value, window, cx));
+        }
     }
     fn command(&mut self, command: CanvasCommand, cx: &mut Context<Self>) -> bool {
         self.notice = None;
@@ -502,6 +552,36 @@ impl CreativeCanvas {
             self.apply_form_edit(cx);
         }
         let command = match action {
+            Action::EditText => {
+                if let Some(node) = self.selected(cx).filter(|n| n.kind == "text") {
+                    self.begin_text_edit(node.id, window, cx);
+                }
+                return;
+            }
+            Action::FinishText => {
+                self.clear_text_edit();
+                self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+                cx.notify();
+                return;
+            }
+            Action::TextSize(delta) => {
+                self.edit_text_style(
+                    |style| style.font_size = (style.font_size + delta).clamp(12., 144.),
+                    window,
+                    cx,
+                );
+                return;
+            }
+            Action::TextBold => {
+                self.edit_text_style(|style| style.bold = !style.bold, window, cx);
+                return;
+            }
+            Action::TextAlign(alignment) => {
+                self.edit_text_style(|style| style.alignment = alignment, window, cx);
+                self.clear_text_edit();
+                self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+                return;
+            }
             Action::RenameProject => {
                 if let Some(project) = &self.project {
                     let name = project.metadata().name.clone();
@@ -699,12 +779,14 @@ impl CreativeCanvas {
                 return;
             }
             Action::Undo => {
+                self.clear_text_edit();
                 self.deferred_edits.clear();
                 self.form_serial += 1;
                 self.form_source = None;
                 CanvasCommand::Undo
             }
             Action::Redo => {
+                self.clear_text_edit();
                 self.deferred_edits.clear();
                 self.form_serial += 1;
                 self.form_source = None;
@@ -946,6 +1028,7 @@ fn label(text: impl Into<SharedString>) -> Div {
 mod chrome;
 mod model_view;
 mod project_ui;
+mod text_objects;
 mod workbench;
 pub use workbench::CreativeWorkbench;
 
@@ -995,12 +1078,19 @@ impl Render for CreativeCanvas {
             .overflow_hidden()
             .child(
                 canvas(
-                    move |bounds, _, cx| {
-                        let _ = owner.update(cx, |this, _| {
-                            this.canvas_origin =
+                    move |bounds, window, cx| {
+                        let _ = owner.update(cx, |this, cx| {
+                            let origin =
                                 WorldPoint::new(bounds.origin.x.into(), bounds.origin.y.into());
-                            this.canvas_size =
-                                WorldSize::new(bounds.size.width.into(), bounds.size.height.into())
+                            let size =
+                                WorldSize::new(bounds.size.width.into(), bounds.size.height.into());
+                            if this.canvas_origin != origin || this.canvas_size != size {
+                                this.canvas_origin = origin;
+                                this.canvas_size = size;
+                                // Layout runs after this view rendered. Notify on
+                                // the next turn instead of waiting for input.
+                                cx.on_next_frame(window, |_, _, cx| cx.notify());
+                            }
                         });
                     },
                     |_, _, _, _| {},
@@ -1117,7 +1207,14 @@ impl Render for CreativeCanvas {
         }
         if let Some(node) = &node {
             let r = viewport.world_rect_to_screen(node.bounds());
-            let toolbar_width = if node.kind == "image" { 334. } else { 184. };
+            if node.kind == "text" && self.is_editing_text(&node.id) {
+                surface = surface.child(self.text_editor(node, r, viewport.zoom, cx));
+            }
+            let toolbar_width = match node.kind.as_str() {
+                "image" => 334.,
+                "text" => 410.,
+                _ => 184.,
+            };
             let toolbar_left = (r.center().x - toolbar_width / 2.)
                 .clamp(78., (self.canvas_size.width - toolbar_width - 12.).max(78.));
             let toolbar_top = (r.origin.y - 68.).max(62.);

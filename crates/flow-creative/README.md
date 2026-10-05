@@ -33,6 +33,8 @@ cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative 
 - 选中图片后上栏替换、用作参考、恢复原比例、复制/编组/端口色/删除；下方描述入口默认收起
 - “用作参考”创建图片生成节点与同类型参考边；生成器下方直接输入提示词，比例按钮同步调整占位宽高
 - 文字字段停止输入后自动保存；画布手势期间保留草稿，结束后应用。自定义 JSON 需显式校验
+- 文字对象透明显示在画布上；双击或点“编辑文字”就地输入，Escape/“完成编辑”结束。上栏调整 12–144px 字号、粗体和对齐，样式随项目保存并支持撤销
+- 原生多行输入器编辑时左对齐；选对齐按钮会完成编辑并立即显示对象排版
 - 图层按钮弹出对象列表并切换选择；浮栏跟随对象，尺寸保持屏幕像素
 - 图形编辑、连线、分组、删除和内容编辑继续使用核心事务与 Undo/Redo
 - Space+左键或中键平移；释放 Space 或鼠标会保留视口，Esc 才取消当前手势
@@ -93,6 +95,10 @@ cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative 
 `NodeRenderer` 接口保留。`NodeRenderer::full_bleed()` 默认为 false，老渲染器不变；
 新媒体渲染器可选择裸对象展示。`FlowCanvas::set_host_persistence(true)` 让保存快捷键
 发出 `FlowEvent::SaveRequested`，默认独立画布仍走原有文件保存。
+
+`NodeRenderer::transparent_background(&Node)` 默认 false；Creative 文字选择透明背景。
+`TextStyle` / `edit_text_style` 验证 `data.style` 并保留宿主字段。`CreativeCanvas::set_assets`
+安装标准媒体/文字渲染器与就地编辑绑定，使用自定义渲染器的宿主仍可保留自己的 registry。
 
 ```sh
 cargo test --locked -p gpui-flow-creative --lib

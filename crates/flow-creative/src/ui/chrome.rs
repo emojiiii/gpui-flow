@@ -130,6 +130,9 @@ impl CreativeCanvas {
                 ))
                 .child(separator());
         }
+        if node.kind == "text" {
+            bar = bar.child(self.text_style_toolbar(node, editable, cx));
+        }
         bar.child(self.icon_button(
             "object-copy",
             "copy",
@@ -243,6 +246,33 @@ impl CreativeCanvas {
         let generation = GenerationKind::from_node_kind(&node.kind);
         let model = matches!(node.kind.as_str(), "model" | "generate_model")
             && !node.data["asset"].as_str().unwrap_or_default().is_empty();
+        if node.kind == "text" {
+            let editing = self.is_editing_text(&node.id);
+            let p = anchored_panel(bounds, self.canvas_size, WorldSize::new(112., 32.));
+            return div()
+                .occlude()
+                .absolute()
+                .left(px(p.x))
+                .top(px(p.y))
+                .rounded_lg()
+                .bg(rgb(0xffffff))
+                .shadow_sm()
+                .child(self.button(
+                    "edit-canvas-text",
+                    if editing {
+                        "完成编辑"
+                    } else {
+                        "编辑文字"
+                    },
+                    if editing {
+                        Action::FinishText
+                    } else {
+                        Action::EditText
+                    },
+                    !editable,
+                    cx,
+                ));
+        }
         if node.kind == "image" && !self.quick_edit {
             let p = anchored_panel(bounds, self.canvas_size, WorldSize::new(104., 32.));
             return div()

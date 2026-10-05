@@ -21,6 +21,7 @@ pub struct NodeFrame {
     pub color: u32,
     pub header_height: f32,
     full_bleed: bool,
+    transparent_background: bool,
     caption: Option<SharedString>,
     body: Option<AnyElement>,
     overlays: Vec<AnyElement>,
@@ -43,6 +44,7 @@ impl NodeFrame {
             color: 0x9cafc9,
             header_height: 36.,
             full_bleed: false,
+            transparent_background: false,
             caption: None,
             body: None,
             overlays: Vec::new(),
@@ -93,6 +95,10 @@ impl NodeFrame {
     }
     pub fn caption(mut self, value: Option<SharedString>) -> Self {
         self.caption = value;
+        self
+    }
+    pub fn transparent_background(mut self, value: bool) -> Self {
+        self.transparent_background = value;
         self
     }
     pub fn body(mut self, value: impl IntoElement) -> Self {
@@ -171,16 +177,20 @@ impl RenderOnce for NodeFrame {
             })
             .w(px(self.size.width * z))
             .h(px(self.size.height * z))
-            .bg(rgb(theme.card))
+            .when(!self.transparent_background, |frame| {
+                frame.bg(rgb(theme.card))
+            })
             .rounded(px(if self.full_bleed { 2. } else { 10. * z }))
             .border_1()
-            .border_color(rgb(if self.selected {
-                theme.accent
+            .border_color(if self.selected {
+                rgb(theme.accent)
+            } else if self.transparent_background {
+                rgba(0)
             } else if self.full_bleed {
-                theme.card
+                rgb(theme.card)
             } else {
-                theme.border
-            }))
+                rgb(theme.border)
+            })
             .when(!self.full_bleed, |frame| frame.shadow_md().child(header))
             .when(self.full_bleed && !caption.is_empty(), |frame| {
                 frame.child(

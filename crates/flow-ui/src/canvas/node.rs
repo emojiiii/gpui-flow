@@ -92,6 +92,11 @@ impl FlowCanvas {
         .selected(selected)
         .theme(theme)
         .color(color)
+        .transparent_background(
+            self.registry
+                .get(&node.kind)
+                .is_some_and(|r| r.transparent_background(node)),
+        )
         .caption(
             self.registry
                 .get(&node.kind)

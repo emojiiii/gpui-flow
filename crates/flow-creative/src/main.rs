@@ -79,6 +79,7 @@ fn main() {
                                 cx,
                             )
                             .expect("validated document");
+                            view.set_assets(CreativeAssets::demo(), cx);
                             view.set_document_path(file, cx);
                             view
                         })

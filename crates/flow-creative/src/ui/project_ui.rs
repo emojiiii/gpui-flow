@@ -184,7 +184,6 @@ impl CreativeCanvas {
     }
     fn refresh_assets(&mut self, cx: &mut Context<Self>) {
         let mut assets = CreativeAssets::demo();
-        assets.models = self.model_views.clone();
         if let Some(project) = &self.project {
             for asset in project.assets() {
                 if let Ok(path) = project.resolve_asset_path(&asset.key) {
@@ -195,6 +194,17 @@ impl CreativeCanvas {
                 }
             }
         }
+        self.set_assets(assets, cx);
+    }
+    /// Install Creative's standard media/text renderers and local asset sources.
+    /// Hosts supplying custom renderers can retain their own registry instead.
+    pub fn set_assets(&mut self, mut assets: CreativeAssets, cx: &mut Context<Self>) {
+        assets.models = self.model_views.clone();
+        assets.editing_text = self.editing_text.clone();
+        let owner = cx.entity().downgrade();
+        assets.begin_text_edit = Some(Arc::new(move |node, window, cx| {
+            let _ = owner.update(cx, |this, cx| this.begin_text_edit(node, window, cx));
+        }));
         self.canvas.update(cx, |v, cx| {
             v.registry = demo_renderers(assets);
             cx.notify();

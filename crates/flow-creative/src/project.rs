@@ -1235,6 +1235,55 @@ mod tests {
     }
 
     #[test]
+    fn styled_text_roundtrips_and_invalid_style_preserves_saved_project() {
+        let home = TestHome::new();
+        let store = home.store();
+        let registry = standard_registry();
+        let mut project = store
+            .create_project("Typography", &FlowDocument::default(), &registry)
+            .unwrap();
+        let mut document = project.document().clone();
+        let data = crate::edit_text_style(
+            &json!({"text":"山野之间\nFind your quiet", "host":{"keep":true}}),
+            |style| {
+                style.font_size = 42.;
+                style.bold = true;
+                style.alignment = crate::TextAlignment::Center;
+            },
+        )
+        .unwrap();
+        document
+            .graph
+            .add_node(
+                registry
+                    .make_node("text", "title", Point::new(42., 64.), Some(data.clone()))
+                    .unwrap(),
+            )
+            .unwrap();
+        project.save_document(&document, &registry).unwrap();
+        let reopened = store
+            .open_project(&project.metadata().id, &registry)
+            .unwrap();
+        assert_eq!(
+            reopened
+                .document()
+                .graph
+                .node(&"title".into())
+                .unwrap()
+                .data,
+            data
+        );
+        let saved = fs::read(project.directory().join(PROJECT_FILE)).unwrap();
+        document.graph.nodes.get_mut(&"title".into()).unwrap().data["style"]["font_size"] =
+            json!(1000);
+        assert!(project.save_document(&document, &registry).is_err());
+        assert_eq!(
+            fs::read(project.directory().join(PROJECT_FILE)).unwrap(),
+            saved
+        );
+    }
+
+    #[test]
     fn rename_commits_latest_canvas_and_invalid_name_keeps_previous_revision() {
         let home = TestHome::new();
         let store = home.store();

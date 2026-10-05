@@ -372,11 +372,14 @@ pub fn standard_registry() -> CreativeRegistry {
     for definition in [
         NodeDefinition::new(
             "text",
-            "文字 / Brief",
-            Size::new(250., 195.),
+            "文字",
+            Size::new(360., 120.),
             vec![Port::output("text", "文字", DataType::String)],
             json!({"text":"让创意从一句话开始"}),
-            |v| text_field(v, "text"),
+            |v| {
+                text_field(v, "text")?;
+                crate::validate_text_style(v)
+            },
         ),
         NodeDefinition::new(
             "image",
