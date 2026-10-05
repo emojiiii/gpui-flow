@@ -23,7 +23,9 @@ type TextEditCallback = Arc<dyn Fn(NodeId, &mut Window, &mut App) + Send + Sync>
 pub struct CreativeAssets {
     paths: BTreeMap<String, PathBuf>,
     dimensions: BTreeMap<String, (u32, u32)>,
+    media_types: BTreeMap<String, String>,
     models: Arc<model_view::ModelViews>,
+    media: Arc<media_view::MediaViews>,
     editing_text: Arc<Mutex<Option<NodeId>>>,
     begin_text_edit: Option<TextEditCallback>,
 }
@@ -79,6 +81,14 @@ impl NodeRenderer for CardRenderer {
         let z = context.zoom;
         let key = node.data["asset"].as_str().unwrap_or("");
         if let Some(path) = self.assets.paths.get(key) {
+            if self
+                .assets
+                .media_types
+                .get(key)
+                .is_some_and(|kind| kind.starts_with("video/") || kind.starts_with("audio/"))
+            {
+                return self.assets.media.render(node, path, context.selected, cx);
+            }
             if matches!(node.kind.as_str(), "model" | "generate_model") {
                 return self.assets.models.render(node, path, cx);
             }
@@ -222,6 +232,8 @@ pub fn demo_renderers(assets: CreativeAssets) -> NodeRegistry {
     for kind in [
         "text",
         "image",
+        "video",
+        "audio",
         "model",
         "compose",
         "generate_image",
@@ -262,6 +274,7 @@ enum Action {
     QuickEdit,
     EditText,
     FinishText,
+    Media(media_view::MediaAction),
     TextSize(f32),
     TextBold,
     TextAlign(TextAlignment),
@@ -326,6 +339,7 @@ pub struct CreativeCanvas {
     show_layers: bool,
     import_model: bool,
     model_views: Arc<model_view::ModelViews>,
+    media_views: Arc<media_view::MediaViews>,
     editing_text: Arc<Mutex<Option<NodeId>>>,
     form_source: Option<(NodeId, String, Value)>,
     deferred_edits: BTreeMap<NodeId, DeferredFormEdit>,
@@ -384,6 +398,7 @@ impl CreativeCanvas {
             match event {
                 FlowEvent::DocumentChanged | FlowEvent::SelectionChanged => {
                     this.model_views.retain(canvas.read(cx).editor.graph());
+                    this.media_views.retain(canvas, cx);
                     // A successful graph edit supersedes an earlier rejection. Selection
                     // alone must not erase an error the user still needs to understand.
                     if matches!(event, FlowEvent::DocumentChanged) {
@@ -464,6 +479,7 @@ impl CreativeCanvas {
             show_layers: false,
             import_model: false,
             model_views: Arc::default(),
+            media_views: Arc::default(),
             editing_text: Arc::default(),
             form_source: None,
             deferred_edits: BTreeMap::new(),
@@ -552,6 +568,12 @@ impl CreativeCanvas {
             self.apply_form_edit(cx);
         }
         let command = match action {
+            Action::Media(action) => {
+                if let Some(node) = self.selected(cx) {
+                    self.media_views.command(&node.id, action, cx);
+                }
+                return;
+            }
             Action::EditText => {
                 if let Some(node) = self.selected(cx).filter(|n| n.kind == "text") {
                     self.begin_text_edit(node.id, window, cx);
@@ -1013,7 +1035,7 @@ fn form_identity(node: &Node) -> (NodeId, String, Value) {
 fn primary_field(node: &Node) -> Option<&'static str> {
     let field = match node.kind.as_str() {
         "text" | "compose" => "text",
-        "image" | "model" => "caption",
+        "image" | "model" | "video" | "audio" => "caption",
         "palette" => "note",
         "generate_image" | "generate_video" | "generate_audio" | "generate_model" => "prompt",
         _ => return None,
@@ -1026,6 +1048,7 @@ fn label(text: impl Into<SharedString>) -> Div {
     div().text_xs().text_color(rgb(theme().muted)).child(text)
 }
 mod chrome;
+mod media_view;
 mod model_view;
 mod project_ui;
 mod text_objects;
@@ -1149,7 +1172,7 @@ impl Render for CreativeCanvas {
             .child(self.icon_button(
                 "tool-import",
                 "upload",
-                "导入本地图片",
+                "导入图片、视频或音频",
                 Action::ImportImage,
                 !editable || self.saving || count >= MAX_CARDS,
                 cx,
@@ -1197,7 +1220,7 @@ impl Render for CreativeCanvas {
                     .child(label("导入本地素材，或在左侧新建生成节点"))
                     .child(self.button(
                         "empty-import",
-                        "＋ 导入本地图片",
+                        "＋ 导入本地素材",
                         Action::ImportImage,
                         self.project.is_none() || self.saving,
                         cx,
@@ -1344,7 +1367,7 @@ impl Render for CreativeCanvas {
                     .child(div().text_sm().child(if self.import_model {
                         "导入已选择的本地 GLB 模型"
                     } else {
-                        "导入已选择的本地图片"
+                        "导入本地图片、视频或音频"
                     }))
                     .child(label("文件选择器不可用时，可粘贴文件的绝对路径"))
                     .child(

@@ -1,5 +1,6 @@
 use crate::{
-    FfmpegTools, MediaController, MediaError, MediaLimits, MediaPlayer, PlaybackOptions, process,
+    FfmpegTools, MediaController, MediaError, MediaLimits, MediaMetadata, MediaPlayer,
+    PlaybackOptions, process,
 };
 use std::{
     path::Path,
@@ -27,6 +28,17 @@ pub struct ToolAvailability {
     pub ffplay: Result<String, MediaError>,
 }
 impl FfmpegBackend {
+    /// Inspect one explicitly selected local file without starting playback.
+    /// This bounded subprocess operation belongs on a background worker.
+    pub fn probe(&self, source: &Path) -> Result<MediaMetadata, MediaError> {
+        let source = crate::probe::source(source, &self.limits)?;
+        crate::probe::probe(
+            &source,
+            &self.tools,
+            &self.limits,
+            &Arc::new(AtomicBool::new(false)),
+        )
+    }
     /// Bounded executable detection. This runs processes; call off the UI thread.
     pub fn availability(&self) -> ToolAvailability {
         let version = |path: &Path| {

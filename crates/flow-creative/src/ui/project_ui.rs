@@ -191,6 +191,9 @@ impl CreativeCanvas {
                     assets
                         .dimensions
                         .insert(asset.key.clone(), (asset.width, asset.height));
+                    assets
+                        .media_types
+                        .insert(asset.key.clone(), asset.media_type.clone());
                 }
             }
         }
@@ -200,6 +203,8 @@ impl CreativeCanvas {
     /// Hosts supplying custom renderers can retain their own registry instead.
     pub fn set_assets(&mut self, mut assets: CreativeAssets, cx: &mut Context<Self>) {
         assets.models = self.model_views.clone();
+        assets.media = self.media_views.clone();
+        self.media_views.set_owner(cx.entity().downgrade());
         assets.editing_text = self.editing_text.clone();
         let owner = cx.entity().downgrade();
         assets.begin_text_edit = Some(Arc::new(move |node, window, cx| {
@@ -311,7 +316,7 @@ impl CreativeCanvas {
                 if self.import_model {
                     "选择本地 GLB · 复制到项目素材目录"
                 } else {
-                    "选择本地图片 · 复制到项目素材目录"
+                    "选择本地图片、视频或音频 · 复制到项目素材目录"
                 }
                 .into(),
             ),
@@ -389,14 +394,22 @@ impl CreativeCanvas {
                             let mut imports = vec![];
                             let mut errors = vec![];
                             for path in paths {
-                                let model_path = if drop_at.is_some() {
-                                    path.extension()
-                                        .is_some_and(|ext| ext.eq_ignore_ascii_case("glb"))
-                                } else {
-                                    is_model
-                                };
+                                let extension = path
+                                    .extension()
+                                    .and_then(|e| e.to_str())
+                                    .unwrap_or_default()
+                                    .to_ascii_lowercase();
+                                let model_path =
+                                    !replace_selection && (is_model || extension == "glb");
+                                let media_path = !replace_selection
+                                    && matches!(
+                                        extension.as_str(),
+                                        "mp4" | "webm" | "wav" | "mp3" | "flac" | "ogg" | "m4a"
+                                    );
                                 match if model_path {
                                     project.import_model(&path)
+                                } else if media_path {
+                                    project.import_media(&path)
                                 } else {
                                     project.import_image(&path)
                                 } {
@@ -427,6 +440,15 @@ impl CreativeCanvas {
                         let imported_count = assets.len();
                         for (index, asset) in assets.into_iter().enumerate() {
                             let is_model = asset.media_type == "model/gltf-binary";
+                            let kind = if is_model {
+                                "model"
+                            } else if asset.media_type.starts_with("video/") {
+                                "video"
+                            } else if asset.media_type.starts_with("audio/") {
+                                "audio"
+                            } else {
+                                "image"
+                            };
                             if let Some(id) = replace.as_ref() {
                                 if let Some(node) =
                                     this.canvas.read(cx).editor.graph().node(id).cloned()
@@ -444,11 +466,10 @@ impl CreativeCanvas {
                                 }
                             } else {
                                 let view = this.canvas.read(cx);
-                                let id = view.editor.graph().fresh_id(&format!(
-                                    "{}-{}",
-                                    if is_model { "model" } else { "image" },
-                                    this.next_id
-                                ));
+                                let id = view
+                                    .editor
+                                    .graph()
+                                    .fresh_id(&format!("{}-{}", kind, this.next_id));
                                 this.next_id += 1;
                                 let position = drop_at
                                     .map(|at| {
@@ -471,7 +492,7 @@ impl CreativeCanvas {
                                         ))
                                     });
                                 if let Ok(mut node) = this.registry.make_node(
-                                    if is_model { "model" } else { "image" },
+                                    kind,
                                     id.clone(),
                                     position,
                                     Some(serde_json::json!({"asset":asset.key,"caption":""})),
@@ -479,6 +500,8 @@ impl CreativeCanvas {
                                     node.title = asset.name;
                                     node.size = if is_model {
                                         WorldSize::new(420., 315.)
+                                    } else if kind == "audio" {
+                                        WorldSize::new(400., 144.)
                                     } else {
                                         imported_image_size(asset.width, asset.height)
                                     };
@@ -497,7 +520,7 @@ impl CreativeCanvas {
                         this.notice = Some(if errors.is_empty() {
                             format!("已导入 {imported_count} 个素材，已复制到本地项目")
                         } else {
-                            format!("已导入 {imported_count} 张；{}", errors.join("；"))
+                            format!("已导入 {imported_count} 个；{}", errors.join("；"))
                         });
                         this.queue_autosave(cx);
                     }

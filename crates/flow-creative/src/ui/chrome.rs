@@ -246,6 +246,19 @@ impl CreativeCanvas {
         let generation = GenerationKind::from_node_kind(&node.kind);
         let model = matches!(node.kind.as_str(), "model" | "generate_model")
             && !node.data["asset"].as_str().unwrap_or_default().is_empty();
+        if matches!(node.kind.as_str(), "video" | "audio") {
+            let p = anchored_panel(bounds, self.canvas_size, WorldSize::new(272., 44.));
+            return div()
+                .occlude()
+                .absolute()
+                .left(px(p.x))
+                .top(px(p.y))
+                .p_1()
+                .rounded(px(10.))
+                .bg(rgb(0xffffff))
+                .shadow_sm()
+                .child(self.media_controls(node, cx));
+        }
         if node.kind == "text" {
             let editing = self.is_editing_text(&node.id);
             let p = anchored_panel(bounds, self.canvas_size, WorldSize::new(112., 32.));
@@ -287,7 +300,11 @@ impl CreativeCanvas {
         }
         let width = if generation.is_some() { 360. } else { 320. };
         let height = if generation.is_some() {
-            170.
+            if self.media_views.snapshot(&node.id, cx).is_some() {
+                210.
+            } else {
+                170.
+            }
         } else if model {
             112.
         } else {
@@ -309,6 +326,9 @@ impl CreativeCanvas {
             .flex()
             .flex_col()
             .gap_1();
+        if generation.is_some() && self.media_views.snapshot(&node.id, cx).is_some() {
+            panel = panel.child(self.media_controls(node, cx));
+        }
         if !model || generation.is_some() {
             panel = panel.child(
                 Textarea::new(&self.form)

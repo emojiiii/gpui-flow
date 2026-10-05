@@ -34,6 +34,8 @@ const MAX_PROJECT_BYTES: u64 = MAX_JSON_BYTES as u64 + 2 * 1024 * 1024;
 const PROJECT_FILE: &str = "project.json";
 static NEXT_NAME: AtomicU64 = AtomicU64::new(0);
 static TRANSACTION: Mutex<()> = Mutex::new(());
+mod media_assets;
+pub use media_assets::{MAX_MEDIA_BYTES, MAX_MEDIA_DURATION_SECONDS, creative_media_backend};
 
 #[derive(Debug)]
 pub enum ProjectError {
@@ -463,6 +465,8 @@ impl LocalProject {
 
     /// Resolve only manifest-owned relative keys. Built-in symbolic resources
     /// belong to the host renderer and are deliberately not filesystem paths.
+    /// Audio/video resolution probes the copied file; use a background worker.
+    /// UI code can use `resolve_asset_path` and let its media player decode later.
     pub fn resolve_asset(&self, key: &str) -> Result<PathBuf, ProjectError> {
         let (path, asset) = self.asset_path(key)?;
         verify_asset(&path, asset)?;
@@ -568,7 +572,21 @@ fn validate_asset_key(key: &str) -> Result<(), ProjectError> {
                     && stem
                         .bytes()
                         .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
-                    && matches!(ext, "png" | "jpg" | "gif" | "webp" | "glb")
+                    && matches!(
+                        ext,
+                        "png"
+                            | "jpg"
+                            | "gif"
+                            | "webp"
+                            | "glb"
+                            | "mp4"
+                            | "webm"
+                            | "wav"
+                            | "mp3"
+                            | "flac"
+                            | "ogg"
+                            | "m4a"
+                    )
             })
     });
     if !valid {
@@ -610,6 +628,8 @@ fn validate_document_assets(
         // or other host cards remain valid; only model cards require real GLB.
         let compatible = match AssetKind::from_media_type(&asset.media_type)? {
             AssetKind::Model => matches!(node.kind.as_str(), "model" | "generate_model"),
+            AssetKind::Video => matches!(node.kind.as_str(), "video" | "generate_video"),
+            AssetKind::Audio => matches!(node.kind.as_str(), "audio" | "generate_audio"),
             AssetKind::Image => !matches!(node.kind.as_str(), "model" | "generate_model"),
         };
         if !compatible {
@@ -680,6 +700,13 @@ fn validate_project(project: &ProjectFile, id: &str) -> Result<(), ProjectError>
             Some("gif") => "image/gif",
             Some("webp") => "image/webp",
             Some("glb") => "model/gltf-binary",
+            Some("mp4") => "video/mp4",
+            Some("webm") => "video/webm",
+            Some("wav") => "audio/wav",
+            Some("mp3") => "audio/mpeg",
+            Some("flac") => "audio/flac",
+            Some("ogg") => "audio/ogg",
+            Some("m4a") => "audio/mp4",
             _ => return Err(ProjectError::Invalid("unsupported asset extension".into())),
         };
         let kind = AssetKind::from_media_type(&asset.media_type)?;
@@ -690,7 +717,13 @@ fn validate_project(project: &ProjectFile, id: &str) -> Result<(), ProjectError>
             return Err(ProjectError::Invalid("invalid asset type or size".into()));
         }
         match kind {
-            AssetKind::Image => validate_dimensions(asset.width, asset.height)?,
+            AssetKind::Image | AssetKind::Video => validate_dimensions(asset.width, asset.height)?,
+            AssetKind::Audio if asset.width != 0 || asset.height != 0 => {
+                return Err(ProjectError::Invalid(
+                    "audio assets must have zero dimensions".into(),
+                ));
+            }
+            AssetKind::Audio => {}
             AssetKind::Model if asset.width != 0 || asset.height != 0 => {
                 return Err(ProjectError::Invalid(
                     "model assets must have zero width and height".into(),
@@ -894,7 +927,10 @@ fn check_asset_file(path: &Path, asset: &ProjectAsset) -> Result<(), ProjectErro
 fn verify_asset(path: &Path, asset: &ProjectAsset) -> Result<(), ProjectError> {
     let kind = AssetKind::from_media_type(&asset.media_type)?;
     let bytes = read_regular(path, kind.max_bytes())?;
-    let info = kind.inspect(&bytes)?;
+    let mut info = kind.inspect(&bytes)?;
+    if matches!(kind, AssetKind::Video | AssetKind::Audio) {
+        media_assets::verify_media(path, &mut info)?;
+    }
     if bytes.len() as u64 != asset.byte_len
         || info.width != asset.width
         || info.height != asset.height
@@ -920,6 +956,8 @@ fn check_assets_on_disk(directory: &Path, assets: &[ProjectAsset]) -> Result<(),
 enum AssetKind {
     Image,
     Model,
+    Video,
+    Audio,
 }
 
 impl AssetKind {
@@ -927,6 +965,10 @@ impl AssetKind {
         match media_type {
             "image/png" | "image/jpeg" | "image/gif" | "image/webp" => Ok(Self::Image),
             "model/gltf-binary" => Ok(Self::Model),
+            "video/mp4" | "video/webm" => Ok(Self::Video),
+            "audio/wav" | "audio/mpeg" | "audio/flac" | "audio/ogg" | "audio/mp4" => {
+                Ok(Self::Audio)
+            }
             _ => Err(ProjectError::Invalid("unsupported asset media type".into())),
         }
     }
@@ -935,6 +977,7 @@ impl AssetKind {
         match self {
             Self::Image => MAX_IMAGE_BYTES,
             Self::Model => MAX_GLB_BYTES as u64,
+            Self::Video | Self::Audio => MAX_MEDIA_BYTES,
         }
     }
 
@@ -942,12 +985,15 @@ impl AssetKind {
         match self {
             Self::Image => "Imported image",
             Self::Model => "Imported model",
+            Self::Video => "Imported video",
+            Self::Audio => "Imported audio",
         }
     }
 
     fn inspect(self, bytes: &[u8]) -> Result<AssetInfo, ProjectError> {
         match self {
             Self::Image => image_info(bytes),
+            Self::Video | Self::Audio => media_assets::media_info(bytes, Some(self)),
             Self::Model => {
                 parse_glb(bytes).map_err(|error| match error {
                     PreviewError::BudgetExceeded(_) => ProjectError::TooLarge(error.to_string()),
@@ -1232,6 +1278,89 @@ mod tests {
         );
         assert_eq!(reopened.document(), &document);
         assert_eq!(reopened.assets(), &[asset]);
+    }
+
+    #[test]
+    #[ignore = "requires host-installed ffprobe; validates real copied WAV and rejected import cleanup"]
+    fn local_audio_is_copied_probed_and_reopened_without_original_path() {
+        let home = TestHome::new();
+        let store = home.store();
+        let registry = standard_registry();
+        let mut project = store
+            .create_project("Audio", &FlowDocument::default(), &registry)
+            .unwrap();
+        let source = home.0.join("voice.wav");
+        let samples = 8000u32;
+        let mut wav = Vec::new();
+        wav.extend(b"RIFF");
+        wav.extend((36 + samples * 2).to_le_bytes());
+        wav.extend(b"WAVEfmt ");
+        wav.extend(16u32.to_le_bytes());
+        wav.extend(1u16.to_le_bytes());
+        wav.extend(1u16.to_le_bytes());
+        wav.extend(8000u32.to_le_bytes());
+        wav.extend(16000u32.to_le_bytes());
+        wav.extend(2u16.to_le_bytes());
+        wav.extend(16u16.to_le_bytes());
+        wav.extend(b"data");
+        wav.extend((samples * 2).to_le_bytes());
+        wav.resize(44 + samples as usize * 2, 0);
+        fs::write(&source, &wav).unwrap();
+        let asset = project.import_media(&source).unwrap();
+        assert_eq!(asset.media_type, "audio/wav");
+        let mut document = project.document().clone();
+        document
+            .graph
+            .add_node(
+                registry
+                    .make_node(
+                        "audio",
+                        "voice",
+                        Point::ZERO,
+                        Some(json!({"asset":asset.key,"caption":"Local audio"})),
+                    )
+                    .unwrap(),
+            )
+            .unwrap();
+        project.save_document(&document, &registry).unwrap();
+        fs::remove_file(source).unwrap();
+        let reopened = store
+            .open_project(&project.metadata().id, &registry)
+            .unwrap();
+        assert_eq!(
+            fs::read(reopened.resolve_asset(&asset.key).unwrap()).unwrap(),
+            wav
+        );
+        let previous = fs::read(project.directory().join(PROJECT_FILE)).unwrap();
+        let asset_count = fs::read_dir(project.directory().join("assets"))
+            .unwrap()
+            .count();
+        let corrupt = home.0.join("broken.wav");
+        fs::write(&corrupt, b"RIFF\0\0\0\0WAVEbroken").unwrap();
+        assert!(project.import_media(&corrupt).is_err());
+        assert_eq!(
+            fs::read(project.directory().join(PROJECT_FILE)).unwrap(),
+            previous
+        );
+        assert_eq!(
+            fs::read_dir(project.directory().join("assets"))
+                .unwrap()
+                .count(),
+            asset_count
+        );
+        document.graph.nodes.insert(
+            "voice".into(),
+            registry
+                .make_node(
+                    "video",
+                    "voice",
+                    Point::ZERO,
+                    Some(json!({"asset":asset.key,"caption":"wrong type"})),
+                )
+                .unwrap(),
+        );
+        assert!(registry.validate_document(&document).is_ok());
+        assert!(project.validate_document(&document, &registry).is_err());
     }
 
     #[test]

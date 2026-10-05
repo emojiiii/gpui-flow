@@ -2493,6 +2493,7 @@ dependencies = [
  "gpui-flow",
  "gpui-flow-core",
  "gpui-flow-interaction",
+ "gpui-flow-media",
  "gpui-kit",
  "image",
  "serde",

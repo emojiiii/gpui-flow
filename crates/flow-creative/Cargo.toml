@@ -11,6 +11,7 @@ desktop = ["dep:gpui", "dep:gpui-kit", "dep:gpui-flow", "dep:image"]
 [dependencies]
 gpui-flow-core.workspace = true
 gpui-flow-interaction.workspace = true
+gpui-flow-media.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 gltf = { version = "=1.4.1", default-features = false, features = ["utils"] }

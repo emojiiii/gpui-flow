@@ -393,6 +393,36 @@ pub fn standard_registry() -> CreativeRegistry {
             },
         ),
         NodeDefinition::new(
+            "video",
+            "本地视频",
+            Size::new(480., 270.),
+            vec![Port::output(
+                "video",
+                "视频",
+                DataType::Named("video".into()),
+            )],
+            json!({"asset":"","caption":""}),
+            |v| {
+                text_field(v, "asset")?;
+                text_field(v, "caption")
+            },
+        ),
+        NodeDefinition::new(
+            "audio",
+            "本地音频",
+            Size::new(400., 144.),
+            vec![Port::output(
+                "audio",
+                "音频",
+                DataType::Named("audio".into()),
+            )],
+            json!({"asset":"","caption":""}),
+            |v| {
+                text_field(v, "asset")?;
+                text_field(v, "caption")
+            },
+        ),
+        NodeDefinition::new(
             "model",
             "本地 3D 模型",
             Size::new(420., 315.),
