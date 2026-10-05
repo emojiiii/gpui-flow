@@ -246,8 +246,9 @@ impl CreativeCanvas {
         let generation = GenerationKind::from_node_kind(&node.kind);
         let model = matches!(node.kind.as_str(), "model" | "generate_model")
             && !node.data["asset"].as_str().unwrap_or_default().is_empty();
+        let size = self.composer_size(node, cx);
+        let p = anchored_panel(bounds, self.canvas_size, size);
         if matches!(node.kind.as_str(), "video" | "audio") {
-            let p = anchored_panel(bounds, self.canvas_size, WorldSize::new(272., 44.));
             return div()
                 .occlude()
                 .absolute()
@@ -261,7 +262,6 @@ impl CreativeCanvas {
         }
         if node.kind == "text" {
             let editing = self.is_editing_text(&node.id);
-            let p = anchored_panel(bounds, self.canvas_size, WorldSize::new(112., 32.));
             return div()
                 .occlude()
                 .absolute()
@@ -287,7 +287,6 @@ impl CreativeCanvas {
                 ));
         }
         if node.kind == "image" && !self.quick_edit {
-            let p = anchored_panel(bounds, self.canvas_size, WorldSize::new(104., 32.));
             return div()
                 .occlude()
                 .absolute()
@@ -298,28 +297,14 @@ impl CreativeCanvas {
                 .shadow_sm()
                 .child(self.button("quick-edit", "添加描述", Action::QuickEdit, !editable, cx));
         }
-        let width = if generation.is_some() { 360. } else { 320. };
-        let height = if generation.is_some() {
-            if self.media_views.snapshot(&node.id, cx).is_some() {
-                210.
-            } else {
-                170.
-            }
-        } else if model {
-            112.
-        } else {
-            104.
-        };
         let has_reference_input =
             generation.is_some() && crate::references::accepts_image_reference(node);
-        let height = height + if has_reference_input { 56. } else { 0. };
-        let p = anchored_panel(bounds, self.canvas_size, WorldSize::new(width, height));
         let mut panel = div()
             .occlude()
             .absolute()
             .left(px(p.x))
             .top(px(p.y))
-            .w(px(width))
+            .w(px(size.width))
             .p_2()
             .rounded(px(12.))
             .bg(rgb(0xffffff))

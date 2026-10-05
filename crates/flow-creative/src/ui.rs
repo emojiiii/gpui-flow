@@ -1155,6 +1155,7 @@ mod media_view;
 mod model_view;
 mod project_ui;
 mod reference_ui;
+mod selection_toolbar;
 mod text_objects;
 mod workbench;
 pub use workbench::CreativeWorkbench;
@@ -1347,18 +1348,27 @@ impl Render for CreativeCanvas {
             }
             let toolbar_width = match node.kind.as_str() {
                 "image" => 334.,
-                "text" => 410.,
+                "text" => 456.,
                 _ => 184.,
             };
-            let toolbar_left = (r.center().x - toolbar_width / 2.)
-                .clamp(78., (self.canvas_size.width - toolbar_width - 12.).max(78.));
-            let toolbar_top = (r.origin.y - 68.).max(62.);
+            let composer_size = self.composer_size(node, cx);
+            let composer_bounds = gpui_flow_core::Rect::new(
+                anchored_panel(r, self.canvas_size, composer_size),
+                composer_size,
+            );
+            let toolbar_at = selection_toolbar::toolbar_avoiding_composer(
+                r,
+                self.canvas_size,
+                toolbar_width,
+                composer_bounds,
+            );
             surface = surface
                 .child(
                     self.object_toolbar(node, editable, cx)
                         .absolute()
-                        .left(px(toolbar_left))
-                        .top(px(toolbar_top)),
+                        .w(px(toolbar_width))
+                        .left(px(toolbar_at.x))
+                        .top(px(toolbar_at.y)),
                 )
                 .child(self.object_composer(node, r, editable, cx));
             if self.show_colors {
@@ -1444,21 +1454,12 @@ impl Render for CreativeCanvas {
                 .node_bounds(selection.nodes.iter())
         {
             let r = viewport.world_rect_to_screen(bounds);
+            let toolbar_at = selection_toolbar::toolbar_position(r, self.canvas_size, 230.);
             surface = surface.child(
-                div()
+                self.selection_toolbar(selection.nodes.len(), editable, cx)
                     .absolute()
-                    .left(px((r.center().x - 150.).max(90.)))
-                    .top(px((r.origin.y - 58.).max(8.)))
-                    .p_1()
-                    .rounded_lg()
-                    .bg(rgb(t.panel))
-                    .shadow_md()
-                    .flex()
-                    .gap_1()
-                    .child(label(format!("{} 个对象", selection.nodes.len())))
-                    .child(self.button("multi-frame", "分组", Action::Frame, !editable, cx))
-                    .child(self.button("multi-copy", "复制", Action::Duplicate, !editable, cx))
-                    .child(self.button("multi-delete", "删除", Action::Delete, !editable, cx)),
+                    .left(px(toolbar_at.x))
+                    .top(px(toolbar_at.y)),
             );
         }
         if self.show_import_path {
@@ -1686,15 +1687,17 @@ impl Render for CreativeCanvas {
                     .child(self.button("zoom-in", "+", Action::Zoom(1.2), false, cx))
                     .child(self.icon_button("fit", "focus", "适应画布", Action::Fit, false, cx)),
             )
-            .child(
-                div()
-                    .absolute()
-                    .right(px(22.))
-                    .bottom(px(26.))
-                    .text_size(px(10.))
-                    .text_color(rgb(0xb2b7c0))
-                    .child("Space 平移 · Shift 多选"),
-            );
+            .when(selection.nodes.is_empty(), |surface| {
+                surface.child(
+                    div()
+                        .absolute()
+                        .right(px(22.))
+                        .bottom(px(26.))
+                        .text_size(px(10.))
+                        .text_color(rgb(0xb2b7c0))
+                        .child("Space 平移 · Shift 多选"),
+                )
+            });
         if self.show_rename {
             surface = surface.child(
                 div()
