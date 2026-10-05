@@ -134,15 +134,19 @@ pub(crate) fn register_generation_nodes(registry: &mut CreativeRegistry) {
                 kind.node_kind(),
                 kind.title(),
                 Size::new(
-                    320.,
+                    if kind == GenerationKind::Video { 480. } else { 400. },
                     if kind == GenerationKind::Audio {
-                        180.
+                        160.
+                    } else if kind == GenerationKind::Video {
+                        270.
+                    } else if kind == GenerationKind::Image {
+                        400.
                     } else {
-                        280.
+                        300.
                     },
                 ),
                 ports,
-                json!({"prompt":"", "model":"", "status":"idle", "asset":"", "settings":{"aspect_ratio":"1:1","duration_seconds":5}}),
+                json!({"prompt":"", "model":"", "status":"idle", "asset":"", "settings":{"aspect_ratio":if kind == GenerationKind::Video { "16:9" } else { "1:1" },"duration_seconds":5}}),
                 |v| {
                     for key in ["prompt", "model", "status", "asset"] {
                         let text = v

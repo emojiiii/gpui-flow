@@ -211,6 +211,29 @@ impl ProjectStore {
         Ok(listing)
     }
 
+    /// A project-owned image for its home card. The UI decodes it asynchronously.
+    /// This never follows an external document path or a symbolic built-in key.
+    pub fn thumbnail_path(&self, id: &str) -> Result<Option<PathBuf>, ProjectError> {
+        validate_id(id)?;
+        let directory = self.root.join(id);
+        let project = read_project(&directory, id)?;
+        for node in project.document.graph.nodes.values() {
+            let Some(key) = node.data["asset"].as_str() else {
+                continue;
+            };
+            if let Some(asset) = project
+                .assets
+                .iter()
+                .find(|a| a.key == key && a.media_type.starts_with("image/"))
+            {
+                let path = directory.join(&asset.key);
+                check_asset_file(&path, asset)?;
+                return Ok(Some(path));
+            }
+        }
+        Ok(None)
+    }
+
     /// The first complete document is persisted before this returns. Names are
     /// display-only; folder names are generated and cannot escape the home.
     pub fn create_project(
@@ -310,13 +333,29 @@ impl LocalProject {
         document: &FlowDocument,
         registry: &CreativeRegistry,
     ) -> Result<(), ProjectError> {
+        self.save_named_document(document, registry, None)
+    }
+
+    /// Commit a rename and the latest canvas in the same project revision.
+    pub fn save_named_document(
+        &mut self,
+        document: &FlowDocument,
+        registry: &CreativeRegistry,
+        name: Option<&str>,
+    ) -> Result<(), ProjectError> {
         let _transaction = transaction()?;
+        if let Some(name) = name {
+            validate_name(name)?;
+        }
         registry.validate_document(document)?;
         validate_document_assets(document, &self.project.assets)?;
         self.check_revision()?;
         check_assets_on_disk(&self.directory, &self.project.assets)?;
         let mut candidate = self.next_revision()?;
         candidate.document = document.clone();
+        if let Some(name) = name {
+            candidate.metadata.name = name.into();
+        }
         write_project(&self.directory, &candidate)?;
         self.project = candidate;
         Ok(())
@@ -1193,6 +1232,73 @@ mod tests {
         );
         assert_eq!(reopened.document(), &document);
         assert_eq!(reopened.assets(), &[asset]);
+    }
+
+    #[test]
+    fn rename_commits_latest_canvas_and_invalid_name_keeps_previous_revision() {
+        let home = TestHome::new();
+        let store = home.store();
+        let registry = standard_registry();
+        let mut project = store
+            .create_project("Before", &FlowDocument::default(), &registry)
+            .unwrap();
+        let mut doc = project.document().clone();
+        doc.viewport.pan = Point::new(93., -17.);
+        project
+            .save_named_document(&doc, &registry, Some("After"))
+            .unwrap();
+        let reopened = store
+            .open_project(&project.metadata().id, &registry)
+            .unwrap();
+        assert_eq!(reopened.metadata().name, "After");
+        assert_eq!(reopened.document(), &doc);
+        let bytes = fs::read(project.directory().join(PROJECT_FILE)).unwrap();
+        let revision = project.revision();
+        assert!(
+            project
+                .save_named_document(&doc, &registry, Some(""))
+                .is_err()
+        );
+        assert_eq!(project.revision(), revision);
+        assert_eq!(
+            fs::read(project.directory().join(PROJECT_FILE)).unwrap(),
+            bytes
+        );
+    }
+
+    #[test]
+    fn project_thumbnail_uses_referenced_copied_image_and_rejects_missing_asset() {
+        let home = TestHome::new();
+        let store = home.store();
+        let registry = standard_registry();
+        let mut project = store
+            .create_project("Cover", &FlowDocument::default(), &registry)
+            .unwrap();
+        let id = project.metadata().id.clone();
+        assert_eq!(store.thumbnail_path(&id).unwrap(), None);
+        let source = home.0.join("cover.png");
+        fs::write(&source, png()).unwrap();
+        let asset = project.import_image(&source).unwrap();
+        assert_eq!(store.thumbnail_path(&id).unwrap(), None);
+        let mut doc = project.document().clone();
+        doc.graph
+            .add_node(
+                registry
+                    .make_node(
+                        "image",
+                        "cover",
+                        Point::ZERO,
+                        Some(json!({"asset":asset.key,"caption":""})),
+                    )
+                    .unwrap(),
+            )
+            .unwrap();
+        project.save_document(&doc, &registry).unwrap();
+        fs::remove_file(source).unwrap();
+        let copied = project.directory().join(&asset.key);
+        assert_eq!(store.thumbnail_path(&id).unwrap(), Some(copied.clone()));
+        fs::remove_file(copied).unwrap();
+        assert!(store.thumbnail_path(&id).is_err());
     }
 
     #[test]

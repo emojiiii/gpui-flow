@@ -41,6 +41,8 @@ pub struct FlowCanvas {
     file_busy: bool,
     host_persistence: bool,
     selection_on_top: bool,
+    port_labels: bool,
+    pan_mode: bool,
     document_validator: Option<FlowDocumentValidator>,
     focus: FocusHandle,
     space_held: bool,
@@ -86,6 +88,20 @@ impl FlowCanvas {
     /// Optional object-editor presentation; default graph z-order stays unchanged.
     pub fn set_selection_on_top(&mut self, value: bool) {
         self.selection_on_top = value;
+    }
+    /// Compact object editors can keep typed handles without inline labels.
+    pub fn set_port_labels(&mut self, value: bool) {
+        self.port_labels = value;
+    }
+    pub fn pan_mode(&self) -> bool {
+        self.pan_mode
+    }
+    pub fn set_pan_mode(&mut self, value: bool, cx: &mut Context<Self>) {
+        if self.pan_mode != value {
+            self.cancel_interaction(cx);
+            self.pan_mode = value;
+            cx.notify();
+        }
     }
     /// Latest interaction/persistence message for host-owned editor shells.
     pub fn status_message(&self) -> &str {
@@ -152,6 +168,8 @@ impl FlowCanvas {
             file_busy: false,
             host_persistence: false,
             selection_on_top: false,
+            port_labels: true,
+            pan_mode: false,
             document_validator: None,
             focus: cx.focus_handle(),
             space_held: false,

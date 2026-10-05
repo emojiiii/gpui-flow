@@ -6,6 +6,7 @@ use gpui_flow::{
 };
 use gpui_flow_core::{FlowDocument, Node, NodeId, Point as WorldPoint, Size as WorldSize};
 use gpui_flow_interaction::{CanvasCommand, SelectionMode};
+use gpui_kit::base::Button;
 use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
 use serde_json::Value;
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
@@ -14,6 +15,7 @@ use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 #[derive(Clone, Default)]
 pub struct CreativeAssets {
     paths: BTreeMap<String, PathBuf>,
+    dimensions: BTreeMap<String, (u32, u32)>,
     models: Arc<model_view::ModelViews>,
 }
 impl CreativeAssets {
@@ -37,6 +39,21 @@ struct CardRenderer {
     assets: Arc<CreativeAssets>,
 }
 impl NodeRenderer for CardRenderer {
+    fn object_caption(&self, node: &Node) -> Option<SharedString> {
+        if node.kind == "text" {
+            return Some("".into());
+        }
+        if let Some((width, height)) = node.data["asset"]
+            .as_str()
+            .and_then(|key| self.assets.dimensions.get(key))
+            && *width > 0
+            && *height > 0
+        {
+            Some(format!("{}   {} × {}", node.title, width, height).into())
+        } else {
+            Some(node.title.clone().into())
+        }
+    }
     fn full_bleed(&self) -> bool {
         true
     }
@@ -90,20 +107,19 @@ impl NodeRenderer for CardRenderer {
                 .child(node.data["text"].as_str().unwrap_or("").to_string())
                 .into_any_element();
         }
-        let (symbol, title, hint, background) = match node.kind.as_str() {
-            "generate_image" => ("▧", "图片生成", "选择节点，写下你的画面", 0xeaf0fc),
-            "generate_video" => ("▷", "视频生成", "从一个镜头开始", 0xfff1e9),
-            "generate_audio" => ("♫", "音频生成", "声音、音乐与独立音效", 0xe7f5f0),
-            "generate_model" => ("◇", "3D 模型生成", "描述形状、材质与风格", 0xeeeefa),
-            "model" => ("◇", "导入本地 GLB", "CPU 静态几何预览", 0xeeeefa),
-            _ => ("▧", "导入本地图片", "PNG · JPG · GIF · WebP", 0xf0f1f4),
+        let (symbol, background) = match node.kind.as_str() {
+            "generate_image" => ("image", 0xeaf0f8),
+            "generate_video" => ("video", 0xeef0f5),
+            "generate_audio" => ("music", 0xf3eff8),
+            "generate_model" | "model" => ("box", 0xecf2f1),
+            _ => ("image", 0xf0f1f4),
         };
         let status = match node.data["status"].as_str() {
-            Some("queued") => "已交给宿主排队",
-            Some("running") => "宿主正在生成",
-            Some("failed") => "生成失败，详情见宿主",
-            Some("complete") => "宿主已完成，等待可预览素材",
-            _ => hint,
+            Some("queued") => Some("等待生成"),
+            Some("running") => Some("正在生成…"),
+            Some("failed") => Some("生成失败"),
+            Some("complete") => Some("等待宿主提供素材"),
+            _ => None,
         };
         div()
             .size_full()
@@ -112,25 +128,16 @@ impl NodeRenderer for CardRenderer {
             .flex_col()
             .items_center()
             .justify_center()
-            .gap(px(10. * z))
-            .child(
-                div()
-                    .text_size(px(44. * z))
-                    .text_color(rgb(0x8a94ab))
-                    .child(symbol),
-            )
-            .child(
-                div()
-                    .text_size(px(16. * z))
-                    .text_color(rgb(0x697184))
-                    .child(title),
-            )
-            .child(
-                div()
-                    .text_size(px(11. * z))
-                    .text_color(rgb(0x8e95a2))
-                    .child(status),
-            )
+            .gap_3()
+            .child(chrome::icon(symbol, 38. * z).text_color(rgb(0xb8c9df)))
+            .when_some(status, |body, status| {
+                body.child(
+                    div()
+                        .text_size(px(11. * z))
+                        .text_color(rgb(0x8c96a6))
+                        .child(status),
+                )
+            })
             .into_any_element()
     }
 }
@@ -207,8 +214,16 @@ fn theme() -> FlowTheme {
 #[derive(Clone)]
 enum Action {
     Home,
+    RenameProject,
+    ConfirmRename,
     ImportImage,
     ImportModel,
+    PanTool(bool),
+    QuickEdit,
+    UseReference,
+    OriginalRatio,
+    Layers,
+    SelectObject(NodeId),
     ReplaceImage,
     ImportImagePath,
     CloseImportPath,
@@ -235,7 +250,6 @@ enum Action {
     Records,
     Import,
     Apply,
-    Cancel,
     Save,
     Open,
 }
@@ -243,6 +257,11 @@ enum Action {
 enum JsonMode {
     Document,
     Records,
+}
+type FormIdentity = (NodeId, String, Value);
+struct DeferredFormEdit {
+    source: FormIdentity,
+    text: String,
 }
 
 /// Reusable host shell. It embeds one FlowCanvas and the existing editor/ports/history.
@@ -254,13 +273,20 @@ pub struct CreativeCanvas {
     json: Entity<TextareaState>,
     custom_color: Entity<TextareaState>,
     local_path: Entity<TextareaState>,
+    project_name_input: Entity<TextareaState>,
+    show_rename: bool,
+    pending_project_name: Option<String>,
     show_import_path: bool,
+    quick_edit: bool,
+    show_layers: bool,
     import_model: bool,
     model_views: Arc<model_view::ModelViews>,
     form_source: Option<(NodeId, String, Value)>,
+    deferred_edits: BTreeMap<NodeId, DeferredFormEdit>,
     show_data: bool,
     json_mode: JsonMode,
     canvas_size: WorldSize,
+    canvas_origin: WorldPoint,
     next_id: u64,
     notice: Option<String>,
     trace: bool,
@@ -303,6 +329,7 @@ impl CreativeCanvas {
             view.options.show_minimap = false;
             view.show_grid = false;
             view.set_selection_on_top(true);
+            view.set_port_labels(false);
             view.install_plugin(CreativeGuard(guard), cx)
                 .expect("unique guard id");
             view
@@ -314,7 +341,7 @@ impl CreativeCanvas {
                     // A successful graph edit supersedes an earlier rejection. Selection
                     // alone must not erase an error the user still needs to understand.
                     if matches!(event, FlowEvent::DocumentChanged) {
-                        this.notice = Some("画布已更新".into());
+                        this.notice = None;
                     }
                     // Events can be queued after both the document and selection
                     // changed. Commit the old draft before rendering a new form.
@@ -379,13 +406,24 @@ impl CreativeCanvas {
                     .placeholder("本地素材绝对路径")
                     .context_menu(false)
             }),
+            project_name_input: cx.new(|cx| {
+                TextareaState::new(window, cx)
+                    .placeholder("项目名称")
+                    .context_menu(false)
+            }),
+            show_rename: false,
+            pending_project_name: None,
             show_import_path: false,
+            quick_edit: false,
+            show_layers: false,
             import_model: false,
             model_views: Arc::default(),
             form_source: None,
+            deferred_edits: BTreeMap::new(),
             show_data: false,
             json_mode: JsonMode::Document,
             canvas_size: WorldSize::new(780., 700.),
+            canvas_origin: WorldPoint::ZERO,
             next_id: 1,
             notice: Some("拖动端口连接：仅同类型 Output → Input；没有模型调用".into()),
             trace: std::env::args().any(|a| a == "--trace"),
@@ -427,6 +465,10 @@ impl CreativeCanvas {
         if source == self.form_source {
             return;
         }
+        if source.as_ref().map(|s| &s.0) != self.form_source.as_ref().map(|s| &s.0) {
+            self.quick_edit = false;
+            self.show_colors = false;
+        }
         self.form_source = source;
         let value = node
             .as_ref()
@@ -446,9 +488,12 @@ impl CreativeCanvas {
             .canvas
             .update(cx, |v, cx| v.execute_command(command, cx));
         self.notice = Some(match &result {
-            Ok(()) => "操作完成".into(),
+            Ok(()) => String::new(),
             Err(e) => e.to_string(),
         });
+        if result.is_ok() {
+            self.notice = None;
+        }
         cx.notify();
         result.is_ok()
     }
@@ -457,6 +502,73 @@ impl CreativeCanvas {
             self.apply_form_edit(cx);
         }
         let command = match action {
+            Action::RenameProject => {
+                if let Some(project) = &self.project {
+                    let name = project.metadata().name.clone();
+                    self.project_name_input
+                        .update(cx, |input, cx| input.set_value(name, window, cx));
+                    self.show_rename = !self.show_rename;
+                    cx.notify();
+                }
+                return;
+            }
+            Action::ConfirmRename => {
+                let name = self.project_name_input.read(cx).value().trim().to_string();
+                if name.is_empty() {
+                    self.notice = Some("请输入项目名称".into());
+                    cx.notify();
+                    return;
+                }
+                self.pending_project_name = Some(name);
+                self.show_rename = false;
+                self.save_project(cx);
+                return;
+            }
+            Action::PanTool(enabled) => {
+                self.canvas
+                    .update(cx, |canvas, cx| canvas.set_pan_mode(enabled, cx));
+                return;
+            }
+            Action::QuickEdit => {
+                self.quick_edit = !self.quick_edit;
+                cx.notify();
+                return;
+            }
+            Action::Layers => {
+                self.show_layers = !self.show_layers;
+                cx.notify();
+                return;
+            }
+            Action::SelectObject(node) => CanvasCommand::SelectNode {
+                node,
+                mode: SelectionMode::Replace,
+            },
+            Action::UseReference => {
+                self.use_image_reference(cx);
+                return;
+            }
+            Action::OriginalRatio => {
+                let Some(node) = self.selected(cx) else {
+                    return;
+                };
+                let Some(asset) = self.project.as_ref().and_then(|p| {
+                    p.assets()
+                        .iter()
+                        .find(|a| Some(a.key.as_str()) == node.data["asset"].as_str())
+                }) else {
+                    return;
+                };
+                if asset.width == 0 || asset.height == 0 {
+                    return;
+                }
+                CanvasCommand::ResizeNode {
+                    node: node.id,
+                    size: WorldSize::new(
+                        node.size.width,
+                        node.size.width * asset.height as f32 / asset.width as f32,
+                    ),
+                }
+            }
             Action::Home => {
                 self.apply_form_edit(cx);
                 self.return_after_save = true;
@@ -528,6 +640,20 @@ impl CreativeCanvas {
                     node.data["settings"] = serde_json::json!({});
                 }
                 node.data["settings"][key] = value;
+                if key == "aspect_ratio"
+                    && matches!(node.kind.as_str(), "generate_image" | "generate_video")
+                {
+                    let long = node.size.width.max(node.size.height).clamp(160., 720.);
+                    node.size = match node.data["settings"][key].as_str() {
+                        Some("16:9") => WorldSize::new(long, long * 9. / 16.),
+                        Some("9:16") => WorldSize::new(long * 9. / 16., long),
+                        _ => WorldSize::new(long, long),
+                    };
+                    let mut graph = self.canvas.read(cx).editor.graph().clone();
+                    graph.nodes.insert(node.id.clone(), node);
+                    self.command(CanvasCommand::ImportGraph(graph), cx);
+                    return;
+                }
                 CanvasCommand::SetNodeData {
                     node: node.id,
                     data: node.data,
@@ -572,8 +698,18 @@ impl CreativeCanvas {
                 cx.notify();
                 return;
             }
-            Action::Undo => CanvasCommand::Undo,
-            Action::Redo => CanvasCommand::Redo,
+            Action::Undo => {
+                self.deferred_edits.clear();
+                self.form_serial += 1;
+                self.form_source = None;
+                CanvasCommand::Undo
+            }
+            Action::Redo => {
+                self.deferred_edits.clear();
+                self.form_serial += 1;
+                self.form_source = None;
+                CanvasCommand::Redo
+            }
             Action::Delete => CanvasCommand::DeleteSelection,
             Action::Frame => CanvasCommand::GroupSelection {
                 title: "Frame / 创作分组".into(),
@@ -604,9 +740,9 @@ impl CreativeCanvas {
                     .map_or(240., |d| d.size.height)
                     * v.editor.viewport.zoom;
                 let composer_height = if GenerationKind::from_node_kind(&kind).is_some() {
-                    286.
+                    170.
                 } else {
-                    146.
+                    104.
                 };
                 let at = v.editor.viewport.screen_to_world(WorldPoint::new(
                     self.canvas_size.width / 2. - 110.,
@@ -727,13 +863,6 @@ impl CreativeCanvas {
                     data: node.data,
                 }
             }
-            Action::Cancel => {
-                self.form_source = None;
-                self.sync_form(window, cx);
-                self.notice = Some("已放弃尚未应用的表单修改".into());
-                cx.notify();
-                return;
-            }
             Action::Save => {
                 self.apply_form_edit(cx);
                 if self.project.is_some() {
@@ -761,20 +890,28 @@ impl CreativeCanvas {
         action: Action,
         disabled: bool,
         cx: &mut Context<Self>,
-    ) -> ControlButton {
-        ControlButton::new(id, label)
-            .theme(theme())
+    ) -> Button {
+        let label: SharedString = label.into();
+        Button::new(id)
+            .accessibility_label(label.clone())
             .disabled(disabled)
+            .h(px(28.))
+            .px_2()
+            .rounded(px(6.))
+            .text_size(px(12.))
+            .text_color(rgb(if disabled { 0xaeb1b7 } else { 0x42464f }))
+            .bg(rgba(0xffffff00))
+            .hover(|s| s.bg(rgb(0xf0f1f3)))
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_any_mouse_down(|_, window, _| window.prevent_default())
+            .child(label)
             .on_click(
                 cx.listener(move |this, _, window, cx| this.action(action.clone(), window, cx)),
             )
     }
 }
 fn action_flushes_form(action: &Action) -> bool {
-    !matches!(
-        action,
-        Action::Apply | Action::Cancel | Action::Undo | Action::Redo
-    )
+    !matches!(action, Action::Apply | Action::Undo | Action::Redo)
 }
 fn form_data_update(node: &Node, source: &(NodeId, String, Value), text: &str) -> Option<Value> {
     if source != &form_identity(node) {
@@ -806,6 +943,7 @@ fn label(text: impl Into<SharedString>) -> Div {
     let text: SharedString = text.into();
     div().text_xs().text_color(rgb(theme().muted)).child(text)
 }
+mod chrome;
 mod model_view;
 mod project_ui;
 mod workbench;
@@ -850,6 +988,7 @@ impl Render for CreativeCanvas {
         };
         let owner = cx.entity().downgrade();
         let mut surface = div()
+            .id("creative-surface")
             .relative()
             .flex_1()
             .min_h_0()
@@ -858,6 +997,8 @@ impl Render for CreativeCanvas {
                 canvas(
                     move |bounds, _, cx| {
                         let _ = owner.update(cx, |this, _| {
+                            this.canvas_origin =
+                                WorldPoint::new(bounds.origin.x.into(), bounds.origin.y.into());
                             this.canvas_size =
                                 WorldSize::new(bounds.size.width.into(), bounds.size.height.into())
                         });
@@ -867,55 +1008,85 @@ impl Render for CreativeCanvas {
                 .absolute()
                 .size_full(),
             )
-            .child(self.canvas.clone());
-        let tools = [
-            ("text", "T", "文字"),
-            ("image", "▧", "图片"),
-            ("model", "◇", "本地3D"),
-            ("generate_image", "A", "图像"),
-            ("generate_video", "▷", "视频"),
-            ("generate_audio", "♫", "音频"),
-            ("generate_model", "3D", "模型"),
-        ];
+            .child(self.canvas.clone())
+            .on_drop(cx.listener(|this, paths: &ExternalPaths, window, cx| {
+                let point = window.mouse_position();
+                let screen =
+                    WorldPoint::new(f32::from(point.x), f32::from(point.y)) - this.canvas_origin;
+                let at = this.canvas.read(cx).editor.viewport.screen_to_world(screen);
+                this.import_dropped_paths(paths.paths().to_vec(), at, cx);
+            }));
+        let pan_mode = self.canvas.read(cx).pan_mode();
         let mut rail = div()
             .occlude()
             .absolute()
             .left(px(18.))
-            .top(px(72.))
-            .w(px(66.))
-            .p_2()
+            .top(px((self.canvas_size.height / 2. - 192.).max(96.)))
+            .w(px(48.))
+            .p(px(6.))
+            .rounded(px(14.))
             .bg(rgb(t.panel))
-            .rounded_xl()
             .shadow_sm()
             .border_1()
-            .border_color(rgb(t.border))
+            .border_color(rgb(0xe9eaed))
             .flex()
             .flex_col()
-            .gap_1();
-        for (kind, symbol, name) in tools {
-            rail = rail
-                .child(self.button(
-                    SharedString::from(format!("tool-{kind}")),
-                    symbol,
-                    if kind == "image" && self.project.is_some() {
-                        Action::ImportImage
-                    } else if kind == "model" && self.project.is_some() {
-                        Action::ImportModel
-                    } else {
-                        Action::Add(kind.into())
-                    },
-                    !editable || count >= MAX_CARDS || self.saving,
+            .items_center()
+            .gap_1()
+            .child(
+                self.icon_button(
+                    "tool-select",
+                    "mouse-pointer-2",
+                    "选择对象",
+                    Action::PanTool(false),
+                    false,
                     cx,
-                ))
-                .child(
-                    div()
-                        .text_size(px(9.))
-                        .text_color(rgb(t.muted))
-                        .text_center()
-                        .child(name),
-                );
+                )
+                .when(!pan_mode, |b| b.bg(rgb(0xeef1f6))),
+            )
+            .child(
+                self.icon_button(
+                    "tool-hand",
+                    "hand",
+                    "移动画布 · 按住空格临时使用",
+                    Action::PanTool(true),
+                    false,
+                    cx,
+                )
+                .when(pan_mode, |b| b.bg(rgb(0xeef1f6))),
+            )
+            .child(div().w(px(24.)).h(px(1.)).my_1().bg(rgb(0xe9eaed)))
+            .child(self.icon_button(
+                "tool-import",
+                "upload",
+                "导入本地图片",
+                Action::ImportImage,
+                !editable || self.saving || count >= MAX_CARDS,
+                cx,
+            ));
+        for (kind, symbol, name) in [
+            ("text", "type", "文字"),
+            ("generate_image", "image", "图片生成"),
+            ("generate_video", "video", "视频生成"),
+            ("generate_audio", "music", "音频生成"),
+            ("generate_model", "box", "3D 模型生成"),
+        ] {
+            rail = rail.child(self.icon_button(
+                SharedString::from(format!("tool-{kind}")),
+                symbol,
+                name,
+                Action::Add(kind.into()),
+                !editable || count >= MAX_CARDS,
+                cx,
+            ));
         }
+        rail = rail
+            .child(div().w(px(24.)).h(px(1.)).my_1().bg(rgb(0xe9eaed)))
+            .child(self.icon_button("tool-layers", "layers", "图层", Action::Layers, false, cx));
         surface = surface.child(rail);
+        if self.show_layers {
+            surface = surface.child(self.layers_panel(cx));
+        }
         if count == 0 {
             surface = surface.child(
                 div()
@@ -929,11 +1100,11 @@ impl Render for CreativeCanvas {
                     .gap_4()
                     .child(
                         div()
-                            .text_size(px(30.))
+                            .text_size(px(22.))
                             .text_color(rgb(0xa1a5af))
-                            .child("你的创意，从这里开始"),
+                            .child("从一张图片开始"),
                     )
-                    .child(label("导入参考图、添加文字，或放入一个生成节点"))
+                    .child(label("导入本地素材，或在左侧新建生成节点"))
                     .child(self.button(
                         "empty-import",
                         "＋ 导入本地图片",
@@ -941,212 +1112,23 @@ impl Render for CreativeCanvas {
                         self.project.is_none() || self.saving,
                         cx,
                     ))
-                    .child(label("所有内容保存在本机 · 不会自动上传或调用模型")),
+                    .child(label("拖放素材到画布，即可开始创作")),
             );
         }
         if let Some(node) = &node {
             let r = viewport.world_rect_to_screen(node.bounds());
-            let toolbar_left = (r.origin.x + r.size.width / 2. - 184.)
-                .clamp(90., (self.canvas_size.width - 380.).max(90.));
-            let toolbar_top = (r.origin.y - 78.).max(8.);
-            let mut toolbar = div()
-                .occlude()
-                .absolute()
-                .left(px(toolbar_left))
-                .top(px(toolbar_top))
-                .p_1()
-                .bg(rgb(t.panel))
-                .rounded_lg()
-                .shadow_md()
-                .border_1()
-                .border_color(rgb(t.border))
-                .flex()
-                .gap_1()
-                .child(self.button("object-copy", "复制", Action::Duplicate, !editable, cx))
-                .child(self.button("object-frame", "分组", Action::Frame, !editable, cx))
-                .child(self.button("object-colors", "端口颜色", Action::Colors, !editable, cx));
-            if node.kind == "image" {
-                toolbar = toolbar.child(self.button(
-                    "object-replace",
-                    "替换图片",
-                    Action::ReplaceImage,
-                    !editable || self.project.is_none() || self.saving,
-                    cx,
-                ));
-            }
-            toolbar =
-                toolbar.child(self.button("object-delete", "删除", Action::Delete, !editable, cx));
-            surface = surface.child(toolbar);
-            let generation = GenerationKind::from_node_kind(&node.kind);
-            let is_model = matches!(node.kind.as_str(), "model" | "generate_model")
-                && !node.data["asset"].as_str().unwrap_or_default().is_empty();
-            let composer_position = anchored_panel(
-                r,
-                self.canvas_size,
-                WorldSize::new(
-                    380.,
-                    if generation.is_some() && is_model {
-                        378.
-                    } else if generation.is_some() {
-                        286.
-                    } else if is_model {
-                        238.
-                    } else {
-                        146.
-                    },
-                ),
-            );
-            let composer_left = composer_position.x;
-            let composer_top = composer_position.y;
-            let mut composer = div()
-                .occlude()
-                .absolute()
-                .left(px(composer_left))
-                .top(px(composer_top))
-                .w(px(380.))
-                .p_3()
-                .rounded_xl()
-                .bg(rgb(t.panel))
-                .border_1()
-                .border_color(rgb(t.border))
-                .shadow_md()
-                .flex()
-                .flex_col()
-                .gap_2()
+            let toolbar_width = if node.kind == "image" { 334. } else { 184. };
+            let toolbar_left = (r.center().x - toolbar_width / 2.)
+                .clamp(78., (self.canvas_size.width - toolbar_width - 12.).max(78.));
+            let toolbar_top = (r.origin.y - 68.).max(62.);
+            surface = surface
                 .child(
-                    Textarea::new(&self.form)
-                        .h(px(if generation.is_some() { 88. } else { 66. }))
-                        .disabled(!editable)
-                        .aria_label(if generation.is_some() {
-                            "生成提示词"
-                        } else {
-                            "节点内容"
-                        }),
-                );
-            if generation.is_some() {
-                let mut parameters = div().flex().items_center().gap_1();
-                if generation != Some(GenerationKind::Audio)
-                    && generation != Some(GenerationKind::Model)
-                {
-                    for ratio in ["1:1", "16:9", "9:16"] {
-                        parameters = parameters.child(self.button(
-                            SharedString::from(format!("ratio-{ratio}")),
-                            ratio,
-                            Action::Setting("aspect_ratio", Value::String(ratio.into())),
-                            !editable,
-                            cx,
-                        ));
-                    }
-                }
-                if generation == Some(GenerationKind::Video)
-                    || generation == Some(GenerationKind::Audio)
-                {
-                    let duration = node.data["settings"]["duration_seconds"]
-                        .as_u64()
-                        .unwrap_or(5);
-                    parameters = parameters.child(self.button(
-                        "duration",
-                        format!("{}s", duration),
-                        Action::Setting(
-                            "duration_seconds",
-                            serde_json::json!(if duration == 5 { 10 } else { 5 }),
-                        ),
-                        !editable,
-                        cx,
-                    ));
-                }
-                composer = composer
-                    .child(parameters)
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .child(label(if self.generation_available {
-                                "宿主模型 · 使用已配置参数"
-                            } else {
-                                "未连接模型 · 仅本地编辑"
-                            }))
-                            .child(self.button(
-                                "generate-selected",
-                                "生成 ↗",
-                                Action::Generate,
-                                !editable || !self.generation_available,
-                                cx,
-                            )),
-                    )
-                    .child(label("先保存提示词；接入宿主后才会发送生成请求"));
-            }
-            if is_model {
-                composer = composer
-                    .child(
-                        div()
-                            .flex()
-                            .gap_1()
-                            .child(self.button(
-                                "model-left",
-                                "↶",
-                                Action::ModelOrbit(-0.3, 0.),
-                                !editable,
-                                cx,
-                            ))
-                            .child(self.button(
-                                "model-right",
-                                "↷",
-                                Action::ModelOrbit(0.3, 0.),
-                                !editable,
-                                cx,
-                            ))
-                            .child(self.button(
-                                "model-up",
-                                "↑",
-                                Action::ModelOrbit(0., 0.2),
-                                !editable,
-                                cx,
-                            ))
-                            .child(self.button(
-                                "model-down",
-                                "↓",
-                                Action::ModelOrbit(0., -0.2),
-                                !editable,
-                                cx,
-                            ))
-                            .child(self.button(
-                                "model-in",
-                                "+",
-                                Action::ModelZoom(0.8),
-                                !editable,
-                                cx,
-                            ))
-                            .child(self.button(
-                                "model-out",
-                                "−",
-                                Action::ModelZoom(1.25),
-                                !editable,
-                                cx,
-                            ))
-                            .child(self.button(
-                                "model-fit",
-                                "复位",
-                                Action::ModelFit,
-                                !editable,
-                                cx,
-                            )),
-                    )
-                    .child(label("按钮旋转/缩放模型；拖动画面移动节点"))
-                    .child(label(
-                        "CPU 静态预览 · 默认/首场景 · 基色/平面光照；无纹理、PBR、顶点色、原始法线、动画或骨骼",
-                    ));
-            }
-            composer = composer.child(
-                div()
-                    .flex()
-                    .gap_2()
-                    .child(self.button("apply-data", "保存内容", Action::Apply, !editable, cx))
-                    .child(self.button("cancel-data", "还原", Action::Cancel, false, cx))
-                    .child(label(format!("{} 个类型端口", node.ports.len()))),
-            );
-            surface = surface.child(composer);
+                    self.object_toolbar(node, editable, cx)
+                        .absolute()
+                        .left(px(toolbar_left))
+                        .top(px(toolbar_top)),
+                )
+                .child(self.object_composer(node, r, editable, cx));
             if self.show_colors {
                 let mut colors = div()
                     .occlude()
@@ -1304,7 +1286,21 @@ impl Render for CreativeCanvas {
                     .flex()
                     .flex_col()
                     .gap_3()
-                    .child(div().text_lg().child("数据与自定义节点"))
+                    .child(div().text_sm().child("项目选项"))
+                    .child(self.button(
+                        "save-project",
+                        "保存项目",
+                        Action::Save,
+                        self.saving || self.importing,
+                        cx,
+                    ))
+                    .child(self.button(
+                        "import-model-option",
+                        "导入本地 GLB",
+                        Action::ImportModel,
+                        self.project.is_none() || !editable || self.saving,
+                        cx,
+                    ))
                     .child(
                         div()
                             .flex()
@@ -1370,40 +1366,145 @@ impl Render for CreativeCanvas {
         surface = surface
             .child(
                 div()
+                    .occlude()
                     .absolute()
                     .left(px(18.))
-                    .bottom(px(18.))
+                    .top(px(16.))
+                    .h(px(38.))
                     .flex()
                     .items_center()
                     .gap_2()
-                    .p_1()
+                    .child(self.icon_button(
+                        "home",
+                        "arrow-left",
+                        "返回项目",
+                        Action::Home,
+                        self.project.is_none() || self.importing,
+                        cx,
+                    ))
+                    .child(self.button(
+                        "project-name",
+                        project_name,
+                        Action::RenameProject,
+                        self.project.is_none() || self.saving || self.importing,
+                        cx,
+                    ))
+                    .child(
+                        div()
+                            .size(px(5.))
+                            .rounded_full()
+                            .bg(rgb(if dirty || self.saving {
+                                0xe3b771
+                            } else {
+                                0x92b3a0
+                            })),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(10.))
+                            .text_color(rgb(0xa6abb4))
+                            .child(save_status),
+                    ),
+            )
+            .child(
+                div()
+                    .occlude()
+                    .absolute()
+                    .right(px(20.))
+                    .top(px(16.))
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .child(self.icon_button("undo", "undo-2", "撤销", Action::Undo, !editable, cx))
+                    .child(self.icon_button("redo", "redo-2", "重做", Action::Redo, !editable, cx))
+                    .child(self.icon_button(
+                        "data-toggle",
+                        "ellipsis",
+                        "项目选项与数据",
+                        Action::Data,
+                        false,
+                        cx,
+                    )),
+            )
+            .child(
+                div()
+                    .occlude()
+                    .absolute()
+                    .left(px(18.))
+                    .bottom(px(18.))
+                    .h(px(34.))
+                    .px_1()
+                    .flex()
+                    .items_center()
+                    .gap_1()
                     .bg(rgb(t.panel))
                     .rounded_lg()
                     .shadow_sm()
                     .child(self.button("zoom-out", "−", Action::Zoom(1. / 1.2), false, cx))
-                    .child(label(format!("{:.0}%", zoom * 100.)))
-                    .child(self.button("zoom-in", "＋", Action::Zoom(1.2), false, cx))
-                    .child(self.button("fit", "适配", Action::Fit, false, cx)),
+                    .child(
+                        div()
+                            .min_w(px(38.))
+                            .text_center()
+                            .text_size(px(11.))
+                            .text_color(rgb(0x7c838f))
+                            .child(format!("{:.0}%", zoom * 100.)),
+                    )
+                    .child(self.button("zoom-in", "+", Action::Zoom(1.2), false, cx))
+                    .child(self.icon_button("fit", "focus", "适应画布", Action::Fit, false, cx)),
             )
             .child(
                 div()
                     .absolute()
                     .right(px(22.))
-                    .bottom(px(24.))
-                    .child(label("Space 拖动画布 · Shift 多选 · 同色端口连接")),
+                    .bottom(px(26.))
+                    .text_size(px(10.))
+                    .text_color(rgb(0xb2b7c0))
+                    .child("Space 平移 · Shift 多选"),
             );
+        if self.show_rename {
+            surface = surface.child(
+                div()
+                    .occlude()
+                    .absolute()
+                    .top(px(62.))
+                    .left(px(58.))
+                    .w(px(280.))
+                    .p_3()
+                    .bg(rgb(0xffffff))
+                    .rounded_lg()
+                    .shadow_md()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .child(
+                        Textarea::new(&self.project_name_input)
+                            .h(px(38.))
+                            .aria_label("项目名称"),
+                    )
+                    .child(self.button(
+                        "confirm-project-name",
+                        "完成",
+                        Action::ConfirmRename,
+                        self.saving || self.importing,
+                        cx,
+                    )),
+            );
+        }
         if let Some(notice) = &self.notice {
             surface = surface.child(
                 div()
+                    .occlude()
                     .absolute()
-                    .top(px(12.))
-                    .left(px(100.))
+                    .right(px(22.))
+                    .bottom(px(66.))
+                    .max_w(px(420.))
                     .px_3()
                     .py_2()
                     .rounded_lg()
-                    .bg(rgb(t.panel))
+                    .bg(rgb(0xffffff))
+                    .shadow_sm()
                     .text_size(px(11.))
-                    .text_color(rgb(t.muted))
+                    .text_color(rgb(0x8b7882))
                     .child(notice.clone()),
             );
         }
@@ -1413,47 +1514,6 @@ impl Render for CreativeCanvas {
             .flex_col()
             .bg(rgb(t.background))
             .text_color(rgb(t.foreground))
-            .child(
-                div()
-                    .h(px(58.))
-                    .px_4()
-                    .flex_shrink_0()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .border_b_1()
-                    .border_color(rgb(t.border))
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_3()
-                            .child(self.button(
-                                "home",
-                                "‹ 项目",
-                                Action::Home,
-                                self.project.is_none() || self.importing,
-                                cx,
-                            ))
-                            .child(div().text_sm().child(project_name))
-                            .child(label(save_status)),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .gap_2()
-                            .child(self.button("undo", "撤销", Action::Undo, !editable, cx))
-                            .child(self.button("redo", "重做", Action::Redo, !editable, cx))
-                            .child(self.button(
-                                "save",
-                                "保存",
-                                Action::Save,
-                                self.saving || self.importing,
-                                cx,
-                            ))
-                            .child(self.button("data-toggle", "数据", Action::Data, false, cx)),
-                    ),
-            )
             .child(surface)
     }
 }
@@ -1508,7 +1568,6 @@ mod tests {
         ] {
             assert!(action_flushes_form(&action));
         }
-        assert!(!action_flushes_form(&Action::Cancel));
         assert!(!action_flushes_form(&Action::Undo));
     }
     #[test]

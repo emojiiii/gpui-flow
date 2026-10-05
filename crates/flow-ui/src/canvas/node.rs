@@ -92,13 +92,18 @@ impl FlowCanvas {
         .selected(selected)
         .theme(theme)
         .color(color)
+        .caption(
+            self.registry
+                .get(&node.kind)
+                .and_then(|r| r.object_caption(node)),
+        )
         .full_bleed(
             self.registry
                 .get(&node.kind)
                 .is_some_and(|r| r.full_bleed()),
         )
         .body(self.node_body(node, window, cx))
-        .header_cursor(if self.interactions.has_capture() {
+        .header_cursor(if self.interactions.has_capture() || self.pan_mode {
             self.canvas_cursor()
         } else if self.interactions.policy().editable
             && self.interactions.is_enabled("drag")
@@ -184,7 +189,7 @@ impl FlowCanvas {
                 )
                 .anchor(anchor * z)
                 .state(state)
-                .show_label(selected || connection.active())
+                .show_label((self.port_labels && selected) || connection.active())
                 .color(graph_port_color(self.editor.graph(), &port.data_type))
                 .theme(theme)
                 .on_connect(cx.listener(

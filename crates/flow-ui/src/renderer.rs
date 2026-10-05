@@ -15,6 +15,11 @@ pub trait NodeRenderer: Send + Sync {
     fn full_bleed(&self) -> bool {
         false
     }
+    /// Override the external media caption. Empty text hides it; None preserves
+    /// the frame's title/geometry caption for existing renderers.
+    fn object_caption(&self, _node: &Node) -> Option<SharedString> {
+        None
+    }
     fn render(
         &self,
         node: &Node,

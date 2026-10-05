@@ -119,31 +119,40 @@ impl FlowCanvas {
     ) {
         cx.stop_propagation();
         window.focus(&self.focus, cx);
-        let pointer =
-            self.native_pointer
-                .down(event, self.local(event.position), hit, self.space_held);
+        let pointer = self.native_pointer.down(
+            event,
+            self.local(event.position),
+            hit,
+            self.space_held || self.pan_mode,
+        );
         self.dispatch_input(input::CanvasEvent::PointerDown(pointer), cx);
     }
     pub(super) fn move_pointer(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
         let position = self.local(event.position);
-        let pointer =
-            self.native_pointer
-                .moved(event, position, self.hit_at(position), self.space_held);
+        let pointer = self.native_pointer.moved(
+            event,
+            position,
+            self.hit_at(position),
+            self.space_held || self.pan_mode,
+        );
         self.dispatch_input(input::CanvasEvent::PointerMove(pointer), cx);
     }
     pub(super) fn pressure_pointer(&mut self, event: &MousePressureEvent, cx: &mut Context<Self>) {
         let position = self.local(event.position);
         let hit = self.hit_at(position);
-        let pointer = self
-            .native_pointer
-            .pressure(event, position, hit, self.space_held);
+        let pointer =
+            self.native_pointer
+                .pressure(event, position, hit, self.space_held || self.pan_mode);
         self.dispatch_input(input::CanvasEvent::PointerMove(pointer), cx);
     }
     pub(super) fn release_pointer(&mut self, event: &MouseUpEvent, cx: &mut Context<Self>) {
         let position = self.local(event.position);
-        let pointer =
-            self.native_pointer
-                .up(event, position, self.hit_at(position), self.space_held);
+        let pointer = self.native_pointer.up(
+            event,
+            position,
+            self.hit_at(position),
+            self.space_held || self.pan_mode,
+        );
         self.dispatch_input(input::CanvasEvent::PointerUp(pointer), cx);
     }
     pub(super) fn cancel_interaction(&mut self, cx: &mut Context<Self>) {
@@ -163,7 +172,7 @@ impl FlowCanvas {
                 position: self.local(event.position),
                 delta,
                 modifiers: input::Modifiers {
-                    space: self.space_held,
+                    space: self.space_held || self.pan_mode,
                     ..modifiers(event.modifiers)
                 },
             },
@@ -192,7 +201,7 @@ impl FlowCanvas {
             input::CanvasEvent::KeyDown {
                 key,
                 modifiers: input::Modifiers {
-                    space: self.space_held,
+                    space: self.space_held || self.pan_mode,
                     ..modifiers(event.keystroke.modifiers)
                 },
             },
@@ -202,6 +211,10 @@ impl FlowCanvas {
     pub(super) fn key_up(&mut self, event: &KeyUpEvent, cx: &mut Context<Self>) {
         if matches!(event.keystroke.key.as_str(), "space" | " ") {
             self.space_held = false;
+            if self.pan_mode {
+                cx.notify();
+                return;
+            }
             self.dispatch_input(
                 input::CanvasEvent::KeyUp {
                     key: input::KeyCode::Space,
@@ -214,7 +227,7 @@ impl FlowCanvas {
     pub(super) fn canvas_cursor(&self) -> CursorStyle {
         match self.interactions.cursor() {
             input::CanvasCursor::Default => {
-                if self.space_held
+                if (self.space_held || self.pan_mode)
                     && self.interactions.is_enabled("pan")
                     && self.interactions.policy().navigation
                 {

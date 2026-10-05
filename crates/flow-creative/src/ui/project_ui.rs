@@ -4,7 +4,7 @@ use std::time::Duration;
 impl CreativeCanvas {
     pub(super) fn close_ready(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         self.apply_form_edit(cx);
-        if self.saving || self.importing {
+        if self.saving || self.importing || !self.deferred_edits.is_empty() {
             self.pending_window_close = Some(window.window_handle());
             self.notice = Some("正在完成本地保存，完成后关闭…".into());
             return false;
@@ -13,15 +13,22 @@ impl CreativeCanvas {
             return true;
         };
         let document = self.canvas.read(cx).editor.document();
-        if self.last_saved_document.as_ref() == Some(&document) {
+        if self.last_saved_document.as_ref() == Some(&document)
+            && self.pending_project_name.is_none()
+        {
             return true;
         }
         // A close request waits for the bounded local write; no detached task can
         // lose the last keystroke after the view has been destroyed.
-        match project.save_document(&document, &self.registry) {
+        match project.save_named_document(
+            &document,
+            &self.registry,
+            self.pending_project_name.as_deref(),
+        ) {
             Ok(()) => {
                 self.project = Some(project);
                 self.last_saved_document = Some(document);
+                self.pending_project_name = None;
                 true
             }
             Err(error) => {
@@ -47,38 +54,67 @@ impl CreativeCanvas {
             let _ = this.update(cx, |this, cx| {
                 if this.form_serial == serial {
                     this.apply_form_edit(cx);
+                    if this.deferred_edits.is_empty()
+                        && (this.return_after_save || this.pending_window_close.is_some())
+                    {
+                        this.save_project(cx);
+                    }
                 }
             });
         })
         .detach();
     }
     pub(super) fn apply_form_edit(&mut self, cx: &mut Context<Self>) {
+        // Selection starts a capture before its change event is delivered. Keep
+        // the old editor's draft independently of the newly selected form.
+        if let Some(source) = self.form_source.clone()
+            && let Some(node) = self.canvas.read(cx).editor.graph().node(&source.0)
+            && source == form_identity(node)
+        {
+            let text = self.form.read(cx).value().to_string();
+            if form_data_update(node, &source, &text).is_some() {
+                self.deferred_edits
+                    .insert(source.0.clone(), DeferredFormEdit { source, text });
+            } else {
+                self.deferred_edits.remove(&source.0);
+            }
+        }
         if !self.canvas.read(cx).is_editable() {
             return;
         }
-        let Some(source) = self.form_source.clone() else {
-            return;
-        };
-        let id = source.0.clone();
-        let Some(mut node) = self.canvas.read(cx).editor.graph().node(&id).cloned() else {
-            return;
-        };
-        let value = self.form.read(cx).value();
-        let Some(data) = form_data_update(&node, &source, &value) else {
-            return;
-        };
-        node.data = data;
-        if self.registry.validate_node(&node).is_err() {
+        if self.canvas.read(cx).interactions.has_capture()
+            || self.canvas.read(cx).editor.transaction_active()
+        {
+            if !self.deferred_edits.is_empty() {
+                self.queue_form_edit(cx);
+            }
             return;
         }
-        self.form_source = Some(form_identity(&node));
-        self.command(
-            CanvasCommand::SetNodeData {
-                node: id,
-                data: node.data,
-            },
-            cx,
-        );
+        let edits = std::mem::take(&mut self.deferred_edits);
+        for (id, draft) in edits {
+            let Some(mut node) = self.canvas.read(cx).editor.graph().node(&id).cloned() else {
+                continue;
+            };
+            let Some(data) = form_data_update(&node, &draft.source, &draft.text) else {
+                continue;
+            };
+            node.data = data;
+            if let Err(error) = self.registry.validate_node(&node) {
+                self.notice = Some(format!("内容暂未保存：{error}"));
+                continue;
+            }
+            let identity = form_identity(&node);
+            if self.command(
+                CanvasCommand::SetNodeData {
+                    node: id,
+                    data: node.data,
+                },
+                cx,
+            ) && self.form_source.as_ref() == Some(&draft.source)
+            {
+                self.form_source = Some(identity);
+            }
+        }
     }
 
     /// Bind a project after constructing this view from `project.document()`.
@@ -153,6 +189,9 @@ impl CreativeCanvas {
             for asset in project.assets() {
                 if let Ok(path) = project.resolve_asset_path(&asset.key) {
                     assets.register(&asset.key, path);
+                    assets
+                        .dimensions
+                        .insert(asset.key.clone(), (asset.width, asset.height));
                 }
             }
         }
@@ -180,6 +219,10 @@ impl CreativeCanvas {
         .detach();
     }
     pub(super) fn save_project(&mut self, cx: &mut Context<Self>) {
+        if !self.deferred_edits.is_empty() {
+            self.queue_form_edit(cx);
+            return;
+        }
         if self.saving || self.importing {
             return;
         }
@@ -187,7 +230,9 @@ impl CreativeCanvas {
             return;
         };
         let document = self.canvas.read(cx).editor.document();
-        if self.last_saved_document.as_ref() == Some(&document) {
+        if self.last_saved_document.as_ref() == Some(&document)
+            && self.pending_project_name.is_none()
+        {
             if self.return_after_save {
                 self.return_after_save = false;
                 cx.emit(CreativeEvent::BackToProjects);
@@ -196,25 +241,36 @@ impl CreativeCanvas {
             return;
         }
         let registry = self.registry.clone();
+        let requested_name = self.pending_project_name.clone();
         self.saving = true;
         let saved = document.clone();
         cx.notify();
         cx.spawn(async move |this, cx| {
+            let name = requested_name.clone();
             let result = cx
                 .background_executor()
-                .spawn(async move { project.save_document(&document, &registry).map(|_| project) })
+                .spawn(async move {
+                    project
+                        .save_named_document(&document, &registry, name.as_deref())
+                        .map(|_| project)
+                })
                 .await;
             let _ = this.update(cx, |this, cx| {
                 this.saving = false;
                 match result {
                     Ok(project) => {
                         this.project = Some(project);
+                        if this.pending_project_name == requested_name {
+                            this.pending_project_name = None;
+                        }
                         this.last_saved_document = Some(saved);
                         // A user may type while the background write is running.
                         // Include that draft before deciding it is safe to leave.
                         this.apply_form_edit(cx);
                         if this.last_saved_document.as_ref()
                             != Some(&this.canvas.read(cx).editor.document())
+                            || this.pending_project_name.is_some()
+                            || !this.deferred_edits.is_empty()
                         {
                             this.queue_autosave(cx);
                         } else {
@@ -252,6 +308,7 @@ impl CreativeCanvas {
         });
         self.import_image_request(
             replace_selection,
+            None,
             async move {
                 match dialog.await {
                     Ok(Ok(paths)) => Ok(paths),
@@ -270,11 +327,25 @@ impl CreativeCanvas {
             cx.notify();
             return;
         }
-        self.import_image_request(false, std::future::ready(Ok(Some(vec![path]))), cx);
+        self.import_image_request(false, None, std::future::ready(Ok(Some(vec![path]))), cx);
+    }
+    pub(super) fn import_dropped_paths(
+        &mut self,
+        paths: Vec<PathBuf>,
+        at: WorldPoint,
+        cx: &mut Context<Self>,
+    ) {
+        if paths.len() > MAX_CARDS.saturating_sub(self.canvas.read(cx).editor.graph().nodes.len()) {
+            self.notice = Some("画布对象数量已达上限，请减少本次导入数量".into());
+            cx.notify();
+            return;
+        }
+        self.import_image_request(false, Some(at), std::future::ready(Ok(Some(paths))), cx);
     }
     fn import_image_request(
         &mut self,
         replace_selection: bool,
+        drop_at: Option<WorldPoint>,
         paths: impl std::future::Future<Output = Result<Option<Vec<PathBuf>>, String>> + 'static,
         cx: &mut Context<Self>,
     ) {
@@ -308,7 +379,13 @@ impl CreativeCanvas {
                             let mut imports = vec![];
                             let mut errors = vec![];
                             for path in paths {
-                                match if is_model {
+                                let model_path = if drop_at.is_some() {
+                                    path.extension()
+                                        .is_some_and(|ext| ext.eq_ignore_ascii_case("glb"))
+                                } else {
+                                    is_model
+                                };
+                                match if model_path {
                                     project.import_model(&path)
                                 } else {
                                     project.import_image(&path)
@@ -339,6 +416,7 @@ impl CreativeCanvas {
                         let replace = if assets.len() == 1 { replacement } else { None };
                         let imported_count = assets.len();
                         for (index, asset) in assets.into_iter().enumerate() {
+                            let is_model = asset.media_type == "model/gltf-binary";
                             if let Some(id) = replace.as_ref() {
                                 if let Some(node) =
                                     this.canvas.read(cx).editor.graph().node(id).cloned()
@@ -362,27 +440,31 @@ impl CreativeCanvas {
                                     this.next_id
                                 ));
                                 this.next_id += 1;
-                                let position =
-                                    view.editor.viewport.screen_to_world(WorldPoint::new(
-                                        this.canvas_size.width / 2. - 180. + index as f32 * 28.,
-                                        if is_model {
-                                            ((this.canvas_size.height
-                                                - 315. * view.editor.viewport.zoom
-                                                - 250.)
-                                                / 2.)
-                                                .max(96.)
-                                                + index as f32 * 28.
-                                        } else {
-                                            this.canvas_size.height / 2. - 160. + index as f32 * 28.
-                                        },
-                                    ));
+                                let position = drop_at
+                                    .map(|at| {
+                                        at + WorldPoint::new(index as f32 * 28., index as f32 * 28.)
+                                    })
+                                    .unwrap_or_else(|| {
+                                        view.editor.viewport.screen_to_world(WorldPoint::new(
+                                            this.canvas_size.width / 2. - 180. + index as f32 * 28.,
+                                            if is_model {
+                                                ((this.canvas_size.height
+                                                    - 315. * view.editor.viewport.zoom
+                                                    - 250.)
+                                                    / 2.)
+                                                    .max(96.)
+                                                    + index as f32 * 28.
+                                            } else {
+                                                this.canvas_size.height / 2. - 160.
+                                                    + index as f32 * 28.
+                                            },
+                                        ))
+                                    });
                                 if let Ok(mut node) = this.registry.make_node(
                                     if is_model { "model" } else { "image" },
                                     id.clone(),
                                     position,
-                                    Some(
-                                        serde_json::json!({"asset":asset.key,"caption":asset.name}),
-                                    ),
+                                    Some(serde_json::json!({"asset":asset.key,"caption":""})),
                                 ) {
                                     node.title = asset.name;
                                     node.size = if is_model {

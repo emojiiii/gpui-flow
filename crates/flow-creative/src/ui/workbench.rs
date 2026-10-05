@@ -4,6 +4,7 @@ use super::*;
 pub struct CreativeWorkbench {
     store: Option<ProjectStore>,
     projects: Vec<ProjectSummary>,
+    thumbnails: BTreeMap<String, PathBuf>,
     name: Entity<TextareaState>,
     current: Option<Entity<CreativeCanvas>>,
     current_subscription: Option<Subscription>,
@@ -19,6 +20,7 @@ impl CreativeWorkbench {
         let mut this = Self {
             store,
             projects: vec![],
+            thumbnails: BTreeMap::new(),
             name: cx.new(|cx| {
                 TextareaState::new(window, cx)
                     .placeholder("项目名称，例如：秋日品牌提案")
@@ -49,12 +51,28 @@ impl CreativeWorkbench {
         cx.spawn(async move |this, cx| {
             let result = cx
                 .background_executor()
-                .spawn(async move { store.list_projects() })
+                .spawn(async move {
+                    let listing = store.list_projects()?;
+                    let thumbnails = listing
+                        .projects
+                        .iter()
+                        .take(48)
+                        .filter_map(|project| {
+                            store
+                                .thumbnail_path(&project.metadata.id)
+                                .ok()
+                                .flatten()
+                                .map(|path| (project.metadata.id.clone(), path))
+                        })
+                        .collect::<BTreeMap<_, _>>();
+                    Ok::<_, ProjectError>((listing, thumbnails))
+                })
                 .await;
             let _ = this.update(cx, |this, cx| {
                 match result {
-                    Ok(listing) => {
+                    Ok((listing, thumbnails)) => {
                         this.projects = listing.projects;
+                        this.thumbnails = thumbnails;
                         if !listing.skipped.is_empty() {
                             this.notice = Some(format!(
                                 "有 {} 个项目无法读取，已保留原文件",
@@ -109,7 +127,11 @@ impl CreativeWorkbench {
         };
         let result = store.create_project(name, &FlowDocument::default(), &standard_registry());
         match result {
-            Ok(project) => self.activate(project, window, cx),
+            Ok(project) => {
+                self.name
+                    .update(cx, |input, cx| input.set_value("", window, cx));
+                self.activate(project, window, cx);
+            }
             Err(error) => {
                 self.notice = Some(error.to_string());
                 cx.notify();
@@ -156,11 +178,12 @@ impl Render for CreativeWorkbench {
         for project in &self.projects {
             let id = project.metadata.id.clone();
             let name = project.metadata.name.clone();
+            let thumbnail = self.thumbnails.get(&id).cloned();
             projects = projects.child(
                 div()
                     .id(SharedString::from(format!("project-{id}")))
-                    .w(px(260.))
-                    .h(px(204.))
+                    .w(px(268.))
+                    .h(px(220.))
                     .rounded_xl()
                     .border_1()
                     .border_color(rgb(t.border))
@@ -171,17 +194,29 @@ impl Render for CreativeWorkbench {
                     .on_click(cx.listener(move |this, _, window, cx| this.open(&id, window, cx)))
                     .child(
                         div()
-                            .h(px(132.))
+                            .h(px(156.))
                             .bg(rgb(0xebedf3))
                             .flex()
                             .items_center()
                             .justify_center()
-                            .child(
-                                div()
-                                    .text_size(px(34.))
-                                    .text_color(rgb(0xb0b6c5))
-                                    .child("▧"),
-                            ),
+                            .when_some(thumbnail.clone(), |cover, path| {
+                                cover.child(
+                                    img(path)
+                                        .size_full()
+                                        .object_fit(ObjectFit::Cover)
+                                        .with_fallback(|| {
+                                            div().size_full().bg(rgb(0xebedf3)).into_any_element()
+                                        }),
+                                )
+                            })
+                            .when(thumbnail.is_none(), |cover| {
+                                cover.child(
+                                    div()
+                                        .text_size(px(24.))
+                                        .text_color(rgb(0xb0b6c5))
+                                        .child(chrome::icon("layers", 24.)),
+                                )
+                            }),
                     )
                     .child(
                         div()
@@ -202,20 +237,98 @@ impl Render for CreativeWorkbench {
                 "还没有项目。新建后，画布与导入的素材会自动保存在本机。",
             )));
         }
-        let mut root=div().size_full().bg(rgb(t.background)).text_color(rgb(t.foreground)).flex().flex_col()
-            .child(div().h(px(72.)).px_8().flex().items_center().justify_between().border_b_1().border_color(rgb(t.border))
-                .child(div().text_size(px(20.)).child("Flow Creative"))
-                .child(div().px_3().py_1().rounded_full().bg(rgb(0xeaf0eb)).text_size(px(11.)).text_color(rgb(0x538668)).child("● 本地工作空间")))
-            .child(div().id("project-home-scroll").flex_1().min_h_0().overflow_y_scroll().p_8().flex().flex_col().gap_8()
-                .child(div().pt_8().pb_4().flex().flex_col().items_center().gap_4()
-                    .child(div().text_size(px(38.)).child("把想法，放进同一块画布"))
-                    .child(label("图片、文字、视频、声音与 3D。从新项目开始创作。"))
-                    .child(div().w(px(480.)).mt_4().p_4().rounded_xl().bg(rgb(t.panel)).border_1().border_color(rgb(t.border)).flex().flex_col().gap_3()
-                        .child(Textarea::new(&self.name).h(px(48.)).aria_label("新项目名称"))
-                        .child(ControlButton::new("new-project","＋ 新建项目").theme(FlowTheme { card:0x24252a,foreground:0xffffff,border:0x24252a,..t }).disabled(self.store.is_none() || self.opening).on_click(cx.listener(|this,_,window,cx|this.create(window,cx))))))
-                .child(div().flex().items_center().justify_between().child(div().text_lg().child("最近项目")).child(label(format!("{} 个项目",self.projects.len()))))
-                .child(projects)
-                .child(label("导入的素材会复制到项目目录。没有配置模型时，不会发送生成请求或产生 API 费用。")));
+        let mut root = div()
+            .size_full()
+            .bg(rgb(t.background))
+            .text_color(rgb(t.foreground))
+            .flex()
+            .flex_col()
+            .child(
+                div()
+                    .h(px(64.))
+                    .px_8()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .border_b_1()
+                    .border_color(rgb(t.border))
+                    .child(div().text_size(px(20.)).child("Flow Creative"))
+                    .child(
+                        div()
+                            .px_3()
+                            .py_1()
+                            .rounded_full()
+                            .bg(rgb(0xeaf0eb))
+                            .text_size(px(11.))
+                            .text_color(rgb(0x538668))
+                            .child("● 本地工作空间"),
+                    ),
+            )
+            .child(
+                div()
+                    .id("project-home-scroll")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .p_8()
+                    .flex()
+                    .flex_col()
+                    .gap_8()
+                    .child(
+                        div()
+                            .pt_8()
+                            .pb_4()
+                            .flex()
+                            .flex_col()
+                            .items_center()
+                            .gap_4()
+                            .child(div().text_size(px(32.)).child("今天想创作什么？"))
+                            .child(label("把灵感带到画布上"))
+                            .child(
+                                div()
+                                    .w(px(480.))
+                                    .mt_4()
+                                    .p_4()
+                                    .rounded_xl()
+                                    .bg(rgb(t.panel))
+                                    .border_1()
+                                    .border_color(rgb(t.border))
+                                    .flex()
+                                    .flex_col()
+                                    .gap_3()
+                                    .child(
+                                        Textarea::new(&self.name)
+                                            .bordered(false)
+                                            .appearance(false)
+                                            .h(px(40.))
+                                            .aria_label("新项目名称"),
+                                    )
+                                    .child(
+                                        ControlButton::new("new-project", "＋ 新建项目")
+                                            .theme(FlowTheme {
+                                                card: 0x24252a,
+                                                foreground: 0xffffff,
+                                                border: 0x24252a,
+                                                ..t
+                                            })
+                                            .disabled(self.store.is_none() || self.opening)
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.create(window, cx)
+                                            })),
+                                    ),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .child(div().text_lg().child("最近项目"))
+                            .child(label(format!("{} 个项目", self.projects.len()))),
+                    )
+                    .child(projects)
+                    .child(label("项目自动保存在本机，随时回来继续。")),
+            );
         if let Some(notice) = &self.notice {
             root = root.child(
                 div()

@@ -21,6 +21,7 @@ pub struct NodeFrame {
     pub color: u32,
     pub header_height: f32,
     full_bleed: bool,
+    caption: Option<SharedString>,
     body: Option<AnyElement>,
     overlays: Vec<AnyElement>,
     on_header_mouse_down: Option<PointerCallback>,
@@ -42,6 +43,7 @@ impl NodeFrame {
             color: 0x9cafc9,
             header_height: 36.,
             full_bleed: false,
+            caption: None,
             body: None,
             overlays: Vec::new(),
             on_header_mouse_down: None,
@@ -89,6 +91,10 @@ impl NodeFrame {
         self.full_bleed = value;
         self
     }
+    pub fn caption(mut self, value: Option<SharedString>) -> Self {
+        self.caption = value;
+        self
+    }
     pub fn body(mut self, value: impl IntoElement) -> Self {
         self.body = Some(value.into_any_element());
         self
@@ -124,7 +130,13 @@ impl RenderOnce for NodeFrame {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let z = valid_zoom(self.zoom);
         let theme = self.theme;
-        let caption = self.title.clone();
+        let caption = self.caption.clone().unwrap_or_else(|| {
+            format!(
+                "{}   {:.0} × {:.0}",
+                self.title, self.size.width, self.size.height
+            )
+            .into()
+        });
         let mut header = div()
             .h(px(self.header_height * z))
             .px(px(13. * z))
@@ -170,7 +182,7 @@ impl RenderOnce for NodeFrame {
                 theme.border
             }))
             .when(!self.full_bleed, |frame| frame.shadow_md().child(header))
-            .when(self.full_bleed, |frame| {
+            .when(self.full_bleed && !caption.is_empty(), |frame| {
                 frame.child(
                     div()
                         .absolute()
@@ -178,10 +190,7 @@ impl RenderOnce for NodeFrame {
                         .left_0()
                         .text_size(px(11.))
                         .text_color(rgb(theme.muted))
-                        .child(format!(
-                            "{}   {:.0} × {:.0}",
-                            caption, self.size.width, self.size.height
-                        )),
+                        .child(caption),
                 )
             })
             .child(

@@ -26,16 +26,19 @@ cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative 
 
 ## 操作
 
-- 左侧工具添加文字、导入图片、本地 3D，以及图片 / 视频 / 音频 / 3D 模型生成节点
-- 导入支持 PNG、JPEG、GIF、WebP 多选；素材复制到项目，删除外部原文件不影响项目
+- 左侧图标工具选择/平移画布、导入图片、添加文字与四类生成节点；悬停查看名称
+- 点击左上项目名重命名；首页使用项目内图片作封面，改名和当前画布一起原子保存
+- 导入支持 PNG、JPEG、GIF、WebP 多选；图片与 GLB 可从文件管理器拖到画布落点，素材复制到项目
 - 图片初始尺寸保留原比例，媒体占据整个节点；调整不同纵横比时用 cover 填充
-- 选中后上栏复制、分组、替换图片、设置端口色、删除；下栏编辑内容或提示词
-- 文字字段停止输入后应用并自动保存；自定义 JSON 需显式校验应用
+- 选中图片后上栏替换、用作参考、恢复原比例、复制/编组/端口色/删除；下方描述入口默认收起
+- “用作参考”创建图片生成节点与同类型参考边；生成器下方直接输入提示词，比例按钮同步调整占位宽高
+- 文字字段停止输入后自动保存；画布手势期间保留草稿，结束后应用。自定义 JSON 需显式校验
+- 图层按钮弹出对象列表并切换选择；浮栏跟随对象，尺寸保持屏幕像素
 - 图形编辑、连线、分组、删除和内容编辑继续使用核心事务与 Undo/Redo
 - Space+左键或中键平移；释放 Space 或鼠标会保留视口，Esc 才取消当前手势
 - 端口按数据类型统一颜色；连线继承源端口类型色。可选色板或输入 `#RRGGBB`
 - 仅同型 Output → Input 可连接，颜色不改变验证规则；`Any` 在 Creative 中禁用
-- 顶部“数据”保留 FlowDocument/records v1 入口、自定义 Palette 示例与只读开关
+- 右上“…”项目选项保留保存、GLB 导入、FlowDocument/records v1、自定义 Palette 与只读开关
 
 ## 本地持久化
 
@@ -66,7 +69,7 @@ cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative 
 
 ## 本地 3D 预览
 
-左侧“本地3D”选择 `.glb`，或在文件选择器不可用时输入明确的本地绝对路径。
+拖入 `.glb`，或从右上项目选项/模型生成器下方选择“导入GLB”；文件选择器不可用时可输入明确的本地绝对路径。
 `LocalProject::import_model` 在后台验证后复制文件到项目；模型节点输出类型与
 `generate_model` 一致。选中节点后，下方按钮旋转、俯仰、缩放或复位视角；拖动画面
 仍移动节点。相机状态随项目保存，并支持 Undo/Redo。宿主也可将已导入 GLB 资产键
@@ -98,16 +101,7 @@ cargo test --locked -p gpui-flow-creative --features desktop --lib
 cargo clippy --locked -p gpui-flow-creative --features desktop --all-targets -- -D warnings
 ```
 
-本轮 Linux 本地已通过 Creative desktop 29 项、interaction 32 项及端口配色回归；
-Creative / Flow UI / interaction 的 all-target strict Clippy、格式检查与桌面可执行文件
-链接通过。Linux 原生窗口已实际检查新建、导图复制/铺满、浮层输入、拖动跟随、
-Space 松开保留视口、类型颜色/自定义色/真实连线、四生成入口、返回首页、退出重开
-后的资产/提示词/参数/连线/颜色/视口恢复。当前云桌面没有 XDG file chooser portal，
-系统选择器仅验证了失败反馈；实际图片导入通过 UI 提供的明确本地路径入口完成。
-这些结果不外推为系统文件选择器、其他平台或真实模型服务通过。
-
-3D 增量通过 Creative desktop 53 项测试（含 17 项网格解析/栅格回归和 7 项 GLB
-资产回归）、all-target strict Clippy、格式与链接。原生实际导入非对称四面体及
-592 顶点 / 1120 面 / 双基色的环体与偏心球组合，确认旋转、透视遮挡、缩放、
-对象拖动、切换/删除节点及完整退出重启后的资产和相机恢复。文件选择器在当前环境
-仍缺 XDG portal，实际导入使用明确的本地路径入口；这些小样本不代表所有 GLB 均受支持。
+本地验证覆盖项目/资产/改名、草稿保存、类型连线、GLB解析/栅格，以及旧演示迁出的
+共享阴影预算和GIF回归。原生检查真实图片文件拖入、上下浮栏、参考连线、导航和项目存取。
+当前Linux桌面缺 XDG file chooser portal，系统选择器仅确认失败反馈；路径入口和真实
+文件拖放独立验证。其他平台、实际生成服务和任意GLB不由这些检查保证。

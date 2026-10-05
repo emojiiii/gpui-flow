@@ -115,10 +115,21 @@ impl RenderOnce for PortHandle {
         } else {
             self.diameter
         };
+        let tip = if self.label.is_empty() {
+            match self.direction {
+                PortDirection::Input => "输入端口".into(),
+                PortDirection::Output => "输出端口".into(),
+            }
+        } else {
+            self.label.clone()
+        };
         let mut handle = div()
             .id(self.id)
             .relative()
             .size(px(hit))
+            .tooltip(move |window, cx| {
+                gpui_kit::component::tooltip::Tooltip::new(tip.clone()).build(window, cx)
+            })
             .cursor(match state {
                 PortState::Rejected | PortState::Disabled => CursorStyle::OperationNotAllowed,
                 PortState::Target => CursorStyle::DragLink,
