@@ -3,6 +3,9 @@ use std::time::Duration;
 
 impl CreativeCanvas {
     pub(super) fn close_ready(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if let Some(job) = &self.custom_job {
+            job.cancel.store(true, std::sync::atomic::Ordering::Release);
+        }
         if let Some(job) = &self.processing_job {
             job.cancel.store(true, std::sync::atomic::Ordering::Release);
         }
@@ -212,6 +215,21 @@ impl CreativeCanvas {
         assets.masks = self.mask_views.clone();
         self.sync_processing_views(cx);
         assets.processing_errors = self.processing_errors.clone();
+        self.sync_custom_views(cx);
+        assets.custom_views = self.custom_views.clone();
+        self.known_custom_kinds = self
+            .canvas
+            .read(cx)
+            .editor
+            .graph()
+            .nodes
+            .values()
+            .filter(|n| n.kind.starts_with("custom."))
+            .map(|n| n.kind.clone())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        assets.custom_kinds = self.known_custom_kinds.clone();
         assets.models = self.model_views.clone();
         assets.media = self.media_views.clone();
         self.media_views.set_owner(cx.entity().downgrade());

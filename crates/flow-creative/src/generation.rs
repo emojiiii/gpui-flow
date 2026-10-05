@@ -92,19 +92,36 @@ impl GenerationRequest {
             .edges
             .values()
             .filter(|e| e.target.node == node.id)
-            .filter_map(|e| {
-                let source = graph.node(&e.source.node)?;
-                Some(GenerationInput {
+            .map(|e| {
+                let source = graph
+                    .node(&e.source.node)
+                    .ok_or_else(|| CreativeError("输入节点不存在".into()))?;
+                let value = if source.kind.starts_with("custom.")
+                    || crate::processing::ProcessingKind::from_node_kind(&source.kind).is_some()
+                {
+                    Some(crate::custom_nodes::resolve_graph_output(graph, &e.source)?)
+                } else {
+                    None
+                };
+                Ok(GenerationInput {
                     port: e.target.port.to_string(),
                     source: source.id.clone(),
-                    asset: source.data["asset"]
-                        .as_str()
-                        .filter(|s| !s.is_empty())
-                        .map(str::to_string),
-                    text: source.data["text"].as_str().map(str::to_string),
+                    asset: value
+                        .as_ref()
+                        .and_then(|v| v.asset_key().map(str::to_string))
+                        .or_else(|| {
+                            source.data["asset"]
+                                .as_str()
+                                .filter(|s| !s.is_empty())
+                                .map(str::to_string)
+                        }),
+                    text: value
+                        .as_ref()
+                        .and_then(|v| v.text().map(str::to_string))
+                        .or_else(|| source.data["text"].as_str().map(str::to_string)),
                 })
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, CreativeError>>()?;
         if prompt.is_empty()
             && !inputs
                 .iter()

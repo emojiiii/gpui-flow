@@ -1,7 +1,7 @@
 //! Typed mask-node payload and source provenance, separate from the editor UI.
 use crate::mask::{MaskSource, MaskState, MaskStroke};
 use crate::{CreativeError, CreativeRegistry, NodeDefinition, ProjectAsset};
-use gpui_flow_core::{DataType, Graph, Node, NodeId, Port, Size};
+use gpui_flow_core::{DataType, Graph, Node, Port, Size};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -77,28 +77,21 @@ impl MaskNodeData {
     }
 }
 
-pub(crate) fn linked_mask_image<'a>(graph: &'a Graph, target: &NodeId) -> Option<&'a Node> {
-    graph
-        .edges
-        .values()
-        .find(|edge| edge.target.node == *target && edge.target.port.as_str() == "image")
-        .and_then(|edge| graph.node(&edge.source.node))
-}
-
 pub fn mask_source(
     graph: &Graph,
     node: &Node,
     assets: &[ProjectAsset],
 ) -> Result<MaskSource, CreativeError> {
-    let image = linked_mask_image(graph, &node.id)
+    let edge = graph
+        .edges
+        .values()
+        .find(|e| e.target.node == node.id && e.target.port.as_str() == "image")
         .ok_or_else(|| CreativeError("请先连接一个图片节点".into()))?;
-    if crate::processing::ProcessingKind::from_node_kind(&image.kind).is_some() {
-        crate::processing_node::processing_output(graph, image)?;
-    }
-    let key = image.data["asset"]
-        .as_str()
-        .filter(|key| !key.is_empty())
-        .ok_or_else(|| CreativeError("图片输入节点尚无图片".into()))?;
+    let value = crate::custom_nodes::resolve_graph_output(graph, &edge.source)?;
+    value.validate_for(&DataType::Named("image".into()))?;
+    let key = value
+        .asset_key()
+        .ok_or_else(|| CreativeError("图片输入尚无素材".into()))?;
     let asset = assets
         .iter()
         .find(|asset| asset.key == key)
@@ -115,39 +108,26 @@ pub(crate) fn validate_edit_inputs(node: &Node, graph: &Graph) -> Result<(), Cre
     if node.kind != "edit_image" {
         return Ok(());
     }
-    let image = linked_mask_image(graph, &node.id)
-        .ok_or_else(|| CreativeError("图片编辑需要 Image 输入".into()))?;
-    if crate::processing::ProcessingKind::from_node_kind(&image.kind).is_some() {
-        crate::processing_node::processing_output(graph, image)?;
-    }
-    let image_key = image.data["asset"]
-        .as_str()
-        .filter(|key| !key.is_empty())
-        .ok_or_else(|| CreativeError("Image 输入尚无图片".into()))?;
-    let mask_node = graph
+    let image_edge = graph
         .edges
         .values()
-        .find(|edge| edge.target.node == node.id && edge.target.port.as_str() == "mask")
-        .and_then(|edge| graph.node(&edge.source.node))
+        .find(|e| e.target.node == node.id && e.target.port.as_str() == "image")
+        .ok_or_else(|| CreativeError("图片编辑需要 Image 输入".into()))?;
+    let image = crate::custom_nodes::resolve_graph_output(graph, &image_edge.source)?;
+    image.validate_for(&DataType::Named("image".into()))?;
+    let mask_edge = graph
+        .edges
+        .values()
+        .find(|e| e.target.node == node.id && e.target.port.as_str() == "mask")
         .ok_or_else(|| CreativeError("图片编辑需要独立 Mask 输入".into()))?;
-    if mask_node.kind != "mask" {
-        return Err(CreativeError("Mask 输入必须提供可验证的遮罩输出".into()));
+    let mask = crate::custom_nodes::resolve_graph_output(graph, &mask_edge.source)?;
+    let crate::custom_nodes::CustomValue::Mask { source, .. } = mask else {
+        return Err(CreativeError("Mask 输入必须是可验证的独立遮罩输出".into()));
+    };
+    if image.asset_key() != Some(source.asset_key.as_str()) {
+        return Err(CreativeError("Mask 与 Image 输入的原图身份不一致".into()));
     }
-    let data = MaskNodeData::from_value(&mask_node.data)?;
-    let source = data
-        .state
-        .source
-        .as_ref()
-        .ok_or_else(|| CreativeError("遮罩尚未绑定原图".into()))?;
-    if source.asset_key != image_key
-        || linked_mask_image(graph, &mask_node.id).and_then(|source| source.data["asset"].as_str())
-            != Some(image_key)
-        || !data.output_is_current(source)
-    {
-        return Err(CreativeError(
-            "遮罩输入已变更或尚未应用，请重新检查原图并应用遮罩".into(),
-        ));
-    }
+
     Ok(())
 }
 

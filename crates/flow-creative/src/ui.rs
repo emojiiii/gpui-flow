@@ -27,6 +27,8 @@ pub struct CreativeAssets {
     models: Arc<model_view::ModelViews>,
     masks: Arc<mask_preview::MaskViews>,
     processing_errors: Arc<Mutex<BTreeMap<NodeId, String>>>,
+    custom_views: Arc<Mutex<BTreeMap<NodeId, custom_tasks::CustomPreview>>>,
+    custom_kinds: Vec<String>,
     media: Arc<media_view::MediaViews>,
     editing_text: Arc<Mutex<Option<NodeId>>>,
     begin_text_edit: Option<TextEditCallback>,
@@ -59,9 +61,17 @@ impl NodeRenderer for CardRenderer {
         if node.kind == "text" {
             return Some("".into());
         }
-        if let Some((width, height)) = node.data["asset"]
-            .as_str()
-            .and_then(|key| self.assets.dimensions.get(key))
+        let key = node.data["asset"].as_str().map(str::to_string).or_else(|| {
+            self.assets
+                .custom_views
+                .lock()
+                .unwrap()
+                .get(&node.id)
+                .and_then(|p| p.value.as_ref())
+                .and_then(|v| v.asset_key())
+                .map(str::to_string)
+        });
+        if let Some((width, height)) = key.as_ref().and_then(|key| self.assets.dimensions.get(key))
             && *width > 0
             && *height > 0
         {
@@ -81,6 +91,52 @@ impl NodeRenderer for CardRenderer {
         cx: &mut App,
     ) -> AnyElement {
         let z = context.zoom;
+        if node.kind.starts_with("custom.") {
+            let preview = self
+                .assets
+                .custom_views
+                .lock()
+                .unwrap()
+                .get(&node.id)
+                .cloned();
+            if let Some(value) = preview.as_ref().and_then(|p| p.value.as_ref()) {
+                if let crate::custom_nodes::CustomValue::Image { asset_key } = value
+                    && let Some(path) = self.assets.paths.get(asset_key)
+                {
+                    return img(path.clone())
+                        .size_full()
+                        .object_fit(ObjectFit::Contain)
+                        .into_any_element();
+                }
+                if let crate::custom_nodes::CustomValue::Text { text } = value {
+                    return div()
+                        .size_full()
+                        .p_4()
+                        .bg(rgb(0xffffff))
+                        .text_size(px(14. * z))
+                        .child(text.chars().take(200).collect::<String>())
+                        .into_any_element();
+                }
+            }
+            return div()
+                .size_full()
+                .p_3()
+                .flex()
+                .flex_col()
+                .items_center()
+                .justify_center()
+                .gap_2()
+                .bg(rgb(0xf0f1f5))
+                .text_size(px(12. * z))
+                .text_color(rgb(0x777f8b))
+                .child(node.title.clone())
+                .child(
+                    preview
+                        .map(|p| p.status)
+                        .unwrap_or_else(|| "自定义类型端口".into()),
+                )
+                .into_any_element();
+        }
         if node.kind == "mask" {
             return self.assets.masks.render(node, cx);
         }
@@ -279,6 +335,14 @@ pub fn demo_renderers(assets: CreativeAssets) -> NodeRegistry {
         );
     }
     registry.register("palette", PaletteRenderer);
+    for kind in &assets.custom_kinds {
+        registry.register(
+            kind.clone(),
+            CardRenderer {
+                assets: assets.clone(),
+            },
+        );
+    }
     registry
 }
 fn theme() -> FlowTheme {
@@ -295,6 +359,9 @@ fn theme() -> FlowTheme {
 }
 #[derive(Clone)]
 enum Action {
+    NewCustom,
+    CustomDesigner(custom_designer::CustomDesignerAction),
+    Custom(custom_tasks::CustomAction),
     Processing(processing_panel::ProcessingAction),
     ProcessSelection(crate::processing::ProcessingKind),
     ProcessingMenu,
@@ -388,6 +455,11 @@ pub struct CreativeCanvas {
     processing_job: Option<processing_tasks::ProcessingJob>,
     processing_errors: Arc<Mutex<BTreeMap<NodeId, String>>>,
     show_processing_menu: bool,
+    custom_designer: Option<custom_designer::CustomDesigner>,
+    custom_executors: crate::custom_nodes::CustomNodeExecutors,
+    custom_job: Option<custom_tasks::CustomJob>,
+    custom_views: Arc<Mutex<BTreeMap<NodeId, custom_tasks::CustomPreview>>>,
+    known_custom_kinds: Vec<String>,
     media_views: Arc<media_view::MediaViews>,
     editing_text: Arc<Mutex<Option<NodeId>>>,
     form_source: Option<(NodeId, String, Value)>,
@@ -451,6 +523,21 @@ impl CreativeCanvas {
                         .sync(canvas.read(cx).editor.graph(), this.project.as_ref());
                     this.reconcile_mask_edit(cx);
                     this.sync_processing_views(cx);
+                    this.sync_custom_views(cx);
+                    let kinds = canvas
+                        .read(cx)
+                        .editor
+                        .graph()
+                        .nodes
+                        .values()
+                        .filter(|n| n.kind.starts_with("custom."))
+                        .map(|n| n.kind.clone())
+                        .collect::<std::collections::BTreeSet<_>>()
+                        .into_iter()
+                        .collect::<Vec<_>>();
+                    if kinds != this.known_custom_kinds {
+                        this.refresh_assets(cx);
+                    }
                     this.media_views.retain(canvas, cx);
                     // A successful graph edit supersedes an earlier rejection. Selection
                     // alone must not erase an error the user still needs to understand.
@@ -504,6 +591,9 @@ impl CreativeCanvas {
         let asset_thumbnails = cx.new(asset_thumbnails::AssetThumbnails::new);
         let thumbnail_observer = cx.observe(&asset_thumbnails, |_, _, cx| cx.notify());
         cx.on_release(|this: &mut Self, _| {
+            if let Some(job) = &this.custom_job {
+                job.cancel.store(true, std::sync::atomic::Ordering::Release);
+            }
             if let Some(job) = &this.processing_job {
                 job.cancel.store(true, std::sync::atomic::Ordering::Release);
             }
@@ -554,6 +644,11 @@ impl CreativeCanvas {
             processing_job: None,
             processing_errors: Arc::default(),
             show_processing_menu: false,
+            custom_designer: None,
+            custom_executors: crate::custom_host::local_custom_executors(),
+            custom_job: None,
+            custom_views: Arc::default(),
+            known_custom_kinds: Vec::new(),
             media_views: Arc::default(),
             editing_text: Arc::default(),
             form_source: None,
@@ -666,6 +761,30 @@ impl CreativeCanvas {
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
         }
         let command = match action {
+            Action::NewCustom => {
+                let graph = self.canvas.read(cx).editor.graph();
+                let definitions =
+                    crate::custom_nodes::custom_definitions_from_graph(graph).unwrap_or_default();
+                let mut serial = 1;
+                let kind = loop {
+                    let candidate = format!("custom.node{serial}");
+                    if !definitions.iter().any(|d| d.kind == candidate) {
+                        break candidate;
+                    }
+                    serial += 1;
+                };
+                self.show_processing_menu = false;
+                self.open_custom_designer(kind, window, cx);
+                return;
+            }
+            Action::CustomDesigner(action) => {
+                self.handle_custom_designer(action, window, cx);
+                return;
+            }
+            Action::Custom(action) => {
+                self.custom_action(action, cx);
+                return;
+            }
             Action::Processing(action) => {
                 self.processing_action(action, cx);
                 return;
@@ -1202,6 +1321,8 @@ fn label(text: impl Into<SharedString>) -> Div {
 mod asset_browser;
 mod asset_thumbnails;
 mod chrome;
+mod custom_designer;
+mod custom_tasks;
 mod mask_editor;
 mod mask_preview;
 mod mask_tasks;
@@ -1242,7 +1363,9 @@ impl Render for CreativeCanvas {
             .last_saved_document
             .as_ref()
             .is_some_and(|d| d != &view.editor.document());
-        let save_status = if self.processing_job.is_some() {
+        let save_status = if self.custom_job.is_some() {
+            "正在运行宿主接口…"
+        } else if self.processing_job.is_some() {
             "正在本地处理…"
         } else if self.mask_cancel.is_some() {
             "正在应用遮罩…"
@@ -1408,6 +1531,13 @@ impl Render for CreativeCanvas {
                     cx,
                 ));
             }
+            menu = menu.child(self.button(
+                "add-custom",
+                "＋ 自定义节点",
+                Action::NewCustom,
+                !editable || count >= MAX_CARDS,
+                cx,
+            ));
             surface = surface.child(menu);
         }
         if self.show_layers {
@@ -1860,6 +1990,9 @@ impl Render for CreativeCanvas {
         }
         if self.asset_picker.is_some() {
             surface = surface.child(self.asset_panel(cx));
+        }
+        if self.custom_designer.is_some() {
+            surface = surface.child(self.custom_designer_panel(cx));
         }
         div()
             .size_full()

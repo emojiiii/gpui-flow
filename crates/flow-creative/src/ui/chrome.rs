@@ -268,6 +268,27 @@ impl CreativeCanvas {
         editable: bool,
         cx: &mut Context<Self>,
     ) -> Div {
+        if node.kind.starts_with("custom.") {
+            let p = anchored_panel(bounds, self.canvas_size, self.composer_size(node, cx));
+            return div()
+                .occlude()
+                .absolute()
+                .left(px(p.x))
+                .top(px(p.y))
+                .w(px(360.))
+                .max_h(px(280.))
+                .p_3()
+                .rounded(px(12.))
+                .bg(rgb(0xffffff))
+                .shadow_sm()
+                .child(
+                    div()
+                        .id("custom-composer")
+                        .max_h(px(256.))
+                        .overflow_y_scroll()
+                        .child(self.custom_composer(node, editable, cx)),
+                );
+        }
         if crate::processing::ProcessingKind::from_node_kind(&node.kind).is_some() {
             let p = anchored_panel(bounds, self.canvas_size, self.composer_size(node, cx));
             let input = self

@@ -22,5 +22,7 @@ pub mod mask;
 mod mask_node;
 mod references;
 pub use mask_node::{MASK_MEDIA_TYPE, MaskNodeData, mask_source};
+pub mod custom_host;
+pub mod custom_nodes;
 pub mod processing;
 pub mod processing_node;

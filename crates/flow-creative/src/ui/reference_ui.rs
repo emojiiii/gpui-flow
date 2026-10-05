@@ -4,9 +4,34 @@ use crate::references::linked_reference;
 impl CreativeCanvas {
     pub(super) fn reference_row(&self, node: &Node, cx: &mut Context<Self>) -> Div {
         let linked = linked_reference(self.canvas.read(cx).editor.graph(), &node.id).cloned();
-        let path = linked
+        let resolved = self
+            .canvas
+            .read(cx)
+            .editor
+            .graph()
+            .edges
+            .values()
+            .find(|e| e.target.node == node.id && e.target.port.as_str() == "reference")
+            .and_then(|e| {
+                crate::custom_nodes::resolve_graph_output(
+                    self.canvas.read(cx).editor.graph(),
+                    &e.source,
+                )
+                .ok()
+            });
+        let path = resolved
             .as_ref()
-            .and_then(|source| source.data["asset"].as_str())
+            .and_then(|v| v.asset_key())
+            .or_else(|| {
+                linked
+                    .as_ref()
+                    .filter(|source| {
+                        !source.kind.starts_with("custom.")
+                            && crate::processing::ProcessingKind::from_node_kind(&source.kind)
+                                .is_none()
+                    })
+                    .and_then(|source| source.data["asset"].as_str())
+            })
             .and_then(|key| {
                 self.project
                     .as_ref()

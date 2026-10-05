@@ -108,8 +108,11 @@ impl CreativeCanvas {
                 return Err(CreativeError("请先应用当前遮罩".into()));
             }
             let mut graph = self.canvas.read(cx).editor.graph().clone();
-            let source = crate::mask_node::linked_mask_image(&graph, &mask.id)
-                .cloned()
+            let source = graph
+                .edges
+                .values()
+                .find(|e| e.target.node == mask.id && e.target.port.as_str() == "image")
+                .map(|e| e.source.clone())
                 .ok_or_else(|| CreativeError("缺少原图输入".into()))?;
             let id: NodeId = graph.fresh_id("image-edit").into();
             let node = self.registry.make_node(
@@ -119,19 +122,9 @@ impl CreativeCanvas {
                 None,
             )?;
             graph.add_node(node)?;
-            let image_port = source
-                .ports
-                .iter()
-                .find(|p| {
-                    p.direction == gpui_flow_core::PortDirection::Output
-                        && p.data_type == gpui_flow_core::DataType::Named("image".into())
-                })
-                .ok_or_else(|| CreativeError("原图输出类型无效".into()))?
-                .id
-                .clone();
             graph.connect(
                 graph.fresh_id("edit-image"),
-                PortRef::new(source.id, image_port),
+                source,
                 PortRef::new(id.clone(), "image"),
             )?;
             graph.connect(
@@ -297,7 +290,10 @@ impl CreativeCanvas {
     }
     pub(super) fn mask_input_row(&self, node: &Node, cx: &App) -> Div {
         let graph = self.canvas.read(cx).editor.graph();
-        let image = crate::mask_node::linked_mask_image(graph, &node.id).is_some();
+        let image = graph
+            .edges
+            .values()
+            .any(|e| e.target.node == node.id && e.target.port.as_str() == "image");
         let mask = graph
             .edges
             .values()

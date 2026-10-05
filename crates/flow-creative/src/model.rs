@@ -154,8 +154,9 @@ impl CreativeRegistry {
             return Err(CreativeError("creative board size limit exceeded".into()));
         }
         graph.validate()?;
+        let registry = crate::custom_nodes::registry_with_custom_definitions(self, graph)?;
         for node in graph.nodes.values() {
-            self.validate_node(node)?;
+            registry.validate_node(node)?;
         }
         Ok(())
     }
@@ -218,9 +219,10 @@ impl CreativeRegistry {
         }
         let mut graph = Graph::new();
         graph.data = records.metadata;
+        let registry = crate::custom_nodes::registry_with_custom_definitions(self, &graph)?;
         let mut cards = Vec::new();
         for record in records.cards {
-            let mut node = self.make_node(
+            let mut node = registry.make_node(
                 &record.kind,
                 record.id,
                 record.position.unwrap_or(Point::ZERO),
@@ -232,7 +234,7 @@ impl CreativeRegistry {
             if let Some(size) = record.size {
                 node.size = size;
             }
-            self.validate_node(&node)?;
+            registry.validate_node(&node)?;
             let mut candidate = Graph::new();
             candidate.add_node(node.clone())?;
             cards.push((node, record.position.is_some()));

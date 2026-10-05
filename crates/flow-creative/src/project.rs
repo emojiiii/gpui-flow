@@ -646,6 +646,7 @@ fn validate_document_assets(
     assets: &[ProjectAsset],
 ) -> Result<(), ProjectError> {
     for node in document.graph.nodes.values() {
+        crate::custom_host::validate_custom_node_assets(node, assets)?;
         if node.kind == "mask" {
             let data = crate::MaskNodeData::from_value(&node.data)?;
             if let Some(source) = &data.state.source {

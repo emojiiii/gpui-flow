@@ -86,7 +86,14 @@ fn input_key(graph: &Graph, node: &Node, depth: usize) -> Result<String, Creativ
     }) {
         return Err(CreativeError("输入端口媒体类型不匹配".into()));
     }
-    if ProcessingKind::from_node_kind(&source.kind).is_some() {
+    if source.kind.starts_with("custom.") {
+        let value = crate::custom_nodes::resolve_graph_output(graph, &edge.source)?;
+        value.validate_for(&kind.input_type())?;
+        value
+            .asset_key()
+            .map(str::to_string)
+            .ok_or_else(|| CreativeError("自定义输入没有媒体输出".into()))
+    } else if ProcessingKind::from_node_kind(&source.kind).is_some() {
         if edge.source.port.as_str() != "output" {
             return Err(CreativeError("处理节点输出端口无效".into()));
         }

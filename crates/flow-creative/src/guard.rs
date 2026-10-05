@@ -19,17 +19,19 @@ impl CanvasPlugin for CreativeGuard {
         _: &mut Vec<CanvasEffect>,
     ) -> Result<(), String> {
         let graph = cx.editor.graph();
+        let registry = crate::custom_nodes::registry_with_custom_definitions(&self.0, graph)
+            .map_err(|e| e.to_string())?;
         match command {
             CanvasCommand::AddNode(node) => {
                 if graph.nodes.len() >= MAX_CARDS {
                     return Err("最多 128 张卡片".into());
                 }
-                self.0.validate_node(node).map_err(|e| e.to_string())?;
+                registry.validate_node(node).map_err(|e| e.to_string())?;
             }
             CanvasCommand::SetNodeData { node, data } => {
                 let mut candidate = graph.node(node).ok_or("card no longer exists")?.clone();
                 candidate.data = data.clone();
-                self.0
+                registry
                     .validate_node(&candidate)
                     .map_err(|e| e.to_string())?;
             }
@@ -49,7 +51,7 @@ impl CanvasPlugin for CreativeGuard {
                     return Err("粘贴超出画布容量".into());
                 }
                 for node in &clipboard.nodes {
-                    self.0.validate_node(node).map_err(|e| e.to_string())?;
+                    registry.validate_node(node).map_err(|e| e.to_string())?;
                 }
             }
             CanvasCommand::Duplicate { .. } => {
@@ -61,7 +63,7 @@ impl CanvasPlugin for CreativeGuard {
                     return Err("复制超出画布容量".into());
                 }
                 for node in &clipboard.nodes {
-                    self.0.validate_node(node).map_err(|e| e.to_string())?;
+                    registry.validate_node(node).map_err(|e| e.to_string())?;
                 }
             }
             CanvasCommand::CompleteConnection { .. } if graph.edges.len() >= MAX_LINKS => {
