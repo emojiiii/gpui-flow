@@ -1,5 +1,7 @@
 # Native Canvas stroke-text acceptance fixture
 
+> 历史验证记录：旧 Studio 原生演示已于 2026-10-05 移除。本文的源码路径、命令、交互矩阵与结果仅对应当时版本，不是当前可运行入口或新工作台验收。当前入口见[入门](getting-started.md)，测试保留范围见[迁移说明](studio-retirement.md)。
+
 Status: the initial frozen `0338Z` revision passed cached build, strict Clippy and
 the no-window helper tour; the build summary (historical record in Git history)
 records those checks. Native scenarios 1–3 accepted on both resources. Its
@@ -294,7 +296,9 @@ native desktop slot, frozen copy, and any Git publication.
 After an exact build slot/disk allowance is granted, use only the existing native
 environment and cached Studio X11 graph:
 
-```sh
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 . /workspace/shared/gpui-flow-native-env.sh
 CARGO_PROFILE_TEST_DEBUG=0 cargo check --locked --offline -p flow-studio \
   --features canvas-stroke-text-x11 --bin canvas_stroke_text
@@ -340,7 +344,9 @@ It does not establish native shaping, stroke rendering or resource upload.
 
 The optional unit-test harness adds a checksum known-vector check:
 
-```sh
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 CARGO_PROFILE_TEST_DEBUG=0 cargo test --locked --offline -p flow-studio \
   --features canvas-stroke-text-x11 --bin canvas_stroke_text
 ```

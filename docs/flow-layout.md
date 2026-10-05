@@ -1,5 +1,7 @@
 # Explicit visual flow layout
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 `gpui-flow-layout` is an optional, headless Rust layout module. It arranges the
 direct children of fixed or content-sized `Box` and `Frame` scene objects. It changes actual
 shape geometry and local transforms, so existing GPUI drawing, picking, engine
@@ -223,7 +225,9 @@ intact; it does not end an active session.
 
 Examples:
 
-```bash
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 cargo run --locked -p flow-studio --bin auto_size
 cargo run --locked --manifest-path docs/examples/Cargo.toml --bin auto_size
 ```

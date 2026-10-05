@@ -1,5 +1,7 @@
 # Native static-font binding acceptance
 
+> 历史验证记录：旧 Studio 原生演示已于 2026-10-05 移除。本文的源码路径、命令、交互矩阵与结果仅对应当时版本，不是当前可运行入口或新工作台验收。当前入口见[入门](getting-started.md)，测试保留范围见[迁移说明](studio-retirement.md)。
+
 The Linux X11 fixture completed **2026-10-03 00:44:56–00:47:51 UTC**, with normal
 exit **0**, **28 physical actions across 11 buttons**, and **21/21 trace checks**.
 Independent provenance checks passed **17 general checks and 34 font checks**.

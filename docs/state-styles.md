@@ -1,5 +1,7 @@
 # State styles and transitions
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 Geometry/per-state timing extension: see [state-geometry.md](state-geometry.md) for
 the supported property set, reactive layout, matching paint/hit projection and
 current validation boundary. The historical paint-only contract below is retained
@@ -156,7 +158,9 @@ view.state_styles.bind(&view.editor.engine, handle, StateStyles {
 
 Run the native `state_styles` example or the executable headless documentation:
 
-```bash
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 cargo run --locked -p flow-studio --bin state_styles
 cargo run --locked --manifest-path docs/examples/Cargo.toml --bin state_styles
 ```

@@ -1,5 +1,7 @@
 # Intrinsic fixed Text-box resize
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 Status: implemented and validated in focused automated checks and a real Linux
 window. This is an explicit fixed-box tool, not full Leafer editor parity.
 

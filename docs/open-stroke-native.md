@@ -1,5 +1,7 @@
 # Open-contour stroke native acceptance — 2026-10-02
 
+> 历史验证记录：旧 Studio 原生演示已于 2026-10-05 移除。本文的源码路径、命令、交互矩阵与结果仅对应当时版本，不是当前可运行入口或新工作台验收。当前入口见[入门](getting-started.md)，测试保留范围见[迁移说明](studio-retirement.md)。
+
 The exercised Linux open-contour geometry, history and navigation matrix passed.
 The auxiliary native/CPU-panel decoded-capture bound comparison is **20/21 within one pixel**;
 one isolated low-contrast pixel is retained below. This is not an all-pixel-checks

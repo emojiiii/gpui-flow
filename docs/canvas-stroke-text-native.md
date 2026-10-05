@@ -1,5 +1,7 @@
 # Native Canvas shaped-outline acceptance
 
+> 历史验证记录：旧 Studio 原生演示已于 2026-10-05 移除。本文的源码路径、命令、交互矩阵与结果仅对应当时版本，不是当前可运行入口或新工作台验收。当前入口见[入门](getting-started.md)，测试保留范围见[迁移说明](studio-retirement.md)。
+
 The original broad run preserved a real DPR-2 work-limit failure. A focused
 follow-up accepted the same clip/alpha artwork in two explicit bounded batches,
 then checked rejection and regeneration against two nonempty resources. Neither

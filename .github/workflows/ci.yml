@@ -102,7 +102,7 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Test reusable UI components
         run: cargo test --locked -p gpui-flow --lib
-      - name: Link native Studio
-        run: cargo build --locked -p flow-studio --bins
+      - name: Link creative workbench
+        run: cargo build --locked -p gpui-flow-creative --features desktop --bin flow-creative
       # This job proves compilation and linking, not graphical interaction.
       # Never run provider calls, upload graphs, or require production secrets in CI.

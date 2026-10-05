@@ -1,5 +1,7 @@
 # APP-05 coherent state presentation: native evidence
 
+> 历史验证记录：旧 Studio 原生演示已于 2026-10-05 移除。本文的源码路径、命令、交互矩阵与结果仅对应当时版本，不是当前可运行入口或新工作台验收。当前入口见[入门](getting-started.md)，测试保留范围见[迁移说明](studio-retirement.md)。
+
 Source publication: [`93ee7f7c`](https://github.com/emojiiii/gpui-flow/commit/93ee7f7cabfb7979aeca93ec137ccf81644baeb5), verified remote tree
 `a8f08d035dde97d13eecc932630e8fdda65dfb42`. This report records the
 frozen shared-worktree executable, not a newly rebuilt published revision.

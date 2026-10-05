@@ -1,5 +1,7 @@
 # 当前批次：实现范围与本地验证边界
 
+> 历史验证记录：旧 Studio 原生演示已于 2026-10-05 移除。本文的源码路径、命令、交互矩阵与结果仅对应当时版本，不是当前可运行入口或新工作台验收。当前入口见[入门](getting-started.md)，测试保留范围见[迁移说明](studio-retirement.md)。
+
 日期：2026-09-30。对照基线为远端
 [`bde1142b027dfbd52c9d5fb7f16a9261eff5b17e`](https://github.com/emojiiii/gpui-flow/commit/bde1142b027dfbd52c9d5fb7f16a9261eff5b17e)。
 本页记录源码接入，不是运行结果或完整 Leafer 兼容声明。

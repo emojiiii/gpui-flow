@@ -1,5 +1,7 @@
 # Grayscale native QA on recovered host — 2026-10-03
 
+> 历史验证记录：旧 Studio 原生演示已于 2026-10-05 移除。本文的源码路径、命令、交互矩阵与结果仅对应当时版本，不是当前可运行入口或新工作台验收。当前入口见[入门](getting-started.md)，测试保留范围见[迁移说明](studio-retirement.md)。
+
 All 15 required physical rows and the single optional reopen were completed. The stable functional observations matched the bounded fixture expectations. A diagnostic-display outlier remains in row 9: one screenshot shows StaleFrame while the updated gray content is visible; the following same-revision live record has no composite issue. This is not an all-frames-error-free claim.
 
 Main ran 09:30:50–09:42:51 UTC and reopened once at 09:43:31–09:44:05 UTC. Both exited normally with code 0 and empty stderr. The desktop was released after reopen. No source edit, build, relink, push or dependency change occurred during this QA.

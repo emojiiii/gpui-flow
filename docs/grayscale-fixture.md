@@ -1,5 +1,7 @@
 # Bounded grayscale native fixture
 
+> 历史验证记录：旧 Studio 原生演示已于 2026-10-05 移除。本文的源码路径、命令、交互矩阵与结果仅对应当时版本，不是当前可运行入口或新工作台验收。当前入口见[入门](getting-started.md)，测试保留范围见[迁移说明](studio-retirement.md)。
+
 This contract defines the finite fixture. Compilation, helper results and physical acceptance are recorded separately; this document alone establishes no pass. The original unrun author draft remains preserved outside the repository.
 
 Fixture file: `examples/studio/src/bin/grayscale.rs`. The draft uses the current Studio dependencies (`gpui`, `gpui-kit`, `gpui-flow`, `serde_json`, `image`) and default binary discovery. No Cargo change is proposed. No new dependency, font, remote resource, private renderer access, or general export wrapper is needed.

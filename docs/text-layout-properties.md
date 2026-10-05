@@ -1,5 +1,7 @@
 # Fixed plain-text layout properties
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 This module adds `letter_spacing`, `word_spacing`, `para_indent`, and
 `auto_size_align` to the existing `text_case` and `para_spacing` contract.
 `writing_mode` additionally supports a bounded Flow axis extension described below.

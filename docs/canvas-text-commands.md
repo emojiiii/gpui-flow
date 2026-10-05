@@ -1,5 +1,7 @@
 # Canvas text-box commands and native measurement
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 Status: implementation and 8 new regressions pass; 119 distinct affected checks,
 strict Clippy, native linking and real Linux-window acceptance pass. This is a bounded text-box API, not full browser CanvasText.
 

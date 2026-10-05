@@ -1,11 +1,13 @@
 # 节点流层架构、图模型与持久化
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 本文描述当前节点流层；后续组件/显示场景层的设计和验证范围应单独补充，以下分层不是最终架构承诺。
 
 ## 分层职责
 
 ```text
-flow-studio                         应用入口，gpui-kit 初始化
+gpui-flow-creative                  当前应用、项目与创作对象，gpui-kit 初始化
     └── gpui-flow                   FlowCanvas、渲染器、主题、内置节点
             ├── gpui-flow-core      图、几何、选择、事务、历史、文档文件读写
             └── gpui-flow-runtime   后台 runner、取消、任务事件

@@ -1,5 +1,7 @@
 # Custom geometry native acceptance (CUS-01)
 
+> 历史验证记录：旧 Studio 原生演示已于 2026-10-05 移除。本文的源码路径、命令、交互矩阵与结果仅对应当时版本，不是当前可运行入口或新工作台验收。当前入口见[入门](getting-started.md)，测试保留范围见[迁移说明](studio-retirement.md)。
+
 This closes a bounded acceptance gap for existing engine definitions and the
 per-SceneView native renderer registry. It does not add a new Custom backend,
 query language, factory schema contract, or Leafer-compatible API.

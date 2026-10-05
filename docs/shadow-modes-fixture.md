@@ -1,8 +1,10 @@
 # Integrated bounded shadow-modes fixture and physical contract
 
+> 历史验证记录：旧 Studio 原生演示已于 2026-10-05 移除。本文的源码路径、命令、交互矩阵与结果仅对应当时版本，不是当前可运行入口或新工作台验收。当前入口见[入门](getting-started.md)，测试保留范围见[迁移说明](studio-retirement.md)。
+
 Integrated 2026-10-03. **Final strict compilation, build, formatting and all three helper modes passed. The separately frozen15-row native gate is now recorded in [native acceptance](shadow-modes-native.md).** The original author draft contract (preserved as `author-contract.md` in the evidence package), author Rust draft (preserved as `author-draft.rs` in the evidence package), first compilation failure and first helper failure are preserved unchanged. The parent owns source publication, native execution, independent audit and final package acceptance.
 
-This is the exact contract for [shadow_modes.rs](../examples/studio/src/bin/shadow_modes.rs), SHA-256 `6b625d2935c54ebaf821e3d6b4efea03f1fc8ea476352cbfff423f828d34839c`. Final broad source inventory: 535 files, `bd3da34d1ffd098703070ca03dd93e51fb34c75d23b071d765db73bbf4aa7149`. Final executable `/workspace/shared/rust-target-native/debug/shadow_modes`: `d3341d1be0ee3602277d9ddc1eb2cc36ca37f571770589f7724776b11f70d2cf`. Each helper receipt records its own executable hash before and after, beginning with the very first failed helper 04 rather than a later replay. The different historical hashes remain in their own receipts.
+This is the exact contract for `shadow_modes.rs`（历史源码已移除）, SHA-256 `6b625d2935c54ebaf821e3d6b4efea03f1fc8ea476352cbfff423f828d34839c`. Final broad source inventory: 535 files, `bd3da34d1ffd098703070ca03dd93e51fb34c75d23b071d765db73bbf4aa7149`. Final executable `/workspace/shared/rust-target-native/debug/shadow_modes`: `d3341d1be0ee3602277d9ddc1eb2cc36ca37f571770589f7724776b11f70d2cf`. Each helper receipt records its own executable hash before and after, beginning with the very first failed helper 04 rather than a later replay. The different historical hashes remain in their own receipts.
 
 ## Actual integration changes and preserved failures
 

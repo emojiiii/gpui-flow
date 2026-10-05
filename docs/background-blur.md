@@ -1,10 +1,12 @@
 # Owned background blur
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 `Style::background_blur` and `PropertyKey::BackgroundBlur` add a finite scalar
 in `[0,256]`, defaulting to zero for older documents. Zero, including negative
 zero, preserves the previous pixel, isolation and budget path. Invalid values
 reject atomically; Scene JSON, engine changes and Undo/Redo retain the scalar.
-The [background_blur example](../examples/studio/src/bin/background_blur.rs)
+The `background_blur example`（历史源码已移除）
 demonstrates the supported composition and explicit error cases.
 
 ## Pixels and ownership

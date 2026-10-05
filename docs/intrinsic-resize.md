@@ -1,5 +1,7 @@
 # Built-in intrinsic resize
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 `SceneResizePlugin::default().with_builtin_resize(true)` enables component-defined
 geometry edits for named single-selection handles. The default plugin and shared
 multi-selection handles retain their existing transform behavior. Configure Text
@@ -60,7 +62,9 @@ Locked or unsupported subtrees are rejected under existing transform rules.
 
 Run the compact native sample:
 
-```sh
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 cargo run --locked -p flow-studio --bin intrinsic_resize -- --trace
 ```
 

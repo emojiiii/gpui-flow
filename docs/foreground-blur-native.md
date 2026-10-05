@@ -1,5 +1,7 @@
 # Foreground blur: bounded native acceptance
 
+> 历史验证记录：旧 Studio 原生演示已于 2026-10-05 移除。本文的源码路径、命令、交互矩阵与结果仅对应当时版本，不是当前可运行入口或新工作台验收。当前入口见[入门](getting-started.md)，测试保留范围见[迁移说明](studio-retirement.md)。
+
 The 12-row physical matrix completed on the dot cloud Linux desktop at actual display DPR 1. The expected visible behavior, public diagnostics, history, navigation and pointer routing were observed. The process closed normally once at **2026-10-03 11:15:10.948935 UTC**, exit **0**, with empty stderr. No unexpected diagnostic or persistent failure was observed in this run. Ordinary pending transitions and the two intended `UnsupportedBlurBackdrop` states are retained.
 
 The final independent read/parse/document/hash audit by the same QA operator passed **210/210** checks. This is an evidence audit, not a second execution or separately staffed renderer review. The raw material comprises **79 physical clicks, 82 numbered JSON events, 34 settled observations, 7 actual PointerDown traces, and 46 original JPEG screenshots**. The evidence was captured through supported cloud desktop controls; no event injection or helper was substituted for physical input.

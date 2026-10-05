@@ -1,5 +1,7 @@
 # Bounded foreground-blur native fixture
 
+> 历史验证记录：旧 Studio 原生演示已于 2026-10-05 移除。本文的源码路径、命令、交互矩阵与结果仅对应当时版本，不是当前可运行入口或新工作台验收。当前入口见[入门](getting-started.md)，测试保留范围见[迁移说明](studio-retirement.md)。
+
 This fixture was integrated from a separately retained unrun author draft. The explicit Studio feature graph passed strict checking and native linking; the headless and canonical CPU helpers then exited 0 using a frozen executable with its SHA-256 checked before and after each run. Physical acceptance was **not run** at that source checkpoint. The later [12-row native gate](foreground-blur-native.md) completed with normal exit; its original observations, limits and audit corrections are recorded separately. The summary (historical record in Git history) records the exact source/binary provenance and intermediate failures.
 
 Source: `examples/studio/src/bin/foreground_blur.rs`. It reuses existing Studio dependencies and public host/editor/input APIs, with no new font/resource/dependency or budget increase. Runtime source is [5d735c76](https://github.com/emojiiii/gpui-flow/commit/5d735c76cff47a0996c6757d5bb1eba80c924286); large cancelling translations and offscreen parent-shadow ownership were repaired and validated there. The new fixture and its physical gate are separate from that runtime validation.

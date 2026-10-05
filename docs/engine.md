@@ -1,5 +1,7 @@
 # 元素引擎与事件路由
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 这层是基于 Leafer 官方源码职责划分的独立 Rust 实现，不提供 Leafer API 兼容性。源码与许可定位见 [源码对照](leafer-source-map.md)。
 
 ## 唯一文档与实例

@@ -1,5 +1,7 @@
 # Text padding and vertical alignment
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 The Text component gains typed top/middle/bottom vertical alignment and four-side
 padding in [top,right,bottom,left] order. Zero padding/top remain the exact old
 serialization/default behavior. New fields are handled in the Text component's

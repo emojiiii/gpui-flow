@@ -1,5 +1,7 @@
 # Measured scene text
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 This is a bounded plain-text slice of Leafer's text layout contract. It uses the
 same native GPUI shaping function for measurement and scene painting. It does
 not estimate width from character counts and does not provide rich-text editing,
@@ -204,7 +206,9 @@ cache keys.
 
 ## Verification and upstream reference
 
-```bash
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 cargo test --locked -p gpui-flow-layout --test text
 cargo test --locked -p gpui-flow-layout -p gpui-flow-interaction --test text_vertical_autoheight
 cargo test --locked -p gpui-flow-layout --test advanced autowidth

@@ -1,5 +1,7 @@
 # Bounded scene eraser native fixture contract
 
+> 历史验证记录：旧 Studio 原生演示已于 2026-10-05 移除。本文的源码路径、命令、交互矩阵与结果仅对应当时版本，不是当前可运行入口或新工作台验收。当前入口见[入门](getting-started.md)，测试保留范围见[迁移说明](studio-retirement.md)。
+
 ## Delivery and verification state
 
 The native fixture lives at `examples/studio/src/bin/scene_erasers.rs`. This document defines its behavior and acceptance matrix; build, helper and native results are recorded separately in `docs/validation/2026-10-03-scene-eraser-fixture-summary.json`. A successful syntax/type check is not native acceptance. The repaired fifteen-row physical run and its separate capture-integrity incident are recorded in [native evidence](scene-eraser-native.md); the first reset crash remains in the historical failed report (historical record in Git history).

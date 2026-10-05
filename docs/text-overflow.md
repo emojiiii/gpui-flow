@@ -1,5 +1,7 @@
 # Text fixed-box end ellipsis
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 Status: bounded Linux model, real-glyph and native-window acceptance passed on
 2026-10-02. This is a fixed-box end-ellipsis slice, not full typography parity.
 

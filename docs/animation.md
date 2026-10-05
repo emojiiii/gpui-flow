@@ -1,5 +1,7 @@
 # 显式时钟动画底座
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 > 2026-09-30 本地验证：21项timing回归及既有动画/序列/编辑器测试通过，workspace check与严格clippy通过。原生窗口视觉行为与CI未验，完整覆盖见本地验证记录（历史记录见Git历史）。
 
 可选 `gpui-flow-animation` 在已有 SceneEngine 上实现真实属性插值和播放控制。输入定义与运行期状态分离；不启动后台线程、定时器、网络调用或隐式引擎监听器。
@@ -89,7 +91,9 @@ Drop控制器只释放自己的有界数据，不留下线程、定时器或引�
 
 原生 `animations` 示例用 `Window::on_next_frame` + `Instant` 提供时钟，演示两条各两段/总2秒的关键帧序列，内置Restart/Pause/Resume/Seek 50%/Finish/Cancel/Undo/Redo/Destroy circle。完成自动提交一个播放步骤，取消回到基线；Destroy circle是独立编辑，可以Undo。每帧只排一个弱引用回调，窗口关闭不会靠回调保活整个视图。系统减少动态效果等偏好由宿主决定，核心不依赖平台设置。
 
-```bash
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 cargo run --locked -p flow-studio --bin animations
 cargo run --locked --manifest-path docs/examples/Cargo.toml --bin animation
 cargo test --locked -p gpui-flow-animation

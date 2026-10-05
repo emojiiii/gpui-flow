@@ -2,6 +2,8 @@ Source/runtime: [bounded scene erasers](scene-erasers.md), [fixture contract](sc
 
 # Scene eraser reset repair: bounded native QA
 
+> 历史验证记录：旧 Studio 原生演示已于 2026-10-05 移除。本文的源码路径、命令、交互矩阵与结果仅对应当时版本，不是当前可运行入口或新工作台验收。当前入口见[入门](getting-started.md)，测试保留范围见[迁移说明](studio-retirement.md)。
+
 The repaired fixture passed the **bounded functional matrix**, with all 15 physical rows exercised. It ran on the cloud Linux X11 desktop from 05:46:26 to 05:54:33 UTC on 2026-10-03, closed normally with exit 0 and empty stderr, and released the desktop. A separate **capture-handling incident damaged one historical screenshot**; the evidence-integrity result is not a clean pass and is detailed below.
 
 ## Evidence-integrity incident

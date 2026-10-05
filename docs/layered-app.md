@@ -1,5 +1,7 @@
 # Overlapping layered App (INS-02)
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 `LayeredApp` owns one GPUI surface and a bottom-to-top stack of independent
 `SceneView` entities. Every visible child occupies **the same full-sized rectangle**;
 this is an overlapping compositor, not a row of views. Each child retains its own
@@ -111,7 +113,9 @@ Multi-touch gestures and cross-window pointer capture are not claimed.
 
 Run with the shared single-job native environment:
 
-```sh
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 cargo test --locked -p gpui-flow --lib layered_app
 cargo test --locked -p gpui-flow --lib layer_host
 cargo check --locked -p flow-studio --bin layered_app

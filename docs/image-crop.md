@@ -1,5 +1,7 @@
 # Fixed Image source-crop editor
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 This bounded slice adds a normalized source rectangle and an opt-in source-frame
 editor for one built-in Image. It reuses Flow's resource lifecycle, capture,
 revision guards, property validation and Undo history. It does not fetch or
@@ -74,7 +76,9 @@ Focused model and UI results are recorded separately from native window receipts
 A passing `cargo check` or linked demo is not a physical drag/pixel acceptance.
 Run the native fixture with:
 
-```sh
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 cargo run --locked -p flow-studio --bin image_crop_trace
 ```
 
@@ -113,7 +117,9 @@ false `natural_size` metadata. No network is used.
 
 Additional regression commands:
 
-```sh
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 cargo test --locked -p gpui-flow-scene -p gpui-flow-engine -p gpui-flow-editor -p gpui-flow-interaction --test image_crop
 cargo test --locked -p gpui-flow-composite source_crop --lib
 cargo test --locked -p gpui-flow --lib

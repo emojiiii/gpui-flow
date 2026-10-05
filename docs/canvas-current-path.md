@@ -1,5 +1,7 @@
 # Canvas current-path construction
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 Status: implemented with Linux automated and bounded native acceptance.
 The full DPR 1/2 functional run passed against published source
 [`39fcf56a`](https://github.com/emojiiii/gpui-flow/commit/39fcf56a2e91f59d5da7a04ee519cade66f8cb69).
@@ -94,7 +96,9 @@ conveniences and full persistent-context state remain outside this increment.
 
 Run on a native GPUI desktop:
 
-```sh
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 cargo run --locked -p flow-studio --bin canvas_current_path
 ```
 

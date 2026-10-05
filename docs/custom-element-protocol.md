@@ -1,5 +1,7 @@
 # Custom sizing and asynchronous resources
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 `ElementDefinition` has optional pure `measure`, `resize_policy`, `resize` and
 `resource_key` hooks. Existing definitions remain inert unless they opt in.
 Measurement must agree exactly with generated local bounds and declare positive
@@ -46,7 +48,7 @@ Validation: focused engine/interaction/async regressions cover policy and bounds
 opts that view into a separate host-owned CPU capability. `DisplayRenderer`
 continues to return `AnyElement`; registration of either capability does not
 register the other, capture a native widget, or change native routing outside a
-required CPU domain. The [custom_protocol example](../examples/studio/src/bin/custom_protocol.rs)
+required CPU domain. The `custom_protocol example`（历史源码已移除）
 now installs both independently and uses OwnedCanvas to display resource-backed
 RGBA with a transparent aperture. It is a runnable fixture, not a new native-window
 validation receipt.

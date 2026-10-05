@@ -60,7 +60,6 @@ Verification:
 ```sh
 cargo test --locked -p gpui-flow-text --no-default-features
 cargo test --locked -p gpui-flow-text --features gpui
-cargo run --locked -p flow-studio --bin text_measure_probe
 ```
 
 ## Explicit native raster bridge

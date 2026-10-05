@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/flow-creative", "crates/flow-composite", "crates/flow-text", "crates/flow-core", "crates/flow-engine", "crates/flow-layout", "crates/flow-animation", "crates/flow-interaction", "crates/flow-runtime", "crates/flow-scene", "crates/flow-editor", "crates/flow-media", "crates/flow-ui", "examples/studio", "vendor/gpui_wgpu"]
+members = ["crates/flow-creative", "crates/flow-composite", "crates/flow-text", "crates/flow-core", "crates/flow-engine", "crates/flow-layout", "crates/flow-animation", "crates/flow-interaction", "crates/flow-runtime", "crates/flow-scene", "crates/flow-editor", "crates/flow-media", "crates/flow-ui", "vendor/gpui_wgpu"]
 default-members = ["crates/flow-composite", "crates/flow-text", "crates/flow-core", "crates/flow-engine", "crates/flow-layout", "crates/flow-animation", "crates/flow-interaction", "crates/flow-runtime", "crates/flow-scene", "crates/flow-editor", "crates/flow-media"]
 
 [workspace.package]

@@ -1,5 +1,7 @@
 # 本地音视频解码与播放
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 `gpui-flow-media` 是不依赖 GPUI 的播放后端；`gpui_flow::MediaView` 是可独立使用的 GPUI 播放器。音频和视频节点通过 `.player(Entity<MediaView>)` 组合它，不再只有元数据占位。
 
 当前后端使用宿主安装的 **ffmpeg + ffprobe + ffplay**：
@@ -59,20 +61,26 @@ let body = VideoNode::new("/media/clip.mkv").player(player);
 
 不下载外部视频，完全在本机生成测试图和低振幅正弦波：
 
-```bash
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 python3 scripts/generate-media-fixtures.py
 cargo run --locked -p flow-studio --bin media
 ```
 
 默认生成 `target/media-fixtures/test-pattern.mkv` 和 `tone.wav`。示例不会自动播放；点击 Play 后才输出音频。可传入自己的两个本地文件：
 
-```bash
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 cargo run --locked -p flow-studio --bin media -- /path/video.mkv /path/audio.wav
 ```
 
 只验证视频、不打开音频设备：
 
-```bash
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 cargo run --locked -p flow-studio --bin media -- --muted
 ```
 

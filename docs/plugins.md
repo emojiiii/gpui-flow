@@ -1,10 +1,14 @@
 # 输入行为、插件与编辑策略
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 `gpui-flow-interaction` 将指针状态、编辑命令和渲染器分离。插件处理的是实际行为：移除 connection 就不能拖出连线，移除 snapping 则只剩端口本身的命中范围，移除 drag 不会通过旧的 Canvas handler 继续移动节点。
 
 ## 先运行交互工作台
 
-```bash
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 cargo run --locked -p flow-studio --bin interactions
 cargo run --locked --manifest-path docs/examples/Cargo.toml --bin plugins
 ```

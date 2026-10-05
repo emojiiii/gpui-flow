@@ -1,5 +1,7 @@
 # Resource readiness and native paint acceptance (LIF-02)
 
+> 历史验证记录：旧 Studio 原生演示已于 2026-10-05 移除。本文的源码路径、命令、交互矩阵与结果仅对应当时版本，不是当前可运行入口或新工作台验收。当前入口见[入门](getting-started.md)，测试保留范围见[迁移说明](studio-retirement.md)。
+
 ## Scope and evidence classes
 
 This acceptance slice uses the existing `SceneResources` tracker, public GPUI
@@ -73,7 +75,9 @@ capacity, dispatch, cross-engine/tracker, disposal and runtime-only regressions.
 Use the repository's configured toolchain and native libraries. In the prepared
 Linux validation environment:
 
-```sh
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 source /workspace/shared/gpui-flow-native-env.sh
 cargo test --offline -p gpui-flow-engine --test resources --test resource_lifecycle_acceptance
 cargo test --offline -p gpui-flow --lib resources::lifecycle_tests

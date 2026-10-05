@@ -1,5 +1,7 @@
 # Bounded scale-fixed stroke native fixture
 
+> 历史验证记录：旧 Studio 原生演示已于 2026-10-05 移除。本文的源码路径、命令、交互矩阵与结果仅对应当时版本，不是当前可运行入口或新工作台验收。当前入口见[入门](getting-started.md)，测试保留范围见[迁移说明](studio-retirement.md)。
+
 The fixture is `examples/studio/src/bin/scale_fixed_strokes.rs`. Build, helper and native outcomes are recorded separately; this contract does not establish a native pass. Existing gpui/gpui-kit/gpui-flow/serde_json/image dependencies and application assets suffice. It creates no scene Text/Image producers and adds no fonts or dependencies.
 
 ## Purpose and finite scope

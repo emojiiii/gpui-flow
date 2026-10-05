@@ -1,5 +1,7 @@
 # Geometry tools (Flow extension)
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 INT-05 adds an opt-in `SceneGeometryToolsPlugin::new(GeometryToolMode::{Path, Skew, Pivot})`. Native hosts use `SceneView::set_geometry_tool(Some(mode), cx)`; `None` returns to ordinary outer handles. Mode changes cancel an unfinished drag. This is a **Flow extension**: the pinned Leafer OSS general point editor is a stub, not an upstream implementation of these controls.
 
 - **Path** edits one stored M/L/Q/C endpoint or Bezier control in a single Path or leaf Pen. It preserves command order, primitive identity and every other coordinate. Control polygons are overlays, never flattened document data. There is no point insertion/deletion, automatic smoothing, coupled handles, or control editing for Line/Polygon/Group containers.

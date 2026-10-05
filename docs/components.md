@@ -1,12 +1,16 @@
 # 独立 GPUI 组件：从一个节点到完整画布
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 `gpui-flow` 的 UI 不是只有 `FlowCanvas` 一个入口。`components/` 中每个公共组件都有自己的源文件，并实现 GPUI 的 `RenderOnce` / `IntoElement`。节点内容位于 `nodes/`，每类节点一个文件。你可以只使用一个节点外壳、一个端口、一个缩略图，或者把它们组合成自己的编辑器。
 
 所有交互状态都由宿主管理：这些组件不会偷偷创建 `Editor`、后台任务、供应商客户端或全局单例。`FlowCanvas` 是这些组件与 core/runtime 的一个集成实现，实际节点、侧栏、工具栏、缩略图都使用同一套公开组件。
 
-可运行的完整示例：[composition.rs](../examples/studio/src/bin/composition.rs)。左侧卡片完全独立，右侧把 `canvas_only` 画布嵌入自定义宿主界面，并注册自己的结果节点 renderer。
+可运行的完整示例：`composition.rs`（历史源码已移除）。左侧卡片完全独立，右侧把 `canvas_only` 画布嵌入自定义宿主界面，并注册自己的结果节点 renderer。
 
-```bash
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 cargo run --locked -p flow-studio --bin composition
 ```
 

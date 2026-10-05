@@ -1,5 +1,7 @@
 # Native outline font binding acceptance fixture
 
+> 历史验证记录：旧 Studio 原生演示已于 2026-10-05 移除。本文的源码路径、命令、交互矩阵与结果仅对应当时版本，不是当前可运行入口或新工作台验收。当前入口见[入门](getting-started.md)，测试保留范围见[迁移说明](studio-retirement.md)。
+
 Status: source fixture awaiting build and physical native acceptance. No native
 result is claimed by this document. This fixture exercises the startup-only API
 from [static-font-registration.md](static-font-registration.md), same-App GPUI
@@ -44,7 +46,9 @@ its font bytes are neither read back nor redistributed.
 After a build slot and disk allowance are granted, in the existing host native
 toolchain environment:
 
-```sh
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 . /workspace/shared/gpui-flow-native-env.sh
 CARGO_PROFILE_TEST_DEBUG=0 cargo check --locked --offline -p flow-studio \
   --features outline-font-binding-x11 --bin outline_font_binding
@@ -65,7 +69,9 @@ before linking or making the frozen copy. No parallel Cargo processes.
 
 An optional separate test harness runs four ordinary, headless helper tests:
 
-```sh
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 CARGO_PROFILE_TEST_DEBUG=0 cargo test --locked --offline -p flow-studio \
   --features outline-font-binding-x11 --bin outline_font_binding
 ```

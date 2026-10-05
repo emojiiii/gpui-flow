@@ -1,5 +1,7 @@
 # Shadow modes: bounded native acceptance
 
+> 历史验证记录：旧 Studio 原生演示已于 2026-10-05 移除。本文的源码路径、命令、交互矩阵与结果仅对应当时版本，不是当前可运行入口或新工作台验收。当前入口见[入门](getting-started.md)，测试保留范围见[迁移说明](studio-retirement.md)。
+
 All **15 physical rows** completed on the dot cloud Linux desktop at actual display **DPR 1**. Expected visible behavior, public diagnostics, history, navigation, real Text production and pointer routing were observed. The single window closed normally at **2026-10-03 13:05:31.547137 UTC**, exit **0**, with empty stderr. No unexpected native diagnostic or persistent failure was observed. The two intended guard rejections and ordinary Compositing transitions are preserved.
 
 The final saved-evidence audit passed **298/298** checks. It independently parses/hashes and compares complete authored documents using the same QA operator; it is not another renderer execution or separately staffed review. Evidence contains **108 physical clicks, 112 numbered JSON events, 45 settled observations, 10 actual PointerDown traces and 54 original JPEGs**. Both prescribed bursts finished before B replacement, so cancellation timing is explicitly **unobserved**.

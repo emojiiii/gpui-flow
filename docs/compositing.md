@@ -1,5 +1,7 @@
 # Bounded vector, image and text compositing in SceneView
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 Status: bounded vector, static-image, elapsed-time animated-image, host-opt-in same-backend text and explicit owned-canvas backdrop implementation. Explicit [Box/Frame paint phases](container-paint-order.md) passed the current local Linux aggregate and targeted native smoke checks; see the [phase-order checkpoint](#container-paint-order-validation-2026-10-01) for scope and limits. Validation checkpoints below distinguish this batch from earlier local Linux passes. The vector native-window smoke test below was recorded on 2026-09-30; static-image validation is reported separately. This is a bounded Leafer-inspired slice, not complete Leafer or GPU-backdrop compatibility. The first headless checkpoint is [9bd37d4](https://github.com/emojiiii/gpui-flow/commit/9bd37d479cf546e0d58b123465a2df07cf13bc3c); the subsequent integration adds the production SceneView consumer.
 
 ## Actual rendering path
@@ -198,7 +200,9 @@ Raster work uses GPUI's background executor, but full Scene validation, snapshot
 
 ## Validation and reproduction
 
-```sh
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 cargo test --locked --offline
 cargo test --locked --offline -p gpui-flow --lib
 cargo clippy --locked --offline --workspace --all-targets -- -D warnings

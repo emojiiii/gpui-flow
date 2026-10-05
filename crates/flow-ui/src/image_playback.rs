@@ -175,7 +175,7 @@ mod tests {
     #[test]
     fn original_gif_decodes_distinct_full_frames_delays_and_transparent_disposal() {
         use image::AnimationDecoder;
-        let bytes = include_bytes!("../../../examples/studio/assets/composite-animation.gif");
+        let bytes = include_bytes!("../tests/fixtures/composite-animation.gif");
         let frames = image::codecs::gif::GifDecoder::new(std::io::Cursor::new(bytes))
             .unwrap()
             .into_frames()

@@ -1,5 +1,7 @@
 # Native rectangular clip chains
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 Text and Image now render inside nested `Frame` containers whose
 `clip_children=true` (the default). This slice supports zero-radius rectangles
 under translation and positive uniform scale, including viewport pan/zoom. It
@@ -67,7 +69,9 @@ Text/Image geometry, font metrics, resource identity or edit history. Ordinary
   intersection without altering the original text alignment rectangle
 - The existing affine/rounded vector regression remains part of the UI suite
 
-```bash
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 cargo run --locked -p flow-studio --bin clip_chains
 cargo run --locked -p flow-studio --bin measured_text
 cargo run --locked -p flow-studio --bin text_measure_probe

@@ -1,5 +1,7 @@
 # 显示对象、场景树与图形编辑
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 本层与节点图、agent 执行完全解耦。它解决“有哪些图形、如何组合、在哪个坐标系、如何命中和传播事件”。节点工作流仅是富画布的一种上层应用。
 
 ## 目录与职责
@@ -138,7 +140,9 @@ view.on(
 
 纯场景与编辑器不需要显示器：
 
-```bash
+历史命令（当前分支不可运行；仅供对应历史版本复现）：
+
+```text
 cargo test --locked -p gpui-flow-scene -p gpui-flow-editor
 cargo test --locked -p gpui-flow --lib
 cargo run --locked -p flow-studio --bin primitives

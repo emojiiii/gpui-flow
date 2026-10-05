@@ -1,5 +1,7 @@
 # Canvas runtime image patterns
 
+> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+
 Status: runtime implementation with automated validation and a completed bounded
 [Linux native control tour](canvas-pattern-native.md): 23/23 trace checks and
 48/50 decoded-JPEG screenshot checks, with two exterior samples unresolved.
