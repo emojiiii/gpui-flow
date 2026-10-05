@@ -155,6 +155,7 @@ impl CreativeRegistry {
         graph.validate()?;
         for node in graph.nodes.values() {
             self.validate_node(node)?;
+            crate::references::validate_reference_binding(graph, node)?;
         }
         Ok(())
     }

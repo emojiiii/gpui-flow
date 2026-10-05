@@ -270,6 +270,8 @@ enum Action {
     ConfirmRename,
     ImportImage,
     ImportModel,
+    ImportReference(NodeId),
+    ClearReference(NodeId),
     PanTool(bool),
     QuickEdit,
     EditText,
@@ -338,6 +340,7 @@ pub struct CreativeCanvas {
     quick_edit: bool,
     show_layers: bool,
     import_model: bool,
+    reference_target: Option<NodeId>,
     model_views: Arc<model_view::ModelViews>,
     media_views: Arc<media_view::MediaViews>,
     editing_text: Arc<Mutex<Option<NodeId>>>,
@@ -478,6 +481,7 @@ impl CreativeCanvas {
             quick_edit: false,
             show_layers: false,
             import_model: false,
+            reference_target: None,
             model_views: Arc::default(),
             media_views: Arc::default(),
             editing_text: Arc::default(),
@@ -568,6 +572,16 @@ impl CreativeCanvas {
             self.apply_form_edit(cx);
         }
         let command = match action {
+            Action::ImportReference(target) => {
+                self.reference_target = Some(target);
+                self.import_model = false;
+                self.import_image(false, cx);
+                return;
+            }
+            Action::ClearReference(target) => {
+                self.set_reference(&target, None, cx);
+                return;
+            }
             Action::Media(action) => {
                 if let Some(node) = self.selected(cx) {
                     self.media_views.command(&node.id, action, cx);
@@ -683,20 +697,24 @@ impl CreativeCanvas {
             }
             Action::CloseImportPath => {
                 self.show_import_path = false;
+                self.reference_target = None;
                 cx.notify();
                 return;
             }
             Action::ImportImage => {
+                self.reference_target = None;
                 self.import_model = false;
                 self.import_image(false, cx);
                 return;
             }
             Action::ImportModel => {
+                self.reference_target = None;
                 self.import_model = true;
                 self.import_image(false, cx);
                 return;
             }
             Action::ReplaceImage => {
+                self.reference_target = None;
                 self.import_model = false;
                 self.import_image(true, cx);
                 return;
@@ -1051,6 +1069,7 @@ mod chrome;
 mod media_view;
 mod model_view;
 mod project_ui;
+mod reference_ui;
 mod text_objects;
 mod workbench;
 pub use workbench::CreativeWorkbench;
@@ -1364,7 +1383,9 @@ impl Render for CreativeCanvas {
                     .flex()
                     .flex_col()
                     .gap_3()
-                    .child(div().text_sm().child(if self.import_model {
+                    .child(div().text_sm().child(if self.reference_target.is_some() {
+                        "选择一张本地图片作为参考"
+                    } else if self.import_model {
                         "导入已选择的本地 GLB 模型"
                     } else {
                         "导入本地图片、视频或音频"

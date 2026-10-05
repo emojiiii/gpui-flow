@@ -310,6 +310,9 @@ impl CreativeCanvas {
         } else {
             104.
         };
+        let has_reference_input =
+            generation.is_some() && crate::references::accepts_image_reference(node);
+        let height = height + if has_reference_input { 56. } else { 0. };
         let p = anchored_panel(bounds, self.canvas_size, WorldSize::new(width, height));
         let mut panel = div()
             .occlude()
@@ -329,19 +332,20 @@ impl CreativeCanvas {
         if generation.is_some() && self.media_views.snapshot(&node.id, cx).is_some() {
             panel = panel.child(self.media_controls(node, cx));
         }
-        if !model || generation.is_some() {
+        if has_reference_input {
+            panel = panel.child(self.reference_row(node, editable, cx));
+        }
+        if generation.is_some() {
+            panel = panel.child(self.reference_prompt(node, editable, cx));
+        } else if !model {
             panel = panel.child(
                 Textarea::new(&self.form)
-                    .h(px(if generation.is_some() { 104. } else { 66. }))
+                    .h(px(66.))
                     .bordered(false)
                     .appearance(false)
                     .text_size(px(13.))
                     .disabled(!editable)
-                    .aria_label(if generation.is_some() {
-                        "生成提示词"
-                    } else {
-                        "对象描述"
-                    }),
+                    .aria_label("对象描述"),
             );
         }
         if let Some(kind) = generation {

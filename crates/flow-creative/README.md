@@ -32,6 +32,7 @@ cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative 
 - 图片初始尺寸保留原比例，媒体占据整个节点；调整不同纵横比时用 cover 填充
 - 选中图片后上栏替换、用作参考、恢复原比例、复制/编组/端口色/删除；下方描述入口默认收起
 - “用作参考”创建图片生成节点与同类型参考边；生成器下方直接输入提示词，比例按钮同步调整占位宽高
+- 生成器提示框显示参考缩略图；拖入一张图片或点“添加参考图”时保存为本地附件，不新建画布对象。“移除参考”不删除原素材，可撤销
 - 文字字段停止输入后自动保存；画布手势期间保留草稿，结束后应用。自定义 JSON 需显式校验
 - 文字对象透明显示在画布上；双击或点“编辑文字”就地输入，Escape/“完成编辑”结束。上栏调整 12–144px 字号、粗体和对齐，样式随项目保存并支持撤销
 - 原生多行输入器编辑时左对齐；选对齐按钮会完成编辑并立即显示对象排版
@@ -66,6 +67,9 @@ cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative 
 宿主调用 `set_generation_available(true)` 后订阅 `CreativeEvent::GenerationRequested`，
 得到含提示词、设置、输入节点和资产键的 `GenerationRequest`。连接本身不会执行任务。
 宿主负责模型、凭证、权限、队列和预算，完成后通过 `apply_generation_update` 回写。
+单张图片附件的项目资产键在 `GenerationRequest.settings.reference_asset` 中；宿主通过
+当前 `LocalProject` 解析。它与既有 `reference` 图片边互斥，共用原来的单张输入容量。
+替换附件解除旧参考边，原画布图片仍保留。非图片附件、跨项目键和外部 URL 被拒绝。
 宿主返回已导入的音视频资产键时，对应生成节点也显示真实媒体。不能把未接服务的
 占位符当成已生成媒体。
 

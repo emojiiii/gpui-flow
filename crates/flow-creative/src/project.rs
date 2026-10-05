@@ -220,17 +220,22 @@ impl ProjectStore {
         let directory = self.root.join(id);
         let project = read_project(&directory, id)?;
         for node in project.document.graph.nodes.values() {
-            let Some(key) = node.data["asset"].as_str() else {
-                continue;
-            };
-            if let Some(asset) = project
-                .assets
-                .iter()
-                .find(|a| a.key == key && a.media_type.starts_with("image/"))
+            for key in [
+                node.data["asset"].as_str(),
+                crate::references::reference_asset(node),
+            ]
+            .into_iter()
+            .flatten()
             {
-                let path = directory.join(&asset.key);
-                check_asset_file(&path, asset)?;
-                return Ok(Some(path));
+                if let Some(asset) = project
+                    .assets
+                    .iter()
+                    .find(|a| a.key == key && a.media_type.starts_with("image/"))
+                {
+                    let path = directory.join(&asset.key);
+                    check_asset_file(&path, asset)?;
+                    return Ok(Some(path));
+                }
             }
         }
         Ok(None)
@@ -602,6 +607,20 @@ fn validate_document_assets(
     assets: &[ProjectAsset],
 ) -> Result<(), ProjectError> {
     for node in document.graph.nodes.values() {
+        if crate::references::accepts_image_reference(node)
+            && let Some(key) = crate::references::reference_asset(node)
+        {
+            validate_asset_key(key)?;
+            let asset = assets
+                .iter()
+                .find(|asset| asset.key == key)
+                .ok_or_else(|| ProjectError::Invalid(format!("missing reference asset: {key}")))?;
+            if !asset.media_type.starts_with("image/") {
+                return Err(ProjectError::Invalid(
+                    "reference attachments must be project-owned images".into(),
+                ));
+            }
+        }
         let Some(value) = node.data.get("asset") else {
             continue;
         };
@@ -1278,6 +1297,67 @@ mod tests {
         );
         assert_eq!(reopened.document(), &document);
         assert_eq!(reopened.assets(), &[asset]);
+    }
+
+    #[test]
+    fn reference_attachment_roundtrips_without_a_canvas_node_and_rejects_foreign_keys() {
+        let home = TestHome::new();
+        let store = home.store();
+        let registry = standard_registry();
+        let mut project = store
+            .create_project("References", &FlowDocument::default(), &registry)
+            .unwrap();
+        let source = home.0.join("reference.png");
+        fs::write(&source, png()).unwrap();
+        let asset = project.import_image(&source).unwrap();
+        let mut document = project.document().clone();
+        document
+            .graph
+            .add_node(
+                registry
+                    .make_node("generate_image", "gen", Point::ZERO, None)
+                    .unwrap(),
+            )
+            .unwrap();
+        document.graph = crate::references::replace_reference(
+            &registry,
+            &document.graph,
+            &"gen".into(),
+            Some(&asset.key),
+        )
+        .unwrap();
+        project.save_document(&document, &registry).unwrap();
+        fs::remove_file(source).unwrap();
+        let reopened = store
+            .open_project(&project.metadata().id, &registry)
+            .unwrap();
+        assert_eq!(reopened.document().graph.nodes.len(), 1);
+        assert_eq!(reopened.document(), &document);
+        assert_eq!(
+            store.thumbnail_path(&project.metadata().id).unwrap(),
+            Some(project.resolve_asset_path(&asset.key).unwrap())
+        );
+        let before = fs::read(project.directory().join(PROJECT_FILE)).unwrap();
+        for key in [
+            "https://example.com/image.png",
+            "../outside.png",
+            "assets/missing.png",
+        ] {
+            let mut invalid = document.clone();
+            invalid.graph.nodes.get_mut(&"gen".into()).unwrap().data["settings"]["reference_asset"] =
+                json!(key);
+            assert!(project.save_document(&invalid, &registry).is_err());
+            assert_eq!(
+                fs::read(project.directory().join(PROJECT_FILE)).unwrap(),
+                before
+            );
+        }
+        let model = home.0.join("wrong.glb");
+        fs::write(&model, glb()).unwrap();
+        let model = project.import_model(model).unwrap();
+        document.graph.nodes.get_mut(&"gen".into()).unwrap().data["settings"]["reference_asset"] =
+            json!(model.key);
+        assert!(project.validate_document(&document, &registry).is_err());
     }
 
     #[test]

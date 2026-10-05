@@ -147,7 +147,7 @@ pub(crate) fn register_generation_nodes(registry: &mut CreativeRegistry) {
                 ),
                 ports,
                 json!({"prompt":"", "model":"", "status":"idle", "asset":"", "settings":{"aspect_ratio":if kind == GenerationKind::Video { "16:9" } else { "1:1" },"duration_seconds":5}}),
-                |v| {
+                move |v| {
                     for key in ["prompt", "model", "status", "asset"] {
                         let text = v
                             .get(key)
@@ -165,6 +165,12 @@ pub(crate) fn register_generation_nodes(registry: &mut CreativeRegistry) {
                     }
                     if let Some(settings)=v.get("settings") {
                         if !settings.is_object() { return Err("settings must be an object".into()); }
+                        if let Some(reference) = settings.get("reference_asset") {
+                            let reference = reference.as_str().ok_or("reference_asset must be a string")?;
+                            if reference.len() > 16 * 1024 || (kind == GenerationKind::Audio && !reference.is_empty()) {
+                                return Err("this generator does not accept that image reference".into());
+                            }
+                        }
                         if settings.get("aspect_ratio").is_some_and(|ratio| !matches!(ratio.as_str(),Some("1:1"|"16:9"|"9:16"))) { return Err("unsupported aspect ratio".into()); }
                         if settings.get("duration_seconds").is_some_and(|duration| duration.as_u64().is_none_or(|value| value==0 || value>300)) { return Err("duration must be 1..300 seconds".into()); }
                     }
