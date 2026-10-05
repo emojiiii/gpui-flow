@@ -1,13 +1,14 @@
 //! Local-only projects. `project.json` is a versioned envelope around an unchanged
 //! `FlowDocument`; its asset manifest and graph commit together in one rename.
 //!
-//! Only an explicit host-selected path enters `import_image`. JSON contains asset
-//! keys, never paths to open. Project IDs and keys are single, validated names;
-//! symlink components are rejected before filesystem access. This protects against
+//! Only an explicit host-selected path enters `import_image` or `import_model`.
+//! JSON contains asset keys, never paths to open. Project IDs and keys are single,
+//! validated names; symlink components are rejected before filesystem access. This protects against
 //! untrusted project contents, not another process concurrently replacing trusted
 //! parent directories. Hosts should serialize saves and keep the returned handle:
 //! stale cloned handles fail with `Conflict` rather than overwriting newer work.
 
+use crate::model_preview::{MAX_GLB_BYTES, PreviewError, parse_glb};
 use crate::{CreativeError, CreativeRegistry, MAX_CARDS, MAX_JSON_BYTES, MAX_LINKS};
 use gpui_flow_core::FlowDocument;
 use serde::{Deserialize, Serialize};
@@ -272,7 +273,7 @@ impl ProjectStore {
         registry.validate_document(&project.document)?;
         check_assets_on_disk(&directory, &project.assets)?;
         for asset in &project.assets {
-            verify_asset_image(&directory.join(&asset.key), asset)?;
+            verify_asset(&directory.join(&asset.key), asset)?;
         }
         Ok(LocalProject { directory, project })
     }
@@ -337,6 +338,22 @@ impl LocalProject {
     /// Supported containers: PNG, JPEG, GIF, WebP. The renderer still decodes the
     /// image and must report malformed compressed pixel data normally.
     pub fn import_image(&mut self, source: impl AsRef<Path>) -> Result<ProjectAsset, ProjectError> {
+        self.import_asset(source.as_ref(), AssetKind::Image)
+    }
+
+    /// Copy a user-selected, self-contained GLB 2.0 into this project's assets.
+    /// The bounded CPU-preview parser validates geometry before anything is
+    /// written, rejects external/data URIs, and never reads referenced files.
+    /// Models have media type `model/gltf-binary` and zero width/height.
+    pub fn import_model(&mut self, source: impl AsRef<Path>) -> Result<ProjectAsset, ProjectError> {
+        self.import_asset(source.as_ref(), AssetKind::Model)
+    }
+
+    fn import_asset(
+        &mut self,
+        source: &Path,
+        kind: AssetKind,
+    ) -> Result<ProjectAsset, ProjectError> {
         let _transaction = transaction()?;
         self.check_revision()?;
         if self.project.assets.len() >= MAX_PROJECT_ASSETS {
@@ -344,9 +361,9 @@ impl LocalProject {
                 "project has reached its 512 asset limit".into(),
             ));
         }
-        let source = absolute_path(source.as_ref())?;
-        let bytes = read_regular(&source, MAX_IMAGE_BYTES)?;
-        let format = image_info(&bytes)?;
+        let source = absolute_path(source)?;
+        let bytes = read_regular(&source, kind.max_bytes())?;
+        let format = kind.inspect(&bytes)?;
         let total = self
             .project
             .assets
@@ -362,7 +379,7 @@ impl LocalProject {
         let name = source
             .file_name()
             .and_then(|name| name.to_str())
-            .unwrap_or("Imported image")
+            .unwrap_or(kind.default_name())
             .chars()
             .filter(|c| !c.is_control())
             .take(200)
@@ -370,7 +387,7 @@ impl LocalProject {
         let asset = ProjectAsset {
             key,
             name: if name.is_empty() {
-                "Imported image".into()
+                kind.default_name().into()
             } else {
                 name
             },
@@ -408,6 +425,20 @@ impl LocalProject {
     /// Resolve only manifest-owned relative keys. Built-in symbolic resources
     /// belong to the host renderer and are deliberately not filesystem paths.
     pub fn resolve_asset(&self, key: &str) -> Result<PathBuf, ProjectError> {
+        let (path, asset) = self.asset_path(key)?;
+        verify_asset(&path, asset)?;
+        Ok(path)
+    }
+
+    /// Resolve a manifest-owned asset without parsing its contents. This checks
+    /// path components, symlinks, regular-file status and the saved byte length.
+    /// Hosts may use this on a UI thread and validate/decode the file later on a
+    /// worker; success alone does not establish that the bytes are valid media.
+    pub fn resolve_asset_path(&self, key: &str) -> Result<PathBuf, ProjectError> {
+        self.asset_path(key).map(|(path, _)| path)
+    }
+
+    fn asset_path(&self, key: &str) -> Result<(PathBuf, &ProjectAsset), ProjectError> {
         validate_asset_key(key)?;
         let asset = self
             .project
@@ -419,8 +450,7 @@ impl LocalProject {
             })?;
         let path = self.directory.join(key);
         check_asset_file(&path, asset)?;
-        verify_asset_image(&path, asset)?;
-        Ok(path)
+        Ok((path, asset))
     }
 
     fn check_revision(&self) -> Result<(), ProjectError> {
@@ -499,7 +529,7 @@ fn validate_asset_key(key: &str) -> Result<(), ProjectError> {
                     && stem
                         .bytes()
                         .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
-                    && matches!(ext, "png" | "jpg" | "gif" | "webp")
+                    && matches!(ext, "png" | "jpg" | "gif" | "webp" | "glb")
             })
     });
     if !valid {
@@ -531,9 +561,22 @@ fn validate_document_assets(
             continue;
         }
         validate_asset_key(key)?;
-        if !assets.iter().any(|asset| asset.key == key) {
+        let asset = assets
+            .iter()
+            .find(|asset| asset.key == key)
+            .ok_or_else(|| ProjectError::Invalid(format!("missing project asset: {key}")))?;
+        // Model output has a strict contract. Existing image/compose cards and
+        // host-defined image kinds retain their compatibility; do not invent an
+        // allowlist for unknown host kinds. Raster posters for existing video
+        // or other host cards remain valid; only model cards require real GLB.
+        let compatible = match AssetKind::from_media_type(&asset.media_type)? {
+            AssetKind::Model => matches!(node.kind.as_str(), "model" | "generate_model"),
+            AssetKind::Image => !matches!(node.kind.as_str(), "model" | "generate_model"),
+        };
+        if !compatible {
             return Err(ProjectError::Invalid(format!(
-                "missing project asset: {key}"
+                "asset type {} is incompatible with node kind {}",
+                asset.media_type, node.kind
             )));
         }
     }
@@ -597,15 +640,25 @@ fn validate_project(project: &ProjectFile, id: &str) -> Result<(), ProjectError>
             Some("jpg") => "image/jpeg",
             Some("gif") => "image/gif",
             Some("webp") => "image/webp",
-            _ => return Err(ProjectError::Invalid("unsupported image extension".into())),
+            Some("glb") => "model/gltf-binary",
+            _ => return Err(ProjectError::Invalid("unsupported asset extension".into())),
         };
+        let kind = AssetKind::from_media_type(&asset.media_type)?;
         if asset.media_type != expected_type
             || asset.byte_len == 0
-            || asset.byte_len > MAX_IMAGE_BYTES
+            || asset.byte_len > kind.max_bytes()
         {
             return Err(ProjectError::Invalid("invalid asset type or size".into()));
         }
-        validate_dimensions(asset.width, asset.height)?;
+        match kind {
+            AssetKind::Image => validate_dimensions(asset.width, asset.height)?,
+            AssetKind::Model if asset.width != 0 || asset.height != 0 => {
+                return Err(ProjectError::Invalid(
+                    "model assets must have zero width and height".into(),
+                ));
+            }
+            AssetKind::Model => {}
+        }
         total = total.saturating_add(asset.byte_len);
     }
     if total > MAX_PROJECT_ASSET_BYTES {
@@ -799,9 +852,10 @@ fn check_asset_file(path: &Path, asset: &ProjectAsset) -> Result<(), ProjectErro
     Ok(())
 }
 
-fn verify_asset_image(path: &Path, asset: &ProjectAsset) -> Result<(), ProjectError> {
-    let bytes = read_regular(path, MAX_IMAGE_BYTES)?;
-    let info = image_info(&bytes)?;
+fn verify_asset(path: &Path, asset: &ProjectAsset) -> Result<(), ProjectError> {
+    let kind = AssetKind::from_media_type(&asset.media_type)?;
+    let bytes = read_regular(path, kind.max_bytes())?;
+    let info = kind.inspect(&bytes)?;
     if bytes.len() as u64 != asset.byte_len
         || info.width != asset.width
         || info.height != asset.height
@@ -823,7 +877,55 @@ fn check_assets_on_disk(directory: &Path, assets: &[ProjectAsset]) -> Result<(),
     Ok(())
 }
 
-struct ImageInfo {
+#[derive(Clone, Copy)]
+enum AssetKind {
+    Image,
+    Model,
+}
+
+impl AssetKind {
+    fn from_media_type(media_type: &str) -> Result<Self, ProjectError> {
+        match media_type {
+            "image/png" | "image/jpeg" | "image/gif" | "image/webp" => Ok(Self::Image),
+            "model/gltf-binary" => Ok(Self::Model),
+            _ => Err(ProjectError::Invalid("unsupported asset media type".into())),
+        }
+    }
+
+    fn max_bytes(self) -> u64 {
+        match self {
+            Self::Image => MAX_IMAGE_BYTES,
+            Self::Model => MAX_GLB_BYTES as u64,
+        }
+    }
+
+    fn default_name(self) -> &'static str {
+        match self {
+            Self::Image => "Imported image",
+            Self::Model => "Imported model",
+        }
+    }
+
+    fn inspect(self, bytes: &[u8]) -> Result<AssetInfo, ProjectError> {
+        match self {
+            Self::Image => image_info(bytes),
+            Self::Model => {
+                parse_glb(bytes).map_err(|error| match error {
+                    PreviewError::BudgetExceeded(_) => ProjectError::TooLarge(error.to_string()),
+                    _ => ProjectError::Invalid(error.to_string()),
+                })?;
+                Ok(AssetInfo {
+                    extension: "glb",
+                    media_type: "model/gltf-binary",
+                    width: 0,
+                    height: 0,
+                })
+            }
+        }
+    }
+}
+
+struct AssetInfo {
     extension: &'static str,
     media_type: &'static str,
     width: u32,
@@ -844,7 +946,7 @@ fn validate_dimensions(width: u32, height: u32) -> Result<(), ProjectError> {
     Ok(())
 }
 
-fn image_info(bytes: &[u8]) -> Result<ImageInfo, ProjectError> {
+fn image_info(bytes: &[u8]) -> Result<AssetInfo, ProjectError> {
     let invalid = || ProjectError::Invalid("choose a valid PNG, JPEG, GIF, or WebP image".into());
     let be32 = |slice: &[u8]| u32::from_be_bytes(slice.try_into().expect("four checked bytes"));
     let le24 = |slice: &[u8]| {
@@ -898,7 +1000,7 @@ fn image_info(bytes: &[u8]) -> Result<ImageInfo, ProjectError> {
         return Err(invalid());
     };
     validate_dimensions(width, height)?;
-    Ok(ImageInfo {
+    Ok(AssetInfo {
         extension,
         media_type,
         width,
@@ -978,6 +1080,45 @@ mod tests {
         ]
     }
 
+    fn model_json() -> serde_json::Value {
+        json!({
+            "asset": {"version": "2.0"},
+            "scene": 0,
+            "scenes": [{"nodes": [0]}],
+            "nodes": [{"mesh": 0}],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "mode": 4}]}],
+            "buffers": [{"byteLength": 36}],
+            "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 36}],
+            "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3,
+                "type": "VEC3", "min": [-1, -1, 0], "max": [1, 1, 0]}]
+        })
+    }
+
+    fn glb_with_json(value: &serde_json::Value) -> Vec<u8> {
+        // A complete GLB 2.0 with real FLOAT positions for one triangle. Tests
+        // exercise persisted model bytes, not image headers or placeholder PNGs.
+        let mut json = serde_json::to_vec(value).unwrap();
+        while !json.len().is_multiple_of(4) {
+            json.push(b' ');
+        }
+        let positions: [f32; 9] = [-1., -1., 0., 1., -1., 0., 0., 1., 0.];
+        let bin: Vec<u8> = positions.into_iter().flat_map(f32::to_le_bytes).collect();
+        let mut bytes = b"glTF".to_vec();
+        bytes.extend_from_slice(&2u32.to_le_bytes());
+        bytes.extend_from_slice(&((28 + json.len() + bin.len()) as u32).to_le_bytes());
+        bytes.extend_from_slice(&(json.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(b"JSON");
+        bytes.extend_from_slice(&json);
+        bytes.extend_from_slice(&(bin.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(b"BIN\0");
+        bytes.extend_from_slice(&bin);
+        bytes
+    }
+
+    fn glb() -> Vec<u8> {
+        glb_with_json(&model_json())
+    }
+
     #[test]
     fn create_save_open_and_list_preserve_flow_document() {
         let home = TestHome::new();
@@ -1052,6 +1193,318 @@ mod tests {
         );
         assert_eq!(reopened.document(), &document);
         assert_eq!(reopened.assets(), &[asset]);
+    }
+
+    #[test]
+    fn copied_glb_survives_source_deletion_and_reopen_as_real_geometry() {
+        let home = TestHome::new();
+        let store = home.store();
+        let registry = standard_registry();
+        let source = home.0.join("triangle.glb");
+        fs::write(&source, glb()).unwrap();
+        let mut project = store
+            .create_project("Models", &FlowDocument::default(), &registry)
+            .unwrap();
+        let asset = project.import_model(&source).unwrap();
+        assert_eq!(asset.media_type, "model/gltf-binary");
+        assert!(asset.key.ends_with(".glb"));
+        assert_eq!((asset.width, asset.height), (0, 0));
+        assert_eq!(project.revision(), 1);
+        let mut document = project.document().clone();
+        let mut node = registry
+            .make_node("generate_model", "model", Point::ZERO, None)
+            .unwrap();
+        node.data["asset"] = json!(asset.key);
+        document.graph.add_node(node).unwrap();
+        project.save_document(&document, &registry).unwrap();
+        fs::remove_file(source).unwrap();
+        let reopened = store
+            .open_project(&project.metadata().id, &registry)
+            .unwrap();
+        let bytes = fs::read(reopened.resolve_asset(&asset.key).unwrap()).unwrap();
+        assert_eq!(bytes, glb());
+        let mesh = parse_glb(&bytes).unwrap();
+        assert_eq!((mesh.vertex_count(), mesh.triangle_count()), (3, 1));
+        assert_eq!(reopened.revision(), 2);
+        assert_eq!(reopened.document(), &document);
+        assert_eq!(reopened.assets(), &[asset]);
+    }
+
+    #[test]
+    fn image_and_model_assets_keep_node_contracts_and_host_image_compatibility() {
+        let home = TestHome::new();
+        let registry = standard_registry();
+        let mut project = home
+            .store()
+            .create_project("Typed assets", &FlowDocument::default(), &registry)
+            .unwrap();
+        let image_path = home.0.join("image.png");
+        let model_path = home.0.join("model.glb");
+        fs::write(&image_path, png()).unwrap();
+        fs::write(&model_path, glb()).unwrap();
+        let image = project.import_image(&image_path).unwrap();
+        let model = project.import_model(&model_path).unwrap();
+        for kind in [
+            "image",
+            "compose",
+            "generate_image",
+            "generate_video",
+            "generate_audio",
+            "host_custom_image",
+            "model",
+            "generate_model",
+        ] {
+            for asset in [&image, &model] {
+                let mut document = FlowDocument::default();
+                let mut node = registry
+                    .make_node("image", "asset", Point::ZERO, None)
+                    .unwrap();
+                node.kind = kind.into();
+                node.data["asset"] = json!(asset.key);
+                document.graph.add_node(node).unwrap();
+                let model_kind = matches!(kind, "model" | "generate_model");
+                assert_eq!(
+                    validate_document_assets(&document, project.assets()).is_ok(),
+                    model_kind == (asset.media_type == "model/gltf-binary"),
+                    "kind {kind}, media type {}",
+                    asset.media_type
+                );
+            }
+        }
+        let before = fs::read(project.directory().join(PROJECT_FILE)).unwrap();
+        let mut document = FlowDocument::default();
+        let mut node = registry
+            .make_node("image", "wrong-type", Point::ZERO, None)
+            .unwrap();
+        node.data["asset"] = json!(model.key);
+        document.graph.add_node(node).unwrap();
+        assert!(project.save_document(&document, &registry).is_err());
+        assert_eq!(
+            before,
+            fs::read(project.directory().join(PROJECT_FILE)).unwrap()
+        );
+    }
+
+    #[test]
+    fn model_import_rejects_external_uris_and_hostile_sizes_before_commit() {
+        let home = TestHome::new();
+        let registry = standard_registry();
+        let mut project = home
+            .store()
+            .create_project("Bounded models", &FlowDocument::default(), &registry)
+            .unwrap();
+        let source = home.0.join("model.glb");
+        let before = fs::read(project.directory().join(PROJECT_FILE)).unwrap();
+        for uri in [
+            "https://example.invalid/positions.bin",
+            "file:///tmp/positions.bin",
+            "../positions.bin",
+            "data:application/octet-stream;base64,AAAA",
+        ] {
+            let mut value = model_json();
+            value["buffers"][0]["uri"] = json!(uri);
+            fs::write(&source, glb_with_json(&value)).unwrap();
+            assert!(project.import_model(&source).is_err(), "URI {uri}");
+        }
+        let mut oversized_count = model_json();
+        oversized_count["accessors"][0]["count"] = json!(u64::MAX);
+        let mut oversized_view = model_json();
+        oversized_view["bufferViews"][0]["byteLength"] = json!(u64::MAX);
+        let mut bad_header = glb();
+        bad_header[8..12].copy_from_slice(&u32::MAX.to_le_bytes());
+        for bytes in [
+            png(),
+            glb_with_json(&oversized_count),
+            glb_with_json(&oversized_view),
+            bad_header,
+        ] {
+            fs::write(&source, bytes).unwrap();
+            assert!(project.import_model(&source).is_err());
+        }
+        File::create(&source)
+            .unwrap()
+            .set_len(MAX_GLB_BYTES as u64 + 1)
+            .unwrap();
+        assert!(matches!(
+            project.import_model(&source),
+            Err(ProjectError::TooLarge(_))
+        ));
+        assert!(project.assets().is_empty());
+        assert_eq!(project.revision(), 0);
+        assert_eq!(
+            before,
+            fs::read(project.directory().join(PROJECT_FILE)).unwrap()
+        );
+        assert_eq!(
+            fs::read_dir(project.directory().join("assets"))
+                .unwrap()
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn stale_model_import_and_image_model_confusion_leave_manifest_unchanged() {
+        let home = TestHome::new();
+        let registry = standard_registry();
+        let mut project = home
+            .store()
+            .create_project("Shared models", &FlowDocument::default(), &registry)
+            .unwrap();
+        let mut stale = project.clone();
+        let source = home.0.join("model.glb");
+        fs::write(&source, glb()).unwrap();
+        assert!(project.import_image(&source).is_err());
+        project.import_model(&source).unwrap();
+        let before = fs::read(project.directory().join(PROJECT_FILE)).unwrap();
+        assert!(matches!(
+            stale.import_model(&source),
+            Err(ProjectError::Conflict)
+        ));
+        assert_eq!(
+            before,
+            fs::read(project.directory().join(PROJECT_FILE)).unwrap()
+        );
+        assert_eq!(project.assets().len(), 1);
+        assert_eq!(
+            fs::read_dir(project.directory().join("assets"))
+                .unwrap()
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn model_content_and_manifest_tampering_are_rejected_on_open_and_resolve() {
+        let home = TestHome::new();
+        let store = home.store();
+        let registry = standard_registry();
+        let mut project = store
+            .create_project("Checked models", &FlowDocument::default(), &registry)
+            .unwrap();
+        let source = home.0.join("model.glb");
+        fs::write(&source, glb()).unwrap();
+        let asset = project.import_model(&source).unwrap();
+        let path = project.resolve_asset_path(&asset.key).unwrap();
+        let mut changed = glb();
+        changed[0] = 0;
+        fs::write(&path, changed).unwrap();
+        // A UI path lookup deliberately leaves expensive content validation to
+        // the worker. Full resolve and reopen must still reject invalid bytes.
+        assert_eq!(project.resolve_asset_path(&asset.key).unwrap(), path);
+        assert!(project.resolve_asset(&asset.key).is_err());
+        assert!(
+            store
+                .open_project(&project.metadata().id, &registry)
+                .is_err()
+        );
+        fs::write(&path, glb()).unwrap();
+        assert!(
+            store
+                .open_project(&project.metadata().id, &registry)
+                .is_ok()
+        );
+        for (field, value) in [
+            ("width", json!(1)),
+            ("height", json!(u32::MAX)),
+            ("media_type", json!("image/png")),
+            ("byte_len", json!(MAX_GLB_BYTES as u64 + 1)),
+        ] {
+            let mut manifest = serde_json::to_value(&project.project).unwrap();
+            manifest["assets"][0][field] = value;
+            fs::write(
+                project.directory().join(PROJECT_FILE),
+                serde_json::to_vec(&manifest).unwrap(),
+            )
+            .unwrap();
+            assert!(
+                store
+                    .open_project(&project.metadata().id, &registry)
+                    .is_err(),
+                "field {field}"
+            );
+        }
+    }
+
+    #[test]
+    fn mixed_media_share_project_manifest_count_and_total_byte_budgets() {
+        let home = TestHome::new();
+        let registry = standard_registry();
+        let project = home
+            .store()
+            .create_project("Shared budget", &FlowDocument::default(), &registry)
+            .unwrap();
+        // Validate manifest accounting directly: the filesystem does not need
+        // half a gigabyte of fixtures to exercise the mixed-media total limit.
+        let mut candidate = project.project.clone();
+        candidate.assets = (0..16)
+            .map(|index| {
+                let model = index % 2 == 0;
+                ProjectAsset {
+                    key: format!("assets/asset-{index}.{}", if model { "glb" } else { "png" }),
+                    name: format!("Asset {index}"),
+                    media_type: if model {
+                        "model/gltf-binary"
+                    } else {
+                        "image/png"
+                    }
+                    .into(),
+                    byte_len: MAX_IMAGE_BYTES,
+                    width: u32::from(!model),
+                    height: u32::from(!model),
+                }
+            })
+            .collect();
+        assert!(validate_project(&candidate, &candidate.metadata.id).is_ok());
+        let mut extra = candidate.assets[0].clone();
+        extra.key = "assets/extra.glb".into();
+        extra.byte_len = glb().len() as u64;
+        candidate.assets.push(extra.clone());
+        assert!(matches!(
+            validate_project(&candidate, &candidate.metadata.id),
+            Err(ProjectError::TooLarge(_))
+        ));
+        candidate.assets = (0..=MAX_PROJECT_ASSETS)
+            .map(|index| ProjectAsset {
+                key: format!("assets/model-{index}.glb"),
+                ..extra.clone()
+            })
+            .collect();
+        assert!(matches!(
+            validate_project(&candidate, &candidate.metadata.id),
+            Err(ProjectError::TooLarge(_))
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn model_import_and_both_resolvers_reject_symlink_files() {
+        use std::os::unix::fs::symlink;
+        let home = TestHome::new();
+        let store = home.store();
+        let registry = standard_registry();
+        let mut project = store
+            .create_project("Model links", &FlowDocument::default(), &registry)
+            .unwrap();
+        let source = home.0.join("model.glb");
+        fs::write(&source, glb()).unwrap();
+        let linked_source = home.0.join("linked.glb");
+        symlink(&source, &linked_source).unwrap();
+        assert!(project.import_model(linked_source).is_err());
+        assert!(project.assets().is_empty());
+        let asset = project.import_model(&source).unwrap();
+        let asset_path = project.resolve_asset_path(&asset.key).unwrap();
+        fs::remove_file(&asset_path).unwrap();
+        symlink(&source, &asset_path).unwrap();
+        assert!(project.resolve_asset_path(&asset.key).is_err());
+        assert!(project.resolve_asset(&asset.key).is_err());
+        assert!(
+            store
+                .open_project(&project.metadata().id, &registry)
+                .is_err()
+        );
+        assert!(project.resolve_asset_path("assets/missing.glb").is_err());
+        assert!(project.resolve_asset_path("assets/../model.glb").is_err());
     }
 
     #[test]

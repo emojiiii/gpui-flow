@@ -119,12 +119,21 @@ impl CreativeCanvas {
         if let Some(key) = asset {
             if let Some(project) = &self.project {
                 project
-                    .resolve_asset(key)
+                    .resolve_asset_path(key)
                     .map_err(|e| CreativeError(e.to_string()))?;
             }
             current.data["asset"] = Value::String(key.into());
         }
         self.registry.validate_node(&current)?;
+        if let Some(project) = &self.project {
+            let mut document = self.canvas.read(cx).editor.document();
+            if let Some(candidate) = document.graph.nodes.get_mut(&node) {
+                candidate.data = current.data.clone();
+            }
+            project
+                .validate_document(&document, &self.registry)
+                .map_err(|error| CreativeError(error.to_string()))?;
+        }
         self.canvas
             .update(cx, |v, cx| {
                 v.execute_command(
@@ -139,9 +148,10 @@ impl CreativeCanvas {
     }
     fn refresh_assets(&mut self, cx: &mut Context<Self>) {
         let mut assets = CreativeAssets::demo();
+        assets.models = self.model_views.clone();
         if let Some(project) = &self.project {
             for asset in project.assets() {
-                if let Ok(path) = project.resolve_asset(&asset.key) {
+                if let Ok(path) = project.resolve_asset_path(&asset.key) {
                     assets.register(&asset.key, path);
                 }
             }
@@ -231,7 +241,14 @@ impl CreativeCanvas {
             files: true,
             directories: false,
             multiple: true,
-            prompt: Some("选择本地图片 · 复制到项目素材目录".into()),
+            prompt: Some(
+                if self.import_model {
+                    "选择本地 GLB · 复制到项目素材目录"
+                } else {
+                    "选择本地图片 · 复制到项目素材目录"
+                }
+                .into(),
+            ),
         });
         self.import_image_request(
             replace_selection,
@@ -249,7 +266,7 @@ impl CreativeCanvas {
         let value = self.local_path.read(cx).value();
         let path = PathBuf::from(value.trim());
         if !path.is_absolute() {
-            self.notice = Some("请输入已选择图片的完整绝对路径".into());
+            self.notice = Some("请输入已选择文件的完整绝对路径".into());
             cx.notify();
             return;
         }
@@ -276,6 +293,7 @@ impl CreativeCanvas {
             .map(|n| n.id);
         let document = self.canvas.read(cx).editor.document();
         let registry = self.registry.clone();
+        let is_model = self.import_model;
         self.importing = true;
         self.canvas.update(cx, |v, cx| v.set_editable(false, cx));
         cx.notify();
@@ -290,7 +308,11 @@ impl CreativeCanvas {
                             let mut imports = vec![];
                             let mut errors = vec![];
                             for path in paths {
-                                match project.import_image(&path) {
+                                match if is_model {
+                                    project.import_model(&path)
+                                } else {
+                                    project.import_image(&path)
+                                } {
                                     Ok(asset) => imports.push(asset),
                                     Err(error) => errors.push(format!(
                                         "{}: {error}",
@@ -334,18 +356,28 @@ impl CreativeCanvas {
                                 }
                             } else {
                                 let view = this.canvas.read(cx);
-                                let id = view
-                                    .editor
-                                    .graph()
-                                    .fresh_id(&format!("image-{}", this.next_id));
+                                let id = view.editor.graph().fresh_id(&format!(
+                                    "{}-{}",
+                                    if is_model { "model" } else { "image" },
+                                    this.next_id
+                                ));
                                 this.next_id += 1;
                                 let position =
                                     view.editor.viewport.screen_to_world(WorldPoint::new(
                                         this.canvas_size.width / 2. - 180. + index as f32 * 28.,
-                                        this.canvas_size.height / 2. - 160. + index as f32 * 28.,
+                                        if is_model {
+                                            ((this.canvas_size.height
+                                                - 315. * view.editor.viewport.zoom
+                                                - 250.)
+                                                / 2.)
+                                                .max(96.)
+                                                + index as f32 * 28.
+                                        } else {
+                                            this.canvas_size.height / 2. - 160. + index as f32 * 28.
+                                        },
                                     ));
                                 if let Ok(mut node) = this.registry.make_node(
-                                    "image",
+                                    if is_model { "model" } else { "image" },
                                     id.clone(),
                                     position,
                                     Some(
@@ -353,7 +385,11 @@ impl CreativeCanvas {
                                     ),
                                 ) {
                                     node.title = asset.name;
-                                    node.size = imported_image_size(asset.width, asset.height);
+                                    node.size = if is_model {
+                                        WorldSize::new(420., 315.)
+                                    } else {
+                                        imported_image_size(asset.width, asset.height)
+                                    };
                                     if this.command(CanvasCommand::AddNode(node), cx) {
                                         this.command(
                                             CanvasCommand::SelectNode {
@@ -367,7 +403,7 @@ impl CreativeCanvas {
                             }
                         }
                         this.notice = Some(if errors.is_empty() {
-                            format!("已导入 {imported_count} 张图片，素材已复制到项目")
+                            format!("已导入 {imported_count} 个素材，已复制到本地项目")
                         } else {
                             format!("已导入 {imported_count} 张；{}", errors.join("；"))
                         });
@@ -389,6 +425,44 @@ impl CreativeCanvas {
             });
         })
         .detach();
+    }
+
+    pub(super) fn change_model_camera(
+        &mut self,
+        yaw: f32,
+        pitch: f32,
+        zoom: f32,
+        reset: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(mut node) = self
+            .selected(cx)
+            .filter(|n| matches!(n.kind.as_str(), "model" | "generate_model"))
+        else {
+            return;
+        };
+        let mut state = node
+            .data
+            .get("camera")
+            .and_then(|v| {
+                serde_json::from_value::<crate::model_preview::OrbitCameraState>(v.clone()).ok()
+            })
+            .unwrap_or_else(|| crate::model_preview::OrbitCamera::default().state());
+        if reset {
+            state = crate::model_preview::OrbitCamera::default().state();
+        } else {
+            state.yaw_radians = (state.yaw_radians + yaw).rem_euclid(std::f32::consts::TAU);
+            state.pitch_radians = (state.pitch_radians + pitch).clamp(-1.56, 1.56);
+            state.distance_factor = (state.distance_factor * zoom).clamp(0.05, 100.);
+        }
+        node.data["camera"] = serde_json::to_value(state).expect("bounded camera");
+        self.command(
+            CanvasCommand::SetNodeData {
+                node: node.id,
+                data: node.data,
+            },
+            cx,
+        );
     }
 }
 fn imported_image_size(width: u32, height: u32) -> WorldSize {

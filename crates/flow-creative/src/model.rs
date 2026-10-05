@@ -390,6 +390,30 @@ pub fn standard_registry() -> CreativeRegistry {
             },
         ),
         NodeDefinition::new(
+            "model",
+            "本地 3D 模型",
+            Size::new(420., 315.),
+            vec![Port::output("model", "3D", DataType::Named("model".into()))],
+            json!({"asset":"","caption":"本地 GLB · CPU 静态预览"}),
+            |v| {
+                text_field(v, "asset")?;
+                text_field(v, "caption")?;
+                if let Some(state) = v.get("camera") {
+                    let state: crate::model_preview::OrbitCameraState =
+                        serde_json::from_value(state.clone()).map_err(|e| e.to_string())?;
+                    if !state.yaw_radians.is_finite()
+                        || !(0.0..=std::f32::consts::TAU).contains(&state.yaw_radians)
+                        || !state.pitch_radians.is_finite()
+                        || state.pitch_radians.abs() > std::f32::consts::FRAC_PI_2 - 0.01
+                        || !(0.05..=100.0).contains(&state.distance_factor)
+                    {
+                        return Err("invalid model camera".into());
+                    }
+                }
+                Ok(())
+            },
+        ),
+        NodeDefinition::new(
             "compose",
             "创作卡片 / Compose",
             Size::new(275., 270.),

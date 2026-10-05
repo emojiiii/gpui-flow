@@ -14,6 +14,7 @@ use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 #[derive(Clone, Default)]
 pub struct CreativeAssets {
     paths: BTreeMap<String, PathBuf>,
+    models: Arc<model_view::ModelViews>,
 }
 impl CreativeAssets {
     pub fn register(&mut self, key: impl Into<String>, path: impl Into<PathBuf>) {
@@ -44,11 +45,14 @@ impl NodeRenderer for CardRenderer {
         node: &Node,
         context: NodeRenderContext,
         _: &mut Window,
-        _: &mut App,
+        cx: &mut App,
     ) -> AnyElement {
         let z = context.zoom;
         let key = node.data["asset"].as_str().unwrap_or("");
         if let Some(path) = self.assets.paths.get(key) {
+            if matches!(node.kind.as_str(), "model" | "generate_model") {
+                return self.assets.models.render(node, path, cx);
+            }
             return img(path.clone())
                 .size_full()
                 .object_fit(ObjectFit::Cover)
@@ -91,6 +95,7 @@ impl NodeRenderer for CardRenderer {
             "generate_video" => ("▷", "视频生成", "从一个镜头开始", 0xfff1e9),
             "generate_audio" => ("♫", "音频生成", "声音、音乐与独立音效", 0xe7f5f0),
             "generate_model" => ("◇", "3D 模型生成", "描述形状、材质与风格", 0xeeeefa),
+            "model" => ("◇", "导入本地 GLB", "CPU 静态几何预览", 0xeeeefa),
             _ => ("▧", "导入本地图片", "PNG · JPG · GIF · WebP", 0xf0f1f4),
         };
         let status = match node.data["status"].as_str() {
@@ -170,6 +175,7 @@ pub fn demo_renderers(assets: CreativeAssets) -> NodeRegistry {
     for kind in [
         "text",
         "image",
+        "model",
         "compose",
         "generate_image",
         "generate_video",
@@ -202,6 +208,7 @@ fn theme() -> FlowTheme {
 enum Action {
     Home,
     ImportImage,
+    ImportModel,
     ReplaceImage,
     ImportImagePath,
     CloseImportPath,
@@ -219,6 +226,9 @@ enum Action {
     Ungroup,
     Fit,
     Zoom(f32),
+    ModelOrbit(f32, f32),
+    ModelZoom(f32),
+    ModelFit,
     ReadOnly,
     Data,
     Export,
@@ -245,6 +255,8 @@ pub struct CreativeCanvas {
     custom_color: Entity<TextareaState>,
     local_path: Entity<TextareaState>,
     show_import_path: bool,
+    import_model: bool,
+    model_views: Arc<model_view::ModelViews>,
     form_source: Option<(NodeId, String, Value)>,
     show_data: bool,
     json_mode: JsonMode,
@@ -298,6 +310,7 @@ impl CreativeCanvas {
         let subscription = cx.subscribe_in(&canvas, window, |this, canvas, event, window, cx| {
             match event {
                 FlowEvent::DocumentChanged | FlowEvent::SelectionChanged => {
+                    this.model_views.retain(canvas.read(cx).editor.graph());
                     // A successful graph edit supersedes an earlier rejection. Selection
                     // alone must not erase an error the user still needs to understand.
                     if matches!(event, FlowEvent::DocumentChanged) {
@@ -363,10 +376,12 @@ impl CreativeCanvas {
             }),
             local_path: cx.new(|cx| {
                 TextareaState::new(window, cx)
-                    .placeholder("本地图片绝对路径")
+                    .placeholder("本地素材绝对路径")
                     .context_menu(false)
             }),
             show_import_path: false,
+            import_model: false,
+            model_views: Arc::default(),
             form_source: None,
             show_data: false,
             json_mode: JsonMode::Document,
@@ -458,16 +473,35 @@ impl CreativeCanvas {
                 return;
             }
             Action::ImportImage => {
+                self.import_model = false;
+                self.import_image(false, cx);
+                return;
+            }
+            Action::ImportModel => {
+                self.import_model = true;
                 self.import_image(false, cx);
                 return;
             }
             Action::ReplaceImage => {
+                self.import_model = false;
                 self.import_image(true, cx);
                 return;
             }
             Action::Duplicate => CanvasCommand::Duplicate {
                 offset: WorldPoint::new(32., 32.),
             },
+            Action::ModelOrbit(yaw, pitch) => {
+                self.change_model_camera(yaw, pitch, 1., false, cx);
+                return;
+            }
+            Action::ModelZoom(factor) => {
+                self.change_model_camera(0., 0., factor, false, cx);
+                return;
+            }
+            Action::ModelFit => {
+                self.change_model_camera(0., 0., 1., true, cx);
+                return;
+            }
             Action::Colors => {
                 self.show_colors = !self.show_colors;
                 cx.notify();
@@ -760,7 +794,7 @@ fn form_identity(node: &Node) -> (NodeId, String, Value) {
 fn primary_field(node: &Node) -> Option<&'static str> {
     let field = match node.kind.as_str() {
         "text" | "compose" => "text",
-        "image" => "caption",
+        "image" | "model" => "caption",
         "palette" => "note",
         "generate_image" | "generate_video" | "generate_audio" | "generate_model" => "prompt",
         _ => return None,
@@ -772,6 +806,7 @@ fn label(text: impl Into<SharedString>) -> Div {
     let text: SharedString = text.into();
     div().text_xs().text_color(rgb(theme().muted)).child(text)
 }
+mod model_view;
 mod project_ui;
 mod workbench;
 pub use workbench::CreativeWorkbench;
@@ -836,6 +871,7 @@ impl Render for CreativeCanvas {
         let tools = [
             ("text", "T", "文字"),
             ("image", "▧", "图片"),
+            ("model", "◇", "本地3D"),
             ("generate_image", "A", "图像"),
             ("generate_video", "▷", "视频"),
             ("generate_audio", "♫", "音频"),
@@ -863,6 +899,8 @@ impl Render for CreativeCanvas {
                     symbol,
                     if kind == "image" && self.project.is_some() {
                         Action::ImportImage
+                    } else if kind == "model" && self.project.is_some() {
+                        Action::ImportModel
                     } else {
                         Action::Add(kind.into())
                     },
@@ -940,10 +978,23 @@ impl Render for CreativeCanvas {
                 toolbar.child(self.button("object-delete", "删除", Action::Delete, !editable, cx));
             surface = surface.child(toolbar);
             let generation = GenerationKind::from_node_kind(&node.kind);
+            let is_model = matches!(node.kind.as_str(), "model" | "generate_model")
+                && !node.data["asset"].as_str().unwrap_or_default().is_empty();
             let composer_position = anchored_panel(
                 r,
                 self.canvas_size,
-                WorldSize::new(380., if generation.is_some() { 286. } else { 146. }),
+                WorldSize::new(
+                    380.,
+                    if generation.is_some() && is_model {
+                        378.
+                    } else if generation.is_some() {
+                        286.
+                    } else if is_model {
+                        238.
+                    } else {
+                        146.
+                    },
+                ),
             );
             let composer_left = composer_position.x;
             let composer_top = composer_position.y;
@@ -1025,6 +1076,67 @@ impl Render for CreativeCanvas {
                             )),
                     )
                     .child(label("先保存提示词；接入宿主后才会发送生成请求"));
+            }
+            if is_model {
+                composer = composer
+                    .child(
+                        div()
+                            .flex()
+                            .gap_1()
+                            .child(self.button(
+                                "model-left",
+                                "↶",
+                                Action::ModelOrbit(-0.3, 0.),
+                                !editable,
+                                cx,
+                            ))
+                            .child(self.button(
+                                "model-right",
+                                "↷",
+                                Action::ModelOrbit(0.3, 0.),
+                                !editable,
+                                cx,
+                            ))
+                            .child(self.button(
+                                "model-up",
+                                "↑",
+                                Action::ModelOrbit(0., 0.2),
+                                !editable,
+                                cx,
+                            ))
+                            .child(self.button(
+                                "model-down",
+                                "↓",
+                                Action::ModelOrbit(0., -0.2),
+                                !editable,
+                                cx,
+                            ))
+                            .child(self.button(
+                                "model-in",
+                                "+",
+                                Action::ModelZoom(0.8),
+                                !editable,
+                                cx,
+                            ))
+                            .child(self.button(
+                                "model-out",
+                                "−",
+                                Action::ModelZoom(1.25),
+                                !editable,
+                                cx,
+                            ))
+                            .child(self.button(
+                                "model-fit",
+                                "复位",
+                                Action::ModelFit,
+                                !editable,
+                                cx,
+                            )),
+                    )
+                    .child(label("按钮旋转/缩放模型；拖动画面移动节点"))
+                    .child(label(
+                        "CPU 静态预览 · 默认/首场景 · 基色/平面光照；无纹理、PBR、顶点色、原始法线、动画或骨骼",
+                    ));
             }
             composer = composer.child(
                 div()
@@ -1150,12 +1262,16 @@ impl Render for CreativeCanvas {
                     .flex()
                     .flex_col()
                     .gap_3()
-                    .child(div().text_sm().child("导入已选择的本地图片"))
-                    .child(label("文件选择器不可用时，可粘贴图片的绝对路径"))
+                    .child(div().text_sm().child(if self.import_model {
+                        "导入已选择的本地 GLB 模型"
+                    } else {
+                        "导入已选择的本地图片"
+                    }))
+                    .child(label("文件选择器不可用时，可粘贴文件的绝对路径"))
                     .child(
                         Textarea::new(&self.local_path)
                             .h(px(72.))
-                            .aria_label("要导入的本地图片绝对路径"),
+                            .aria_label("要导入的本地素材绝对路径"),
                     )
                     .child(self.button(
                         "import-local-path",

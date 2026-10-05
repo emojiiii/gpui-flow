@@ -14,3 +14,5 @@ pub use generation::*;
 
 mod project;
 pub use project::*;
+
+pub mod model_preview;
