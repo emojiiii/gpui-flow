@@ -25,6 +25,7 @@ pub struct CreativeAssets {
     dimensions: BTreeMap<String, (u32, u32)>,
     media_types: BTreeMap<String, String>,
     models: Arc<model_view::ModelViews>,
+    masks: Arc<mask_preview::MaskViews>,
     media: Arc<media_view::MediaViews>,
     editing_text: Arc<Mutex<Option<NodeId>>>,
     begin_text_edit: Option<TextEditCallback>,
@@ -79,6 +80,9 @@ impl NodeRenderer for CardRenderer {
         cx: &mut App,
     ) -> AnyElement {
         let z = context.zoom;
+        if node.kind == "mask" {
+            return self.assets.masks.render(node, cx);
+        }
         let key = node.data["asset"].as_str().unwrap_or("");
         if let Some(path) = self.assets.paths.get(key) {
             if self
@@ -158,7 +162,7 @@ impl NodeRenderer for CardRenderer {
                 .into_any_element();
         }
         let (symbol, background) = match node.kind.as_str() {
-            "generate_image" => ("image", 0xeaf0f8),
+            "generate_image" | "edit_image" => ("image", 0xeaf0f8),
             "generate_video" => ("video", 0xeef0f5),
             "generate_audio" => ("music", 0xf3eff8),
             "generate_model" | "model" => ("box", 0xecf2f1),
@@ -235,6 +239,8 @@ pub fn demo_renderers(assets: CreativeAssets) -> NodeRegistry {
         "video",
         "audio",
         "model",
+        "mask",
+        "edit_image",
         "compose",
         "generate_image",
         "generate_video",
@@ -265,6 +271,7 @@ fn theme() -> FlowTheme {
 }
 #[derive(Clone)]
 enum Action {
+    Mask(mask_editor::MaskAction),
     Home,
     RenameProject,
     ConfirmRename,
@@ -339,6 +346,7 @@ pub struct CreativeCanvas {
     show_rename: bool,
     pending_project_name: Option<String>,
     show_import_path: bool,
+    import_replacement: Option<NodeId>,
     quick_edit: bool,
     show_layers: bool,
     import_model: bool,
@@ -346,6 +354,10 @@ pub struct CreativeCanvas {
     asset_picker_focus: FocusHandle,
     asset_thumbnails: Entity<asset_thumbnails::AssetThumbnails>,
     model_views: Arc<model_view::ModelViews>,
+    mask_views: Arc<mask_preview::MaskViews>,
+    mask_editing: Option<mask_editor::MaskEditing>,
+    mask_focus: FocusHandle,
+    mask_cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
     media_views: Arc<media_view::MediaViews>,
     editing_text: Arc<Mutex<Option<NodeId>>>,
     form_source: Option<(NodeId, String, Value)>,
@@ -405,6 +417,9 @@ impl CreativeCanvas {
             match event {
                 FlowEvent::DocumentChanged | FlowEvent::SelectionChanged => {
                     this.model_views.retain(canvas.read(cx).editor.graph());
+                    this.mask_views
+                        .sync(canvas.read(cx).editor.graph(), this.project.as_ref());
+                    this.reconcile_mask_edit(cx);
                     this.media_views.retain(canvas, cx);
                     // A successful graph edit supersedes an earlier rejection. Selection
                     // alone must not erase an error the user still needs to understand.
@@ -457,6 +472,12 @@ impl CreativeCanvas {
         });
         let asset_thumbnails = cx.new(asset_thumbnails::AssetThumbnails::new);
         let thumbnail_observer = cx.observe(&asset_thumbnails, |_, _, cx| cx.notify());
+        cx.on_release(|this: &mut Self, _| {
+            if let Some(cancel) = &this.mask_cancel {
+                cancel.store(true, std::sync::atomic::Ordering::Release);
+            }
+        })
+        .detach();
         Ok(Self {
             canvas,
             registry,
@@ -484,6 +505,7 @@ impl CreativeCanvas {
             show_rename: false,
             pending_project_name: None,
             show_import_path: false,
+            import_replacement: None,
             quick_edit: false,
             show_layers: false,
             import_model: false,
@@ -491,6 +513,10 @@ impl CreativeCanvas {
             asset_picker_focus: cx.focus_handle(),
             asset_thumbnails,
             model_views: Arc::default(),
+            mask_views: Arc::default(),
+            mask_editing: None,
+            mask_focus: cx.focus_handle(),
+            mask_cancel: None,
             media_views: Arc::default(),
             editing_text: Arc::default(),
             form_source: None,
@@ -547,6 +573,13 @@ impl CreativeCanvas {
         }
         if source.as_ref().map(|s| &s.0) != self.form_source.as_ref().map(|s| &s.0) {
             self.clear_text_edit();
+            if self
+                .mask_editing
+                .as_ref()
+                .is_some_and(|edit| source.as_ref().map(|s| &s.0) != Some(&edit.node))
+            {
+                self.clear_mask_edit();
+            }
             self.quick_edit = false;
             self.show_colors = false;
         }
@@ -596,6 +629,10 @@ impl CreativeCanvas {
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
         }
         let command = match action {
+            Action::Mask(action) => {
+                self.handle_mask_action(action, window, cx);
+                return;
+            }
             Action::BrowseAssets => {
                 self.asset_picker = Some(asset_browser::AssetPicker { page: 0 });
                 self.show_layers = false;
@@ -731,6 +768,8 @@ impl CreativeCanvas {
                 }
             }
             Action::Home => {
+                self.finish_mask_stroke(cx);
+                self.clear_mask_edit();
                 self.apply_form_edit(cx);
                 self.return_after_save = true;
                 self.save_project(cx);
@@ -742,6 +781,7 @@ impl CreativeCanvas {
             }
             Action::CloseImportPath => {
                 self.show_import_path = false;
+                self.import_replacement = None;
                 self.canvas.read(cx).focus_handle(cx).focus(window, cx);
                 cx.notify();
                 return;
@@ -1097,7 +1137,8 @@ fn primary_field(node: &Node) -> Option<&'static str> {
         "text" | "compose" => "text",
         "image" | "model" | "video" | "audio" => "caption",
         "palette" => "note",
-        "generate_image" | "generate_video" | "generate_audio" | "generate_model" => "prompt",
+        "generate_image" | "generate_video" | "generate_audio" | "generate_model"
+        | "edit_image" => "prompt",
         _ => return None,
     };
     node.data.get(field).and_then(Value::as_str).map(|_| field)
@@ -1110,6 +1151,9 @@ fn label(text: impl Into<SharedString>) -> Div {
 mod asset_browser;
 mod asset_thumbnails;
 mod chrome;
+mod mask_editor;
+mod mask_preview;
+mod mask_tasks;
 mod media_view;
 mod model_view;
 mod project_ui;
@@ -1145,7 +1189,9 @@ impl Render for CreativeCanvas {
             .last_saved_document
             .as_ref()
             .is_some_and(|d| d != &view.editor.document());
-        let save_status = if self.importing {
+        let save_status = if self.mask_cancel.is_some() {
+            "正在应用遮罩…"
+        } else if self.importing {
             "正在复制素材…"
         } else if self.saving {
             "正在保存…"
@@ -1198,7 +1244,7 @@ impl Render for CreativeCanvas {
             .occlude()
             .absolute()
             .left(px(18.))
-            .top(px((self.canvas_size.height / 2. - 211.).max(76.)))
+            .top(px((self.canvas_size.height / 2. - 249.).max(76.)))
             .w(px(48.))
             .p(px(6.))
             .rounded(px(14.))
@@ -1250,6 +1296,8 @@ impl Render for CreativeCanvas {
                 cx,
             ));
         for (kind, symbol, name) in [
+            ("mask", "paintbrush", "绘制遮罩"),
+            ("edit_image", "image-plus", "图片编辑 · Image/Mask 输入"),
             ("text", "type", "文字"),
             ("generate_image", "image", "图片生成"),
             ("generate_video", "video", "视频生成"),
@@ -1302,11 +1350,16 @@ impl Render for CreativeCanvas {
         }
         if let Some(node) = &node {
             let r = viewport.world_rect_to_screen(node.bounds());
+            if node.kind == "mask"
+                && let Some(overlay) = self.mask_editor_overlay(node, r, cx)
+            {
+                surface = surface.child(overlay);
+            }
             if node.kind == "text" && self.is_editing_text(&node.id) {
                 surface = surface.child(self.text_editor(node, r, viewport.zoom, cx));
             }
             let toolbar_width = match node.kind.as_str() {
-                "image" => 334.,
+                "image" => 372.,
                 "text" => 456.,
                 _ => 184.,
             };
@@ -1436,7 +1489,9 @@ impl Render for CreativeCanvas {
                     .flex()
                     .flex_col()
                     .gap_3()
-                    .child(div().text_sm().child(if self.import_model {
+                    .child(div().text_sm().child(if self.import_replacement.is_some() {
+                        "替换已选择的图片 · 保留节点与连线"
+                    } else if self.import_model {
                         "导入已选择的本地 GLB 模型"
                     } else {
                         "导入本地图片、视频或音频"

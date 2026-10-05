@@ -21,6 +21,7 @@ pub fn default_port_color(data_type: &DataType) -> u32 {
         DataType::Any => 0x9b9fa8,
         DataType::Named(name) => match name.as_str() {
             "image" => 0xa274e7,
+            "mask" => 0xd171ad,
             "video" => 0xea9062,
             "audio" => 0x47ad96,
             "model" => 0x6881db,

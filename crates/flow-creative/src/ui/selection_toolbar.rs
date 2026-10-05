@@ -46,6 +46,9 @@ pub(super) fn toolbar_avoiding_composer(
 
 impl CreativeCanvas {
     pub(super) fn composer_size(&self, node: &Node, cx: &App) -> WorldSize {
+        if node.kind == "mask" {
+            return WorldSize::new(360., 164.);
+        }
         if matches!(node.kind.as_str(), "video" | "audio") {
             return WorldSize::new(272., 44.);
         }
@@ -72,6 +75,7 @@ impl CreativeCanvas {
         WorldSize::new(
             if generation { 360. } else { 320. },
             height
+                + if node.kind == "edit_image" { 44. } else { 0. }
                 + if generation && crate::references::accepts_image_reference(node) {
                     56.
                 } else {

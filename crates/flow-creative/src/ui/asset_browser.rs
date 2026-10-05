@@ -7,7 +7,9 @@ pub(super) struct AssetPicker {
 }
 
 fn asset_kind(asset: &ProjectAsset) -> &'static str {
-    if asset.media_type.starts_with("image/") {
+    if asset.media_type == MASK_MEDIA_TYPE {
+        "mask"
+    } else if asset.media_type.starts_with("image/") {
         "image"
     } else if asset.media_type.starts_with("video/") {
         "video"
@@ -21,6 +23,7 @@ fn asset_description(asset: &ProjectAsset) -> String {
     match asset_kind(asset) {
         "image" | "video" => format!("{} × {}", asset.width, asset.height),
         "audio" => "音频".into(),
+        "mask" => "Mask · 灰度遮罩".into(),
         _ => "GLB 模型".into(),
     }
 }
@@ -48,6 +51,32 @@ impl CreativeCanvas {
             return;
         }
         let kind = asset_kind(&asset);
+        if kind == "mask" {
+            let existing = self
+                .canvas
+                .read(cx)
+                .editor
+                .graph()
+                .nodes
+                .values()
+                .find(|node| node.kind == "mask" && node.data["asset"].as_str() == Some(key))
+                .cloned();
+            if let Some(node) = existing {
+                self.asset_picker = None;
+                self.command(
+                    CanvasCommand::SelectNode {
+                        node: node.id.clone(),
+                        mode: SelectionMode::Replace,
+                    },
+                    cx,
+                );
+                self.focus_mask_object(&node, cx);
+            } else {
+                self.notice = Some("该Mask输出已无编辑节点，请从原图建立新遮罩".into());
+                cx.notify();
+            }
+            return;
+        }
         let size = match kind {
             "audio" => WorldSize::new(400., 144.),
             "model" => WorldSize::new(420., 315.),
@@ -125,6 +154,7 @@ impl CreativeCanvas {
                 "video" => "video",
                 "audio" => "music",
                 "model" => "box",
+                "mask" => "paintbrush",
                 _ => "image",
             };
             grid = grid.child(

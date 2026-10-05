@@ -38,6 +38,9 @@ impl GenerationKind {
         }
     }
     pub fn from_node_kind(kind: &str) -> Option<Self> {
+        if kind == "edit_image" {
+            return Some(Self::Image);
+        }
         [Self::Image, Self::Video, Self::Audio, Self::Model]
             .into_iter()
             .find(|k| k.node_kind() == kind)
@@ -68,6 +71,7 @@ impl GenerationRequest {
             .ok_or_else(|| CreativeError("此节点不是生成节点".into()))?;
         crate::references::reject_legacy_reference(node)?;
         graph.validate()?;
+        crate::mask_node::validate_edit_inputs(node, graph)?;
         let prompt = node.data["prompt"]
             .as_str()
             .unwrap_or_default()
@@ -176,6 +180,21 @@ pub(crate) fn register_generation_nodes(registry: &mut CreativeRegistry) {
             ))
             .expect("valid generation definition");
     }
+    let mut edit = registry
+        .definition("generate_image")
+        .expect("registered image generator")
+        .clone();
+    edit.kind = "edit_image".into();
+    edit.title = "图片编辑".into();
+    edit.ports = vec![
+        Port::input("prompt", "提示词", DataType::String),
+        Port::input("image", "Image", DataType::Named("image".into())),
+        Port::input("mask", "Mask", DataType::Named("mask".into())),
+        Port::output("output", "图片", DataType::Named("image".into())),
+    ];
+    registry
+        .register(edit)
+        .expect("valid image-edit definition");
 }
 
 #[cfg(test)]

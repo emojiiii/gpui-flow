@@ -18,4 +18,7 @@ pub use project::*;
 pub mod model_preview;
 mod text_style;
 pub use text_style::*;
+pub mod mask;
+mod mask_node;
 mod references;
+pub use mask_node::{MASK_MEDIA_TYPE, MaskNodeData, mask_source};

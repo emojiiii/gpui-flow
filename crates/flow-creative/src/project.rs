@@ -34,6 +34,7 @@ const MAX_PROJECT_BYTES: u64 = MAX_JSON_BYTES as u64 + 2 * 1024 * 1024;
 const PROJECT_FILE: &str = "project.json";
 static NEXT_NAME: AtomicU64 = AtomicU64::new(0);
 static TRANSACTION: Mutex<()> = Mutex::new(());
+mod mask_assets;
 mod media_assets;
 pub use media_assets::{MAX_MEDIA_BYTES, MAX_MEDIA_DURATION_SECONDS, creative_media_backend};
 
@@ -645,6 +646,33 @@ fn validate_document_assets(
     assets: &[ProjectAsset],
 ) -> Result<(), ProjectError> {
     for node in document.graph.nodes.values() {
+        if node.kind == "mask" {
+            let data = crate::MaskNodeData::from_value(&node.data)?;
+            if let Some(source) = &data.state.source {
+                let original = assets
+                    .iter()
+                    .find(|asset| asset.key == source.asset_key)
+                    .ok_or_else(|| ProjectError::Invalid("Mask 原图不属于当前项目".into()))?;
+                if !matches!(original.media_type.as_str(), "image/png" | "image/jpeg")
+                    || original.width != source.width
+                    || original.height != source.height
+                {
+                    return Err(ProjectError::Invalid("Mask 原图尺寸或类型不匹配".into()));
+                }
+                if !data.asset.is_empty() {
+                    let output = assets
+                        .iter()
+                        .find(|asset| asset.key == data.asset)
+                        .ok_or_else(|| ProjectError::Invalid("Mask 输出素材不存在".into()))?;
+                    if output.media_type != crate::MASK_MEDIA_TYPE
+                        || output.width != source.width
+                        || output.height != source.height
+                    {
+                        return Err(ProjectError::Invalid("Mask 输出与原图尺寸不匹配".into()));
+                    }
+                }
+            }
+        }
         // Only the legacy envelope reader admits this key. Public document
         // validation and every write reject it until migration has removed it.
         if crate::references::has_legacy_reference(node)
@@ -709,10 +737,11 @@ fn validate_document_assets(
         // allowlist for unknown host kinds. Raster posters for existing video
         // or other host cards remain valid; only model cards require real GLB.
         let compatible = match AssetKind::from_media_type(&asset.media_type)? {
+            AssetKind::Mask => node.kind == "mask",
             AssetKind::Model => matches!(node.kind.as_str(), "model" | "generate_model"),
             AssetKind::Video => matches!(node.kind.as_str(), "video" | "generate_video"),
             AssetKind::Audio => matches!(node.kind.as_str(), "audio" | "generate_audio"),
-            AssetKind::Image => !matches!(node.kind.as_str(), "model" | "generate_model"),
+            AssetKind::Image => !matches!(node.kind.as_str(), "model" | "generate_model" | "mask"),
         };
         if !compatible {
             return Err(ProjectError::Invalid(format!(
@@ -777,6 +806,7 @@ fn validate_project(project: &ProjectFile, id: &str) -> Result<(), ProjectError>
             return Err(ProjectError::Invalid("invalid asset display name".into()));
         }
         let expected_type = match asset.key.rsplit('.').next() {
+            Some("png") if asset.media_type == crate::MASK_MEDIA_TYPE => crate::MASK_MEDIA_TYPE,
             Some("png") => "image/png",
             Some("jpg") => "image/jpeg",
             Some("gif") => "image/gif",
@@ -799,7 +829,9 @@ fn validate_project(project: &ProjectFile, id: &str) -> Result<(), ProjectError>
             return Err(ProjectError::Invalid("invalid asset type or size".into()));
         }
         match kind {
-            AssetKind::Image | AssetKind::Video => validate_dimensions(asset.width, asset.height)?,
+            AssetKind::Image | AssetKind::Mask | AssetKind::Video => {
+                validate_dimensions(asset.width, asset.height)?
+            }
             AssetKind::Audio if asset.width != 0 || asset.height != 0 => {
                 return Err(ProjectError::Invalid(
                     "audio assets must have zero dimensions".into(),
@@ -1040,6 +1072,7 @@ fn check_assets_on_disk(directory: &Path, assets: &[ProjectAsset]) -> Result<(),
 #[derive(Clone, Copy)]
 enum AssetKind {
     Image,
+    Mask,
     Model,
     Video,
     Audio,
@@ -1048,6 +1081,7 @@ enum AssetKind {
 impl AssetKind {
     fn from_media_type(media_type: &str) -> Result<Self, ProjectError> {
         match media_type {
+            crate::MASK_MEDIA_TYPE => Ok(Self::Mask),
             "image/png" | "image/jpeg" | "image/gif" | "image/webp" => Ok(Self::Image),
             "model/gltf-binary" => Ok(Self::Model),
             "video/mp4" | "video/webm" => Ok(Self::Video),
@@ -1060,7 +1094,7 @@ impl AssetKind {
 
     fn max_bytes(self) -> u64 {
         match self {
-            Self::Image => MAX_IMAGE_BYTES,
+            Self::Image | Self::Mask => MAX_IMAGE_BYTES,
             Self::Model => MAX_GLB_BYTES as u64,
             Self::Video | Self::Audio => MAX_MEDIA_BYTES,
         }
@@ -1069,6 +1103,7 @@ impl AssetKind {
     fn default_name(self) -> &'static str {
         match self {
             Self::Image => "Imported image",
+            Self::Mask => "Mask",
             Self::Model => "Imported model",
             Self::Video => "Imported video",
             Self::Audio => "Imported audio",
@@ -1078,6 +1113,7 @@ impl AssetKind {
     fn inspect(self, bytes: &[u8]) -> Result<AssetInfo, ProjectError> {
         match self {
             Self::Image => image_info(bytes),
+            Self::Mask => mask_assets::mask_info(bytes),
             Self::Video | Self::Audio => media_assets::media_info(bytes, Some(self)),
             Self::Model => {
                 parse_glb(bytes).map_err(|error| match error {

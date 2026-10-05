@@ -184,7 +184,7 @@ impl CreativeCanvas {
             })
             .map_err(|e| CreativeError(e.to_string()))
     }
-    fn refresh_assets(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn refresh_assets(&mut self, cx: &mut Context<Self>) {
         let mut assets = CreativeAssets::demo();
         if let Some(project) = &self.project {
             for asset in project.assets() {
@@ -204,6 +204,9 @@ impl CreativeCanvas {
     /// Install Creative's standard media/text renderers and local asset sources.
     /// Hosts supplying custom renderers can retain their own registry instead.
     pub fn set_assets(&mut self, mut assets: CreativeAssets, cx: &mut Context<Self>) {
+        self.mask_views
+            .sync(self.canvas.read(cx).editor.graph(), self.project.as_ref());
+        assets.masks = self.mask_views.clone();
         assets.models = self.model_views.clone();
         assets.media = self.media_views.clone();
         self.media_views.set_owner(cx.entity().downgrade());
@@ -310,10 +313,17 @@ impl CreativeCanvas {
         .detach();
     }
     pub(super) fn import_image(&mut self, replace_selection: bool, cx: &mut Context<Self>) {
+        self.import_replacement = self
+            .selected(cx)
+            .filter(|n| replace_selection && n.kind == "image")
+            .map(|n| n.id);
+        if replace_selection && self.import_replacement.is_none() {
+            return;
+        }
         let dialog = cx.prompt_for_paths(PathPromptOptions {
             files: true,
             directories: false,
-            multiple: true,
+            multiple: !replace_selection,
             prompt: Some(
                 if self.import_model {
                     "选择本地 GLB · 复制到项目素材目录"
@@ -324,7 +334,7 @@ impl CreativeCanvas {
             ),
         });
         self.import_image_request(
-            replace_selection,
+            self.import_replacement.clone(),
             None,
             async move {
                 match dialog.await {
@@ -344,7 +354,12 @@ impl CreativeCanvas {
             cx.notify();
             return;
         }
-        self.import_image_request(false, None, std::future::ready(Ok(Some(vec![path]))), cx);
+        self.import_image_request(
+            self.import_replacement.clone(),
+            None,
+            std::future::ready(Ok(Some(vec![path]))),
+            cx,
+        );
     }
     pub(super) fn import_dropped_paths(
         &mut self,
@@ -357,11 +372,12 @@ impl CreativeCanvas {
             cx.notify();
             return;
         }
-        self.import_image_request(false, Some(at), std::future::ready(Ok(Some(paths))), cx);
+        self.import_replacement = None;
+        self.import_image_request(None, Some(at), std::future::ready(Ok(Some(paths))), cx);
     }
     pub(super) fn import_image_request(
         &mut self,
-        replace_selection: bool,
+        replacement: Option<NodeId>,
         drop_at: Option<WorldPoint>,
         paths: impl std::future::Future<Output = Result<Option<Vec<PathBuf>>, String>> + 'static,
         cx: &mut Context<Self>,
@@ -375,10 +391,21 @@ impl CreativeCanvas {
             cx.notify();
             return;
         };
-        let replacement = self
-            .selected(cx)
-            .filter(|n| replace_selection && n.kind == "image")
-            .map(|n| n.id);
+        if replacement.as_ref().is_some_and(|id| {
+            self.canvas
+                .read(cx)
+                .editor
+                .graph()
+                .node(id)
+                .is_none_or(|n| n.kind != "image")
+        }) {
+            self.notice = Some("要替换的图片节点已不存在，请重新选择图片".into());
+            self.import_replacement = None;
+            self.show_import_path = false;
+            cx.notify();
+            return;
+        }
+        let replace_selection = replacement.is_some();
         let document = self.canvas.read(cx).editor.document();
         let registry = self.registry.clone();
         let is_model = self.import_model;
@@ -387,6 +414,9 @@ impl CreativeCanvas {
         cx.notify();
         cx.spawn(async move |this, cx| {
             let result = match paths.await {
+                Ok(Some(paths)) if replace_selection && paths.len() > 1 => {
+                    Some(Err("替换图片时请选择一个文件".into()))
+                }
                 Ok(Some(paths)) if !paths.is_empty() => Some(
                     cx.background_executor()
                         .spawn(async move {
@@ -435,6 +465,9 @@ impl CreativeCanvas {
                 match result {
                     Some(Ok((project, assets, errors))) => {
                         this.show_import_path = !errors.is_empty();
+                        if errors.is_empty() {
+                            this.import_replacement = None;
+                        }
                         this.last_saved_document = Some(project.document().clone());
                         this.project = Some(project);
                         this.refresh_assets(cx);
@@ -534,7 +567,10 @@ impl CreativeCanvas {
                             "文件选择/导入失败，可使用右侧本地路径入口：{error}"
                         ));
                     }
-                    None => {}
+                    None => {
+                        this.import_replacement = None;
+                        this.show_import_path = false;
+                    }
                 }
                 if this.pending_window_close.is_some() {
                     this.save_project(cx);

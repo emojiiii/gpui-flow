@@ -106,6 +106,14 @@ impl CreativeCanvas {
         if node.kind == "image" {
             bar = bar
                 .child(self.icon_button(
+                    "image-mask",
+                    "paintbrush",
+                    "从图片绘制遮罩",
+                    Action::Mask(mask_editor::MaskAction::FromImage),
+                    !editable || self.project.is_none(),
+                    cx,
+                ))
+                .child(self.icon_button(
                     "replace-image",
                     "upload",
                     "替换本地图片",
@@ -243,6 +251,22 @@ impl CreativeCanvas {
         editable: bool,
         cx: &mut Context<Self>,
     ) -> Div {
+        if node.kind == "mask" {
+            let p = anchored_panel(bounds, self.canvas_size, self.composer_size(node, cx));
+            return div()
+                .occlude()
+                .absolute()
+                .left(px(p.x))
+                .top(px(p.y))
+                .w(px(360.))
+                .p_2()
+                .rounded(px(12.))
+                .bg(rgb(0xffffff))
+                .shadow_sm()
+                .border_1()
+                .border_color(rgb(0xe9eaed))
+                .child(self.mask_controls(node, editable, cx));
+        }
         let generation = GenerationKind::from_node_kind(&node.kind);
         let model = matches!(node.kind.as_str(), "model" | "generate_model")
             && !node.data["asset"].as_str().unwrap_or_default().is_empty();
@@ -320,6 +344,9 @@ impl CreativeCanvas {
         if has_reference_input {
             panel = panel.child(self.reference_row(node, cx));
         }
+        if node.kind == "edit_image" {
+            panel = panel.child(self.mask_input_row(node, cx));
+        }
         if generation.is_some() {
             panel = panel.child(self.reference_prompt(node, editable, cx));
         } else if !model {
@@ -358,7 +385,9 @@ impl CreativeCanvas {
                     cx,
                 ));
             }
-            if matches!(kind, GenerationKind::Image | GenerationKind::Video) {
+            if matches!(kind, GenerationKind::Image | GenerationKind::Video)
+                && node.kind != "edit_image"
+            {
                 let ratio = node.data["settings"]["aspect_ratio"]
                     .as_str()
                     .unwrap_or("1:1");
