@@ -39,8 +39,14 @@ impl MediaViews {
             .filter(|n| {
                 matches!(
                     n.kind.as_str(),
-                    "video" | "audio" | "generate_video" | "generate_audio"
-                )
+                    "video"
+                        | "audio"
+                        | "generate_video"
+                        | "generate_audio"
+                        | "process_video"
+                        | "process_audio"
+                ) && (crate::processing::ProcessingKind::from_node_kind(&n.kind).is_none()
+                    || crate::processing_node::processing_output(view.editor.graph(), n).is_ok())
             })
             .map(|n| {
                 (
@@ -109,7 +115,10 @@ impl MediaViews {
                 Err(error) => return message(format!("媒体无法打开：{error}")),
             };
             let owner = self.owner.lock().unwrap().clone();
-            let audio = matches!(node.kind.as_str(), "audio" | "generate_audio");
+            let audio = matches!(
+                node.kind.as_str(),
+                "audio" | "generate_audio" | "process_audio"
+            );
             let view = cx.new(|cx| MediaObjectView::new(controller, owner, audio, cx));
             entries.insert(
                 node.id.clone(),

@@ -72,6 +72,17 @@ impl GenerationRequest {
         crate::references::reject_legacy_reference(node)?;
         graph.validate()?;
         crate::mask_node::validate_edit_inputs(node, graph)?;
+        for edge in graph
+            .edges
+            .values()
+            .filter(|edge| edge.target.node == node.id)
+        {
+            if let Some(source) = graph.node(&edge.source.node)
+                && crate::processing::ProcessingKind::from_node_kind(&source.kind).is_some()
+            {
+                crate::processing_node::processing_output(graph, source)?;
+            }
+        }
         let prompt = node.data["prompt"]
             .as_str()
             .unwrap_or_default()

@@ -92,6 +92,9 @@ pub fn mask_source(
 ) -> Result<MaskSource, CreativeError> {
     let image = linked_mask_image(graph, &node.id)
         .ok_or_else(|| CreativeError("请先连接一个图片节点".into()))?;
+    if crate::processing::ProcessingKind::from_node_kind(&image.kind).is_some() {
+        crate::processing_node::processing_output(graph, image)?;
+    }
     let key = image.data["asset"]
         .as_str()
         .filter(|key| !key.is_empty())
@@ -114,6 +117,9 @@ pub(crate) fn validate_edit_inputs(node: &Node, graph: &Graph) -> Result<(), Cre
     }
     let image = linked_mask_image(graph, &node.id)
         .ok_or_else(|| CreativeError("图片编辑需要 Image 输入".into()))?;
+    if crate::processing::ProcessingKind::from_node_kind(&image.kind).is_some() {
+        crate::processing_node::processing_output(graph, image)?;
+    }
     let image_key = image.data["asset"]
         .as_str()
         .filter(|key| !key.is_empty())

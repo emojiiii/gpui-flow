@@ -3,6 +3,9 @@ use std::time::Duration;
 
 impl CreativeCanvas {
     pub(super) fn close_ready(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if let Some(job) = &self.processing_job {
+            job.cancel.store(true, std::sync::atomic::Ordering::Release);
+        }
         self.apply_form_edit(cx);
         if self.saving || self.importing || !self.deferred_edits.is_empty() {
             self.pending_window_close = Some(window.window_handle());
@@ -207,6 +210,8 @@ impl CreativeCanvas {
         self.mask_views
             .sync(self.canvas.read(cx).editor.graph(), self.project.as_ref());
         assets.masks = self.mask_views.clone();
+        self.sync_processing_views(cx);
+        assets.processing_errors = self.processing_errors.clone();
         assets.models = self.model_views.clone();
         assets.media = self.media_views.clone();
         self.media_views.set_owner(cx.entity().downgrade());

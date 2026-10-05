@@ -26,6 +26,7 @@ pub struct CreativeAssets {
     media_types: BTreeMap<String, String>,
     models: Arc<model_view::ModelViews>,
     masks: Arc<mask_preview::MaskViews>,
+    processing_errors: Arc<Mutex<BTreeMap<NodeId, String>>>,
     media: Arc<media_view::MediaViews>,
     editing_text: Arc<Mutex<Option<NodeId>>>,
     begin_text_edit: Option<TextEditCallback>,
@@ -82,6 +83,26 @@ impl NodeRenderer for CardRenderer {
         let z = context.zoom;
         if node.kind == "mask" {
             return self.assets.masks.render(node, cx);
+        }
+        if let Some(error) = self
+            .assets
+            .processing_errors
+            .lock()
+            .unwrap()
+            .get(&node.id)
+            .cloned()
+        {
+            return div()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .p_3()
+                .bg(rgb(0xeef0f5))
+                .text_size(px(12. * z))
+                .text_color(rgb(0x8d939e))
+                .child(error)
+                .into_any_element();
         }
         let key = node.data["asset"].as_str().unwrap_or("");
         if let Some(path) = self.assets.paths.get(key) {
@@ -241,6 +262,9 @@ pub fn demo_renderers(assets: CreativeAssets) -> NodeRegistry {
         "model",
         "mask",
         "edit_image",
+        "process_image",
+        "process_video",
+        "process_audio",
         "compose",
         "generate_image",
         "generate_video",
@@ -271,6 +295,9 @@ fn theme() -> FlowTheme {
 }
 #[derive(Clone)]
 enum Action {
+    Processing(processing_panel::ProcessingAction),
+    ProcessSelection(crate::processing::ProcessingKind),
+    ProcessingMenu,
     Mask(mask_editor::MaskAction),
     Home,
     RenameProject,
@@ -358,6 +385,9 @@ pub struct CreativeCanvas {
     mask_editing: Option<mask_editor::MaskEditing>,
     mask_focus: FocusHandle,
     mask_cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
+    processing_job: Option<processing_tasks::ProcessingJob>,
+    processing_errors: Arc<Mutex<BTreeMap<NodeId, String>>>,
+    show_processing_menu: bool,
     media_views: Arc<media_view::MediaViews>,
     editing_text: Arc<Mutex<Option<NodeId>>>,
     form_source: Option<(NodeId, String, Value)>,
@@ -420,6 +450,7 @@ impl CreativeCanvas {
                     this.mask_views
                         .sync(canvas.read(cx).editor.graph(), this.project.as_ref());
                     this.reconcile_mask_edit(cx);
+                    this.sync_processing_views(cx);
                     this.media_views.retain(canvas, cx);
                     // A successful graph edit supersedes an earlier rejection. Selection
                     // alone must not erase an error the user still needs to understand.
@@ -473,6 +504,9 @@ impl CreativeCanvas {
         let asset_thumbnails = cx.new(asset_thumbnails::AssetThumbnails::new);
         let thumbnail_observer = cx.observe(&asset_thumbnails, |_, _, cx| cx.notify());
         cx.on_release(|this: &mut Self, _| {
+            if let Some(job) = &this.processing_job {
+                job.cancel.store(true, std::sync::atomic::Ordering::Release);
+            }
             if let Some(cancel) = &this.mask_cancel {
                 cancel.store(true, std::sync::atomic::Ordering::Release);
             }
@@ -517,6 +551,9 @@ impl CreativeCanvas {
             mask_editing: None,
             mask_focus: cx.focus_handle(),
             mask_cancel: None,
+            processing_job: None,
+            processing_errors: Arc::default(),
+            show_processing_menu: false,
             media_views: Arc::default(),
             editing_text: Arc::default(),
             form_source: None,
@@ -629,6 +666,19 @@ impl CreativeCanvas {
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
         }
         let command = match action {
+            Action::Processing(action) => {
+                self.processing_action(action, cx);
+                return;
+            }
+            Action::ProcessSelection(kind) => {
+                self.create_processing_from_selection(kind, cx);
+                return;
+            }
+            Action::ProcessingMenu => {
+                self.show_processing_menu = !self.show_processing_menu;
+                cx.notify();
+                return;
+            }
             Action::Mask(action) => {
                 self.handle_mask_action(action, window, cx);
                 return;
@@ -932,6 +982,7 @@ impl CreativeCanvas {
                 zoom: (self.canvas.read(cx).editor.viewport.zoom * factor).clamp(0.1, 3.),
             },
             Action::Add(kind) => {
+                self.show_processing_menu = false;
                 let v = self.canvas.read(cx);
                 let id = v
                     .editor
@@ -1156,6 +1207,8 @@ mod mask_preview;
 mod mask_tasks;
 mod media_view;
 mod model_view;
+mod processing_panel;
+mod processing_tasks;
 mod project_ui;
 mod reference_ui;
 mod selection_toolbar;
@@ -1189,7 +1242,9 @@ impl Render for CreativeCanvas {
             .last_saved_document
             .as_ref()
             .is_some_and(|d| d != &view.editor.document());
-        let save_status = if self.mask_cancel.is_some() {
+        let save_status = if self.processing_job.is_some() {
+            "正在本地处理…"
+        } else if self.mask_cancel.is_some() {
             "正在应用遮罩…"
         } else if self.importing {
             "正在复制素材…"
@@ -1314,9 +1369,47 @@ impl Render for CreativeCanvas {
             ));
         }
         rail = rail
+            .child(self.icon_button(
+                "tool-processing",
+                "sliders-horizontal",
+                "本地媒体处理",
+                Action::ProcessingMenu,
+                !editable,
+                cx,
+            ))
             .child(div().w(px(24.)).h(px(1.)).my_1().bg(rgb(0xe9eaed)))
             .child(self.icon_button("tool-layers", "layers", "图层", Action::Layers, false, cx));
         surface = surface.child(rail);
+        if self.show_processing_menu {
+            let mut menu = div()
+                .occlude()
+                .absolute()
+                .left(px(78.))
+                .top(px(390.))
+                .w(px(220.))
+                .p_3()
+                .rounded_xl()
+                .bg(rgb(t.panel))
+                .shadow_md()
+                .flex()
+                .flex_col()
+                .gap_2()
+                .child(label("本地处理节点"));
+            for kind in [
+                crate::processing::ProcessingKind::Image,
+                crate::processing::ProcessingKind::Video,
+                crate::processing::ProcessingKind::Audio,
+            ] {
+                menu = menu.child(self.button(
+                    SharedString::from(format!("add-{}", kind.node_kind())),
+                    kind.title(),
+                    Action::Add(kind.node_kind().into()),
+                    !editable || count >= MAX_CARDS,
+                    cx,
+                ));
+            }
+            surface = surface.child(menu);
+        }
         if self.show_layers {
             surface = surface.child(self.layers_panel(cx));
         }
@@ -1359,7 +1452,8 @@ impl Render for CreativeCanvas {
                 surface = surface.child(self.text_editor(node, r, viewport.zoom, cx));
             }
             let toolbar_width = match node.kind.as_str() {
-                "image" => 372.,
+                "image" => 410.,
+                "video" | "audio" | "process_image" | "process_video" | "process_audio" => 222.,
                 "text" => 456.,
                 _ => 184.,
             };

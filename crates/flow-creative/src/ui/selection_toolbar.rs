@@ -46,6 +46,16 @@ pub(super) fn toolbar_avoiding_composer(
 
 impl CreativeCanvas {
     pub(super) fn composer_size(&self, node: &Node, cx: &App) -> WorldSize {
+        if crate::processing::ProcessingKind::from_node_kind(&node.kind).is_some() {
+            return WorldSize::new(
+                360.,
+                if matches!(node.kind.as_str(), "process_video" | "process_audio") {
+                    300.
+                } else {
+                    260.
+                },
+            );
+        }
         if node.kind == "mask" {
             return WorldSize::new(360., 164.);
         }

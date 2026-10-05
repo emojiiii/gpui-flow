@@ -608,7 +608,7 @@ fn validate_name(name: &str) -> Result<(), ProjectError> {
     Ok(())
 }
 
-fn validate_asset_key(key: &str) -> Result<(), ProjectError> {
+pub(crate) fn validate_asset_key(key: &str) -> Result<(), ProjectError> {
     let valid = key.strip_prefix("assets/").is_some_and(|name| {
         name.len() <= 128
             && name.rsplit_once('.').is_some_and(|(stem, ext)| {
@@ -671,6 +671,38 @@ fn validate_document_assets(
                         return Err(ProjectError::Invalid("Mask 输出与原图尺寸不匹配".into()));
                     }
                 }
+            }
+        }
+        if let Some(kind) = crate::processing::ProcessingKind::from_node_kind(&node.kind) {
+            let data = crate::processing_node::ProcessingNodeData::from_value(&node.data)
+                .map_err(|e| ProjectError::Invalid(e.to_string()))?;
+            if let Some(key) = &data.source_asset {
+                let source = assets
+                    .iter()
+                    .find(|asset| &asset.key == key)
+                    .ok_or_else(|| ProjectError::Invalid("处理输出缺少原素材".into()))?;
+                let matches = match kind {
+                    crate::processing::ProcessingKind::Image => {
+                        matches!(source.media_type.as_str(), "image/png" | "image/jpeg")
+                    }
+                    crate::processing::ProcessingKind::Video => {
+                        source.media_type.starts_with("video/")
+                    }
+                    crate::processing::ProcessingKind::Audio => {
+                        source.media_type.starts_with("audio/")
+                    }
+                };
+                if !matches {
+                    return Err(ProjectError::Invalid("处理输出的原素材类型不匹配".into()));
+                }
+            }
+            if !data.asset.is_empty()
+                && assets
+                    .iter()
+                    .find(|asset| asset.key == data.asset)
+                    .is_none_or(|asset| asset.media_type != data.settings.media_type())
+            {
+                return Err(ProjectError::Invalid("处理输出格式与参数不匹配".into()));
             }
         }
         // Only the legacy envelope reader admits this key. Public document
@@ -739,8 +771,14 @@ fn validate_document_assets(
         let compatible = match AssetKind::from_media_type(&asset.media_type)? {
             AssetKind::Mask => node.kind == "mask",
             AssetKind::Model => matches!(node.kind.as_str(), "model" | "generate_model"),
-            AssetKind::Video => matches!(node.kind.as_str(), "video" | "generate_video"),
-            AssetKind::Audio => matches!(node.kind.as_str(), "audio" | "generate_audio"),
+            AssetKind::Video => matches!(
+                node.kind.as_str(),
+                "video" | "generate_video" | "process_video"
+            ),
+            AssetKind::Audio => matches!(
+                node.kind.as_str(),
+                "audio" | "generate_audio" | "process_audio"
+            ),
             AssetKind::Image => !matches!(node.kind.as_str(), "model" | "generate_model" | "mask"),
         };
         if !compatible {

@@ -141,6 +141,23 @@ impl CreativeCanvas {
         if node.kind == "text" {
             bar = bar.child(self.text_style_toolbar(node, editable, cx));
         }
+        if let Some(kind) = crate::processing::ProcessingKind::from_node_kind(&node.kind).or(
+            match node.kind.as_str() {
+                "image" => Some(crate::processing::ProcessingKind::Image),
+                "video" => Some(crate::processing::ProcessingKind::Video),
+                "audio" => Some(crate::processing::ProcessingKind::Audio),
+                _ => None,
+            },
+        ) {
+            bar = bar.child(self.icon_button(
+                "process-media",
+                "sliders-horizontal",
+                "创建本地处理节点",
+                Action::ProcessSelection(kind),
+                !editable || self.project.is_none(),
+                cx,
+            ));
+        }
         bar.child(self.icon_button(
             "object-copy",
             "copy",
@@ -251,6 +268,48 @@ impl CreativeCanvas {
         editable: bool,
         cx: &mut Context<Self>,
     ) -> Div {
+        if crate::processing::ProcessingKind::from_node_kind(&node.kind).is_some() {
+            let p = anchored_panel(bounds, self.canvas_size, self.composer_size(node, cx));
+            let input = self
+                .project
+                .as_ref()
+                .ok_or_else(|| "请先打开本地项目".to_string())
+                .and_then(|p| {
+                    crate::processing_node::processing_source(
+                        self.canvas.read(cx).editor.graph(),
+                        node,
+                        p.assets(),
+                    )
+                    .map_err(|e| e.to_string())
+                });
+            let state = processing_panel::ProcessingPanelState {
+                input,
+                running: self
+                    .processing_job
+                    .as_ref()
+                    .is_some_and(|j| j.node == node.id),
+                busy: self.saving || self.importing,
+                error: node.data["error"].as_str().map(str::to_string),
+            };
+            return div()
+                .occlude()
+                .absolute()
+                .left(px(p.x))
+                .top(px(p.y))
+                .w(px(360.))
+                .p_3()
+                .rounded(px(12.))
+                .bg(rgb(0xffffff))
+                .shadow_sm()
+                .border_1()
+                .border_color(rgb(0xe9eaed))
+                .child(self.processing_panel(node, editable, state, cx))
+                .when(
+                    matches!(node.kind.as_str(), "process_video" | "process_audio")
+                        && !node.data["asset"].as_str().unwrap_or_default().is_empty(),
+                    |panel| panel.child(self.media_controls(node, cx)),
+                );
+        }
         if node.kind == "mask" {
             let p = anchored_panel(bounds, self.canvas_size, self.composer_size(node, cx));
             return div()

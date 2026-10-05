@@ -497,6 +497,7 @@ pub fn standard_registry() -> CreativeRegistry {
     }
     crate::generation::register_generation_nodes(&mut registry);
     crate::mask_node::register_mask_nodes(&mut registry);
+    crate::processing_node::register_processing_nodes(&mut registry);
     registry
 }
 pub fn sample_records() -> CanvasRecords {
