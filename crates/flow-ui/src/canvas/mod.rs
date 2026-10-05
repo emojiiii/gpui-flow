@@ -9,6 +9,8 @@ use std::{collections::BTreeMap, sync::Arc, time::Duration};
 pub enum FlowEvent {
     DocumentChanged,
     SelectionChanged,
+    ViewportChanged,
+    SaveRequested,
     ConnectionRejected(String),
     RunChanged(String),
 }
@@ -37,6 +39,8 @@ pub struct FlowCanvas {
     /// Optional host-owned path used by Save/Open instead of native dialogs.
     pub document_path: Option<std::path::PathBuf>,
     file_busy: bool,
+    host_persistence: bool,
+    selection_on_top: bool,
     document_validator: Option<FlowDocumentValidator>,
     focus: FocusHandle,
     space_held: bool,
@@ -73,6 +77,15 @@ impl FlowCanvas {
         persistence::validate_host_document(&self.editor.document(), validator.as_ref())?;
         self.document_validator = validator;
         Ok(())
+    }
+    /// Delegate save requests to the embedding project's persistence owner.
+    /// Default false preserves the standalone FlowDocument file dialogs.
+    pub fn set_host_persistence(&mut self, value: bool) {
+        self.host_persistence = value;
+    }
+    /// Optional object-editor presentation; default graph z-order stays unchanged.
+    pub fn set_selection_on_top(&mut self, value: bool) {
+        self.selection_on_top = value;
     }
     /// Latest interaction/persistence message for host-owned editor shells.
     pub fn status_message(&self) -> &str {
@@ -137,6 +150,8 @@ impl FlowCanvas {
             show_grid: true,
             document_path: None,
             file_busy: false,
+            host_persistence: false,
+            selection_on_top: false,
             document_validator: None,
             focus: cx.focus_handle(),
             space_held: false,

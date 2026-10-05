@@ -8,3 +8,9 @@ pub use guard::CreativeGuard;
 mod ui;
 #[cfg(feature = "desktop")]
 pub use ui::*;
+
+mod generation;
+pub use generation::*;
+
+mod project;
+pub use project::*;

@@ -87,6 +87,10 @@ impl FlowCanvas {
         .detach();
     }
     pub fn save_file(&mut self, cx: &mut Context<Self>) {
+        if self.host_persistence {
+            cx.emit(FlowEvent::SaveRequested);
+            return;
+        }
         if let Some(path) = self.document_path.clone() {
             self.save_to_path(path, cx);
             return;

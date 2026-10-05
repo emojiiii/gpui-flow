@@ -1,4 +1,12 @@
-use gpui::{AppContext, Bounds, WindowBounds, WindowOptions, px, size};
+use gpui::{prelude::*, *};
+struct CreativeRoot {
+    content: AnyView,
+}
+impl Render for CreativeRoot {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div().size_full().child(self.content.clone())
+    }
+}
 use gpui_flow_creative::*;
 use std::{path::PathBuf, sync::Arc};
 fn main() {
@@ -6,12 +14,23 @@ fn main() {
         .skip(1)
         .filter(|a| a != "--trace")
         .collect();
-    let path = match args.as_slice() {
-        [] => None,
-        [flag, path] if flag == "--file" => Some(PathBuf::from(path)),
+    let (root, file, demo) = match args.as_slice() {
+        [] => (
+            ProjectStore::default_root().unwrap_or_else(|e| {
+                eprintln!("{e}");
+                std::process::exit(2)
+            }),
+            None,
+            false,
+        ),
+        [flag, path] if flag == "--projects-dir" => (PathBuf::from(path), None, false),
+        [flag, path] if flag == "--file" => (PathBuf::new(), Some(PathBuf::from(path)), false),
+        [flag] if flag == "--demo" => (PathBuf::new(), None, true),
         _ => {
-            eprintln!("Usage: flow-creative [--file PATH] [--trace]");
-            std::process::exit(2);
+            eprintln!(
+                "Usage: flow-creative [--projects-dir PATH | --file PATH | --demo] [--trace]"
+            );
+            std::process::exit(2)
         }
     };
     gpui_kit::application()
@@ -29,33 +48,48 @@ fn main() {
                 },
                 cx,
                 move |window, cx| {
-                    window.set_window_title("Flow Creative · 原生创作画布");
+                    window.set_window_title("Flow Creative · 本地创作工作台");
                     gpui_kit::component::Theme::change(
                         gpui_kit::component::ThemeMode::Light,
                         Some(window),
                         cx,
                     );
-                    let registry = Arc::new(standard_registry());
-                    let mut document = registry
-                        .map_records(sample_records(), LayoutPolicy::RequirePositions)
-                        .expect("valid sample");
-                    document.viewport.zoom = 0.62;
-                    document.viewport.pan = gpui_flow_core::Point::new(15., 20.);
-                    cx.new(|cx| {
-                        let mut view = CreativeCanvas::new(
-                            registry,
-                            document,
-                            demo_renderers(CreativeAssets::demo()),
-                            window,
-                            cx,
-                        )
-                        .expect("valid creative view");
-                        view.set_document_path(path, cx);
-                        view
-                    })
+                    let content: AnyView = if demo || file.is_some() {
+                        let registry = Arc::new(standard_registry());
+                        let document = if let Some(path) = &file {
+                            let value = std::fs::read_to_string(path).unwrap_or_else(|e| {
+                                eprintln!("Open failed: {e}");
+                                std::process::exit(2)
+                            });
+                            registry.parse_document(&value).unwrap_or_else(|e| {
+                                eprintln!("Invalid document: {e}");
+                                std::process::exit(2)
+                            })
+                        } else {
+                            registry
+                                .map_records(sample_records(), LayoutPolicy::RequirePositions)
+                                .expect("valid demo")
+                        };
+                        cx.new(|cx| {
+                            let mut view = CreativeCanvas::new(
+                                registry,
+                                document,
+                                demo_renderers(CreativeAssets::demo()),
+                                window,
+                                cx,
+                            )
+                            .expect("validated document");
+                            view.set_document_path(file, cx);
+                            view
+                        })
+                        .into()
+                    } else {
+                        cx.new(|cx| CreativeWorkbench::new(root, window, cx)).into()
+                    };
+                    cx.new(|_| CreativeRoot { content })
                 },
             )
-            .expect("open creative canvas");
+            .expect("open creative workbench");
             cx.activate(true);
         });
 }

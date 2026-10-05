@@ -24,6 +24,9 @@ impl FlowCanvas {
         if report.document_changed {
             self.changed(cx);
         }
+        if report.viewport_changed {
+            cx.emit(FlowEvent::ViewportChanged);
+        }
         if report.selection_changed {
             cx.emit(FlowEvent::SelectionChanged);
         }
@@ -199,7 +202,13 @@ impl FlowCanvas {
     pub(super) fn key_up(&mut self, event: &KeyUpEvent, cx: &mut Context<Self>) {
         if matches!(event.keystroke.key.as_str(), "space" | " ") {
             self.space_held = false;
-            cx.notify();
+            self.dispatch_input(
+                input::CanvasEvent::KeyUp {
+                    key: input::KeyCode::Space,
+                    modifiers: modifiers(event.keystroke.modifiers),
+                },
+                cx,
+            );
         }
     }
     pub(super) fn canvas_cursor(&self) -> CursorStyle {
@@ -226,10 +235,11 @@ impl FlowCanvas {
     }
     /// Exact visible hit areas only. Proximity snapping is owned by SnappingPlugin.
     pub(super) fn hit_at(&self, screen: model::Point) -> input::HitTarget {
-        hit_at_editor(
+        hit_at_editor_ordered(
             &self.editor,
             screen,
             self.interactions.policy().editable && self.interactions.is_enabled("resize"),
+            self.selection_on_top,
         )
     }
     pub(super) fn local(&self, p: gpui::Point<Pixels>) -> model::Point {
@@ -237,9 +247,22 @@ impl FlowCanvas {
     }
 }
 
+#[cfg(test)]
 fn hit_at_editor(editor: &Editor, screen: model::Point, resize_enabled: bool) -> input::HitTarget {
+    hit_at_editor_ordered(editor, screen, resize_enabled, false)
+}
+fn hit_at_editor_ordered(
+    editor: &Editor,
+    screen: model::Point,
+    resize_enabled: bool,
+    selection_on_top: bool,
+) -> input::HitTarget {
     let viewport = editor.viewport;
-    for node in editor.graph().nodes.values().rev() {
+    let mut nodes: Vec<_> = editor.graph().nodes.values().collect();
+    if selection_on_top {
+        nodes.sort_by_key(|node| editor.selection.nodes.contains(&node.id));
+    }
+    for node in nodes.into_iter().rev() {
         let rect = viewport.world_rect_to_screen(node.bounds());
         if editor.selection.nodes.contains(&node.id)
             && !node.locked
@@ -293,6 +316,26 @@ mod tests {
             )
             .unwrap();
         Editor::new(graph).unwrap()
+    }
+    #[test]
+    fn selected_media_front_order_matches_hit_testing_without_changing_default() {
+        let mut graph = Graph::new();
+        for id in ["a", "z"] {
+            graph
+                .add_node(Node::new(id, id, model::Point::new(100., 100.)))
+                .unwrap();
+        }
+        let mut editor = Editor::new(graph).unwrap();
+        editor.selection.select_node("a", false);
+        let at = model::Point::new(150., 160.);
+        assert_eq!(
+            super::hit_at_editor_ordered(&editor, at, false, false),
+            input::HitTarget::Node("z".into())
+        );
+        assert_eq!(
+            super::hit_at_editor_ordered(&editor, at, false, true),
+            input::HitTarget::Node("a".into())
+        );
     }
     #[test]
     fn body_hit_never_becomes_background_pan_and_exact_ports_do_not_magnet_snap() {

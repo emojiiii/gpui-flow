@@ -39,11 +39,11 @@ impl PortHandle {
         Self {
             id: id.into(),
             direction,
-            data_type,
+            data_type: data_type.clone(),
             label: "".into(),
             anchor: None,
             diameter: 12.,
-            color: 0x9cafc9,
+            color: crate::default_port_color(&data_type),
             active: false,
             state: PortState::Idle,
             show_label: false,
@@ -106,9 +106,8 @@ impl RenderOnce for PortHandle {
         };
         let color = match state {
             PortState::Rejected => 0xf17c88,
-            PortState::Source | PortState::Target | PortState::Compatible => self.theme.accent,
-            PortState::Disabled => self.theme.muted,
-            PortState::Idle => self.color,
+            PortState::Source | PortState::Target | PortState::Compatible => self.color,
+            PortState::Disabled | PortState::Idle => self.color,
         };
         let hit = self.diameter.max(22.);
         let size = if state == PortState::Target {
@@ -132,10 +131,10 @@ impl RenderOnce for PortHandle {
                     .top(px((hit - size) * 0.5))
                     .size(px(size))
                     .rounded_full()
-                    .bg(rgb(color).alpha(if state == PortState::Compatible {
-                        0.65
-                    } else {
-                        1.
+                    .bg(rgb(color).alpha(match state {
+                        PortState::Compatible => 0.65,
+                        PortState::Disabled => 0.45,
+                        _ => 1.,
                     }))
                     .border_2()
                     .border_color(rgb(if state == PortState::Target {
@@ -155,6 +154,7 @@ impl RenderOnce for PortHandle {
                 .absolute()
                 .top(px((hit - 12.) * 0.5))
                 .text_xs()
+                .whitespace_nowrap()
                 .text_color(rgb(self.theme.muted))
                 .child(self.label);
             handle = handle.child(match self.direction {

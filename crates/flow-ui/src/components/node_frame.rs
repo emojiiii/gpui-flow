@@ -20,6 +20,7 @@ pub struct NodeFrame {
     pub theme: FlowTheme,
     pub color: u32,
     pub header_height: f32,
+    full_bleed: bool,
     body: Option<AnyElement>,
     overlays: Vec<AnyElement>,
     on_header_mouse_down: Option<PointerCallback>,
@@ -40,6 +41,7 @@ impl NodeFrame {
             theme: FlowTheme::default(),
             color: 0x9cafc9,
             header_height: 36.,
+            full_bleed: false,
             body: None,
             overlays: Vec::new(),
             on_header_mouse_down: None,
@@ -83,6 +85,10 @@ impl NodeFrame {
         self.header_height = value.max(0.);
         self
     }
+    pub fn full_bleed(mut self, value: bool) -> Self {
+        self.full_bleed = value;
+        self
+    }
     pub fn body(mut self, value: impl IntoElement) -> Self {
         self.body = Some(value.into_any_element());
         self
@@ -118,6 +124,7 @@ impl RenderOnce for NodeFrame {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let z = valid_zoom(self.zoom);
         let theme = self.theme;
+        let caption = self.title.clone();
         let mut header = div()
             .h(px(self.header_height * z))
             .px(px(13. * z))
@@ -153,19 +160,41 @@ impl RenderOnce for NodeFrame {
             .w(px(self.size.width * z))
             .h(px(self.size.height * z))
             .bg(rgb(theme.card))
-            .rounded(px(10. * z))
+            .rounded(px(if self.full_bleed { 2. } else { 10. * z }))
             .border_1()
             .border_color(rgb(if self.selected {
                 theme.accent
+            } else if self.full_bleed {
+                theme.card
             } else {
                 theme.border
             }))
-            .shadow_md()
-            .child(header)
+            .when(!self.full_bleed, |frame| frame.shadow_md().child(header))
+            .when(self.full_bleed, |frame| {
+                frame.child(
+                    div()
+                        .absolute()
+                        .top(px(-24.))
+                        .left_0()
+                        .text_size(px(11.))
+                        .text_color(rgb(theme.muted))
+                        .child(format!(
+                            "{}   {:.0} × {:.0}",
+                            caption, self.size.width, self.size.height
+                        )),
+                )
+            })
             .child(
                 div()
                     .overflow_hidden()
-                    .h(px((self.size.height - self.header_height - 3.).max(0.) * z))
+                    .h(px((self.size.height
+                        - if self.full_bleed {
+                            2.
+                        } else {
+                            self.header_height + 3.
+                        })
+                    .max(0.)
+                        * z))
                     .children(self.body),
             );
         if let Some(position) = self.position {

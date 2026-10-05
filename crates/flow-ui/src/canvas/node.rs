@@ -92,6 +92,11 @@ impl FlowCanvas {
         .selected(selected)
         .theme(theme)
         .color(color)
+        .full_bleed(
+            self.registry
+                .get(&node.kind)
+                .is_some_and(|r| r.full_bleed()),
+        )
         .body(self.node_body(node, window, cx))
         .header_cursor(if self.interactions.has_capture() {
             self.canvas_cursor()
@@ -179,7 +184,8 @@ impl FlowCanvas {
                 )
                 .anchor(anchor * z)
                 .state(state)
-                .color(color)
+                .show_label(selected || connection.active())
+                .color(graph_port_color(self.editor.graph(), &port.data_type))
                 .theme(theme)
                 .on_connect(cx.listener(
                     move |this, event: &MouseDownEvent, window, cx| {

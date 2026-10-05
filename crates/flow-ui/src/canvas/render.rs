@@ -20,6 +20,15 @@ impl Render for FlowCanvas {
                 Some((
                     self.editor.graph().port_position(&e.source)?,
                     self.editor.graph().port_position(&e.target)?,
+                    graph_port_color(
+                        self.editor.graph(),
+                        &self
+                            .editor
+                            .graph()
+                            .node(&e.source.node)?
+                            .port(&e.source.port)?
+                            .data_type,
+                    ),
                 ))
             })
             .collect();
@@ -32,7 +41,12 @@ impl Render for FlowCanvas {
         {
             0xf27788
         } else {
-            theme.accent
+            self.interactions
+                .connection()
+                .source()
+                .and_then(|p| self.editor.graph().node(&p.node)?.port(&p.port))
+                .map(|p| graph_port_color(self.editor.graph(), &p.data_type))
+                .unwrap_or(theme.accent)
         };
         let marquee = self.interactions.marquee();
         let guides = self.interactions.guides().to_vec();
@@ -69,13 +83,8 @@ impl Render for FlowCanvas {
                         x += gap;
                     }
                 }
-                for (from, to) in edges {
-                    edge_renderer.paint(
-                        screen(from),
-                        screen(to),
-                        rgb(theme.accent).alpha(0.55),
-                        window,
-                    );
+                for (from, to, color) in edges {
+                    edge_renderer.paint(screen(from), screen(to), rgb(color).alpha(0.65), window);
                 }
                 if let Some((from, to)) = pending {
                     edge_renderer.paint(screen(from), screen(to), rgb(pending_color), window);
@@ -148,7 +157,7 @@ impl Render for FlowCanvas {
             )
             .on_mouse_up_out(
                 MouseButton::Left,
-                cx.listener(|this, _, _, cx| this.cancel_interaction(cx)),
+                cx.listener(|this, event, _, cx| this.release_pointer(event, cx)),
             )
             .on_mouse_up(
                 MouseButton::Middle,
@@ -156,7 +165,7 @@ impl Render for FlowCanvas {
             )
             .on_mouse_up_out(
                 MouseButton::Middle,
-                cx.listener(|this, _, _, cx| this.cancel_interaction(cx)),
+                cx.listener(|this, event, _, cx| this.release_pointer(event, cx)),
             )
             .on_mouse_up(
                 MouseButton::Right,
@@ -164,7 +173,7 @@ impl Render for FlowCanvas {
             )
             .on_mouse_up_out(
                 MouseButton::Right,
-                cx.listener(|this, _, _, cx| this.cancel_interaction(cx)),
+                cx.listener(|this, event, _, cx| this.release_pointer(event, cx)),
             )
             .on_scroll_wheel(cx.listener(|this, event, _, cx| this.scroll(event, cx)));
         for group in self.editor.graph().groups.values() {
@@ -207,8 +216,23 @@ impl Render for FlowCanvas {
         }
         let visible = viewport.visible_world_rect(self.extent).expanded(100.);
         for node in self.editor.graph().nodes.values() {
-            if visible.intersects(node.bounds()) {
+            if visible.intersects(node.bounds())
+                && (!self.selection_on_top || !self.editor.selection.nodes.contains(&node.id))
+            {
                 surface = surface.child(self.render_node(node, window, cx));
+            }
+        }
+        if self.selection_on_top {
+            for node in self
+                .editor
+                .graph()
+                .nodes
+                .values()
+                .filter(|n| self.editor.selection.nodes.contains(&n.id))
+            {
+                if visible.intersects(node.bounds()) {
+                    surface = surface.child(self.render_node(node, window, cx));
+                }
             }
         }
         if self.options.show_minimap {

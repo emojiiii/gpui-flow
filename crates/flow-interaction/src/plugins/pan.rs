@@ -47,6 +47,17 @@ impl CanvasPlugin for PanPlugin {
                     self.last = None;
                 }
             }
+            // Releasing the navigation modifier finishes the pan, rather than
+            // leaving a capture that a later focus/lost-button event rolls back.
+            CanvasEvent::KeyUp {
+                key: KeyCode::Space,
+                ..
+            } if cx.capture_owner == Some("pan") => {
+                if self.last.take().is_some() {
+                    out.command(CanvasCommand::ReleasePointer);
+                    out.effect(CanvasEffect::Cursor(CanvasCursor::Default));
+                }
+            }
             CanvasEvent::PointerUp(_) => {
                 if self.last.take().is_some() {
                     out.command(CanvasCommand::ReleasePointer);

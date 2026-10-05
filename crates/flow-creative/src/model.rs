@@ -437,6 +437,7 @@ pub fn standard_registry() -> CreativeRegistry {
             .register(definition)
             .expect("valid built-in creative definition");
     }
+    crate::generation::register_generation_nodes(&mut registry);
     registry
 }
 pub fn sample_records() -> CanvasRecords {

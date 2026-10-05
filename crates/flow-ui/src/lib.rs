@@ -56,3 +56,6 @@ pub use layered_app::{LayerId, LayerOptions, LayeredApp, LayeredAppError, Layere
 /// Opt-in Linux GPU tile damage adapter and real-backend oracle.
 #[cfg(all(feature = "gpu-damage", target_os = "linux"))]
 pub mod gpu_damage;
+
+mod port_color;
+pub use port_color::*;

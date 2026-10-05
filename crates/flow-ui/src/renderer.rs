@@ -10,6 +10,11 @@ pub struct NodeRenderContext {
     pub theme: FlowTheme,
 }
 pub trait NodeRenderer: Send + Sync {
+    /// Opt into a media-first object: content fills the node, with its caption
+    /// outside the top edge. Existing renderers keep the framed presentation.
+    fn full_bleed(&self) -> bool {
+        false
+    }
     fn render(
         &self,
         node: &Node,
