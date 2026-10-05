@@ -614,7 +614,7 @@ impl CreativeCanvas {
         );
     }
 }
-fn imported_image_size(width: u32, height: u32) -> WorldSize {
+pub(super) fn imported_image_size(width: u32, height: u32) -> WorldSize {
     let width = width.max(1) as f32;
     let height = height.max(1) as f32;
     if width >= height {

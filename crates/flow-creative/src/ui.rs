@@ -272,6 +272,10 @@ enum Action {
     ImportModel,
     ImportReference(NodeId),
     ClearReference(NodeId),
+    BrowseAssets(Option<NodeId>),
+    CloseAssets,
+    AssetsPage(bool),
+    PlaceAsset(String),
     PanTool(bool),
     QuickEdit,
     EditText,
@@ -341,6 +345,9 @@ pub struct CreativeCanvas {
     show_layers: bool,
     import_model: bool,
     reference_target: Option<NodeId>,
+    asset_picker: Option<asset_browser::AssetPicker>,
+    asset_picker_focus: FocusHandle,
+    asset_thumbnails: Entity<asset_thumbnails::AssetThumbnails>,
     model_views: Arc<model_view::ModelViews>,
     media_views: Arc<media_view::MediaViews>,
     editing_text: Arc<Mutex<Option<NodeId>>>,
@@ -451,6 +458,8 @@ impl CreativeCanvas {
                 this.apply_form_edit(cx);
             }
         });
+        let asset_thumbnails = cx.new(asset_thumbnails::AssetThumbnails::new);
+        let thumbnail_observer = cx.observe(&asset_thumbnails, |_, _, cx| cx.notify());
         Ok(Self {
             canvas,
             registry,
@@ -482,6 +491,9 @@ impl CreativeCanvas {
             show_layers: false,
             import_model: false,
             reference_target: None,
+            asset_picker: None,
+            asset_picker_focus: cx.focus_handle(),
+            asset_thumbnails,
             model_views: Arc::default(),
             media_views: Arc::default(),
             editing_text: Arc::default(),
@@ -504,7 +516,12 @@ impl CreativeCanvas {
             pending_window_close: None,
             show_colors: false,
             generation_available: false,
-            _subscriptions: vec![subscription, observer, form_subscription],
+            _subscriptions: vec![
+                subscription,
+                observer,
+                form_subscription,
+                thumbnail_observer,
+            ],
         })
     }
     pub fn canvas(&self) -> Entity<FlowCanvas> {
@@ -536,6 +553,17 @@ impl CreativeCanvas {
             self.clear_text_edit();
             self.quick_edit = false;
             self.show_colors = false;
+            if self
+                .asset_picker
+                .as_ref()
+                .and_then(|picker| picker.target.as_ref())
+                .is_some_and(|target| source.as_ref().map(|source| &source.0) != Some(target))
+            {
+                self.asset_picker = None;
+                if self.asset_picker_focus.contains_focused(window, cx) {
+                    self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+                }
+            }
         }
         self.form_source = source;
         let value = node
@@ -571,7 +599,61 @@ impl CreativeCanvas {
         if action_flushes_form(&action) {
             self.apply_form_edit(cx);
         }
+        if self.asset_picker.is_some()
+            && matches!(
+                &action,
+                Action::Layers
+                    | Action::ImportReference(_)
+                    | Action::ImportImage
+                    | Action::ImportModel
+                    | Action::Add(_)
+            )
+        {
+            // Toolbar buttons preserve focus. Return it before removing the
+            // picker so cancelled imports and the next canvas shortcut work.
+            self.asset_picker = None;
+            self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+        }
         let command = match action {
+            Action::BrowseAssets(target) => {
+                self.asset_picker = Some(asset_browser::AssetPicker { target, page: 0 });
+                self.show_layers = false;
+                self.asset_picker_focus.focus(window, cx);
+                cx.notify();
+                return;
+            }
+            Action::CloseAssets => {
+                self.asset_picker = None;
+                self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+                cx.notify();
+                return;
+            }
+            Action::AssetsPage(forward) => {
+                if let Some(picker) = &mut self.asset_picker {
+                    picker.page = if forward {
+                        picker.page.saturating_add(1)
+                    } else {
+                        picker.page.saturating_sub(1)
+                    };
+                }
+                cx.notify();
+                return;
+            }
+            Action::PlaceAsset(key) => {
+                let reference = self
+                    .asset_picker
+                    .as_ref()
+                    .is_some_and(|picker| picker.target.is_some());
+                self.place_project_asset(&key, cx);
+                if self.asset_picker.is_none() {
+                    if reference {
+                        self.form.read(cx).focus_handle(cx).focus(window, cx);
+                    } else {
+                        self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+                    }
+                }
+                return;
+            }
             Action::ImportReference(target) => {
                 self.reference_target = Some(target);
                 self.import_model = false;
@@ -698,6 +780,7 @@ impl CreativeCanvas {
             Action::CloseImportPath => {
                 self.show_import_path = false;
                 self.reference_target = None;
+                self.canvas.read(cx).focus_handle(cx).focus(window, cx);
                 cx.notify();
                 return;
             }
@@ -1065,6 +1148,8 @@ fn label(text: impl Into<SharedString>) -> Div {
     let text: SharedString = text.into();
     div().text_xs().text_color(rgb(theme().muted)).child(text)
 }
+mod asset_browser;
+mod asset_thumbnails;
 mod chrome;
 mod media_view;
 mod model_view;
@@ -1153,7 +1238,7 @@ impl Render for CreativeCanvas {
             .occlude()
             .absolute()
             .left(px(18.))
-            .top(px((self.canvas_size.height / 2. - 192.).max(96.)))
+            .top(px((self.canvas_size.height / 2. - 211.).max(76.)))
             .w(px(48.))
             .p(px(6.))
             .rounded(px(14.))
@@ -1194,6 +1279,14 @@ impl Render for CreativeCanvas {
                 "导入图片、视频或音频",
                 Action::ImportImage,
                 !editable || self.saving || count >= MAX_CARDS,
+                cx,
+            ))
+            .child(self.icon_button(
+                "tool-assets",
+                "folder-open",
+                "本项目素材",
+                Action::BrowseAssets(None),
+                self.project.is_none(),
                 cx,
             ));
         for (kind, symbol, name) in [
@@ -1648,6 +1741,9 @@ impl Render for CreativeCanvas {
                     .text_color(rgb(0x8b7882))
                     .child(notice.clone()),
             );
+        }
+        if self.asset_picker.is_some() {
+            surface = surface.child(self.asset_panel(cx));
         }
         div()
             .size_full()

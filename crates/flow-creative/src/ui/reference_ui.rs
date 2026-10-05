@@ -131,7 +131,7 @@ impl CreativeCanvas {
             } else {
                 "添加参考图"
             },
-            Action::ImportReference(node.id.clone()),
+            Action::BrowseAssets(Some(node.id.clone())),
             !editable || self.project.is_none() || self.saving || self.importing,
             cx,
         ))
