@@ -120,11 +120,13 @@ impl CreativeCanvas {
     /// Bind a project after constructing this view from `project.document()`.
     /// Ctrl/Cmd+S and background changes then use the same local project owner.
     pub fn bind_project(&mut self, project: LocalProject, cx: &mut Context<Self>) {
+        let migrated = project.migrated_reference_count();
         self.last_saved_document = Some(project.document().clone());
         self.project = Some(project);
         self.refresh_assets(cx);
         self.canvas.update(cx, |v, _| v.set_host_persistence(true));
-        self.notice = None;
+        self.notice = (migrated > 0)
+            .then(|| format!("已将 {migrated} 个旧参考附件转换为画布图片输入，原素材已保留"));
         cx.notify();
     }
     pub fn set_generation_available(&mut self, available: bool, cx: &mut Context<Self>) {
@@ -313,9 +315,7 @@ impl CreativeCanvas {
             directories: false,
             multiple: true,
             prompt: Some(
-                if self.reference_target.is_some() {
-                    "选择一张图片作为参考 · 复制到项目素材目录"
-                } else if self.import_model {
+                if self.import_model {
                     "选择本地 GLB · 复制到项目素材目录"
                 } else {
                     "选择本地图片、视频或音频 · 复制到项目素材目录"
@@ -352,7 +352,6 @@ impl CreativeCanvas {
         at: WorldPoint,
         cx: &mut Context<Self>,
     ) {
-        self.reference_target = None;
         if paths.len() > MAX_CARDS.saturating_sub(self.canvas.read(cx).editor.graph().nodes.len()) {
             self.notice = Some("画布对象数量已达上限，请减少本次导入数量".into());
             cx.notify();
@@ -383,20 +382,6 @@ impl CreativeCanvas {
         let document = self.canvas.read(cx).editor.document();
         let registry = self.registry.clone();
         let is_model = self.import_model;
-        let reference_target = self.reference_target.clone();
-        let reference_import = reference_target.is_some();
-        if reference_target.as_ref().is_some_and(|target| {
-            self.canvas
-                .read(cx)
-                .editor
-                .graph()
-                .node(target)
-                .is_none_or(|node| node.locked || !crate::references::accepts_image_reference(node))
-        }) {
-            self.notice = Some("参考图目标已删除、锁定或不支持图片".into());
-            cx.notify();
-            return;
-        }
         self.importing = true;
         self.canvas.update(cx, |v, cx| v.set_editable(false, cx));
         cx.notify();
@@ -405,9 +390,6 @@ impl CreativeCanvas {
                 Ok(Some(paths)) if !paths.is_empty() => Some(
                     cx.background_executor()
                         .spawn(async move {
-                            if reference_import && paths.len() != 1 {
-                                return Err("这个参考输入支持一张图片，请一次导入一张".into());
-                            }
                             project
                                 .save_document(&document, &registry)
                                 .map_err(|e| e.to_string())?;
@@ -419,11 +401,9 @@ impl CreativeCanvas {
                                     .and_then(|e| e.to_str())
                                     .unwrap_or_default()
                                     .to_ascii_lowercase();
-                                let model_path = !reference_import
-                                    && !replace_selection
-                                    && (is_model || extension == "glb");
-                                let media_path = !reference_import
-                                    && !replace_selection
+                                let model_path =
+                                    !replace_selection && (is_model || extension == "glb");
+                                let media_path = !replace_selection
                                     && matches!(
                                         extension.as_str(),
                                         "mp4" | "webm" | "wav" | "mp3" | "flac" | "ogg" | "m4a"
@@ -453,7 +433,7 @@ impl CreativeCanvas {
                 this.importing = false;
                 this.canvas.update(cx, |v, cx| v.set_editable(true, cx));
                 match result {
-                    Some(Ok((project, assets, mut errors))) => {
+                    Some(Ok((project, assets, errors))) => {
                         this.show_import_path = !errors.is_empty();
                         this.last_saved_document = Some(project.document().clone());
                         this.project = Some(project);
@@ -461,14 +441,6 @@ impl CreativeCanvas {
                         let replace = if assets.len() == 1 { replacement } else { None };
                         let imported_count = assets.len();
                         for (index, asset) in assets.into_iter().enumerate() {
-                            if let Some(target) = &reference_target {
-                                if !this.set_reference(target, Some(&asset.key), cx) {
-                                    errors.push(
-                                        this.notice.take().unwrap_or_else(|| "参考图未应用".into()),
-                                    );
-                                }
-                                continue;
-                            }
                             let is_model = asset.media_type == "model/gltf-binary";
                             let kind = if is_model {
                                 "model"
@@ -553,9 +525,6 @@ impl CreativeCanvas {
                             format!("已导入 {imported_count} 个；{}", errors.join("；"))
                         });
                         this.show_import_path = !errors.is_empty();
-                        if reference_import && errors.is_empty() {
-                            this.reference_target = None;
-                        }
                         this.queue_autosave(cx);
                     }
                     Some(Err(error)) => {

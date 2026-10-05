@@ -143,6 +143,7 @@ impl CreativeRegistry {
         if node.title.len() > 512 {
             return Err(CreativeError("card title exceeds 512 bytes".into()));
         }
+        crate::references::reject_legacy_reference(node)?;
         validate_payload(def, &node.data)
     }
     pub fn validate_graph(&self, graph: &Graph) -> Result<(), CreativeError> {
@@ -155,7 +156,6 @@ impl CreativeRegistry {
         graph.validate()?;
         for node in graph.nodes.values() {
             self.validate_node(node)?;
-            crate::references::validate_reference_binding(graph, node)?;
         }
         Ok(())
     }
@@ -776,5 +776,25 @@ mod tests {
         assert!(r.import_document(&mut editor, document()).is_err());
         assert_eq!(editor.document(), before);
         assert!(editor.transaction_active());
+    }
+    #[test]
+    fn standalone_legacy_documents_require_local_project_conversion_without_changing_editor() {
+        let registry = standard_registry();
+        let mut legacy = FlowDocument::default();
+        let mut node = registry
+            .make_node("generate_image", "gen", Point::ZERO, None)
+            .unwrap();
+        node.data["settings"]["reference_asset"] = json!("assets/old.png");
+        legacy.graph.add_node(node).unwrap();
+        let json = legacy.to_json().unwrap();
+        let error = registry.parse_document(&json).unwrap_err();
+        assert!(error.to_string().contains("本地项目"));
+        assert!(error.to_string().contains("重新导出"));
+        assert!(registry.encode_document(&legacy).is_err());
+        let mut editor = Editor::new(document().graph).unwrap();
+        let before = editor.document();
+        assert!(registry.import_document(&mut editor, legacy).is_err());
+        assert_eq!(editor.document(), before);
+        assert!(!editor.undo());
     }
 }

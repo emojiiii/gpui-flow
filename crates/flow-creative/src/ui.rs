@@ -270,9 +270,7 @@ enum Action {
     ConfirmRename,
     ImportImage,
     ImportModel,
-    ImportReference(NodeId),
-    ClearReference(NodeId),
-    BrowseAssets(Option<NodeId>),
+    BrowseAssets,
     CloseAssets,
     AssetsPage(bool),
     PlaceAsset(String),
@@ -344,7 +342,6 @@ pub struct CreativeCanvas {
     quick_edit: bool,
     show_layers: bool,
     import_model: bool,
-    reference_target: Option<NodeId>,
     asset_picker: Option<asset_browser::AssetPicker>,
     asset_picker_focus: FocusHandle,
     asset_thumbnails: Entity<asset_thumbnails::AssetThumbnails>,
@@ -490,7 +487,6 @@ impl CreativeCanvas {
             quick_edit: false,
             show_layers: false,
             import_model: false,
-            reference_target: None,
             asset_picker: None,
             asset_picker_focus: cx.focus_handle(),
             asset_thumbnails,
@@ -553,17 +549,6 @@ impl CreativeCanvas {
             self.clear_text_edit();
             self.quick_edit = false;
             self.show_colors = false;
-            if self
-                .asset_picker
-                .as_ref()
-                .and_then(|picker| picker.target.as_ref())
-                .is_some_and(|target| source.as_ref().map(|source| &source.0) != Some(target))
-            {
-                self.asset_picker = None;
-                if self.asset_picker_focus.contains_focused(window, cx) {
-                    self.canvas.read(cx).focus_handle(cx).focus(window, cx);
-                }
-            }
         }
         self.form_source = source;
         let value = node
@@ -602,11 +587,7 @@ impl CreativeCanvas {
         if self.asset_picker.is_some()
             && matches!(
                 &action,
-                Action::Layers
-                    | Action::ImportReference(_)
-                    | Action::ImportImage
-                    | Action::ImportModel
-                    | Action::Add(_)
+                Action::Layers | Action::ImportImage | Action::ImportModel | Action::Add(_)
             )
         {
             // Toolbar buttons preserve focus. Return it before removing the
@@ -615,8 +596,8 @@ impl CreativeCanvas {
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
         }
         let command = match action {
-            Action::BrowseAssets(target) => {
-                self.asset_picker = Some(asset_browser::AssetPicker { target, page: 0 });
+            Action::BrowseAssets => {
+                self.asset_picker = Some(asset_browser::AssetPicker { page: 0 });
                 self.show_layers = false;
                 self.asset_picker_focus.focus(window, cx);
                 cx.notify();
@@ -640,28 +621,10 @@ impl CreativeCanvas {
                 return;
             }
             Action::PlaceAsset(key) => {
-                let reference = self
-                    .asset_picker
-                    .as_ref()
-                    .is_some_and(|picker| picker.target.is_some());
                 self.place_project_asset(&key, cx);
                 if self.asset_picker.is_none() {
-                    if reference {
-                        self.form.read(cx).focus_handle(cx).focus(window, cx);
-                    } else {
-                        self.canvas.read(cx).focus_handle(cx).focus(window, cx);
-                    }
+                    self.canvas.read(cx).focus_handle(cx).focus(window, cx);
                 }
-                return;
-            }
-            Action::ImportReference(target) => {
-                self.reference_target = Some(target);
-                self.import_model = false;
-                self.import_image(false, cx);
-                return;
-            }
-            Action::ClearReference(target) => {
-                self.set_reference(&target, None, cx);
                 return;
             }
             Action::Media(action) => {
@@ -779,25 +742,21 @@ impl CreativeCanvas {
             }
             Action::CloseImportPath => {
                 self.show_import_path = false;
-                self.reference_target = None;
                 self.canvas.read(cx).focus_handle(cx).focus(window, cx);
                 cx.notify();
                 return;
             }
             Action::ImportImage => {
-                self.reference_target = None;
                 self.import_model = false;
                 self.import_image(false, cx);
                 return;
             }
             Action::ImportModel => {
-                self.reference_target = None;
                 self.import_model = true;
                 self.import_image(false, cx);
                 return;
             }
             Action::ReplaceImage => {
-                self.reference_target = None;
                 self.import_model = false;
                 self.import_image(true, cx);
                 return;
@@ -923,7 +882,7 @@ impl CreativeCanvas {
             Action::Ungroup => CanvasCommand::UngroupSelection,
             Action::Fit => CanvasCommand::Fit {
                 canvas: self.canvas_size,
-                padding: 42.,
+                padding: 140.,
             },
             Action::Zoom(factor) => CanvasCommand::Zoom {
                 position: WorldPoint::new(
@@ -1286,7 +1245,7 @@ impl Render for CreativeCanvas {
                 "tool-assets",
                 "folder-open",
                 "本项目素材",
-                Action::BrowseAssets(None),
+                Action::BrowseAssets,
                 self.project.is_none(),
                 cx,
             ));
@@ -1477,9 +1436,7 @@ impl Render for CreativeCanvas {
                     .flex()
                     .flex_col()
                     .gap_3()
-                    .child(div().text_sm().child(if self.reference_target.is_some() {
-                        "选择一张本地图片作为参考"
-                    } else if self.import_model {
+                    .child(div().text_sm().child(if self.import_model {
                         "导入已选择的本地 GLB 模型"
                     } else {
                         "导入本地图片、视频或音频"
@@ -1606,6 +1563,9 @@ impl Render for CreativeCanvas {
                     .left(px(18.))
                     .top(px(16.))
                     .h(px(38.))
+                    .px_1()
+                    .rounded_lg()
+                    .bg(rgb(t.background))
                     .flex()
                     .items_center()
                     .gap_2()
@@ -1647,6 +1607,10 @@ impl Render for CreativeCanvas {
                     .absolute()
                     .right(px(20.))
                     .top(px(16.))
+                    .h(px(38.))
+                    .px_1()
+                    .rounded_lg()
+                    .bg(rgb(t.background))
                     .flex()
                     .items_center()
                     .gap_1()

@@ -115,7 +115,7 @@ impl CreativeCanvas {
                 ))
                 .child(self.button(
                     "reference-image",
-                    "用作参考",
+                    "图生图",
                     Action::UseReference,
                     !editable,
                     cx,
@@ -318,7 +318,7 @@ impl CreativeCanvas {
             panel = panel.child(self.media_controls(node, cx));
         }
         if has_reference_input {
-            panel = panel.child(self.reference_row(node, editable, cx));
+            panel = panel.child(self.reference_row(node, cx));
         }
         if generation.is_some() {
             panel = panel.child(self.reference_prompt(node, editable, cx));

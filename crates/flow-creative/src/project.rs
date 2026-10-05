@@ -281,6 +281,7 @@ impl ProjectStore {
             Ok(LocalProject {
                 directory: directory.clone(),
                 project,
+                migrated_reference_count: 0,
             })
         })();
         if result.is_err() {
@@ -296,16 +297,46 @@ impl ProjectStore {
         id: &str,
         registry: &CreativeRegistry,
     ) -> Result<LocalProject, ProjectError> {
+        let _transaction = transaction()?;
         validate_id(id)?;
         checked_directory(&self.root, false)?;
         let directory = self.root.join(id);
         let project = read_project(&directory, id)?;
-        registry.validate_document(&project.document)?;
         check_assets_on_disk(&directory, &project.assets)?;
         for asset in &project.assets {
             verify_asset(&directory.join(&asset.key), asset)?;
         }
-        Ok(LocalProject { directory, project })
+        let mut local = LocalProject {
+            directory,
+            project,
+            migrated_reference_count: 0,
+        };
+        if local
+            .project
+            .document
+            .graph
+            .nodes
+            .values()
+            .any(crate::references::has_legacy_reference)
+        {
+            // Older envelopes may contain a project-owned image attachment.
+            // Build and validate its visible replacement before the first write.
+            let (document, converted) = crate::references::migrate_legacy_references(
+                registry,
+                &local.project.document,
+                &local.project.assets,
+            )?;
+            validate_document_assets(&document, &local.project.assets)?;
+            let mut candidate = local.next_revision()?;
+            candidate.document = document;
+            local.check_revision()?;
+            write_project(&local.directory, &candidate)?;
+            local.project = candidate;
+            local.migrated_reference_count = converted;
+        } else {
+            registry.validate_document(&local.project.document)?;
+        }
+        Ok(local)
     }
 }
 
@@ -313,6 +344,7 @@ impl ProjectStore {
 pub struct LocalProject {
     directory: PathBuf,
     project: ProjectFile,
+    migrated_reference_count: usize,
 }
 
 impl LocalProject {
@@ -330,6 +362,12 @@ impl LocalProject {
     }
     pub fn revision(&self) -> u64 {
         self.project.revision
+    }
+
+    /// Legacy attachment bindings converted to visible image inputs by this
+    /// open. Reopening an already converted project returns zero.
+    pub fn migrated_reference_count(&self) -> usize {
+        self.migrated_reference_count
     }
 
     /// Validate first, then fsync a unique sibling and atomically replace
@@ -607,18 +645,43 @@ fn validate_document_assets(
     assets: &[ProjectAsset],
 ) -> Result<(), ProjectError> {
     for node in document.graph.nodes.values() {
-        if crate::references::accepts_image_reference(node)
-            && let Some(key) = crate::references::reference_asset(node)
+        // Only the legacy envelope reader admits this key. Public document
+        // validation and every write reject it until migration has removed it.
+        if crate::references::has_legacy_reference(node)
+            && let Some(value) = node
+                .data
+                .get("settings")
+                .and_then(|settings| settings.get("reference_asset"))
         {
-            validate_asset_key(key)?;
-            let asset = assets
-                .iter()
-                .find(|asset| asset.key == key)
-                .ok_or_else(|| ProjectError::Invalid(format!("missing reference asset: {key}")))?;
-            if !asset.media_type.starts_with("image/") {
-                return Err(ProjectError::Invalid(
-                    "reference attachments must be project-owned images".into(),
-                ));
+            let key = value.as_str().ok_or_else(|| {
+                ProjectError::Invalid("legacy reference asset must be a string".into())
+            })?;
+            if !key.is_empty() {
+                if !matches!(
+                    crate::GenerationKind::from_node_kind(&node.kind),
+                    Some(
+                        crate::GenerationKind::Image
+                            | crate::GenerationKind::Video
+                            | crate::GenerationKind::Model
+                    )
+                ) || !crate::references::accepts_image_reference(node)
+                {
+                    return Err(ProjectError::Invalid(
+                        "this node does not accept a legacy image reference".into(),
+                    ));
+                }
+                validate_asset_key(key)?;
+                let asset = assets
+                    .iter()
+                    .find(|asset| asset.key == key)
+                    .ok_or_else(|| {
+                        ProjectError::Invalid(format!("missing legacy reference asset: {key}"))
+                    })?;
+                if !asset.media_type.starts_with("image/") {
+                    return Err(ProjectError::Invalid(
+                        "legacy reference attachments must be project-owned images".into(),
+                    ));
+                }
             }
         }
         let Some(value) = node.data.get("asset") else {
@@ -769,6 +832,9 @@ fn read_project(directory: &Path, id: &str) -> Result<ProjectFile, ProjectError>
 }
 
 fn write_project(directory: &Path, project: &ProjectFile) -> Result<(), ProjectError> {
+    for node in project.document.graph.nodes.values() {
+        crate::references::reject_legacy_reference(node)?;
+    }
     validate_project(project, &project.metadata.id)?;
     let bytes = serde_json::to_vec_pretty(project)?;
     if bytes.len() as u64 > MAX_PROJECT_BYTES {
@@ -1299,65 +1365,325 @@ mod tests {
         assert_eq!(reopened.assets(), &[asset]);
     }
 
-    #[test]
-    fn reference_attachment_roundtrips_without_a_canvas_node_and_rejects_foreign_keys() {
-        let home = TestHome::new();
-        let store = home.store();
+    /// Use the current importer for a real owned copy, then write the older
+    /// envelope directly: production writes must no longer accept attachments.
+    fn legacy_reference_project(home: &TestHome, kind: &str) -> (LocalProject, ProjectAsset) {
         let registry = standard_registry();
-        let mut project = store
-            .create_project("References", &FlowDocument::default(), &registry)
+        let mut project = home
+            .store()
+            .create_project("Legacy references", &FlowDocument::default(), &registry)
             .unwrap();
         let source = home.0.join("reference.png");
         fs::write(&source, png()).unwrap();
         let asset = project.import_image(&source).unwrap();
-        let mut document = project.document().clone();
-        document
+        fs::remove_file(source).unwrap();
+        let mut node = registry
+            .make_node(kind, "gen", Point::new(800., 40.), None)
+            .unwrap();
+        node.data["prompt"] = json!("Create a variation");
+        node.data["settings"]["reference_asset"] = json!(asset.key);
+        project.project.document.graph.add_node(node).unwrap();
+        write_legacy_fixture(&project);
+        (project, asset)
+    }
+
+    fn write_legacy_fixture(project: &LocalProject) {
+        fs::write(
+            project.directory().join(PROJECT_FILE),
+            serde_json::to_vec_pretty(&project.project).unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn old_owned_reference_becomes_visible_image_input_and_reopen_is_idempotent() {
+        let home = TestHome::new();
+        let registry = standard_registry();
+        let (project, asset) = legacy_reference_project(&home, "generate_image");
+        let original_asset = fs::read(project.directory().join(&asset.key)).unwrap();
+        let reopened = home
+            .store()
+            .open_project(&project.metadata().id, &registry)
+            .unwrap();
+        let document = reopened.document();
+        assert_eq!(reopened.migrated_reference_count(), 1);
+        assert_eq!(reopened.revision(), project.revision() + 1);
+        assert_eq!(document.graph.nodes.len(), 2);
+        assert_eq!(document.graph.edges.len(), 1);
+        let generator = document.graph.node(&"gen".into()).unwrap();
+        let source = crate::references::linked_reference(&document.graph, &generator.id).unwrap();
+        assert_eq!(source.kind, "image");
+        assert_eq!(source.data["asset"], asset.key);
+        assert!(source.bounds().max_x() < generator.position.x);
+        assert!(!crate::references::has_legacy_reference(generator));
+        let request = crate::GenerationRequest::from_node(generator, &document.graph).unwrap();
+        assert_eq!(request.inputs.len(), 1);
+        assert_eq!(request.inputs[0].port, "reference");
+        assert_eq!(request.inputs[0].asset.as_deref(), Some(asset.key.as_str()));
+        assert!(request.settings.get("reference_asset").is_none());
+        assert_eq!(reopened.assets(), std::slice::from_ref(&asset));
+        assert_eq!(
+            fs::read(reopened.resolve_asset(&asset.key).unwrap()).unwrap(),
+            original_asset
+        );
+        assert_eq!(
+            home.store().thumbnail_path(&project.metadata().id).unwrap(),
+            Some(project.directory().join(&asset.key))
+        );
+        let bytes = fs::read(project.directory().join(PROJECT_FILE)).unwrap();
+        let again = home
+            .store()
+            .open_project(&project.metadata().id, &registry)
+            .unwrap();
+        assert_eq!(again.document(), reopened.document());
+        assert_eq!(again.revision(), reopened.revision());
+        assert_eq!(again.migrated_reference_count(), 0);
+        assert_eq!(
+            fs::read(project.directory().join(PROJECT_FILE)).unwrap(),
+            bytes
+        );
+    }
+
+    #[test]
+    fn old_references_reuse_one_existing_image_for_distinct_generator_kinds() {
+        let home = TestHome::new();
+        let registry = standard_registry();
+        let (mut project, asset) = legacy_reference_project(&home, "generate_video");
+        let image = registry
+            .make_node(
+                "image",
+                "existing",
+                Point::new(12., 30.),
+                Some(json!({"asset":asset.key,"caption":"Keep my image"})),
+            )
+            .unwrap();
+        project
+            .project
+            .document
+            .graph
+            .add_node(image.clone())
+            .unwrap();
+        let mut model = registry
+            .make_node("generate_model", "model-gen", Point::new(800., 500.), None)
+            .unwrap();
+        model.data["settings"]["reference_asset"] = json!(asset.key);
+        project.project.document.graph.add_node(model).unwrap();
+        write_legacy_fixture(&project);
+        let reopened = home
+            .store()
+            .open_project(&project.metadata().id, &registry)
+            .unwrap();
+        assert_eq!(reopened.migrated_reference_count(), 2);
+        assert_eq!(reopened.document().graph.nodes.len(), 3);
+        assert_eq!(reopened.document().graph.node(&image.id), Some(&image));
+        for target in ["gen", "model-gen"] {
+            assert_eq!(
+                crate::references::linked_reference(&reopened.document().graph, &target.into())
+                    .unwrap()
+                    .id,
+                image.id
+            );
+        }
+        assert_eq!(reopened.assets().len(), 1);
+    }
+
+    #[test]
+    fn reference_conflict_preserves_old_project_and_owned_image_bytes() {
+        let home = TestHome::new();
+        let registry = standard_registry();
+        let (mut project, asset) = legacy_reference_project(&home, "generate_image");
+        project
+            .project
+            .document
             .graph
             .add_node(
                 registry
-                    .make_node("generate_image", "gen", Point::ZERO, None)
+                    .make_node(
+                        "image",
+                        "existing",
+                        Point::ZERO,
+                        Some(json!({"asset":asset.key,"caption":"Existing input"})),
+                    )
                     .unwrap(),
             )
             .unwrap();
-        document.graph = crate::references::replace_reference(
-            &registry,
-            &document.graph,
-            &"gen".into(),
-            Some(&asset.key),
-        )
-        .unwrap();
-        project.save_document(&document, &registry).unwrap();
-        fs::remove_file(source).unwrap();
-        let reopened = store
-            .open_project(&project.metadata().id, &registry)
+        project
+            .project
+            .document
+            .graph
+            .connect(
+                "existing-link",
+                gpui_flow_core::PortRef::new("existing", "image"),
+                gpui_flow_core::PortRef::new("gen", "reference"),
+            )
             .unwrap();
-        assert_eq!(reopened.document().graph.nodes.len(), 1);
-        assert_eq!(reopened.document(), &document);
+        write_legacy_fixture(&project);
+        let bytes = fs::read(project.directory().join(PROJECT_FILE)).unwrap();
+        let owned = fs::read(project.directory().join(&asset.key)).unwrap();
+        let error = home
+            .store()
+            .open_project(&project.metadata().id, &registry)
+            .unwrap_err();
+        assert!(error.to_string().contains("冲突"));
         assert_eq!(
-            store.thumbnail_path(&project.metadata().id).unwrap(),
-            Some(project.resolve_asset_path(&asset.key).unwrap())
+            fs::read(project.directory().join(PROJECT_FILE)).unwrap(),
+            bytes
         );
-        let before = fs::read(project.directory().join(PROJECT_FILE)).unwrap();
-        for key in [
-            "https://example.com/image.png",
-            "../outside.png",
-            "assets/missing.png",
-        ] {
-            let mut invalid = document.clone();
-            invalid.graph.nodes.get_mut(&"gen".into()).unwrap().data["settings"]["reference_asset"] =
-                json!(key);
-            assert!(project.save_document(&invalid, &registry).is_err());
+        assert_eq!(
+            fs::read(project.directory().join(&asset.key)).unwrap(),
+            owned
+        );
+        assert_eq!(fs::read_dir(project.directory()).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn missing_reference_asset_or_manifest_entry_preserves_old_project_bytes() {
+        for missing_file in [true, false] {
+            let home = TestHome::new();
+            let registry = standard_registry();
+            let (mut project, asset) = legacy_reference_project(&home, "generate_image");
+            if missing_file {
+                fs::remove_file(project.directory().join(&asset.key)).unwrap();
+            } else {
+                project
+                    .project
+                    .document
+                    .graph
+                    .nodes
+                    .get_mut(&"gen".into())
+                    .unwrap()
+                    .data["settings"]["reference_asset"] = json!("assets/missing.png");
+                write_legacy_fixture(&project);
+            }
+            let bytes = fs::read(project.directory().join(PROJECT_FILE)).unwrap();
+            let file_count = fs::read_dir(project.directory().join("assets"))
+                .unwrap()
+                .count();
+            assert!(
+                home.store()
+                    .open_project(&project.metadata().id, &registry)
+                    .is_err()
+            );
             assert_eq!(
                 fs::read(project.directory().join(PROJECT_FILE)).unwrap(),
-                before
+                bytes
             );
+            assert_eq!(
+                fs::read_dir(project.directory().join("assets"))
+                    .unwrap()
+                    .count(),
+                file_count
+            );
+            assert_eq!(fs::read_dir(project.directory()).unwrap().count(), 2);
         }
-        let model = home.0.join("wrong.glb");
-        fs::write(&model, glb()).unwrap();
-        let model = project.import_model(model).unwrap();
-        document.graph.nodes.get_mut(&"gen".into()).unwrap().data["settings"]["reference_asset"] =
-            json!(model.key);
-        assert!(project.validate_document(&document, &registry).is_err());
+    }
+
+    #[test]
+    fn migration_validation_failure_keeps_a_full_board_and_its_assets_unchanged() {
+        let home = TestHome::new();
+        let registry = standard_registry();
+        let (mut project, asset) = legacy_reference_project(&home, "generate_image");
+        for index in 1..MAX_CARDS {
+            project
+                .project
+                .document
+                .graph
+                .add_node(
+                    registry
+                        .make_node("text", format!("note-{index}"), Point::ZERO, None)
+                        .unwrap(),
+                )
+                .unwrap();
+        }
+        write_legacy_fixture(&project);
+        let bytes = fs::read(project.directory().join(PROJECT_FILE)).unwrap();
+        let error = home
+            .store()
+            .open_project(&project.metadata().id, &registry)
+            .unwrap_err();
+        assert!(error.to_string().contains("size limit"));
+        assert_eq!(
+            fs::read(project.directory().join(PROJECT_FILE)).unwrap(),
+            bytes
+        );
+        assert_eq!(
+            fs::read(project.directory().join(&asset.key)).unwrap(),
+            png()
+        );
+        assert_eq!(fs::read_dir(project.directory()).unwrap().count(), 2);
+        assert_eq!(
+            fs::read_dir(project.directory().join("assets"))
+                .unwrap()
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn a_manifest_owned_model_cannot_be_migrated_as_an_image_input() {
+        let home = TestHome::new();
+        let registry = standard_registry();
+        let mut project = home
+            .store()
+            .create_project("Wrong reference type", &FlowDocument::default(), &registry)
+            .unwrap();
+        let source = home.0.join("model.glb");
+        fs::write(&source, glb()).unwrap();
+        let asset = project.import_model(&source).unwrap();
+        let mut generator = registry
+            .make_node("generate_image", "gen", Point::ZERO, None)
+            .unwrap();
+        generator.data["settings"]["reference_asset"] = json!(asset.key);
+        project.project.document.graph.add_node(generator).unwrap();
+        write_legacy_fixture(&project);
+        let bytes = fs::read(project.directory().join(PROJECT_FILE)).unwrap();
+        assert!(
+            home.store()
+                .open_project(&project.metadata().id, &registry)
+                .is_err()
+        );
+        assert_eq!(
+            fs::read(project.directory().join(PROJECT_FILE)).unwrap(),
+            bytes
+        );
+        assert_eq!(
+            fs::read(project.directory().join(&asset.key)).unwrap(),
+            glb()
+        );
+    }
+
+    #[test]
+    fn unsupported_audio_reference_and_new_attachment_saves_are_rejected() {
+        let home = TestHome::new();
+        let registry = standard_registry();
+        let (mut project, _) = legacy_reference_project(&home, "generate_audio");
+        let bytes = fs::read(project.directory().join(PROJECT_FILE)).unwrap();
+        assert!(
+            home.store()
+                .open_project(&project.metadata().id, &registry)
+                .is_err()
+        );
+        assert_eq!(
+            fs::read(project.directory().join(PROJECT_FILE)).unwrap(),
+            bytes
+        );
+        let document = project.document().clone();
+        assert!(project.save_document(&document, &registry).is_err());
+        assert_eq!(
+            fs::read(project.directory().join(PROJECT_FILE)).unwrap(),
+            bytes
+        );
+
+        let other_home = TestHome::new();
+        let (mut other, _) = legacy_reference_project(&other_home, "generate_image");
+        let document = other.document().clone();
+        let bytes = fs::read(other.directory().join(PROJECT_FILE)).unwrap();
+        assert!(other.save_document(&document, &registry).is_err());
+        assert!(other.validate_document(&document, &registry).is_err());
+        assert_eq!(
+            fs::read(other.directory().join(PROJECT_FILE)).unwrap(),
+            bytes
+        );
     }
 
     #[test]

@@ -51,6 +51,7 @@ pub struct GenerationRequest {
     pub kind: GenerationKind,
     pub prompt: String,
     pub model: String,
+    /// The only source of reference images: explicit incoming canvas edges.
     pub inputs: Vec<GenerationInput>,
     pub settings: Value,
 }
@@ -65,6 +66,8 @@ impl GenerationRequest {
     pub fn from_node(node: &Node, graph: &Graph) -> Result<Self, CreativeError> {
         let kind = GenerationKind::from_node_kind(&node.kind)
             .ok_or_else(|| CreativeError("此节点不是生成节点".into()))?;
+        crate::references::reject_legacy_reference(node)?;
+        graph.validate()?;
         let prompt = node.data["prompt"]
             .as_str()
             .unwrap_or_default()
@@ -165,12 +168,6 @@ pub(crate) fn register_generation_nodes(registry: &mut CreativeRegistry) {
                     }
                     if let Some(settings)=v.get("settings") {
                         if !settings.is_object() { return Err("settings must be an object".into()); }
-                        if let Some(reference) = settings.get("reference_asset") {
-                            let reference = reference.as_str().ok_or("reference_asset must be a string")?;
-                            if reference.len() > 16 * 1024 || (kind == GenerationKind::Audio && !reference.is_empty()) {
-                                return Err("this generator does not accept that image reference".into());
-                            }
-                        }
                         if settings.get("aspect_ratio").is_some_and(|ratio| !matches!(ratio.as_str(),Some("1:1"|"16:9"|"9:16"))) { return Err("unsupported aspect ratio".into()); }
                         if settings.get("duration_seconds").is_some_and(|duration| duration.as_u64().is_none_or(|value| value==0 || value>300)) { return Err("duration must be 1..300 seconds".into()); }
                     }
@@ -233,5 +230,86 @@ mod tests {
             GenerationRequest::from_node(graph.node(&"gen".into()).unwrap(), &graph).unwrap();
         assert_eq!(request.kind, GenerationKind::Image);
         assert_eq!(request.inputs[0].source, NodeId::from("brief"));
+    }
+    #[test]
+    fn reference_images_come_only_from_explicit_edges_and_text_to_image_needs_none() {
+        let registry = crate::standard_registry();
+        let mut graph = Graph::new();
+        let mut generator = registry
+            .make_node("generate_image", "gen", Point::ZERO, None)
+            .unwrap();
+        generator.data["prompt"] = json!("A quiet garden");
+        graph.add_node(generator).unwrap();
+        for (id, asset) in [
+            ("photo", "assets/input.png"),
+            ("unconnected", "assets/unused.png"),
+        ] {
+            graph
+                .add_node(
+                    registry
+                        .make_node(
+                            "image",
+                            id,
+                            Point::ZERO,
+                            Some(json!({"asset":asset,"caption":"Image"})),
+                        )
+                        .unwrap(),
+                )
+                .unwrap();
+        }
+        let text_to_image =
+            GenerationRequest::from_node(graph.node(&"gen".into()).unwrap(), &graph).unwrap();
+        assert_eq!(text_to_image.kind, GenerationKind::Image);
+        assert!(text_to_image.inputs.is_empty());
+        graph
+            .connect(
+                "input",
+                PortRef::new("photo", "image"),
+                PortRef::new("gen", "reference"),
+            )
+            .unwrap();
+        let image_to_image =
+            GenerationRequest::from_node(graph.node(&"gen".into()).unwrap(), &graph).unwrap();
+        assert_eq!(image_to_image.inputs.len(), 1);
+        assert_eq!(image_to_image.inputs[0].source, NodeId::from("photo"));
+        assert_eq!(image_to_image.inputs[0].port, "reference");
+        assert_eq!(
+            image_to_image.inputs[0].asset.as_deref(),
+            Some("assets/input.png")
+        );
+        assert!(image_to_image.settings.get("reference_asset").is_none());
+    }
+
+    #[test]
+    fn legacy_hidden_references_fail_even_with_a_valid_explicit_edge() {
+        let registry = crate::standard_registry();
+        let mut graph = Graph::new();
+        let mut generator = registry
+            .make_node("generate_image", "gen", Point::ZERO, None)
+            .unwrap();
+        generator.data["prompt"] = json!("A quiet garden");
+        generator.data["settings"]["reference_asset"] = json!("assets/hidden.png");
+        graph.add_node(generator).unwrap();
+        graph
+            .add_node(
+                registry
+                    .make_node("image", "photo", Point::ZERO, None)
+                    .unwrap(),
+            )
+            .unwrap();
+        for connected in [false, true] {
+            if connected {
+                graph
+                    .connect(
+                        "input",
+                        PortRef::new("photo", "image"),
+                        PortRef::new("gen", "reference"),
+                    )
+                    .unwrap();
+            }
+            let error = GenerationRequest::from_node(graph.node(&"gen".into()).unwrap(), &graph)
+                .unwrap_err();
+            assert!(error.to_string().contains("转换"));
+        }
     }
 }

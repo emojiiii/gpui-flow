@@ -3,7 +3,6 @@ use super::*;
 
 const PAGE_SIZE: usize = 8;
 pub(super) struct AssetPicker {
-    pub target: Option<NodeId>,
     pub page: usize,
 }
 
@@ -48,16 +47,6 @@ impl CreativeCanvas {
             cx.notify();
             return;
         }
-        if let Some(target) = self
-            .asset_picker
-            .as_ref()
-            .and_then(|picker| picker.target.clone())
-        {
-            if self.set_reference(&target, Some(key), cx) {
-                self.asset_picker = None;
-            }
-            return;
-        }
         let kind = asset_kind(&asset);
         let size = match kind {
             "audio" => WorldSize::new(400., 144.),
@@ -99,19 +88,10 @@ impl CreativeCanvas {
     }
     pub(super) fn asset_panel(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let picker = self.asset_picker.as_ref().expect("open picker");
-        let target = picker.target.clone();
         let assets = self
             .project
             .as_ref()
-            .map(|project| {
-                project
-                    .assets()
-                    .iter()
-                    .rev()
-                    .filter(|asset| target.is_none() || asset.media_type.starts_with("image/"))
-                    .cloned()
-                    .collect::<Vec<_>>()
-            })
+            .map(|project| project.assets().iter().rev().cloned().collect::<Vec<_>>())
             .unwrap_or_default();
         let page = picker.page.min(assets.len().saturating_sub(1) / PAGE_SIZE);
         let visible = assets.iter().skip(page * PAGE_SIZE).take(PAGE_SIZE);
@@ -214,11 +194,7 @@ impl CreativeCanvas {
                     .p_4()
                     .text_size(px(12.))
                     .text_color(rgb(0x929aa8))
-                    .child(if target.is_some() {
-                        "本项目还没有图片。导入一张图片作为参考。"
-                    } else {
-                        "导入的素材会保留在这里，随时放回画布。"
-                    }),
+                    .child("导入的素材会保留在这里，随时放回画布。"),
             );
         }
         let mut panel = div()
@@ -249,11 +225,7 @@ impl CreativeCanvas {
                     .flex()
                     .items_center()
                     .justify_between()
-                    .child(div().text_size(px(13.)).child(if target.is_some() {
-                        "选择参考图"
-                    } else {
-                        "本项目素材"
-                    }))
+                    .child(div().text_size(px(13.)).child("本项目素材"))
                     .child(self.icon_button(
                         "close-assets",
                         "x",
@@ -307,12 +279,11 @@ impl CreativeCanvas {
                             )),
                     ),
             );
-        let import_action = target.map_or(Action::ImportImage, Action::ImportReference);
         panel = panel.child(
             self.button(
                 "asset-import",
                 "＋ 导入本地素材",
-                import_action,
+                Action::ImportImage,
                 !editable || self.saving,
                 cx,
             )
