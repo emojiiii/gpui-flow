@@ -592,7 +592,16 @@ impl CreativeCanvas {
                         } else {
                             this.import_at = None;
                         }
-                        this.notice = Some(notice);
+                        // Successful insertions queue DocumentChanged, which clears
+                        // an earlier notice. Show the batch result after those events
+                        // so a partially rejected import cannot lose its warning.
+                        let owner = cx.weak_entity();
+                        cx.defer(move |cx| {
+                            let _ = owner.update(cx, |this, cx| {
+                                this.notice = Some(notice);
+                                cx.notify();
+                            });
+                        });
                         this.show_import_path = !errors.is_empty();
                         this.queue_autosave(cx);
                     }
