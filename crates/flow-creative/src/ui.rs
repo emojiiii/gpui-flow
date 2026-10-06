@@ -421,6 +421,7 @@ fn theme() -> FlowTheme {
 }
 #[derive(Clone)]
 enum Action {
+    CanvasAppearance(canvas_tools::CanvasAppearanceAction),
     TextAppearance(text_appearance_tools::TypographyAction),
     Arrange(Option<crate::arrangement::Arrangement>),
     Shape(shape_tools::ShapeAction),
@@ -517,6 +518,7 @@ pub struct CreativeCanvas {
     show_arrangement: bool,
     typography: Option<text_appearance_tools::TypographyPanel>,
     font_families: Arc<Vec<String>>,
+    background_panel: Option<canvas_tools::BackgroundPanel>,
     import_model: bool,
     asset_picker: Option<asset_browser::AssetPicker>,
     asset_picker_focus: FocusHandle,
@@ -592,6 +594,8 @@ impl CreativeCanvas {
         cx: &mut Context<Self>,
     ) -> Result<Self, CreativeError> {
         registry.validate_document(&document)?;
+        let canvas_preferences =
+            crate::canvas_preferences::read_canvas_preferences(&document.graph).unwrap_or_default();
         let guard = registry.clone();
         let validator = registry.clone();
         let canvas = cx.new(|cx| {
@@ -604,10 +608,13 @@ impl CreativeCanvas {
             })))
             .expect("initial document validated");
             view.registry = renderers;
-            view.theme = theme();
+            view.theme = FlowTheme {
+                background: canvas_preferences.background_rgb,
+                ..theme()
+            };
             view.options = FlowOptions::canvas_only();
             view.options.show_controls = false;
-            view.options.show_minimap = false;
+            view.options.show_minimap = canvas_preferences.show_minimap;
             view.show_grid = false;
             view.set_selection_on_top(false);
             view.set_port_labels(false);
@@ -618,6 +625,9 @@ impl CreativeCanvas {
         let subscription = cx.subscribe_in(&canvas, window, |this, canvas, event, window, cx| {
             match event {
                 FlowEvent::DocumentChanged | FlowEvent::SelectionChanged => {
+                    if matches!(event, FlowEvent::DocumentChanged) {
+                        this.sync_canvas_appearance(window, cx);
+                    }
                     if matches!(event, FlowEvent::SelectionChanged) {
                         this.show_arrangement = false;
                     }
@@ -793,6 +803,7 @@ impl CreativeCanvas {
             show_layers: false,
             show_arrangement: false,
             typography: None,
+            background_panel: None,
             font_families: Arc::new(
                 cx.text_system()
                     .all_font_names()
@@ -959,6 +970,10 @@ impl CreativeCanvas {
         result.is_ok()
     }
     fn action(&mut self, action: Action, window: &mut Window, cx: &mut Context<Self>) {
+        if !matches!(&action, Action::CanvasAppearance(_)) && self.background_panel.is_some() {
+            self.background_panel = None;
+            self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+        }
         if !matches!(&action, Action::TextAppearance(_)) && self.typography.is_some() {
             self.typography = None;
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
@@ -1006,6 +1021,10 @@ impl CreativeCanvas {
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
         }
         let command = match action {
+            Action::CanvasAppearance(action) => {
+                self.canvas_appearance_action(action, window, cx);
+                return;
+            }
             Action::TextAppearance(action) => {
                 self.handle_typography(action, window, cx);
                 return;
@@ -1606,6 +1625,7 @@ mod arrangement_tools;
 mod asset_browser;
 mod asset_export_ui;
 mod asset_thumbnails;
+mod canvas_tools;
 mod chrome;
 mod custom_designer;
 mod custom_tasks;
@@ -1647,8 +1667,11 @@ impl EventEmitter<CreativeEvent> for CreativeCanvas {}
 
 impl Render for CreativeCanvas {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let t = theme();
         let view = self.canvas.read(cx);
+        let t = FlowTheme {
+            background: view.theme.background,
+            ..theme()
+        };
         let editable = view.is_editable() && !self.importing;
         let selection = view.editor.selection.clone();
         let count = view.editor.graph().nodes.len();
@@ -1740,6 +1763,24 @@ impl Render for CreativeCanvas {
                 }),
             )
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                if event.keystroke.key == "escape" && this.background_panel.is_some() {
+                    cx.stop_propagation();
+                    this.background_panel = None;
+                    this.canvas.read(cx).focus_handle(cx).focus(window, cx);
+                    cx.notify();
+                    return;
+                }
+                if (event.keystroke.key == "v" || event.keystroke.key == "h")
+                    && !event.keystroke.modifiers.control
+                    && !event.keystroke.modifiers.alt
+                    && !event.keystroke.modifiers.platform
+                    && !event.keystroke.modifiers.shift
+                    && this.canvas.read(cx).focus_handle(cx).is_focused(window)
+                {
+                    cx.stop_propagation();
+                    this.action(Action::PanTool(event.keystroke.key == "h"), window, cx);
+                    return;
+                }
                 if event.keystroke.key == "escape" && this.typography.is_some() {
                     cx.stop_propagation();
                     this.typography = None;
@@ -1807,9 +1848,9 @@ impl Render for CreativeCanvas {
             .occlude()
             .absolute()
             .left(px(18.))
-            .top(px((self.canvas_size.height / 2. - 305.).max(76.)))
+            .top(px(76.))
             .w(px(48.))
-            .max_h(px((self.canvas_size.height - 160.).max(180.)))
+            .max_h(px((self.canvas_size.height - 132.).max(44.)))
             .overflow_y_scroll()
             .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
             .p(px(6.))
@@ -1823,7 +1864,7 @@ impl Render for CreativeCanvas {
             .items_center()
             .gap_1()
             .child(
-                self.icon_button(
+                self.rail_button(
                     "tool-select",
                     "mouse-pointer-2",
                     "选择对象",
@@ -1840,7 +1881,7 @@ impl Render for CreativeCanvas {
                 ),
             )
             .child(
-                self.icon_button(
+                self.rail_button(
                     "tool-hand",
                     "hand",
                     "移动画布 · 按住空格临时使用",
@@ -1851,7 +1892,7 @@ impl Render for CreativeCanvas {
                 .when(pan_mode, |b| b.bg(rgb(0xeef1f6))),
             )
             .child(div().w(px(24.)).h(px(1.)).my_1().bg(rgb(0xe9eaed)))
-            .child(self.icon_button(
+            .child(self.rail_button(
                 "tool-import",
                 "upload",
                 "导入图片、视频或音频",
@@ -1859,7 +1900,7 @@ impl Render for CreativeCanvas {
                 !editable || self.saving || count >= MAX_CARDS,
                 cx,
             ))
-            .child(self.icon_button(
+            .child(self.rail_button(
                 "tool-assets",
                 "folder-open",
                 "本项目素材",
@@ -1876,7 +1917,7 @@ impl Render for CreativeCanvas {
             ("generate_audio", "music", "音频生成"),
             ("generate_model", "box", "3D 模型生成"),
         ] {
-            rail = rail.child(self.icon_button(
+            rail = rail.child(self.rail_button(
                 SharedString::from(format!("tool-{kind}")),
                 symbol,
                 name,
@@ -1886,7 +1927,7 @@ impl Render for CreativeCanvas {
             ));
         }
         rail = rail.child(
-            self.icon_button(
+            self.rail_button(
                 "tool-pencil",
                 "pencil",
                 "自由绘制 · P",
@@ -1897,7 +1938,7 @@ impl Render for CreativeCanvas {
             .when(self.pencil_active, |b| b.bg(rgb(0xeef1f6))),
         );
         rail = rail.child(
-            self.icon_button(
+            self.rail_button(
                 "tool-shape",
                 "circle",
                 "绘制图形",
@@ -1911,7 +1952,7 @@ impl Render for CreativeCanvas {
         );
         rail = rail
             .child(
-                self.icon_button(
+                self.rail_button(
                     "tool-frame",
                     "grid-2x2",
                     "画框 · 拖动或单击创建",
@@ -1921,7 +1962,7 @@ impl Render for CreativeCanvas {
                 )
                 .when(self.frame_drawing, |b| b.bg(rgb(0xeef1f6))),
             )
-            .child(self.icon_button(
+            .child(self.rail_button(
                 "tool-processing",
                 "sliders-horizontal",
                 "本地媒体处理",
@@ -1930,7 +1971,7 @@ impl Render for CreativeCanvas {
                 cx,
             ))
             .child(div().w(px(24.)).h(px(1.)).my_1().bg(rgb(0xe9eaed)))
-            .child(self.icon_button("tool-layers", "layers", "图层", Action::Layers, false, cx));
+            .child(self.rail_button("tool-layers", "layers", "图层", Action::Layers, false, cx));
         surface = surface.child(rail);
         if self.show_shapes {
             surface = surface.child(self.shape_menu(cx));
@@ -2439,7 +2480,36 @@ impl Render for CreativeCanvas {
                             .child(format!("{:.0}%", zoom * 100.)),
                     )
                     .child(self.button("zoom-in", "+", Action::Zoom(1.2), false, cx))
-                    .child(self.icon_button("fit", "focus", "适应画布", Action::Fit, false, cx)),
+                    .child(self.icon_button("fit", "focus", "适应画布", Action::Fit, false, cx))
+                    .child(chrome::separator())
+                    .child(
+                        self.icon_button(
+                            "toggle-minimap",
+                            "map",
+                            "显示或隐藏小地图",
+                            Action::CanvasAppearance(
+                                canvas_tools::CanvasAppearanceAction::ToggleMinimap,
+                            ),
+                            !editable || self.saving,
+                            cx,
+                        )
+                        .when(self.canvas.read(cx).options.show_minimap, |v| {
+                            v.bg(rgb(0xeff4ff))
+                        }),
+                    )
+                    .child(
+                        self.icon_button(
+                            "canvas-background",
+                            "palette",
+                            "画布背景",
+                            Action::CanvasAppearance(
+                                canvas_tools::CanvasAppearanceAction::BackgroundPanel,
+                            ),
+                            false,
+                            cx,
+                        )
+                        .when(self.background_panel.is_some(), |v| v.bg(rgb(0xeff4ff))),
+                    ),
             )
             .when(selection.nodes.is_empty(), |surface| {
                 surface.child(
@@ -2449,9 +2519,12 @@ impl Render for CreativeCanvas {
                         .bottom(px(26.))
                         .text_size(px(10.))
                         .text_color(rgb(0xb2b7c0))
-                        .child("Space 平移 · Shift 多选"),
+                        .child("V 选择 · H / Space 平移 · Shift 多选"),
                 )
             });
+        if self.background_panel.is_some() {
+            surface = surface.child(self.background_panel(editable && !self.saving, cx));
+        }
         if self.show_rename {
             surface = surface.child(
                 div()

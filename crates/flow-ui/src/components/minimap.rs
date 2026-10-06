@@ -23,7 +23,35 @@ impl MiniMapNode {
         self
     }
 }
-type NavigateCallback = Box<dyn Fn(&model::Point, &mut Window, &mut App)>;
+type NavigateCallback = Rc<dyn Fn(&model::Point, &mut Window, &mut App)>;
+
+#[derive(Default)]
+struct NavigationState {
+    drag: Option<(model::MinimapTransform, model::Point)>,
+    _activation: Option<Subscription>,
+}
+impl NavigationState {
+    fn target(&self, position: model::Point) -> Option<model::Point> {
+        let (map, origin) = self.drag?;
+        if !position.is_finite() {
+            return None;
+        }
+        let local = position - origin;
+        Some(map.map_to_world(model::Point::new(
+            local.x.clamp(
+                map.map_bounds.origin.x,
+                map.map_bounds.origin.x + map.map_bounds.size.width,
+            ),
+            local.y.clamp(
+                map.map_bounds.origin.y,
+                map.map_bounds.origin.y + map.map_bounds.size.height,
+            ),
+        )))
+    }
+    fn finish(&mut self) -> bool {
+        self.drag.take().is_some()
+    }
+}
 #[derive(IntoElement)]
 pub struct MiniMap {
     pub id: ElementId,
@@ -71,7 +99,7 @@ impl MiniMap {
         mut self,
         callback: impl Fn(&model::Point, &mut Window, &mut App) + 'static,
     ) -> Self {
-        self.on_navigate = Some(Box::new(callback));
+        self.on_navigate = Some(Rc::new(callback));
         self
     }
     pub fn transform(&self) -> Option<model::MinimapTransform> {
@@ -88,13 +116,35 @@ impl MiniMap {
     }
 }
 impl RenderOnce for MiniMap {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        let map = self.transform();
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let navigation =
+            window.use_keyed_state((self.id.clone(), "navigation"), cx, |window, cx| {
+                let subscription = cx.observe_window_activation(
+                    window,
+                    |this: &mut NavigationState, window, cx| {
+                        if !window.is_window_active() && this.finish() {
+                            cx.notify();
+                        }
+                    },
+                );
+                NavigationState {
+                    drag: None,
+                    _activation: Some(subscription),
+                }
+            });
+        // Freeze the transform for the gesture so viewport-induced re-renders
+        // cannot change the mapping underneath the pointer.
+        let map = navigation
+            .read(cx)
+            .drag
+            .map(|(map, _)| map)
+            .or_else(|| self.transform());
         let theme = self.theme;
         let origin = Rc::new(Cell::new(model::Point::ZERO));
         let paint_origin = origin.clone();
         let mut view = div()
             .id(self.id)
+            .occlude()
             .relative()
             .w(px(self.size.width))
             .h(px(self.size.height))
@@ -170,20 +220,110 @@ impl RenderOnce for MiniMap {
                 .size_full(),
             );
             if let Some(callback) = self.on_navigate {
-                view = view.cursor_pointer().on_mouse_down(
-                    MouseButton::Left,
-                    move |event, window, cx| {
+                let down_state = navigation.clone();
+                let down_callback = callback.clone();
+                let move_state = navigation.clone();
+                let move_callback = callback.clone();
+                let up_state = navigation.clone();
+                view = view
+                    .cursor_pointer()
+                    .on_mouse_down(MouseButton::Left, move |event, window, cx| {
                         cx.stop_propagation();
-                        let local =
-                            model::Point::new(event.position.x.into(), event.position.y.into())
-                                - origin.get();
-                        callback(&map.map_to_world(local), window, cx);
-                    },
-                );
+                        let target = down_state.update(cx, |state, _| {
+                            state.drag = Some((map, origin.get()));
+                            state.target(model::Point::new(
+                                event.position.x.into(),
+                                event.position.y.into(),
+                            ))
+                        });
+                        if let Some(target) = target {
+                            down_callback(&target, window, cx);
+                        }
+                    })
+                    .on_mouse_move(move |event, window, cx| {
+                        let target = move_state.update(cx, |state, cx| {
+                            if event.pressed_button != Some(MouseButton::Left) {
+                                if state.finish() {
+                                    cx.notify();
+                                }
+                                return None;
+                            }
+                            state.target(model::Point::new(
+                                event.position.x.into(),
+                                event.position.y.into(),
+                            ))
+                        });
+                        if let Some(target) = target {
+                            cx.stop_propagation();
+                            move_callback(&target, window, cx);
+                        }
+                    })
+                    .on_mouse_up(MouseButton::Left, move |event, window, cx| {
+                        let target = up_state.update(cx, |state, cx| {
+                            let target = state.target(model::Point::new(
+                                event.position.x.into(),
+                                event.position.y.into(),
+                            ));
+                            if state.finish() {
+                                cx.notify();
+                            }
+                            target
+                        });
+                        if let Some(target) = target {
+                            cx.stop_propagation();
+                            callback(&target, window, cx);
+                        }
+                    })
+                    .on_mouse_up_out(MouseButton::Left, move |_, _, cx| {
+                        navigation.update(cx, |state, cx| {
+                            if state.finish() {
+                                cx.notify();
+                            }
+                        });
+                    });
             } else {
                 view = view.on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation());
             }
         }
         view
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ::core::prelude::v1::test;
+
+    #[test]
+    fn drag_keeps_its_mapping_across_updates_and_clears_on_release() {
+        let map = model::MinimapTransform::new(
+            model::Rect::new(
+                model::Point::new(-500., -100.),
+                model::Size::new(2000., 1000.),
+            ),
+            model::Rect::new(model::Point::ZERO, model::Size::new(200., 100.)),
+            0.,
+        )
+        .unwrap();
+        let mut state = NavigationState {
+            drag: Some((map, model::Point::new(30., 40.))),
+            ..Default::default()
+        };
+        assert_eq!(
+            state.target(model::Point::new(80., 90.)),
+            Some(model::Point::new(0., 400.))
+        );
+        assert_eq!(
+            state.target(model::Point::new(180., 90.)),
+            Some(model::Point::new(1000., 400.))
+        );
+        assert_eq!(
+            state.target(model::Point::new(1000., 90.)),
+            Some(model::Point::new(1500., 400.))
+        );
+        assert!(state.target(model::Point::new(f32::NAN, 90.)).is_none());
+        assert!(state.finish());
+        assert!(!state.finish());
+        assert!(state.target(model::Point::new(180., 90.)).is_none());
     }
 }

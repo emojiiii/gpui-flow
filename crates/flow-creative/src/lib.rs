@@ -33,6 +33,7 @@ mod layer_guard;
 
 pub mod arrangement;
 pub mod asset_export;
+pub mod canvas_preferences;
 pub mod frames;
 
 pub mod image_adjust;
