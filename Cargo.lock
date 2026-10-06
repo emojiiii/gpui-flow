@@ -2491,6 +2491,7 @@ dependencies = [
  "gltf",
  "gpui",
  "gpui-flow",
+ "gpui-flow-composite",
  "gpui-flow-core",
  "gpui-flow-editor",
  "gpui-flow-interaction",

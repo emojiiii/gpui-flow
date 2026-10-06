@@ -6,7 +6,7 @@ publish.workspace = true
 
 [features]
 default = []
-desktop = ["dep:gpui", "dep:gpui-kit", "dep:gpui-flow", "dep:image"]
+desktop = ["dep:gpui", "dep:gpui-kit", "dep:gpui-flow", "dep:image", "dep:gpui-flow-composite"]
 
 [dependencies]
 gpui-flow-core.workspace = true
@@ -21,6 +21,7 @@ image = { workspace = true, optional = true }
 gpui = { workspace = true, optional = true }
 gpui-kit = { workspace = true, optional = true }
 gpui-flow = { workspace = true, optional = true }
+gpui-flow-composite = { workspace = true, optional = true }
 
 [[bin]]
 name = "flow-creative"

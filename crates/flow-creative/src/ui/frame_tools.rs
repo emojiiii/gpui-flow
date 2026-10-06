@@ -449,9 +449,9 @@ impl CreativeCanvas {
                 cx,
             ))
             .child(self.icon_button(
-                "export-frame-svg",
+                "export-frame",
                 "download",
-                "导出画框 SVG · 仅形状和笔迹",
+                "导出画框 · PNG / SVG",
                 Action::ExportAsset(asset_export_ui::ExportAction::Open),
                 self.project.is_none() || self.importing || self.saving,
                 cx,

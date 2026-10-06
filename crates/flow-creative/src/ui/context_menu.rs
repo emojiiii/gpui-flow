@@ -305,7 +305,7 @@ impl CreativeCanvas {
         {
             rows.push((
                 if selection.groups.len() == 1 {
-                    "导出画框 SVG…"
+                    "导出画框…"
                 } else {
                     "导出矢量 SVG…"
                 },

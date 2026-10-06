@@ -1,5 +1,8 @@
 use super::*;
-use crate::asset_export::{ExportAsset, export_asset, export_assets, export_vector};
+use crate::asset_export::{
+    ExportAsset, export_asset, export_assets, export_frame_png, export_vector,
+};
+use crate::frame_png::{FramePngExport, prepare_frame_png_export};
 use crate::vector_export::{VectorExport, prepare_vector_export};
 use gpui_flow_core::Selection;
 use gpui_kit::component::input::{Input, InputState};
@@ -29,12 +32,14 @@ pub(super) struct AssetExportDialog {
 enum ExportChoice {
     Media(ExportAsset),
     Vector(VectorExport),
+    FramePng(FramePngExport),
 }
 impl ExportChoice {
     fn name(&self) -> &str {
         match self {
             Self::Media(asset) => &asset.suggested_name,
             Self::Vector(vector) => vector.suggested_name(),
+            Self::FramePng(frame) => frame.suggested_name(),
         }
     }
     fn label(&self) -> String {
@@ -45,6 +50,7 @@ impl ExportChoice {
                 if vector.is_frame() { "画框 · " } else { "" },
                 vector.object_count()
             ),
+            Self::FramePng(frame) => format!("画框 PNG · {} 个对象", frame.object_count()),
         }
     }
     fn details(&self) -> String {
@@ -79,6 +85,17 @@ impl ExportChoice {
                     }
                 )
             }
+            Self::FramePng(frame) => {
+                let [width, height] = frame.pixel_size();
+                format!(
+                    "PNG · {width} × {height} · {}",
+                    if frame.has_white_background() {
+                        "画框白底"
+                    } else {
+                        "透明背景"
+                    }
+                )
+            }
         }
     }
     fn is_mask(&self) -> bool {
@@ -91,6 +108,18 @@ fn export_choices(
     selection: &Selection,
     assets: &[ProjectAsset],
 ) -> Result<Vec<ExportChoice>, String> {
+    if selection.groups.len() == 1 && selection.nodes.is_empty() && selection.edges.is_empty() {
+        let mut choices = Vec::new();
+        if let Ok(vector) = prepare_vector_export(graph, selection) {
+            choices.push(ExportChoice::Vector(vector));
+        }
+        match prepare_frame_png_export(graph, selection, assets) {
+            Ok(frame) => choices.push(ExportChoice::FramePng(frame)),
+            Err(error) if choices.is_empty() => return Err(error),
+            Err(_) => {}
+        }
+        return Ok(choices);
+    }
     if selection.nodes.len() == 1
         && selection.groups.is_empty()
         && selection.edges.is_empty()
@@ -294,6 +323,9 @@ impl CreativeCanvas {
                             ExportChoice::Vector(vector) => {
                                 export_vector(&project, &vector, &destination, &cancel)
                             }
+                            ExportChoice::FramePng(frame) => {
+                                export_frame_png(&project, &frame, &destination, &cancel)
+                            }
                         }
                         .map_err(|error| error.to_string())
                     })
@@ -385,6 +417,9 @@ impl CreativeCanvas {
             .child(label(selected.details()))
             .when(matches!(selected, ExportChoice::Vector(_)), |v| {
                 v.child(label("仅形状与笔迹 · 保留图层、线宽和透明度"))
+            })
+            .when(matches!(selected, ExportChoice::FramePng(_)), |v| {
+                v.child(label("静态PNG/JPEG图片、形状与笔迹 · 按画框裁切"))
             })
             .when(selected.is_mask(), |v| {
                 v.child(label("灰度Mask：0 保留，255 编辑；未转换供应商语义"))
@@ -506,12 +541,30 @@ mod tests {
         let choices = export_choices(&graph, &selection, &assets).unwrap();
         assert!(matches!(&choices[0], ExportChoice::Vector(v)
             if v.is_frame() && v.has_white_background() && v.bounds().size == WorldSize::new(320., 240.)));
+        assert!(choices.iter().any(|output| matches!(output,
+            ExportChoice::FramePng(frame) if frame.pixel_size() == [320, 240])));
         graph
             .groups
             .get_mut(&"frame".into())
             .unwrap()
             .node_ids
             .insert("image".into());
+        let choices = export_choices(&graph, &selection, &assets).unwrap();
+        assert_eq!(choices.len(), 1);
+        assert!(matches!(&choices[0], ExportChoice::FramePng(_)));
+        graph
+            .add_node(
+                standard_registry()
+                    .make_node("text", "text", WorldPoint::ZERO, None)
+                    .unwrap(),
+            )
+            .unwrap();
+        graph
+            .groups
+            .get_mut(&"frame".into())
+            .unwrap()
+            .node_ids
+            .insert("text".into());
         assert!(export_choices(&graph, &selection, &assets).is_err());
     }
 }

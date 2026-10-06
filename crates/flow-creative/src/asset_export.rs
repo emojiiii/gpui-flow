@@ -159,18 +159,51 @@ pub fn export_vector(
     destination: &Path,
     cancel: &AtomicBool,
 ) -> Result<ExportResult, ProjectError> {
+    export_generated(project, destination, "svg", cancel, || {
+        vector.to_svg().map_err(ProjectError::Invalid)
+    })
+}
+
+/// Compose a bounded immutable static Frame snapshot on a worker before
+/// creating a new destination. Source assets and the project stay untouched.
+#[cfg(feature = "desktop")]
+pub fn export_frame_png(
+    project: &LocalProject,
+    frame: &crate::frame_png::FramePngExport,
+    destination: &Path,
+    cancel: &AtomicBool,
+) -> Result<ExportResult, ProjectError> {
+    export_generated(project, destination, "png", cancel, || {
+        frame.encode(project, cancel).map_err(ProjectError::Invalid)
+    })
+}
+
+fn export_generated(
+    project: &LocalProject,
+    destination: &Path,
+    extension: &str,
+    cancel: &AtomicBool,
+    encode: impl FnOnce() -> Result<Vec<u8>, ProjectError>,
+) -> Result<ExportResult, ProjectError> {
     let started = Instant::now();
     cancelled(cancel, started)?;
     let destination = export_destination(project, destination)?;
     if !destination
         .extension()
         .and_then(|s| s.to_str())
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("svg"))
+        .is_some_and(|ext| ext.eq_ignore_ascii_case(extension))
     {
-        return Err(ProjectError::Invalid("矢量导出请使用 .svg 后缀".into()));
+        return Err(ProjectError::Invalid(format!(
+            "导出请使用 .{extension} 后缀"
+        )));
     }
-    let bytes = vector.to_svg().map_err(ProjectError::Invalid)?;
+    let bytes = encode()?;
     cancelled(cancel, started)?;
+    if bytes.len() as u64 > crate::MAX_MEDIA_BYTES {
+        return Err(ProjectError::Invalid(
+            "生成的导出文件超出128 MiB上限".into(),
+        ));
+    }
     let mut output = OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -353,6 +386,75 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.root);
         }
+    }
+
+    #[test]
+    fn frame_png_writes_new_composite_preserves_sources_and_rejects_overwrite_or_cancel() {
+        use gpui_flow_core::{Group, Rect, Selection, Size};
+        let fixture = Fixture::new();
+        let before = fs::read(fixture.project.directory().join("project.json")).unwrap();
+        let source_path = fixture
+            .project
+            .resolve_asset_path(&fixture.asset.key)
+            .unwrap();
+        let source = fs::read(&source_path).unwrap();
+        let mut graph = Graph::new();
+        let mut image = standard_registry()
+            .make_node(
+                "image",
+                "image",
+                Point::ZERO,
+                Some(json!({"asset":fixture.asset.key,"caption":""})),
+            )
+            .unwrap();
+        image.size = Size::new(32., 32.);
+        graph.add_node(image).unwrap();
+        let mut frame = Group::new(
+            "frame",
+            "Frame",
+            Rect::new(Point::ZERO, Size::new(32., 32.)),
+        )
+        .with_nodes(["image".into()]);
+        frame.data = json!({"flow_creative_frame":1});
+        graph.add_group(frame).unwrap();
+        let selection = Selection {
+            groups: ["frame".into()].into_iter().collect(),
+            ..Default::default()
+        };
+        let plan =
+            crate::frame_png::FramePngExport::prepare(&graph, &selection, fixture.project.assets())
+                .unwrap();
+        let target = fixture.root.join("frame.png");
+        let result =
+            export_frame_png(&fixture.project, &plan, &target, &AtomicBool::new(false)).unwrap();
+        let bytes = fs::read(&target).unwrap();
+        let decoded = image::load_from_memory(&bytes).unwrap().into_rgba8();
+        assert_eq!(decoded.dimensions(), (32, 32));
+        assert_eq!(result.byte_len, bytes.len() as u64);
+        assert!(
+            export_frame_png(&fixture.project, &plan, &target, &AtomicBool::new(false)).is_err()
+        );
+        assert_eq!(fs::read(&target).unwrap(), bytes);
+        for invalid in [
+            fixture.root.join("wrong.svg"),
+            fixture.project.directory().join("blocked.png"),
+        ] {
+            assert!(
+                export_frame_png(&fixture.project, &plan, &invalid, &AtomicBool::new(false))
+                    .is_err()
+            );
+            assert!(!invalid.exists());
+        }
+        let cancelled = fixture.root.join("cancelled-frame.png");
+        assert!(
+            export_frame_png(&fixture.project, &plan, &cancelled, &AtomicBool::new(true)).is_err()
+        );
+        assert!(!cancelled.exists());
+        assert_eq!(fs::read(source_path).unwrap(), source);
+        assert_eq!(
+            fs::read(fixture.project.directory().join("project.json")).unwrap(),
+            before
+        );
     }
 
     #[test]
