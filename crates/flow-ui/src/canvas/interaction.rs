@@ -248,11 +248,16 @@ impl FlowCanvas {
     }
     /// Exact visible hit areas only. Proximity snapping is owned by SnappingPlugin.
     pub(super) fn hit_at(&self, screen: model::Point) -> input::HitTarget {
-        hit_at_editor_ordered(
+        hit_at_editor_with_body(
             &self.editor,
             screen,
             self.interactions.policy().editable && self.interactions.is_enabled("resize"),
             self.selection_on_top,
+            |node, local, zoom| {
+                self.registry
+                    .get(&node.kind)
+                    .and_then(|r| r.body_hit_test(node, local, zoom))
+            },
         )
     }
     pub(super) fn local(&self, p: gpui::Point<Pixels>) -> model::Point {
@@ -264,13 +269,30 @@ impl FlowCanvas {
 fn hit_at_editor(editor: &Editor, screen: model::Point, resize_enabled: bool) -> input::HitTarget {
     hit_at_editor_ordered(editor, screen, resize_enabled, false)
 }
+#[cfg(test)]
 fn hit_at_editor_ordered(
     editor: &Editor,
     screen: model::Point,
     resize_enabled: bool,
     selection_on_top: bool,
 ) -> input::HitTarget {
+    hit_at_editor_with_body(
+        editor,
+        screen,
+        resize_enabled,
+        selection_on_top,
+        |_, _, _| None,
+    )
+}
+fn hit_at_editor_with_body(
+    editor: &Editor,
+    screen: model::Point,
+    resize_enabled: bool,
+    selection_on_top: bool,
+    body_hit: impl Fn(&Node, model::Point, f32) -> Option<bool>,
+) -> input::HitTarget {
     let viewport = editor.viewport;
+    let world = viewport.screen_to_world(screen);
     let hidden = model::hidden_node_ids(editor.graph());
     let mut nodes: Vec<_> = model::ordered_node_ids(editor.graph())
         .into_iter()
@@ -306,7 +328,9 @@ fn hit_at_editor_ordered(
                 }
             }
         }
-        if rect.contains(screen) {
+        if body_hit(node, world - node.position, viewport.zoom)
+            .unwrap_or_else(|| rect.contains(screen))
+        {
             return input::HitTarget::Node(node.id.clone());
         }
     }
@@ -343,6 +367,63 @@ mod tests {
             )
             .unwrap();
         Editor::new(graph).unwrap()
+    }
+    #[test]
+    fn custom_body_picking_passes_transparent_corners_through_in_paint_order() {
+        let mut graph = Graph::new();
+        for id in ["background", "circle"] {
+            graph
+                .add_node(
+                    Node::new(id, id, model::Point::new(100., 100.))
+                        .with_size(model::Size::new(100., 100.)),
+                )
+                .unwrap();
+        }
+        let mut editor = Editor::new(graph).unwrap();
+        editor.viewport.zoom = 2.;
+        editor.viewport.pan = model::Point::new(40., 30.);
+        let hit = |node: &Node, p: model::Point, _zoom: f32| {
+            (node.id.as_str() == "circle").then(|| (p.x - 50.).hypot(p.y - 50.) <= 50.)
+        };
+        let corner = editor
+            .viewport
+            .world_to_screen(model::Point::new(105., 105.));
+        let center = editor
+            .viewport
+            .world_to_screen(model::Point::new(150., 150.));
+        assert_eq!(
+            super::hit_at_editor_with_body(&editor, corner, false, false, hit),
+            input::HitTarget::Node("background".into())
+        );
+        assert_eq!(
+            super::hit_at_editor_with_body(&editor, center, false, false, hit),
+            input::HitTarget::Node("circle".into())
+        );
+        assert_eq!(
+            super::hit_at_editor_ordered(&editor, corner, false, false),
+            input::HitTarget::Node("circle".into())
+        );
+    }
+    #[test]
+    fn custom_thin_stroke_can_be_picked_outside_its_one_unit_box() {
+        let mut graph = Graph::new();
+        graph
+            .add_node(
+                Node::new("line", "Line", model::Point::ZERO).with_size(model::Size::new(200., 1.)),
+            )
+            .unwrap();
+        let editor = Editor::new(graph).unwrap();
+        let hit = |_: &Node, p: model::Point, _: f32| {
+            Some((0. ..=200.).contains(&p.x) && (p.y - 0.5).abs() <= 5.)
+        };
+        assert_eq!(
+            super::hit_at_editor_with_body(&editor, model::Point::new(100., 4.), false, false, hit),
+            input::HitTarget::Node("line".into())
+        );
+        assert_eq!(
+            super::hit_at_editor_with_body(&editor, model::Point::new(100., 8.), false, false, hit),
+            input::HitTarget::Background
+        );
     }
     #[test]
     fn artboard_external_title_is_a_screen_sized_hit_area_at_any_zoom() {

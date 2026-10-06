@@ -25,6 +25,7 @@ pub struct CreativeAssets {
     dimensions: BTreeMap<String, (u32, u32)>,
     media_types: BTreeMap<String, String>,
     models: Arc<model_view::ModelViews>,
+    shapes: Arc<shape_preview::ShapeViews>,
     masks: Arc<mask_preview::MaskViews>,
     processing_errors: Arc<Mutex<BTreeMap<NodeId, String>>>,
     custom_views: Arc<Mutex<BTreeMap<NodeId, custom_tasks::CustomPreview>>>,
@@ -56,10 +57,10 @@ struct CardRenderer {
 }
 impl NodeRenderer for CardRenderer {
     fn transparent_background(&self, node: &Node) -> bool {
-        node.kind == "text"
+        matches!(node.kind.as_str(), "text" | "shape")
     }
     fn object_caption(&self, node: &Node) -> Option<SharedString> {
-        if node.kind == "text" {
+        if matches!(node.kind.as_str(), "text" | "shape") {
             return Some("".into());
         }
         let key = node.data["asset"].as_str().map(str::to_string).or_else(|| {
@@ -81,6 +82,13 @@ impl NodeRenderer for CardRenderer {
             Some(node.title.clone().into())
         }
     }
+    fn unframed_body(&self, node: &Node) -> bool {
+        node.kind == crate::shapes::SHAPE_NODE_KIND
+    }
+    fn body_hit_test(&self, node: &Node, local: WorldPoint, zoom: f32) -> Option<bool> {
+        (node.kind == crate::shapes::SHAPE_NODE_KIND)
+            .then(|| shape_preview::hit_shape(node, local, 5. / zoom.max(0.1)))
+    }
     fn full_bleed(&self) -> bool {
         true
     }
@@ -92,6 +100,9 @@ impl NodeRenderer for CardRenderer {
         cx: &mut App,
     ) -> AnyElement {
         let z = context.zoom;
+        if node.kind == crate::shapes::SHAPE_NODE_KIND {
+            return self.assets.shapes.render(node, z, cx);
+        }
         if self.assets.editing_image.lock().unwrap().as_ref() == Some(&node.id) {
             return div().size_full().bg(rgb(0xf5f6f8)).into_any_element();
         }
@@ -315,6 +326,7 @@ pub fn demo_renderers(assets: CreativeAssets) -> NodeRegistry {
     let assets = Arc::new(assets);
     let mut registry = NodeRegistry::default();
     for kind in [
+        "shape",
         "text",
         "image",
         "video",
@@ -363,6 +375,7 @@ fn theme() -> FlowTheme {
 }
 #[derive(Clone)]
 enum Action {
+    Shape(shape_tools::ShapeAction),
     ExportAsset(asset_export_ui::ExportAction),
     Layer(layers::LayerAction),
     ImageEdit(image_edit_controls::ImageEditAction),
@@ -473,6 +486,12 @@ pub struct CreativeCanvas {
     image_editing: Option<image_edit_controls::ImageEditing>,
     image_edit_focus: FocusHandle,
     image_edit_cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
+    shape_views: Arc<shape_preview::ShapeViews>,
+    shape_fields: Option<shape_tools::ShapeFields>,
+    shape_tool: Option<crate::shapes::ShapeKind>,
+    shape_drag: Option<shape_tools::ShapeDrag>,
+    show_shapes: bool,
+    shape_focus: FocusHandle,
     frame_fields: Option<frame_tools::FrameFields>,
     frame_drawing: bool,
     frame_drag: Option<frame_tools::FrameDrag>,
@@ -544,6 +563,8 @@ impl CreativeCanvas {
                     this.reconcile_image_edit(cx);
                     this.reconcile_asset_export(cx);
                     this.sync_frame_fields(window, cx);
+                    this.sync_shape_fields(window, cx);
+                    this.shape_views.retain(canvas.read(cx).editor.graph());
                     this.sync_processing_views(cx);
                     this.sync_custom_views(cx);
                     let kinds = canvas
@@ -608,6 +629,21 @@ impl CreativeCanvas {
             }
             if matches!(event, InputEvent::Blur) {
                 this.apply_form_edit(cx);
+            }
+        });
+        let shape_focus = cx.focus_handle();
+        let shape_blur = cx.on_focus_out(&shape_focus, window, |this, _, _, cx| {
+            if this.shape_tool.is_some() || this.shape_drag.is_some() {
+                this.clear_shape_tool();
+                cx.notify();
+            }
+        });
+        let shape_activation = cx.observe_window_activation(window, |this, window, cx| {
+            if !window.is_window_active()
+                && (this.shape_tool.is_some() || this.shape_drag.is_some())
+            {
+                this.clear_shape_tool();
+                cx.notify();
             }
         });
         let frame_focus = cx.focus_handle();
@@ -696,6 +732,12 @@ impl CreativeCanvas {
             image_editing: None,
             image_edit_focus: cx.focus_handle(),
             image_edit_cancel: None,
+            shape_views: Arc::default(),
+            shape_fields: None,
+            shape_tool: None,
+            shape_drag: None,
+            show_shapes: false,
+            shape_focus,
             frame_fields: None,
             frame_drawing: false,
             frame_drag: None,
@@ -728,6 +770,8 @@ impl CreativeCanvas {
                 observer,
                 form_subscription,
                 thumbnail_observer,
+                shape_blur,
+                shape_activation,
                 frame_focus_out,
                 frame_activation,
             ],
@@ -827,7 +871,18 @@ impl CreativeCanvas {
             self.clear_frame_tool();
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
         }
+        if !matches!(&action, Action::Shape(_))
+            && (self.shape_tool.is_some() || self.shape_drag.is_some() || self.show_shapes)
+        {
+            self.clear_shape_tool();
+            self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+        }
         let command = match action {
+            Action::Shape(action) => {
+                self.handle_shape_action(action, window, cx);
+                return;
+            }
+
             Action::FrameEdit(action) => {
                 self.handle_frame_action(action, window, cx);
                 return;
@@ -1419,6 +1474,8 @@ mod processing_tasks;
 mod project_ui;
 mod reference_ui;
 mod selection_toolbar;
+mod shape_preview;
+mod shape_tools;
 mod text_objects;
 mod workbench;
 pub use workbench::CreativeWorkbench;
@@ -1440,7 +1497,9 @@ impl Render for CreativeCanvas {
         let frame_count = view.editor.graph().groups.len();
         let zoom = view.editor.viewport.zoom;
         let viewport = view.editor.viewport;
-        let node = self.selected(cx);
+        let node = self
+            .selected(cx)
+            .filter(|n| n.kind != "shape" || self.shape_drag.is_none());
         let project_name = self
             .project
             .as_ref()
@@ -1511,13 +1570,20 @@ impl Render for CreativeCanvas {
         if let Some(overlay) = self.frame_draw_overlay(cx) {
             surface = surface.child(overlay);
         }
+        if let Some(overlay) = self.shape_draw_overlay(cx) {
+            surface = surface.child(overlay);
+        }
         let pan_mode = self.canvas.read(cx).pan_mode();
         let mut rail = div()
+            .id("creative-tool-rail")
             .occlude()
             .absolute()
             .left(px(18.))
-            .top(px((self.canvas_size.height / 2. - 249.).max(76.)))
+            .top(px((self.canvas_size.height / 2. - 305.).max(76.)))
             .w(px(48.))
+            .max_h(px((self.canvas_size.height - 160.).max(180.)))
+            .overflow_y_scroll()
+            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
             .p(px(6.))
             .rounded(px(14.))
             .bg(rgb(t.panel))
@@ -1537,7 +1603,10 @@ impl Render for CreativeCanvas {
                     false,
                     cx,
                 )
-                .when(!pan_mode && !self.frame_drawing, |b| b.bg(rgb(0xeef1f6))),
+                .when(
+                    !pan_mode && !self.frame_drawing && self.shape_tool.is_none(),
+                    |b| b.bg(rgb(0xeef1f6)),
+                ),
             )
             .child(
                 self.icon_button(
@@ -1585,6 +1654,19 @@ impl Render for CreativeCanvas {
                 cx,
             ));
         }
+        rail = rail.child(
+            self.icon_button(
+                "tool-shape",
+                "circle",
+                "绘制图形",
+                Action::Shape(shape_tools::ShapeAction::Menu),
+                !editable || self.saving || count >= MAX_CARDS,
+                cx,
+            )
+            .when(self.show_shapes || self.shape_tool.is_some(), |b| {
+                b.bg(rgb(0xeef1f6))
+            }),
+        );
         rail = rail
             .child(
                 self.icon_button(
@@ -1608,6 +1690,9 @@ impl Render for CreativeCanvas {
             .child(div().w(px(24.)).h(px(1.)).my_1().bg(rgb(0xe9eaed)))
             .child(self.icon_button("tool-layers", "layers", "图层", Action::Layers, false, cx));
         surface = surface.child(rail);
+        if self.show_shapes {
+            surface = surface.child(self.shape_menu(cx));
+        }
         if self.show_processing_menu {
             let mut menu = div()
                 .occlude()
@@ -1645,7 +1730,7 @@ impl Render for CreativeCanvas {
             ));
             surface = surface.child(menu);
         }
-        if count == 0 && frame_count == 0 && !self.frame_drawing {
+        if count == 0 && frame_count == 0 && !self.frame_drawing && self.shape_tool.is_none() {
             surface = surface.child(
                 div()
                     .absolute()
@@ -1680,6 +1765,11 @@ impl Render for CreativeCanvas {
                     &node.id,
                 );
             let r = viewport.world_rect_to_screen(node.bounds());
+            if node.kind == "shape"
+                && let Some(handle) = self.shape_resize_handle(node, r, editable, cx)
+            {
+                surface = surface.child(handle);
+            }
             if let Some(overlay) = self.image_edit_overlay(node, r, cx) {
                 surface = surface.child(overlay);
             }
@@ -1702,6 +1792,7 @@ impl Render for CreativeCanvas {
                 (match node.kind.as_str() {
                     "image" => 448.,
                     "video" | "audio" | "process_image" | "process_video" | "process_audio" => 222.,
+                    "shape" => 146.,
                     "text" => 456.,
                     _ => 184.,
                 }) + export_width

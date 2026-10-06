@@ -159,6 +159,7 @@ impl CreativeCanvas {
                 "audio" => "music",
                 "model" => "box",
                 "mask" => "paintbrush",
+                "shape" => "circle",
                 _ => "layers",
             };
             rows = rows.child(

@@ -25,6 +25,22 @@ pub trait NodeRenderer: Send + Sync {
     fn object_caption(&self, _node: &Node) -> Option<SharedString> {
         None
     }
+    /// Opt into exact logical geometry with no body inset or clipping. The
+    /// canvas paints selection as an overlay. Existing card renderers keep
+    /// their frame and clipped body.
+    fn unframed_body(&self, _node: &Node) -> bool {
+        false
+    }
+    /// Optional body picking in node-local world units. None preserves the
+    /// default rectangular hit area; ports and resize controls stay separate.
+    fn body_hit_test(
+        &self,
+        _node: &Node,
+        _local: gpui_flow_core::Point,
+        _zoom: f32,
+    ) -> Option<bool> {
+        None
+    }
     fn render(
         &self,
         node: &Node,

@@ -21,6 +21,7 @@ pub struct NodeFrame {
     pub color: u32,
     pub header_height: f32,
     full_bleed: bool,
+    unframed_body: bool,
     transparent_background: bool,
     caption: Option<SharedString>,
     body: Option<AnyElement>,
@@ -44,6 +45,7 @@ impl NodeFrame {
             color: 0x9cafc9,
             header_height: 36.,
             full_bleed: false,
+            unframed_body: false,
             transparent_background: false,
             caption: None,
             body: None,
@@ -91,6 +93,11 @@ impl NodeFrame {
     }
     pub fn full_bleed(mut self, value: bool) -> Self {
         self.full_bleed = value;
+        self
+    }
+    /// Use the body's exact bounds; the host supplies its own resize controls.
+    pub fn unframed_body(mut self, value: bool) -> Self {
+        self.unframed_body = value;
         self
     }
     pub fn caption(mut self, value: Option<SharedString>) -> Self {
@@ -182,6 +189,7 @@ impl RenderOnce for NodeFrame {
             })
             .rounded(px(if self.full_bleed { 2. } else { 10. * z }))
             .border_1()
+            .when(self.unframed_body, |frame| frame.border_0())
             .border_color(if self.selected {
                 rgb(theme.accent)
             } else if self.transparent_background {
@@ -205,9 +213,11 @@ impl RenderOnce for NodeFrame {
             })
             .child(
                 div()
-                    .overflow_hidden()
+                    .when(!self.unframed_body, |body| body.overflow_hidden())
                     .h(px((self.size.height
-                        - if self.full_bleed {
+                        - if self.unframed_body {
+                            0.
+                        } else if self.full_bleed {
                             2.
                         } else {
                             self.header_height + 3.
@@ -216,6 +226,17 @@ impl RenderOnce for NodeFrame {
                         * z))
                     .children(self.body),
             );
+        if self.unframed_body && self.selected {
+            frame = frame.child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .border_1()
+                    .border_color(rgb(theme.accent)),
+            );
+        }
         if let Some(position) = self.position {
             frame = frame.absolute().left(px(position.x)).top(px(position.y));
         }
@@ -223,6 +244,7 @@ impl RenderOnce for NodeFrame {
             frame = frame.on_mouse_down(MouseButton::Left, callback);
         }
         if self.selected
+            && !self.unframed_body
             && self.size.width * z >= 36.
             && self.size.height * z >= 36.
             && let Some(callback) = self.on_resize_mouse_down

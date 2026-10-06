@@ -29,6 +29,15 @@ impl CanvasPlugin for CreativeGuard {
                 }
                 registry.validate_node(node).map_err(|e| e.to_string())?;
             }
+            CanvasCommand::ResizeNode { node, size } => {
+                if let Some(current) = graph.node(node)
+                    && current.kind == crate::shapes::SHAPE_NODE_KIND
+                {
+                    let mut candidate = current.clone();
+                    candidate.size = *size;
+                    crate::shapes::validate_shape_node(&candidate)?;
+                }
+            }
             CanvasCommand::SetNodeData { node, data } => {
                 let mut candidate = graph.node(node).ok_or("card no longer exists")?.clone();
                 candidate.data = data.clone();

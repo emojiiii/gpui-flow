@@ -235,6 +235,7 @@ impl CreativeCanvas {
             .collect();
         assets.custom_kinds = self.known_custom_kinds.clone();
         assets.models = self.model_views.clone();
+        assets.shapes = self.shape_views.clone();
         assets.media = self.media_views.clone();
         self.media_views.set_owner(cx.entity().downgrade());
         assets.editing_text = self.editing_text.clone();

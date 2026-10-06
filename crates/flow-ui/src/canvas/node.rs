@@ -79,7 +79,6 @@ impl FlowCanvas {
         let theme = self.theme;
         let id = node.id.clone();
         let resize_id = id.clone();
-        let body_id = id.clone();
         let size = node.size;
         let color = kind_color(&node.kind);
         let mut card = NodeFrame::new(
@@ -96,6 +95,11 @@ impl FlowCanvas {
             self.registry
                 .get(&node.kind)
                 .is_some_and(|r| r.transparent_background(node)),
+        )
+        .unframed_body(
+            self.registry
+                .get(&node.kind)
+                .is_some_and(|r| r.unframed_body(node)),
         )
         .caption(
             self.registry
@@ -137,12 +141,8 @@ impl FlowCanvas {
         )
         .on_mouse_down(
             cx.listener(move |this, event: &MouseDownEvent, window, cx| {
-                this.pointer_down(
-                    gpui_flow_interaction::HitTarget::Node(body_id.clone()),
-                    event,
-                    window,
-                    cx,
-                );
+                let hit = this.hit_at(this.local(event.position));
+                this.pointer_down(hit, event, window, cx);
             }),
         );
         if !node.locked

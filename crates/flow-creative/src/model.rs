@@ -144,6 +144,9 @@ impl CreativeRegistry {
             return Err(CreativeError("card title exceeds 512 bytes".into()));
         }
         crate::references::reject_legacy_reference(node)?;
+        if node.kind == crate::shapes::SHAPE_NODE_KIND {
+            crate::shapes::validate_shape_node(node).map_err(CreativeError)?;
+        }
         validate_payload(def, &node.data)
     }
     pub fn validate_graph(&self, graph: &Graph) -> Result<(), CreativeError> {
@@ -497,6 +500,18 @@ pub fn standard_registry() -> CreativeRegistry {
             .register(definition)
             .expect("valid built-in creative definition");
     }
+    registry
+        .register(NodeDefinition::new(
+            crate::shapes::SHAPE_NODE_KIND,
+            "矩形",
+            crate::shapes::DEFAULT_SHAPE_SIZE,
+            vec![],
+            crate::shapes::ShapeData::new(crate::shapes::ShapeKind::Rectangle)
+                .to_data()
+                .expect("valid default shape"),
+            crate::shapes::validate_shape_data,
+        ))
+        .expect("valid shape definition");
     crate::generation::register_generation_nodes(&mut registry);
     crate::mask_node::register_mask_nodes(&mut registry);
     crate::processing_node::register_processing_nodes(&mut registry);
