@@ -46,8 +46,14 @@ impl Selection {
         self.groups.insert(id.into());
     }
     pub fn retain_existing(&mut self, graph: &Graph) {
-        self.nodes.retain(|id| graph.nodes.contains_key(id));
-        self.edges.retain(|id| graph.edges.contains_key(id));
+        let hidden = hidden_node_ids(graph);
+        self.nodes
+            .retain(|id| graph.nodes.contains_key(id) && !hidden.contains(id));
+        self.edges.retain(|id| {
+            graph.edges.get(id).is_some_and(|edge| {
+                !hidden.contains(&edge.source.node) && !hidden.contains(&edge.target.node)
+            })
+        });
         self.groups.retain(|id| graph.groups.contains_key(id));
     }
     /// Includes members of selected groups, once each.
@@ -356,9 +362,24 @@ impl Editor {
         true
     }
     pub fn select_all(&mut self) {
+        let hidden = hidden_node_ids(&self.graph);
         self.selection = Selection {
-            nodes: self.graph.nodes.keys().cloned().collect(),
-            edges: self.graph.edges.keys().cloned().collect(),
+            nodes: self
+                .graph
+                .nodes
+                .keys()
+                .filter(|id| !hidden.contains(*id))
+                .cloned()
+                .collect(),
+            edges: self
+                .graph
+                .edges
+                .values()
+                .filter(|edge| {
+                    !hidden.contains(&edge.source.node) && !hidden.contains(&edge.target.node)
+                })
+                .map(|edge| edge.id.clone())
+                .collect(),
             groups: self.graph.groups.keys().cloned().collect(),
         };
     }
@@ -370,7 +391,14 @@ impl Editor {
         if !additive {
             self.selection.clear();
         }
-        for node in self.graph.nodes.values() {
+        let hidden = hidden_node_ids(&self.graph);
+        self.selection.retain_existing(&self.graph);
+        for node in self
+            .graph
+            .nodes
+            .values()
+            .filter(|node| !hidden.contains(&node.id))
+        {
             if if fully_contained {
                 rect.contains_rect(node.bounds())
             } else {
@@ -381,8 +409,10 @@ impl Editor {
         }
     }
     pub fn selection_bounds(&self) -> Option<Rect> {
+        let hidden = hidden_node_ids(&self.graph);
+        let nodes = self.selection.expanded_nodes(&self.graph);
         self.graph
-            .node_bounds(&self.selection.expanded_nodes(&self.graph))
+            .node_bounds(nodes.iter().filter(|id| !hidden.contains(*id)))
             .into_iter()
             .chain(
                 self.selection
@@ -468,7 +498,9 @@ impl Editor {
         })
     }
     pub fn copy_selection(&self) -> Clipboard {
-        let nodes = self.selection.expanded_nodes(&self.graph);
+        let hidden = hidden_node_ids(&self.graph);
+        let mut nodes = self.selection.expanded_nodes(&self.graph);
+        nodes.retain(|id| !hidden.contains(id));
         Clipboard {
             nodes: ordered_node_ids(&self.graph)
                 .iter()
@@ -491,6 +523,10 @@ impl Editor {
                         || (!g.node_ids.is_empty() && g.node_ids.is_subset(&nodes))
                 })
                 .cloned()
+                .map(|mut group| {
+                    group.node_ids.retain(|id| nodes.contains(id));
+                    group
+                })
                 .collect(),
             options: self.graph.options,
         }
@@ -629,8 +665,7 @@ impl Editor {
         })
     }
     pub fn fit_to_content(&mut self, canvas: Size, padding: f32) -> bool {
-        self.graph
-            .bounds()
+        visible_graph_bounds(&self.graph)
             .is_some_and(|bounds| self.viewport.fit(bounds, canvas, padding))
     }
     pub fn fit_to_selection(&mut self, canvas: Size, padding: f32) -> bool {
@@ -643,10 +678,9 @@ impl Editor {
             return None;
         }
         let visible = self.viewport.visible_world_rect(canvas);
-        let world = self
-            .graph
-            .bounds()
-            .map_or(visible, |bounds| bounds.union(visible));
+        let hidden = hidden_node_ids(&self.graph);
+        let world =
+            visible_graph_bounds(&self.graph).map_or(visible, |bounds| bounds.union(visible));
         let transform = MinimapTransform::new(world, map_bounds, padding)?;
         Some(MinimapData {
             transform,
@@ -654,6 +688,7 @@ impl Editor {
                 .graph
                 .nodes
                 .values()
+                .filter(|node| !hidden.contains(&node.id))
                 .map(|n| (n.id.clone(), transform.world_rect_to_map(n.bounds())))
                 .collect(),
             groups: self

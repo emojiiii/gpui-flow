@@ -61,6 +61,7 @@ impl CanvasPlugin for SnappingPlugin {
                 "snap settings must be finite and non-negative; grid size must be positive".into(),
             );
         }
+        let hidden = gpui_flow_core::hidden_node_ids(cx.editor.graph());
         match command {
             CanvasCommand::PreviewConnection {
                 from,
@@ -77,7 +78,13 @@ impl CanvasPlugin for SnappingPlugin {
                 let mut closest = self.config.port_radius_pixels;
                 let mut closest_invalid = self.config.port_radius_pixels;
                 let mut invalid = None;
-                for node in cx.editor.graph().nodes.values() {
+                for node in cx
+                    .editor
+                    .graph()
+                    .nodes
+                    .values()
+                    .filter(|node| !hidden.contains(&node.id))
+                {
                     for port in &node.ports {
                         let reference = PortRef::new(node.id.clone(), port.id.clone());
                         if &reference == from {
@@ -108,7 +115,10 @@ impl CanvasPlugin for SnappingPlugin {
                 }
             }
             CanvasCommand::SetPositions { nodes, groups } => {
-                let Some((anchor_id, anchor)) = nodes.iter().next().map(|(id, p)| (id.clone(), *p))
+                let Some((anchor_id, anchor)) = nodes
+                    .iter()
+                    .find(|(id, _)| !hidden.contains(*id))
+                    .map(|(id, p)| (id.clone(), *p))
                 else {
                     return Ok(());
                 };
@@ -137,7 +147,7 @@ impl CanvasPlugin for SnappingPlugin {
                 }
                 if self.config.node_alignment {
                     for other in cx.editor.graph().nodes.values() {
-                        if nodes.contains_key(&other.id) {
+                        if nodes.contains_key(&other.id) || hidden.contains(&other.id) {
                             continue;
                         }
                         for a in [

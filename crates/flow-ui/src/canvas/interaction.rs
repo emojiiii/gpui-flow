@@ -271,8 +271,10 @@ fn hit_at_editor_ordered(
     selection_on_top: bool,
 ) -> input::HitTarget {
     let viewport = editor.viewport;
+    let hidden = model::hidden_node_ids(editor.graph());
     let mut nodes: Vec<_> = model::ordered_node_ids(editor.graph())
         .into_iter()
+        .filter(|id| !hidden.contains(id))
         .filter_map(|id| editor.graph().node(&id))
         .collect();
     if selection_on_top {
@@ -383,6 +385,38 @@ mod tests {
         assert_eq!(
             hit_at_editor(&editor, model::Point::new(30., 40.), false),
             input::HitTarget::Node("b".into())
+        );
+    }
+
+    #[test]
+    fn hidden_node_body_ports_and_resize_handle_cannot_be_hit() {
+        let mut editor = editor();
+        editor.selection.select_node("card", false);
+        let rect = editor.graph().node(&"card".into()).unwrap().bounds();
+        let port = editor
+            .graph()
+            .port_position(&PortRef::new("card", "in"))
+            .unwrap();
+        editor
+            .transaction("Hide", |graph| {
+                model::set_node_visible(graph, &"card".into(), false)?;
+                Ok(())
+            })
+            .unwrap();
+        for point in [
+            rect.center(),
+            port,
+            rect.origin + model::Point::new(rect.size.width - 10., rect.size.height - 10.),
+        ] {
+            assert_eq!(
+                hit_at_editor(&editor, point, true),
+                input::HitTarget::Background
+            );
+        }
+        editor.undo();
+        assert_eq!(
+            hit_at_editor(&editor, port, true),
+            input::HitTarget::Port(PortRef::new("card", "in"))
         );
     }
 

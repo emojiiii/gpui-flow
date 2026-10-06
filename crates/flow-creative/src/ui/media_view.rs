@@ -36,6 +36,7 @@ impl MediaViews {
             .graph()
             .nodes
             .values()
+            .filter(|n| gpui_flow_core::node_is_visible(view.editor.graph(), &n.id))
             .filter(|n| {
                 matches!(
                     n.kind.as_str(),

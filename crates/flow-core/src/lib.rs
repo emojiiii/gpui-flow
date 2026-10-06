@@ -42,3 +42,6 @@ pub use connection::*;
 
 mod presentation;
 pub use presentation::*;
+
+mod visibility;
+pub use visibility::*;

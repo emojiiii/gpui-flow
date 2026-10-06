@@ -618,6 +618,9 @@ impl PluginHost {
                 if !editor.graph().nodes.contains_key(&node) {
                     return Err(GraphError::MissingNode(node).into());
                 }
+                if !gpui_flow_core::node_is_visible(editor.graph(), &node) {
+                    return Err(InteractionError::InvalidInput("node is hidden".into()));
+                }
                 match mode {
                     SelectionMode::Replace => editor.selection.select_node(node, false),
                     SelectionMode::Add => editor.selection.select_node(node, true),
@@ -627,6 +630,14 @@ impl PluginHost {
             CanvasCommand::SelectEdge { edge, mode } => {
                 if !editor.graph().edges.contains_key(&edge) {
                     return Err(GraphError::MissingEdge(edge).into());
+                }
+                if editor
+                    .graph()
+                    .edges
+                    .get(&edge)
+                    .is_some_and(|e| !gpui_flow_core::edge_is_visible(editor.graph(), e))
+                {
+                    return Err(InteractionError::InvalidInput("edge is hidden".into()));
                 }
                 if mode == SelectionMode::Replace {
                     editor.selection.clear();
@@ -697,6 +708,13 @@ impl PluginHost {
                 position,
                 hovered,
             } => {
+                if !gpui_flow_core::node_is_visible(editor.graph(), &from.node) {
+                    return Err(InteractionError::InvalidInput(
+                        "connection source is hidden".into(),
+                    ));
+                }
+                let hovered =
+                    hovered.filter(|p| gpui_flow_core::node_is_visible(editor.graph(), &p.node));
                 if self.connection.source() != Some(&from) {
                     self.connection.begin(editor.graph(), from, position)?;
                 }
@@ -723,6 +741,13 @@ impl PluginHost {
                 self.effect(CanvasEffect::ConnectionChanged, report);
                 match pair {
                     Ok(Some(pair)) => {
+                        if !gpui_flow_core::node_is_visible(editor.graph(), &pair.source.node)
+                            || !gpui_flow_core::node_is_visible(editor.graph(), &pair.target.node)
+                        {
+                            return Err(InteractionError::InvalidInput(
+                                "connection endpoint is hidden".into(),
+                            ));
+                        }
                         let id = editor.graph().fresh_id("edge");
                         editor.transaction("Connect ports", move |graph| {
                             graph.connect(id, pair.source, pair.target)

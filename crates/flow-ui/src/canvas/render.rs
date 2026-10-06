@@ -10,12 +10,14 @@ impl Render for FlowCanvas {
         let viewport = self.editor.viewport;
         let grid = self.show_grid;
         let edge_renderer = self.edge_renderer.clone();
+        let hidden = model::hidden_node_ids(self.editor.graph());
         let entity = cx.entity().downgrade();
         let edges: Vec<_> = self
             .editor
             .graph()
             .edges
             .values()
+            .filter(|e| !hidden.contains(&e.source.node) && !hidden.contains(&e.target.node))
             .filter_map(|e| {
                 Some((
                     self.editor.graph().port_position(&e.source)?,
@@ -217,6 +219,7 @@ impl Render for FlowCanvas {
         let visible = viewport.visible_world_rect(self.extent).expanded(100.);
         let ordered_nodes: Vec<_> = model::ordered_node_ids(self.editor.graph())
             .into_iter()
+            .filter(|id| !hidden.contains(id))
             .filter_map(|id| self.editor.graph().node(&id))
             .collect();
         for node in &ordered_nodes {

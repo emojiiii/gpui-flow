@@ -712,6 +712,7 @@ impl CreativeCanvas {
             .iter()
             .next()
             .and_then(|id| v.editor.graph().node(id))
+            .filter(|node| gpui_flow_core::node_is_visible(v.editor.graph(), &node.id))
             .cloned()
     }
     fn sync_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {

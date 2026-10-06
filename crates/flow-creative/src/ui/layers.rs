@@ -4,6 +4,7 @@ use gpui_flow_core::{NodeOrderAction, ordered_node_ids, reorder_nodes};
 #[derive(Clone)]
 pub(super) enum LayerAction {
     ToggleLock(NodeId),
+    ToggleVisibility(NodeId),
     Reorder(NodeOrderAction),
 }
 
@@ -15,6 +16,10 @@ impl CreativeCanvas {
         self.apply_form_edit(cx);
         let mut graph = self.canvas.read(cx).editor.graph().clone();
         let changed = match action {
+            LayerAction::ToggleVisibility(id) => {
+                let visible = gpui_flow_core::node_is_visible(&graph, &id);
+                gpui_flow_core::set_node_visible(&mut graph, &id, !visible)
+            }
             LayerAction::ToggleLock(id) => {
                 if graph
                     .groups
@@ -56,6 +61,7 @@ impl CreativeCanvas {
             .filter_map(|id| graph.node(&id).cloned())
             .collect::<Vec<_>>();
         let selected = view.editor.selection.expanded_nodes(&graph);
+        let hidden = gpui_flow_core::hidden_node_ids(&graph);
         let editable = view.is_editable() && !self.importing && !self.saving;
         let reorderable = editable
             && !selected.is_empty()
@@ -111,7 +117,8 @@ impl CreativeCanvas {
             .gap_1();
         for node in nodes.into_iter().rev() {
             let id = node.id.clone();
-            let is_selected = selected.contains(&id);
+            let visible = !hidden.contains(&id);
+            let is_selected = visible && selected.contains(&id);
             let grouped_lock = graph
                 .groups
                 .values()
@@ -152,7 +159,7 @@ impl CreativeCanvas {
                             .items_center()
                             .gap_2()
                             .text_size(px(12.))
-                            .text_color(rgb(0x545a65))
+                            .text_color(rgb(if visible { 0x545a65 } else { 0xa8acb4 }))
                             .child(chrome::icon(kind_icon, 15.))
                             .child(
                                 div()
@@ -168,6 +175,9 @@ impl CreativeCanvas {
                                 cx.listener(move |this, event: &MouseDownEvent, window, cx| {
                                     cx.stop_propagation();
                                     window.prevent_default();
+                                    if !visible {
+                                        return;
+                                    }
                                     this.apply_form_edit(cx);
                                     this.command(
                                         CanvasCommand::SelectNode {
@@ -184,14 +194,32 @@ impl CreativeCanvas {
                                 }),
                             ),
                     )
-                    .child(self.icon_button(
-                        SharedString::from(format!("layer-lock-{}", node.id)),
-                        icon,
-                        title,
-                        Action::Layer(LayerAction::ToggleLock(node.id)),
-                        !editable || grouped_lock,
-                        cx,
-                    )),
+                    .child(
+                        self.icon_button(
+                            SharedString::from(format!("layer-visible-{}", node.id)),
+                            if visible { "eye" } else { "eye-off" },
+                            if visible {
+                                "隐藏对象"
+                            } else {
+                                "显示对象"
+                            },
+                            Action::Layer(LayerAction::ToggleVisibility(node.id.clone())),
+                            !editable,
+                            cx,
+                        )
+                        .size(px(28.)),
+                    )
+                    .child(
+                        self.icon_button(
+                            SharedString::from(format!("layer-lock-{}", node.id)),
+                            icon,
+                            title,
+                            Action::Layer(LayerAction::ToggleLock(node.id)),
+                            !editable || grouped_lock,
+                            cx,
+                        )
+                        .size(px(28.)),
+                    ),
             );
         }
         div()

@@ -14,6 +14,7 @@ impl FlowCanvas {
             .graph()
             .nodes
             .values()
+            .filter(|node| model::node_is_visible(self.editor.graph(), &node.id))
             .filter(|node| {
                 matches!(node.kind.as_str(), "audio" | "video")
                     && self.registry.get(&node.kind).is_none()

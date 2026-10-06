@@ -325,6 +325,11 @@ mod tests {
             Some("assets/input.png")
         );
         assert!(image_to_image.settings.get("reference_asset").is_none());
+        gpui_flow_core::set_node_visible(&mut graph, &"photo".into(), false).unwrap();
+        let hidden_input =
+            GenerationRequest::from_node(graph.node(&"gen".into()).unwrap(), &graph).unwrap();
+        assert_eq!(hidden_input, image_to_image);
+        assert_eq!(graph.edges.len(), 1);
     }
 
     #[test]

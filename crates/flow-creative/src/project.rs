@@ -220,7 +220,14 @@ impl ProjectStore {
         validate_id(id)?;
         let directory = self.root.join(id);
         let project = read_project(&directory, id)?;
-        for node in project.document.graph.nodes.values() {
+        let hidden = gpui_flow_core::hidden_node_ids(&project.document.graph);
+        for node in project
+            .document
+            .graph
+            .nodes
+            .values()
+            .filter(|node| !hidden.contains(&node.id))
+        {
             for key in [
                 node.data["asset"].as_str(),
                 crate::references::reference_asset(node),
@@ -1955,6 +1962,13 @@ mod tests {
         project.save_document(&doc, &registry).unwrap();
         fs::remove_file(source).unwrap();
         let copied = project.directory().join(&asset.key);
+        assert_eq!(store.thumbnail_path(&id).unwrap(), Some(copied.clone()));
+        gpui_flow_core::set_node_visible(&mut doc.graph, &"cover".into(), false).unwrap();
+        project.save_document(&doc, &registry).unwrap();
+        assert_eq!(store.thumbnail_path(&id).unwrap(), None);
+        assert!(copied.exists());
+        gpui_flow_core::set_node_visible(&mut doc.graph, &"cover".into(), true).unwrap();
+        project.save_document(&doc, &registry).unwrap();
         assert_eq!(store.thumbnail_path(&id).unwrap(), Some(copied.clone()));
         fs::remove_file(copied).unwrap();
         assert!(store.thumbnail_path(&id).is_err());
