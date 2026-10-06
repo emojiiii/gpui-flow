@@ -127,6 +127,17 @@ impl CreativeCanvas {
                     )
                     .when(self.is_image_rotating(&node.id), |b| b.bg(rgb(0xeef1f6))),
                 )
+                .child(
+                    self.icon_button(
+                        "image-adjust",
+                        "sliders-horizontal",
+                        "调整明暗和颜色",
+                        Action::ImageAdjust(image_adjust_controls::AdjustAction::Begin),
+                        !editable || self.project.is_none() || self.saving,
+                        cx,
+                    )
+                    .when(self.is_image_adjusting(&node.id), |b| b.bg(rgb(0xeef1f6))),
+                )
                 .child(self.icon_button(
                     "image-mask",
                     "paintbrush",
@@ -247,6 +258,33 @@ impl CreativeCanvas {
                 .bg(rgb(0xffffff))
                 .shadow_sm()
                 .child(self.image_edit_footer(cx));
+        }
+        if self.is_image_adjusting(&node.id) {
+            let size = self.composer_size(node, cx);
+            let p = anchored_panel(bounds, self.canvas_size, size);
+            return div()
+                .occlude()
+                .absolute()
+                .left(px(p.x))
+                .top(px(p.y))
+                .w(px(size.width))
+                .rounded(px(12.))
+                .bg(rgb(0xffffff))
+                .shadow_sm()
+                .child(
+                    div()
+                        .id(SharedString::from(format!("adjust-scroll-{}", node.id)))
+                        .max_h(px(size.height))
+                        .overflow_y_scroll()
+                        .overflow_x_scroll()
+                        .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
+                        .child(
+                            div()
+                                .min_w(px(270.))
+                                .p_2()
+                                .child(self.image_adjustment_panel(cx)),
+                        ),
+                );
         }
         if self.is_image_rotating(&node.id) {
             let p = anchored_panel(bounds, self.canvas_size, self.composer_size(node, cx));

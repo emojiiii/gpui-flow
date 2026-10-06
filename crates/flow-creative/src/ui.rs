@@ -16,6 +16,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+type AdjustmentSlot = Arc<Mutex<Option<image_adjust_controls::AdjustmentPresentation>>>;
+
 type TextEditCallback = Arc<dyn Fn(NodeId, &mut Window, &mut App) + Send + Sync>;
 
 /// Data contains asset keys only; the host explicitly authorizes local sources.
@@ -33,6 +35,7 @@ pub struct CreativeAssets {
     media: Arc<media_view::MediaViews>,
     editing_text: Arc<Mutex<Option<NodeId>>>,
     editing_image: Arc<Mutex<Option<NodeId>>>,
+    adjustment_presentation: AdjustmentSlot,
     begin_text_edit: Option<TextEditCallback>,
 }
 impl CreativeAssets {
@@ -108,6 +111,35 @@ impl NodeRenderer for CardRenderer {
         }
         if node.kind == crate::shapes::SHAPE_NODE_KIND {
             return self.assets.shapes.render(node, z, cx);
+        }
+        if node.kind == "image" {
+            let preview = self
+                .assets
+                .adjustment_presentation
+                .lock()
+                .unwrap()
+                .as_ref()
+                .filter(|p| {
+                    p.node == node.id
+                        && p.data == node.data
+                        && node.data["asset"]
+                            .as_str()
+                            .and_then(|key| self.assets.paths.get(key))
+                            .is_some_and(|path| path == &p.path)
+                })
+                .map(|p| p.preview.clone());
+            if let Some(preview) = preview {
+                preview.update(cx, |v, cx| {
+                    v.set_size(
+                        WorldSize::new(
+                            (node.size.width * z - 2.).max(1.),
+                            (node.size.height * z - 2.).max(1.),
+                        ),
+                        cx,
+                    )
+                });
+                return preview.into_any_element();
+            }
         }
         if self.assets.editing_image.lock().unwrap().as_ref() == Some(&node.id) {
             return div().size_full().bg(rgb(0xf5f6f8)).into_any_element();
@@ -388,6 +420,7 @@ enum Action {
     Layer(layers::LayerAction),
     ImageEdit(image_edit_controls::ImageEditAction),
     ImageRotation(image_rotation_controls::RotationAction),
+    ImageAdjust(image_adjust_controls::AdjustAction),
     NewCustom,
     CustomDesigner(custom_designer::CustomDesignerAction),
     Custom(custom_tasks::CustomAction),
@@ -494,6 +527,8 @@ pub struct CreativeCanvas {
     editing_image: Arc<Mutex<Option<NodeId>>>,
     image_editing: Option<image_edit_controls::ImageEditing>,
     image_rotation: Option<image_rotation_controls::RotationEditing>,
+    image_adjustment: Option<image_adjust_controls::AdjustmentEditing>,
+    adjustment_presentation: AdjustmentSlot,
     image_edit_focus: FocusHandle,
     image_edit_cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
     shape_views: Arc<shape_preview::ShapeViews>,
@@ -577,6 +612,7 @@ impl CreativeCanvas {
                     this.reconcile_mask_edit(cx);
                     this.reconcile_image_edit(cx);
                     this.reconcile_image_rotation(cx);
+                    this.reconcile_image_adjustment(cx);
                     this.reconcile_asset_export(cx);
                     this.sync_frame_fields(window, cx);
                     this.sync_shape_fields(window, cx);
@@ -761,6 +797,8 @@ impl CreativeCanvas {
             editing_image: Arc::default(),
             image_editing: None,
             image_rotation: None,
+            image_adjustment: None,
+            adjustment_presentation: Arc::default(),
             image_edit_focus: cx.focus_handle(),
             image_edit_cancel: None,
             shape_views: Arc::default(),
@@ -924,7 +962,15 @@ impl CreativeCanvas {
             self.clear_image_rotation();
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
         }
+        if !matches!(&action, Action::ImageAdjust(_)) && self.image_adjustment.is_some() {
+            self.clear_image_adjustment(cx);
+            self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+        }
         let command = match action {
+            Action::ImageAdjust(action) => {
+                self.handle_image_adjustment(action, window, cx);
+                return;
+            }
             Action::ImageRotation(action) => {
                 self.handle_image_rotation(action, window, cx);
                 return;
@@ -1516,6 +1562,9 @@ mod chrome;
 mod custom_designer;
 mod custom_tasks;
 mod frame_tools;
+mod image_adjust_controls;
+mod image_adjust_preview;
+mod image_adjust_tasks;
 mod image_edit_controls;
 mod image_edit_preview;
 mod image_edit_tasks;
@@ -1642,6 +1691,15 @@ impl Render for CreativeCanvas {
                 }),
             )
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                if event.keystroke.key == "escape" && this.image_adjustment.is_some() {
+                    cx.stop_propagation();
+                    this.handle_image_adjustment(
+                        image_adjust_controls::AdjustAction::Cancel,
+                        window,
+                        cx,
+                    );
+                    return;
+                }
                 if event.keystroke.key == "escape" && this.image_rotation.is_some() {
                     cx.stop_propagation();
                     this.handle_image_rotation(
@@ -1917,7 +1975,7 @@ impl Render for CreativeCanvas {
                 470.
             } else {
                 (match node.kind.as_str() {
-                    "image" => 486.,
+                    "image" => 524.,
                     "video" | "audio" | "process_image" | "process_video" | "process_audio" => 222.,
                     "shape" | "pencil" => 146.,
                     "text" => 456.,
@@ -2378,41 +2436,88 @@ impl Render for CreativeCanvas {
     }
 }
 
-fn anchored_panel(node: gpui_flow_core::Rect, canvas: WorldSize, panel: WorldSize) -> WorldPoint {
-    let right = node.origin.x + node.size.width;
-    let bottom = node.origin.y + node.size.height;
-    let centered = (node.center().x - panel.width / 2.)
-        .clamp(90., (canvas.width - panel.width - 12.).max(90.));
-    if bottom + 12. + panel.height <= canvas.height - 12. {
-        return WorldPoint::new(centered, (bottom + 12.).max(8.));
-    }
-    if right + 12. + panel.width <= canvas.width - 12. {
-        return WorldPoint::new(
-            right + 12.,
-            node.origin
-                .y
-                .clamp(8., (canvas.height - panel.height - 12.).max(8.)),
-        );
-    }
-    if node.origin.x - panel.width - 12. >= 90. {
-        return WorldPoint::new(
-            node.origin.x - panel.width - 12.,
-            node.origin
-                .y
-                .clamp(8., (canvas.height - panel.height - 12.).max(8.)),
-        );
-    }
-    WorldPoint::new(
-        centered,
-        (node.origin.y - panel.height - 32.)
-            .clamp(8., (canvas.height - panel.height - 12.).max(8.)),
+fn bounded_panel_size(canvas: WorldSize, preferred: WorldSize) -> WorldSize {
+    WorldSize::new(
+        preferred.width.min((canvas.width - 24.).max(1.)),
+        preferred.height.min((canvas.height - 74.).max(1.)),
     )
+}
+fn panel_overlap(at: WorldPoint, panel: WorldSize, node: gpui_flow_core::Rect) -> f32 {
+    ((at.x + panel.width).min(node.max_x()) - at.x.max(node.min_x())).max(0.)
+        * ((at.y + panel.height).min(node.max_y()) - at.y.max(node.min_y())).max(0.)
+}
+fn anchored_panel(node: gpui_flow_core::Rect, canvas: WorldSize, panel: WorldSize) -> WorldPoint {
+    let max_x = (canvas.width - panel.width - 12.).max(8.);
+    let min_x = 90_f32.min(max_x);
+    let max_y = (canvas.height - panel.height - 12.).max(8.);
+    let min_y = 62_f32.min(max_y);
+    let clamp = |p: WorldPoint| WorldPoint::new(p.x.clamp(min_x, max_x), p.y.clamp(min_y, max_y));
+    let centered = (node.center().x - panel.width / 2.).clamp(min_x, max_x);
+    let candidates = [
+        WorldPoint::new(centered, node.max_y() + 12.),
+        WorldPoint::new(node.max_x() + 12., node.origin.y.clamp(min_y, max_y)),
+        WorldPoint::new(
+            node.origin.x - panel.width - 12.,
+            node.origin.y.clamp(min_y, max_y),
+        ),
+        WorldPoint::new(centered, node.origin.y - panel.height - 32.),
+    ];
+    for candidate in candidates {
+        if candidate == clamp(candidate) && panel_overlap(candidate, panel, node) == 0. {
+            return candidate;
+        }
+    }
+    // With no free adjacent side, use the reachable viewport edge that covers
+    // the least of the object, instead of always covering its upper half.
+    candidates
+        .into_iter()
+        .map(clamp)
+        .chain([
+            WorldPoint::new(min_x, min_y),
+            WorldPoint::new(max_x, min_y),
+            WorldPoint::new(min_x, max_y),
+            WorldPoint::new(max_x, max_y),
+        ])
+        .min_by(|a, b| panel_overlap(*a, panel, node).total_cmp(&panel_overlap(*b, panel, node)))
+        .unwrap_or(WorldPoint::new(min_x, min_y))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use ::core::prelude::v1::test;
+    #[test]
+    fn compact_panels_remain_reachable_and_choose_a_free_side_when_available() {
+        use gpui_flow_core::Rect;
+        for canvas in [
+            WorldSize::new(1180., 812.),
+            WorldSize::new(640., 480.),
+            WorldSize::new(300., 200.),
+        ] {
+            let size = bounded_panel_size(canvas, WorldSize::new(286., 246.));
+            for node in [
+                Rect::new(WorldPoint::new(372., 158.), WorldSize::new(495., 438.)),
+                Rect::new(WorldPoint::new(80., 80.), WorldSize::new(400., 300.)),
+            ] {
+                let at = anchored_panel(node, canvas, size);
+                assert!(at.x >= 8. && at.y >= 8.);
+                assert!(
+                    at.x + size.width <= canvas.width - 12.
+                        && at.y + size.height <= canvas.height - 12.
+                );
+            }
+        }
+        let node = Rect::new(WorldPoint::new(372., 158.), WorldSize::new(495., 438.));
+        let size = WorldSize::new(286., 246.);
+        assert_eq!(
+            panel_overlap(
+                anchored_panel(node, WorldSize::new(1180., 812.), size),
+                size,
+                node
+            ),
+            0.
+        );
+    }
     #[test]
     fn graph_switching_actions_flush_the_pending_form_first() {
         for action in [

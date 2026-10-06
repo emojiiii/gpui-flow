@@ -240,6 +240,7 @@ impl CreativeCanvas {
         self.media_views.set_owner(cx.entity().downgrade());
         assets.editing_text = self.editing_text.clone();
         assets.editing_image = self.editing_image.clone();
+        assets.adjustment_presentation = self.adjustment_presentation.clone();
         let owner = cx.entity().downgrade();
         assets.begin_text_edit = Some(Arc::new(move |node, window, cx| {
             let _ = owner.update(cx, |this, cx| this.begin_text_edit(node, window, cx));
