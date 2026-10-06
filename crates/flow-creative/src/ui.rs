@@ -469,6 +469,7 @@ enum Action {
     CustomPortColor(gpui_flow_core::DataType),
     Setting(&'static str, Value),
     Add(String),
+    TextPlacement(text_placement_tools::TextPlacementAction),
     Undo,
     Redo,
     Delete,
@@ -541,6 +542,9 @@ pub struct CreativeCanvas {
     known_custom_kinds: Vec<String>,
     media_views: Arc<media_view::MediaViews>,
     editing_text: Arc<Mutex<Option<NodeId>>>,
+    text_placing: bool,
+    text_placement_drag: Option<text_placement_tools::TextDrag>,
+    text_placement_focus: FocusHandle,
     editing_image: Arc<Mutex<Option<NodeId>>>,
     image_editing: Option<image_edit_controls::ImageEditing>,
     image_rotation: Option<image_rotation_controls::RotationEditing>,
@@ -694,6 +698,10 @@ impl CreativeCanvas {
                     }
                 }
                 FlowEvent::ViewportChanged => {
+                    if this.text_placement_drag.is_some() {
+                        this.clear_text_placement();
+                        this.canvas.read(cx).focus_handle(cx).focus(window, cx);
+                    }
                     if this.object_menu.take().is_some() {
                         this.canvas.read(cx).focus_handle(cx).focus(window, cx);
                     }
@@ -753,6 +761,20 @@ impl CreativeCanvas {
             }
         });
         let frame_focus = cx.focus_handle();
+        let text_placement_focus = cx.focus_handle();
+        let text_placement_blur =
+            cx.on_focus_out(&text_placement_focus, window, |this, _, _, cx| {
+                if this.text_placing {
+                    this.clear_text_placement();
+                    cx.notify();
+                }
+            });
+        let text_placement_activation = cx.observe_window_activation(window, |this, window, cx| {
+            if !window.is_window_active() && this.text_placing {
+                this.clear_text_placement();
+                cx.notify();
+            }
+        });
         let frame_focus_out = cx.on_focus_out(&frame_focus, window, |this, _, _, cx| {
             if this.frame_drawing || this.frame_drag.is_some() {
                 this.clear_frame_tool();
@@ -853,6 +875,9 @@ impl CreativeCanvas {
             known_custom_kinds: Vec::new(),
             media_views: Arc::default(),
             editing_text: Arc::default(),
+            text_placing: false,
+            text_placement_drag: None,
+            text_placement_focus,
             editing_image: Arc::default(),
             image_editing: None,
             image_rotation: None,
@@ -909,6 +934,8 @@ impl CreativeCanvas {
                 shape_activation,
                 frame_focus_out,
                 frame_activation,
+                text_placement_blur,
+                text_placement_activation,
             ],
         })
     }
@@ -986,6 +1013,10 @@ impl CreativeCanvas {
         result.is_ok()
     }
     fn action(&mut self, action: Action, window: &mut Window, cx: &mut Context<Self>) {
+        if !matches!(&action, Action::TextPlacement(_)) && self.text_placing {
+            self.clear_text_placement();
+            self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+        }
         if self.object_menu.take().is_some() {
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
         }
@@ -1040,6 +1071,10 @@ impl CreativeCanvas {
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
         }
         let command = match action {
+            Action::TextPlacement(action) => {
+                self.handle_text_placement(action, window, cx);
+                return;
+            }
             Action::Context(action) => {
                 self.context_action(action, window, cx);
                 return;
@@ -1679,6 +1714,7 @@ mod shape_preview;
 mod shape_tools;
 mod text_appearance_tools;
 mod text_objects;
+mod text_placement_tools;
 mod workbench;
 pub use workbench::CreativeWorkbench;
 
@@ -1752,6 +1788,11 @@ impl Render for CreativeCanvas {
                             let size =
                                 WorldSize::new(bounds.size.width.into(), bounds.size.height.into());
                             if this.canvas_origin != origin || this.canvas_size != size {
+                                // A window move/resize invalidates the screen-space draft.
+                                if this.text_placement_drag.is_some() {
+                                    this.clear_text_placement();
+                                    this.canvas.read(cx).focus_handle(cx).focus(window, cx);
+                                }
                                 this.canvas_origin = origin;
                                 this.canvas_size = size;
                                 // Layout runs after this view rendered. Notify on
@@ -1787,6 +1828,21 @@ impl Render for CreativeCanvas {
                 }),
             )
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                if event.keystroke.key == "t"
+                    && !event.keystroke.modifiers.control
+                    && !event.keystroke.modifiers.alt
+                    && !event.keystroke.modifiers.platform
+                    && !event.keystroke.modifiers.shift
+                    && this.canvas.read(cx).focus_handle(cx).is_focused(window)
+                {
+                    cx.stop_propagation();
+                    this.action(
+                        Action::TextPlacement(text_placement_tools::TextPlacementAction::Toggle),
+                        window,
+                        cx,
+                    );
+                    return;
+                }
                 if event.keystroke.key == "escape" && this.background_panel.is_some() {
                     cx.stop_propagation();
                     this.background_panel = None;
@@ -1860,6 +1916,9 @@ impl Render for CreativeCanvas {
         if let Some(overlay) = self.frame_draw_overlay(cx) {
             surface = surface.child(overlay);
         }
+        if let Some(overlay) = self.text_placement_overlay(cx) {
+            surface = surface.child(overlay);
+        }
         if let Some(overlay) = self.shape_draw_overlay(cx) {
             surface = surface.child(overlay);
         }
@@ -1900,7 +1959,8 @@ impl Render for CreativeCanvas {
                     !pan_mode
                         && !self.frame_drawing
                         && self.shape_tool.is_none()
-                        && !self.pencil_active,
+                        && !self.pencil_active
+                        && !self.text_placing,
                     |b| b.bg(rgb(0xeef1f6)),
                 ),
             )
@@ -1935,20 +1995,29 @@ impl Render for CreativeCanvas {
         for (kind, symbol, name) in [
             ("mask", "paintbrush", "绘制遮罩"),
             ("edit_image", "image-plus", "图片编辑 · Image/Mask 输入"),
-            ("text", "type", "文字"),
+            ("text", "type", "文字 · T"),
             ("generate_image", "image", "图片生成"),
             ("generate_video", "video", "视频生成"),
             ("generate_audio", "music", "音频生成"),
             ("generate_model", "box", "3D 模型生成"),
         ] {
-            rail = rail.child(self.rail_button(
-                SharedString::from(format!("tool-{kind}")),
-                symbol,
-                name,
-                Action::Add(kind.into()),
-                !editable || count >= MAX_CARDS,
-                cx,
-            ));
+            rail = rail.child(
+                self.rail_button(
+                    SharedString::from(format!("tool-{kind}")),
+                    symbol,
+                    name,
+                    if kind == "text" {
+                        Action::TextPlacement(text_placement_tools::TextPlacementAction::Toggle)
+                    } else {
+                        Action::Add(kind.into())
+                    },
+                    !editable || count >= MAX_CARDS,
+                    cx,
+                )
+                .when(kind == "text" && self.text_placing, |button| {
+                    button.bg(rgb(0xeef1f6))
+                }),
+            );
         }
         rail = rail.child(
             self.rail_button(
@@ -2042,6 +2111,7 @@ impl Render for CreativeCanvas {
             && !self.frame_drawing
             && self.shape_tool.is_none()
             && !self.pencil_active
+            && !self.text_placing
         {
             surface = surface.child(
                 div()

@@ -40,3 +40,4 @@ pub mod image_adjust;
 pub mod image_rotation;
 pub mod pencil;
 pub mod shapes;
+pub mod text_placement;

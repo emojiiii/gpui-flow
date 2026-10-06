@@ -72,6 +72,7 @@ impl CreativeCanvas {
             || self.pencil_active
             || self.shape_tool.is_some()
             || self.frame_drawing
+            || self.text_placing
             || self.editing_text.lock().is_ok_and(|id| id.is_some())
         {
             return;
@@ -298,7 +299,11 @@ impl CreativeCanvas {
         if selection.is_empty() {
             rows.extend([
                 ("导入本地素材…", Action::ImportImage, !editable),
-                ("添加文字", Action::Add("text".into()), !editable),
+                (
+                    "添加文字",
+                    Action::TextPlacement(text_placement_tools::TextPlacementAction::At(world)),
+                    !editable,
+                ),
                 ("适应画布", Action::Fit, false),
             ]);
         } else {
