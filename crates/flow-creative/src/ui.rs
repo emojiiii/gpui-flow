@@ -407,6 +407,7 @@ enum Action {
     Redo,
     Delete,
     Frame,
+    FrameEdit(frame_tools::FrameAction),
     Ungroup,
     Fit,
     Zoom(f32),
@@ -472,6 +473,10 @@ pub struct CreativeCanvas {
     image_editing: Option<image_edit_controls::ImageEditing>,
     image_edit_focus: FocusHandle,
     image_edit_cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
+    frame_fields: Option<frame_tools::FrameFields>,
+    frame_drawing: bool,
+    frame_drag: Option<frame_tools::FrameDrag>,
+    frame_focus: FocusHandle,
     export_dialog: Option<asset_export_ui::AssetExportDialog>,
     export_focus: FocusHandle,
     export_serial: u64,
@@ -538,6 +543,7 @@ impl CreativeCanvas {
                     this.reconcile_mask_edit(cx);
                     this.reconcile_image_edit(cx);
                     this.reconcile_asset_export(cx);
+                    this.sync_frame_fields(window, cx);
                     this.sync_processing_views(cx);
                     this.sync_custom_views(cx);
                     let kinds = canvas
@@ -602,6 +608,19 @@ impl CreativeCanvas {
             }
             if matches!(event, InputEvent::Blur) {
                 this.apply_form_edit(cx);
+            }
+        });
+        let frame_focus = cx.focus_handle();
+        let frame_focus_out = cx.on_focus_out(&frame_focus, window, |this, _, _, cx| {
+            if this.frame_drawing || this.frame_drag.is_some() {
+                this.clear_frame_tool();
+                cx.notify();
+            }
+        });
+        let frame_activation = cx.observe_window_activation(window, |this, window, cx| {
+            if !window.is_window_active() && (this.frame_drawing || this.frame_drag.is_some()) {
+                this.clear_frame_tool();
+                cx.notify();
             }
         });
         let asset_thumbnails = cx.new(asset_thumbnails::AssetThumbnails::new);
@@ -677,6 +696,10 @@ impl CreativeCanvas {
             image_editing: None,
             image_edit_focus: cx.focus_handle(),
             image_edit_cancel: None,
+            frame_fields: None,
+            frame_drawing: false,
+            frame_drag: None,
+            frame_focus,
             export_dialog: None,
             export_focus: cx.focus_handle(),
             export_serial: 0,
@@ -705,6 +728,8 @@ impl CreativeCanvas {
                 observer,
                 form_subscription,
                 thumbnail_observer,
+                frame_focus_out,
+                frame_activation,
             ],
         })
     }
@@ -796,7 +821,17 @@ impl CreativeCanvas {
             self.asset_picker = None;
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
         }
+        if !matches!(&action, Action::FrameEdit(_))
+            && (self.frame_drawing || self.frame_drag.is_some())
+        {
+            self.clear_frame_tool();
+            self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+        }
         let command = match action {
+            Action::FrameEdit(action) => {
+                self.handle_frame_action(action, window, cx);
+                return;
+            }
             Action::ExportAsset(action) => {
                 self.handle_asset_export(action, window, cx);
                 return;
@@ -1370,6 +1405,7 @@ mod asset_thumbnails;
 mod chrome;
 mod custom_designer;
 mod custom_tasks;
+mod frame_tools;
 mod image_edit_controls;
 mod image_edit_preview;
 mod image_edit_tasks;
@@ -1401,6 +1437,7 @@ impl Render for CreativeCanvas {
         let editable = view.is_editable() && !self.importing;
         let selection = view.editor.selection.clone();
         let count = view.editor.graph().nodes.len();
+        let frame_count = view.editor.graph().groups.len();
         let zoom = view.editor.viewport.zoom;
         let viewport = view.editor.viewport;
         let node = self.selected(cx);
@@ -1471,6 +1508,9 @@ impl Render for CreativeCanvas {
                 let at = this.canvas.read(cx).editor.viewport.screen_to_world(screen);
                 this.import_dropped_paths(paths.paths().to_vec(), at, cx);
             }));
+        if let Some(overlay) = self.frame_draw_overlay(cx) {
+            surface = surface.child(overlay);
+        }
         let pan_mode = self.canvas.read(cx).pan_mode();
         let mut rail = div()
             .occlude()
@@ -1497,7 +1537,7 @@ impl Render for CreativeCanvas {
                     false,
                     cx,
                 )
-                .when(!pan_mode, |b| b.bg(rgb(0xeef1f6))),
+                .when(!pan_mode && !self.frame_drawing, |b| b.bg(rgb(0xeef1f6))),
             )
             .child(
                 self.icon_button(
@@ -1546,6 +1586,17 @@ impl Render for CreativeCanvas {
             ));
         }
         rail = rail
+            .child(
+                self.icon_button(
+                    "tool-frame",
+                    "grid-2x2",
+                    "画框 · 拖动或单击创建",
+                    Action::FrameEdit(frame_tools::FrameAction::Draw),
+                    !editable || self.saving || frame_count >= MAX_CARDS,
+                    cx,
+                )
+                .when(self.frame_drawing, |b| b.bg(rgb(0xeef1f6))),
+            )
             .child(self.icon_button(
                 "tool-processing",
                 "sliders-horizontal",
@@ -1594,7 +1645,7 @@ impl Render for CreativeCanvas {
             ));
             surface = surface.child(menu);
         }
-        if count == 0 {
+        if count == 0 && frame_count == 0 && !self.frame_drawing {
             surface = surface.child(
                 div()
                     .absolute()
@@ -1778,6 +1829,9 @@ impl Render for CreativeCanvas {
                 .left(px(toolbar_at.x))
                 .top(px(toolbar_at.y)),
             );
+        }
+        if let Some(controls) = self.frame_controls(cx) {
+            surface = surface.child(controls);
         }
         if self.show_import_path {
             surface = surface.child(

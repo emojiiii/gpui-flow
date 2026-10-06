@@ -61,6 +61,7 @@ impl CreativeCanvas {
             .filter_map(|id| graph.node(&id).cloned())
             .collect::<Vec<_>>();
         let selected = view.editor.selection.expanded_nodes(&graph);
+        let selected_groups = view.editor.selection.groups.clone();
         let hidden = gpui_flow_core::hidden_node_ids(&graph);
         let editable = view.is_editable() && !self.importing && !self.saving;
         let reorderable = editable
@@ -115,6 +116,24 @@ impl CreativeCanvas {
             .flex()
             .flex_col()
             .gap_1();
+        for group in graph.groups.values().rev() {
+            rows = rows.child(
+                self.button(
+                    SharedString::from(format!("frame-layer-{}", group.id)),
+                    format!(
+                        "▣ {} · {} 对象{}",
+                        group.title,
+                        group.node_ids.len(),
+                        if group.locked { " · 锁定" } else { "" }
+                    ),
+                    Action::FrameEdit(frame_tools::FrameAction::Select(group.id.clone())),
+                    false,
+                    cx,
+                )
+                .w_full()
+                .when(selected_groups.contains(&group.id), |b| b.bg(rgb(0xeff4ff))),
+            );
+        }
         for node in nodes.into_iter().rev() {
             let id = node.id.clone();
             let visible = !hidden.contains(&id);

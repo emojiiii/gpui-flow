@@ -9,6 +9,14 @@ impl Render for FlowCanvas {
         let theme = self.theme;
         let viewport = self.editor.viewport;
         let grid = self.show_grid;
+        let frame_backgrounds: Vec<_> = self
+            .editor
+            .graph()
+            .groups
+            .values()
+            .filter(|g| g.data["flow_creative_frame"].as_u64() == Some(1))
+            .map(|g| g.bounds)
+            .collect();
         let edge_renderer = self.edge_renderer.clone();
         let hidden = model::hidden_node_ids(self.editor.graph());
         let entity = cx.entity().downgrade();
@@ -84,6 +92,17 @@ impl Render for FlowCanvas {
                         }
                         x += gap;
                     }
+                }
+                // Frame backgrounds stay below wires and media objects.
+                for frame in frame_backgrounds {
+                    let r = viewport.world_rect_to_screen(frame);
+                    window.paint_quad(fill(
+                        Bounds::new(
+                            bounds.origin + point(px(r.origin.x), px(r.origin.y)),
+                            size(px(r.size.width), px(r.size.height)),
+                        ),
+                        rgb(0xffffff),
+                    ));
                 }
                 for (from, to, color) in edges {
                     edge_renderer.paint(screen(from), screen(to), rgb(color).alpha(0.65), window);
@@ -182,6 +201,7 @@ impl Render for FlowCanvas {
             let r = viewport.world_rect_to_screen(group.bounds);
             let group_id = group.id.clone();
             let selected = self.editor.selection.groups.contains(&group_id);
+            let artboard = group.data["flow_creative_frame"].as_u64() == Some(1);
             surface = surface.child(
                 div()
                     .absolute()
@@ -191,14 +211,30 @@ impl Render for FlowCanvas {
                     .h(px(r.size.height))
                     .border_1()
                     .border_color(rgb(theme.accent).alpha(if selected { 0.9 } else { 0.35 }))
-                    .rounded_lg()
+                    .when(!artboard, |v| v.rounded_lg())
                     .child(
                         div()
+                            .when(artboard, |v| {
+                                v.absolute().top(px(-24.)).left_0().w_full().h(px(24.))
+                            })
                             .px_3()
                             .py_1()
                             .text_xs()
                             .text_color(rgb(theme.accent))
-                            .child(group.title.clone())
+                            .overflow_hidden()
+                            .text_ellipsis()
+                            .whitespace_nowrap()
+                            .child(if artboard {
+                                format!(
+                                    "{}   {:.0} × {:.0}{}",
+                                    group.title,
+                                    group.bounds.size.width,
+                                    group.bounds.size.height,
+                                    if group.locked { " · 锁定" } else { "" }
+                                )
+                            } else {
+                                group.title.clone()
+                            })
                             .cursor_grab()
                             .on_mouse_down(
                                 MouseButton::Left,

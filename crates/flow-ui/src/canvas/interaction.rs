@@ -312,7 +312,16 @@ fn hit_at_editor_ordered(
     }
     for group in editor.graph().groups.values().rev() {
         let rect = viewport.world_rect_to_screen(group.bounds);
-        if model::Rect::new(rect.origin, model::Size::new(rect.size.width, 28.)).contains(screen) {
+        let artboard = group.data["flow_creative_frame"].as_u64() == Some(1);
+        let header = if artboard {
+            model::Rect::new(
+                rect.origin - model::Point::new(0., 24.),
+                model::Size::new(rect.size.width, 24.),
+            )
+        } else {
+            model::Rect::new(rect.origin, model::Size::new(rect.size.width, 28.))
+        };
+        if header.contains(screen) {
             return input::HitTarget::Group(group.id.clone());
         }
     }
@@ -334,6 +343,33 @@ mod tests {
             )
             .unwrap();
         Editor::new(graph).unwrap()
+    }
+    #[test]
+    fn artboard_external_title_is_a_screen_sized_hit_area_at_any_zoom() {
+        let mut graph = Graph::new();
+        let mut group = model::Group::new(
+            "frame",
+            "Board",
+            model::Rect::new(model::Point::new(100., 100.), model::Size::new(500., 300.)),
+        );
+        group.data = serde_json::json!({"flow_creative_frame":1});
+        graph.add_group(group).unwrap();
+        let mut editor = Editor::new(graph).unwrap();
+        for zoom in [0.5, 2.] {
+            editor.viewport.zoom = zoom;
+            editor.viewport.pan = model::Point::new(40., 60.);
+            let at = editor
+                .viewport
+                .world_to_screen(model::Point::new(130., 100.));
+            assert_eq!(
+                hit_at_editor(&editor, at - model::Point::new(0., 12.), false),
+                input::HitTarget::Group("frame".into())
+            );
+            assert_eq!(
+                hit_at_editor(&editor, at + model::Point::new(0., 12.), false),
+                input::HitTarget::Background
+            );
+        }
     }
     #[test]
     fn selected_media_front_order_matches_hit_testing_without_changing_default() {

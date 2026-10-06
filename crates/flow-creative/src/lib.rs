@@ -31,3 +31,4 @@ pub mod processing_node;
 mod layer_guard;
 
 pub mod asset_export;
+pub mod frames;
