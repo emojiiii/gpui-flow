@@ -90,6 +90,8 @@ impl CreativeCanvas {
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
         let style = TextStyle::from_data(&node.data).unwrap_or_default();
+        let appearance =
+            crate::text_appearance::TextAppearance::from_data(&node.data).unwrap_or_default();
         // The native textarea uses fixed 10px/8px insets. Compensate here so
         // its glyph origin matches the scaled canvas object at every zoom.
         div()
@@ -121,7 +123,11 @@ impl CreativeCanvas {
                     })
                     .text_align(alignment(style.alignment))
                     .line_height(relative(1.25))
-                    .text_color(rgb(0x32343a))
+                    .text_color(rgb(appearance.color))
+                    .when_some(
+                        appearance.installed_family(&self.font_families),
+                        |v, family| v.font_family(SharedString::from(family.to_string())),
+                    )
                     .aria_label("画布文字，按 Escape 完成编辑"),
             )
     }
@@ -136,6 +142,16 @@ impl CreativeCanvas {
             .flex()
             .items_center()
             .gap_1()
+            .child(
+                self.button(
+                    "text-appearance",
+                    "字体",
+                    Action::TextAppearance(text_appearance_tools::TypographyAction::Toggle),
+                    !editable,
+                    cx,
+                )
+                .when(self.typography.is_some(), |v| v.bg(rgb(0xeff4ff))),
+            )
             .child(self.icon_button(
                 "text-smaller",
                 "minus",

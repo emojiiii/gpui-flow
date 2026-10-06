@@ -214,6 +214,7 @@ impl CreativeCanvas {
     /// Install Creative's standard media/text renderers and local asset sources.
     /// Hosts supplying custom renderers can retain their own registry instead.
     pub fn set_assets(&mut self, mut assets: CreativeAssets, cx: &mut Context<Self>) {
+        assets.font_families = self.font_families.clone();
         self.mask_views
             .sync(self.canvas.read(cx).editor.graph(), self.project.as_ref());
         assets.masks = self.mask_views.clone();

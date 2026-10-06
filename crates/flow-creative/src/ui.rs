@@ -36,6 +36,7 @@ pub struct CreativeAssets {
     editing_text: Arc<Mutex<Option<NodeId>>>,
     editing_image: Arc<Mutex<Option<NodeId>>>,
     adjustment_presentation: AdjustmentSlot,
+    font_families: Arc<Vec<String>>,
     begin_text_edit: Option<TextEditCallback>,
 }
 impl CreativeAssets {
@@ -255,6 +256,8 @@ impl NodeRenderer for CardRenderer {
         }
         if node.kind == "text" {
             let style = TextStyle::from_data(&node.data).unwrap_or_default();
+            let appearance =
+                crate::text_appearance::TextAppearance::from_data(&node.data).unwrap_or_default();
             let editing = self
                 .assets
                 .editing_text
@@ -273,8 +276,12 @@ impl NodeRenderer for CardRenderer {
                     FontWeight::NORMAL
                 })
                 .text_align(text_objects::alignment(style.alignment))
+                .when_some(
+                    appearance.installed_family(&self.assets.font_families),
+                    |v, family| v.font_family(SharedString::from(family.to_string())),
+                )
                 .line_height(relative(1.25))
-                .text_color(rgb(0x32343a))
+                .text_color(rgb(appearance.color))
                 .when(!editing, |body| {
                     body.child(node.data["text"].as_str().unwrap_or("").to_string())
                 })
@@ -414,6 +421,7 @@ fn theme() -> FlowTheme {
 }
 #[derive(Clone)]
 enum Action {
+    TextAppearance(text_appearance_tools::TypographyAction),
     Arrange(Option<crate::arrangement::Arrangement>),
     Shape(shape_tools::ShapeAction),
     Pencil(pencil_tools::PencilAction),
@@ -507,6 +515,8 @@ pub struct CreativeCanvas {
     quick_edit: bool,
     show_layers: bool,
     show_arrangement: bool,
+    typography: Option<text_appearance_tools::TypographyPanel>,
+    font_families: Arc<Vec<String>>,
     import_model: bool,
     asset_picker: Option<asset_browser::AssetPicker>,
     asset_picker_focus: FocusHandle,
@@ -618,6 +628,7 @@ impl CreativeCanvas {
                     this.reconcile_image_edit(cx);
                     this.reconcile_image_rotation(cx);
                     this.reconcile_image_adjustment(cx);
+                    this.reconcile_typography(window, cx);
                     this.reconcile_asset_export(cx);
                     this.sync_frame_fields(window, cx);
                     this.sync_shape_fields(window, cx);
@@ -781,6 +792,21 @@ impl CreativeCanvas {
             quick_edit: false,
             show_layers: false,
             show_arrangement: false,
+            typography: None,
+            font_families: Arc::new(
+                cx.text_system()
+                    .all_font_names()
+                    .into_iter()
+                    .filter(|name| {
+                        crate::text_appearance::TextAppearance {
+                            font_family: Some(name.clone()),
+                            ..Default::default()
+                        }
+                        .validate()
+                        .is_ok()
+                    })
+                    .collect(),
+            ),
             import_model: false,
             asset_picker: None,
             asset_picker_focus: cx.focus_handle(),
@@ -933,6 +959,10 @@ impl CreativeCanvas {
         result.is_ok()
     }
     fn action(&mut self, action: Action, window: &mut Window, cx: &mut Context<Self>) {
+        if !matches!(&action, Action::TextAppearance(_)) && self.typography.is_some() {
+            self.typography = None;
+            self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+        }
         if !matches!(&action, Action::Arrange(_)) {
             self.show_arrangement = false;
         }
@@ -976,6 +1006,10 @@ impl CreativeCanvas {
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
         }
         let command = match action {
+            Action::TextAppearance(action) => {
+                self.handle_typography(action, window, cx);
+                return;
+            }
             Action::Arrange(arrangement) => {
                 self.handle_arrangement(arrangement, window, cx);
                 return;
@@ -1599,6 +1633,7 @@ mod reference_ui;
 mod selection_toolbar;
 mod shape_preview;
 mod shape_tools;
+mod text_appearance_tools;
 mod text_objects;
 mod workbench;
 pub use workbench::CreativeWorkbench;
@@ -1705,6 +1740,13 @@ impl Render for CreativeCanvas {
                 }),
             )
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                if event.keystroke.key == "escape" && this.typography.is_some() {
+                    cx.stop_propagation();
+                    this.typography = None;
+                    this.canvas.read(cx).focus_handle(cx).focus(window, cx);
+                    cx.notify();
+                    return;
+                }
                 if event.keystroke.key == "escape" && this.show_arrangement {
                     cx.stop_propagation();
                     this.show_arrangement = false;
@@ -1998,7 +2040,7 @@ impl Render for CreativeCanvas {
                     "image" => 524.,
                     "video" | "audio" | "process_image" | "process_video" | "process_audio" => 222.,
                     "shape" | "pencil" => 146.,
-                    "text" => 456.,
+                    "text" => 506.,
                     _ => 184.,
                 }) + export_width
             };

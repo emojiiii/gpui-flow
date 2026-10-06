@@ -259,6 +259,34 @@ impl CreativeCanvas {
                 .shadow_sm()
                 .child(self.image_edit_footer(cx));
         }
+        if self.is_typography_open(&node.id) {
+            let size = self.composer_size(node, cx);
+            let p = anchored_panel(bounds, self.canvas_size, size);
+            return div()
+                .occlude()
+                .absolute()
+                .left(px(p.x))
+                .top(px(p.y))
+                .w(px(size.width))
+                .rounded(px(12.))
+                .bg(rgb(0xffffff))
+                .shadow_sm()
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
+                .child(
+                    div()
+                        .id("typography-panel-scroll")
+                        .max_h(px(size.height))
+                        .overflow_y_scroll()
+                        .overflow_x_scroll()
+                        .child(
+                            div()
+                                .min_w(px(288.))
+                                .p_2()
+                                .child(self.typography_panel(node, editable, cx)),
+                        ),
+                );
+        }
         if self.is_image_adjusting(&node.id) {
             let size = self.composer_size(node, cx);
             let p = anchored_panel(bounds, self.canvas_size, size);

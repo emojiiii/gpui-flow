@@ -396,7 +396,7 @@ pub fn standard_registry() -> CreativeRegistry {
             json!({"text":"让创意从一句话开始"}),
             |v| {
                 text_field(v, "text")?;
-                crate::validate_text_style(v)
+                crate::text_appearance::TextAppearance::from_data(v).map(|_| ())
             },
         ),
         NodeDefinition::new(
