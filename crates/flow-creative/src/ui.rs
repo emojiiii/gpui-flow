@@ -1480,32 +1480,23 @@ impl CreativeCanvas {
                     .graph()
                     .fresh_id(&format!("creative-{}", self.next_id));
                 self.next_id += 1;
-                let node_height = self
+                let node_size = self
                     .registry
                     .definition(&kind)
-                    .map_or(240., |d| d.size.height)
-                    * v.editor.viewport.zoom;
+                    .map_or(WorldSize::new(320., 240.), |d| d.size);
+                let node_height = node_size.height * v.editor.viewport.zoom;
                 let composer_height = if GenerationKind::from_node_kind(&kind).is_some() {
                     170.
                 } else {
                     104.
                 };
                 let at = v.editor.viewport.screen_to_world(WorldPoint::new(
-                    self.canvas_size.width / 2. - 110.,
+                    (self.canvas_size.width - node_size.width * v.editor.viewport.zoom) / 2.,
                     ((self.canvas_size.height - node_height - composer_height - 24.) / 2.).max(80.),
                 ));
                 match self.registry.make_node(&kind, id, at, None) {
                     Ok(node) => {
-                        let id = node.id.clone();
-                        if self.command(CanvasCommand::AddNode(node), cx) {
-                            self.command(
-                                CanvasCommand::SelectNode {
-                                    node: id,
-                                    mode: SelectionMode::Replace,
-                                },
-                                cx,
-                            );
-                        }
+                        self.add_object_in_free_space(node, cx);
                     }
                     Err(e) => self.notice = Some(e.to_string()),
                 }
@@ -1714,6 +1705,7 @@ mod mask_preview;
 mod mask_tasks;
 mod media_view;
 mod model_view;
+mod object_creation;
 mod pencil_preview;
 mod pencil_tools;
 mod processing_panel;

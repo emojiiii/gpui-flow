@@ -91,22 +91,15 @@ impl CreativeCanvas {
         let at = WorldPoint::new(center.x - size.width / 2., center.y - size.height / 2.);
         match self.registry.make_node(
             kind,
-            id.clone(),
+            id,
             at,
             Some(serde_json::json!({"asset":key,"caption":""})),
         ) {
             Ok(mut node) => {
                 node.title = asset.name;
                 node.size = size;
-                if self.command(CanvasCommand::AddNode(node), cx) {
+                if self.add_object_in_free_space(node, cx) {
                     self.asset_picker = None;
-                    self.command(
-                        CanvasCommand::SelectNode {
-                            node: id,
-                            mode: SelectionMode::Replace,
-                        },
-                        cx,
-                    );
                 }
             }
             Err(error) => {
