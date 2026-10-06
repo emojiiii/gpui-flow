@@ -116,6 +116,17 @@ impl CreativeCanvas {
                     !editable || self.project.is_none() || self.saving,
                     cx,
                 ))
+                .child(
+                    self.icon_button(
+                        "image-custom-rotate",
+                        "rotate-cw",
+                        "自定义角度旋转",
+                        Action::ImageRotation(image_rotation_controls::RotationAction::Begin),
+                        !editable || self.project.is_none() || self.saving,
+                        cx,
+                    )
+                    .when(self.is_image_rotating(&node.id), |b| b.bg(rgb(0xeef1f6))),
+                )
                 .child(self.icon_button(
                     "image-mask",
                     "paintbrush",
@@ -236,6 +247,20 @@ impl CreativeCanvas {
                 .bg(rgb(0xffffff))
                 .shadow_sm()
                 .child(self.image_edit_footer(cx));
+        }
+        if self.is_image_rotating(&node.id) {
+            let p = anchored_panel(bounds, self.canvas_size, self.composer_size(node, cx));
+            return div()
+                .occlude()
+                .absolute()
+                .left(px(p.x))
+                .top(px(p.y))
+                .w(px(308.))
+                .p_2()
+                .rounded(px(12.))
+                .bg(rgb(0xffffff))
+                .shadow_sm()
+                .child(self.image_rotation_panel(cx));
         }
         if node.kind == "pencil" {
             let p = anchored_panel(bounds, self.canvas_size, self.composer_size(node, cx));

@@ -46,6 +46,9 @@ pub(super) fn toolbar_avoiding_composer(
 
 impl CreativeCanvas {
     pub(super) fn composer_size(&self, node: &Node, cx: &App) -> WorldSize {
+        if self.is_image_rotating(&node.id) {
+            return WorldSize::new(308., 276.);
+        }
         if node.kind == "pencil" {
             return WorldSize::new(360., 116.);
         }

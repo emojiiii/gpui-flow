@@ -57,7 +57,7 @@ struct CardRenderer {
 }
 impl NodeRenderer for CardRenderer {
     fn transparent_background(&self, node: &Node) -> bool {
-        matches!(node.kind.as_str(), "text" | "shape" | "pencil")
+        matches!(node.kind.as_str(), "text" | "shape" | "pencil" | "image")
     }
     fn object_caption(&self, node: &Node) -> Option<SharedString> {
         if matches!(node.kind.as_str(), "text" | "shape" | "pencil") {
@@ -387,6 +387,7 @@ enum Action {
     ExportAsset(asset_export_ui::ExportAction),
     Layer(layers::LayerAction),
     ImageEdit(image_edit_controls::ImageEditAction),
+    ImageRotation(image_rotation_controls::RotationAction),
     NewCustom,
     CustomDesigner(custom_designer::CustomDesignerAction),
     Custom(custom_tasks::CustomAction),
@@ -492,6 +493,7 @@ pub struct CreativeCanvas {
     editing_text: Arc<Mutex<Option<NodeId>>>,
     editing_image: Arc<Mutex<Option<NodeId>>>,
     image_editing: Option<image_edit_controls::ImageEditing>,
+    image_rotation: Option<image_rotation_controls::RotationEditing>,
     image_edit_focus: FocusHandle,
     image_edit_cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
     shape_views: Arc<shape_preview::ShapeViews>,
@@ -574,6 +576,7 @@ impl CreativeCanvas {
                         .sync(canvas.read(cx).editor.graph(), this.project.as_ref());
                     this.reconcile_mask_edit(cx);
                     this.reconcile_image_edit(cx);
+                    this.reconcile_image_rotation(cx);
                     this.reconcile_asset_export(cx);
                     this.sync_frame_fields(window, cx);
                     this.sync_shape_fields(window, cx);
@@ -757,6 +760,7 @@ impl CreativeCanvas {
             editing_text: Arc::default(),
             editing_image: Arc::default(),
             image_editing: None,
+            image_rotation: None,
             image_edit_focus: cx.focus_handle(),
             image_edit_cancel: None,
             shape_views: Arc::default(),
@@ -916,7 +920,15 @@ impl CreativeCanvas {
             self.sync_pencil_fields(window, cx);
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
         }
+        if !matches!(&action, Action::ImageRotation(_)) && self.image_rotation.is_some() {
+            self.clear_image_rotation();
+            self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+        }
         let command = match action {
+            Action::ImageRotation(action) => {
+                self.handle_image_rotation(action, window, cx);
+                return;
+            }
             Action::Pencil(action) => {
                 self.handle_pencil_action(action, window, cx);
                 return;
@@ -1507,6 +1519,9 @@ mod frame_tools;
 mod image_edit_controls;
 mod image_edit_preview;
 mod image_edit_tasks;
+mod image_rotation_controls;
+mod image_rotation_preview;
+mod image_rotation_tasks;
 mod mask_editor;
 mod mask_preview;
 mod mask_tasks;
@@ -1627,6 +1642,15 @@ impl Render for CreativeCanvas {
                 }),
             )
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                if event.keystroke.key == "escape" && this.image_rotation.is_some() {
+                    cx.stop_propagation();
+                    this.handle_image_rotation(
+                        image_rotation_controls::RotationAction::Cancel,
+                        window,
+                        cx,
+                    );
+                    return;
+                }
                 if event.keystroke.key == "p"
                     && !event.keystroke.modifiers.control
                     && !event.keystroke.modifiers.alt
@@ -1893,7 +1917,7 @@ impl Render for CreativeCanvas {
                 470.
             } else {
                 (match node.kind.as_str() {
-                    "image" => 448.,
+                    "image" => 486.,
                     "video" | "audio" | "process_image" | "process_video" | "process_audio" => 222.,
                     "shape" | "pencil" => 146.,
                     "text" => 456.,
