@@ -162,6 +162,34 @@ impl FlowCanvas {
         self.space_held = false;
         self.dispatch_input(input::CanvasEvent::FocusLost, cx);
     }
+    /// Forward temporary Space-pan from a host-owned focused overlay.
+    ///
+    /// Begin only when the host has no active tool gesture. Ending commits an
+    /// active pan through the normal Space-key release path, preserving its
+    /// viewport position. End before restoring overlay focus: focus loss still
+    /// cancels an unfinished gesture. Persistent pan mode remains active.
+    pub fn set_temporary_pan(&mut self, active: bool, cx: &mut Context<Self>) {
+        if active {
+            self.space_held = true;
+            cx.notify();
+        } else {
+            self.release_temporary_pan(input::Modifiers::default(), cx);
+        }
+    }
+    fn release_temporary_pan(&mut self, modifiers: input::Modifiers, cx: &mut Context<Self>) {
+        self.space_held = false;
+        if self.pan_mode {
+            cx.notify();
+            return;
+        }
+        self.dispatch_input(
+            input::CanvasEvent::KeyUp {
+                key: input::KeyCode::Space,
+                modifiers,
+            },
+            cx,
+        );
+    }
     pub(super) fn scroll(&mut self, event: &ScrollWheelEvent, cx: &mut Context<Self>) {
         let delta = match event.delta {
             ScrollDelta::Pixels(p) => model::Point::new(p.x.into(), p.y.into()),
@@ -181,8 +209,7 @@ impl FlowCanvas {
     }
     pub(super) fn key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
         if matches!(event.keystroke.key.as_str(), "space" | " ") {
-            self.space_held = true;
-            cx.notify();
+            self.set_temporary_pan(true, cx);
             return;
         }
         let key = match event.keystroke.key.as_str() {
@@ -210,18 +237,7 @@ impl FlowCanvas {
     }
     pub(super) fn key_up(&mut self, event: &KeyUpEvent, cx: &mut Context<Self>) {
         if matches!(event.keystroke.key.as_str(), "space" | " ") {
-            self.space_held = false;
-            if self.pan_mode {
-                cx.notify();
-                return;
-            }
-            self.dispatch_input(
-                input::CanvasEvent::KeyUp {
-                    key: input::KeyCode::Space,
-                    modifiers: modifiers(event.keystroke.modifiers),
-                },
-                cx,
-            );
+            self.release_temporary_pan(modifiers(event.keystroke.modifiers), cx);
         }
     }
     pub(super) fn canvas_cursor(&self) -> CursorStyle {

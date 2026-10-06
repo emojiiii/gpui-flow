@@ -545,6 +545,7 @@ pub struct CreativeCanvas {
     text_placing: bool,
     text_placement_drag: Option<text_placement_tools::TextDrag>,
     text_placement_focus: FocusHandle,
+    temporary_hand: Option<tool_navigation::SuspendedTool>,
     editing_image: Arc<Mutex<Option<NodeId>>>,
     image_editing: Option<image_edit_controls::ImageEditing>,
     image_rotation: Option<image_rotation_controls::RotationEditing>,
@@ -787,6 +788,11 @@ impl CreativeCanvas {
                 cx.notify();
             }
         });
+        let temporary_hand_activation = cx.observe_window_activation(window, |this, window, cx| {
+            if !window.is_window_active() && this.temporary_hand.is_some() {
+                this.finish_temporary_hand(false, window, cx);
+            }
+        });
         let asset_thumbnails = cx.new(asset_thumbnails::AssetThumbnails::new);
         let thumbnail_observer = cx.observe(&asset_thumbnails, |_, _, cx| cx.notify());
         cx.on_release(|this: &mut Self, _| {
@@ -878,6 +884,7 @@ impl CreativeCanvas {
             text_placing: false,
             text_placement_drag: None,
             text_placement_focus,
+            temporary_hand: None,
             editing_image: Arc::default(),
             image_editing: None,
             image_rotation: None,
@@ -936,6 +943,7 @@ impl CreativeCanvas {
                 frame_activation,
                 text_placement_blur,
                 text_placement_activation,
+                temporary_hand_activation,
             ],
         })
     }
@@ -1013,6 +1021,9 @@ impl CreativeCanvas {
         result.is_ok()
     }
     fn action(&mut self, action: Action, window: &mut Window, cx: &mut Context<Self>) {
+        if self.temporary_hand.is_some() {
+            self.finish_temporary_hand(false, window, cx);
+        }
         if !matches!(&action, Action::TextPlacement(_)) && self.text_placing {
             self.clear_text_placement();
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
@@ -1715,6 +1726,7 @@ mod shape_tools;
 mod text_appearance_tools;
 mod text_objects;
 mod text_placement_tools;
+mod tool_navigation;
 mod workbench;
 pub use workbench::CreativeWorkbench;
 
@@ -1827,20 +1839,22 @@ impl Render for CreativeCanvas {
                     }
                 }),
             )
-            .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
-                if event.keystroke.key == "t"
-                    && !event.keystroke.modifiers.control
-                    && !event.keystroke.modifiers.alt
-                    && !event.keystroke.modifiers.platform
-                    && !event.keystroke.modifiers.shift
-                    && this.canvas.read(cx).focus_handle(cx).is_focused(window)
+            .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                this.tool_key_down(event, window, cx);
+            }))
+            .capture_key_up(cx.listener(|this, event: &KeyUpEvent, window, cx| {
+                if matches!(event.keystroke.key.as_str(), "space" | " ")
+                    && this.temporary_hand.is_some()
                 {
                     cx.stop_propagation();
-                    this.action(
-                        Action::TextPlacement(text_placement_tools::TextPlacementAction::Toggle),
-                        window,
-                        cx,
-                    );
+                    window.prevent_default();
+                    this.finish_temporary_hand(true, window, cx);
+                }
+            }))
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                if event.keystroke.key == "escape" && this.temporary_hand.is_some() {
+                    this.finish_temporary_hand(false, window, cx);
+                    cx.stop_propagation();
                     return;
                 }
                 if event.keystroke.key == "escape" && this.background_panel.is_some() {
@@ -1848,17 +1862,6 @@ impl Render for CreativeCanvas {
                     this.background_panel = None;
                     this.canvas.read(cx).focus_handle(cx).focus(window, cx);
                     cx.notify();
-                    return;
-                }
-                if (event.keystroke.key == "v" || event.keystroke.key == "h")
-                    && !event.keystroke.modifiers.control
-                    && !event.keystroke.modifiers.alt
-                    && !event.keystroke.modifiers.platform
-                    && !event.keystroke.modifiers.shift
-                    && this.canvas.read(cx).focus_handle(cx).is_focused(window)
-                {
-                    cx.stop_propagation();
-                    this.action(Action::PanTool(event.keystroke.key == "h"), window, cx);
                     return;
                 }
                 if event.keystroke.key == "escape" && this.typography.is_some() {
@@ -1890,20 +1893,6 @@ impl Render for CreativeCanvas {
                         window,
                         cx,
                     );
-                    return;
-                }
-                if event.keystroke.key == "p"
-                    && !event.keystroke.modifiers.control
-                    && !event.keystroke.modifiers.alt
-                    && !event.keystroke.modifiers.platform
-                    && this.canvas.read(cx).focus_handle(cx).is_focused(window)
-                {
-                    cx.stop_propagation();
-                    this.action(
-                        Action::Pencil(pencil_tools::PencilAction::Toggle),
-                        window,
-                        cx,
-                    );
                 }
             }))
             .on_drop(cx.listener(|this, paths: &ExternalPaths, window, cx| {
@@ -1925,7 +1914,7 @@ impl Render for CreativeCanvas {
         if let Some(overlay) = self.pencil_overlay(cx) {
             surface = surface.child(overlay);
         }
-        let pan_mode = self.canvas.read(cx).pan_mode();
+        let pan_mode = self.canvas.read(cx).pan_mode() || self.temporary_hand.is_some();
         let mut rail = div()
             .id("creative-tool-rail")
             .occlude()
@@ -1996,8 +1985,8 @@ impl Render for CreativeCanvas {
             ("mask", "paintbrush", "绘制遮罩"),
             ("edit_image", "image-plus", "图片编辑 · Image/Mask 输入"),
             ("text", "type", "文字 · T"),
-            ("generate_image", "image", "图片生成"),
-            ("generate_video", "video", "视频生成"),
+            ("generate_image", "image", "图片生成 · A"),
+            ("generate_video", "video", "视频生成 · S"),
             ("generate_audio", "music", "音频生成"),
             ("generate_model", "box", "3D 模型生成"),
         ] {
@@ -2048,7 +2037,7 @@ impl Render for CreativeCanvas {
                 self.rail_button(
                     "tool-frame",
                     "grid-2x2",
-                    "画框 · 拖动或单击创建",
+                    "画框 · F · 拖动或单击创建",
                     Action::FrameEdit(frame_tools::FrameAction::Draw),
                     !editable || self.saving || frame_count >= MAX_CARDS,
                     cx,
@@ -2112,6 +2101,7 @@ impl Render for CreativeCanvas {
             && self.shape_tool.is_none()
             && !self.pencil_active
             && !self.text_placing
+            && self.temporary_hand.is_none()
         {
             surface = surface.child(
                 div()
