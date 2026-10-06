@@ -296,6 +296,17 @@ impl CreativeCanvas {
                 !editable,
             ));
         }
+        if expanded.iter().any(|id| {
+            graph
+                .node(id)
+                .is_some_and(|node| matches!(node.kind.as_str(), "shape" | "pencil"))
+        }) {
+            rows.push((
+                "导出矢量 SVG…",
+                Action::ExportAsset(asset_export_ui::ExportAction::Open),
+                self.project.is_none() || self.importing || self.saving,
+            ));
+        }
         if selection.is_empty() {
             rows.extend([
                 ("导入本地素材…", Action::ImportImage, !editable),

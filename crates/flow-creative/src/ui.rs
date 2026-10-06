@@ -2163,7 +2163,9 @@ impl Render for CreativeCanvas {
             if node.kind == "text" && self.is_editing_text(&node.id) {
                 surface = surface.child(self.text_editor(node, r, viewport.zoom, cx));
             }
-            let export_width = if crate::asset_export::has_media_output(node) {
+            let export_width = if crate::asset_export::has_media_output(node)
+                || matches!(node.kind.as_str(), "shape" | "pencil")
+            {
                 38.
             } else {
                 0.

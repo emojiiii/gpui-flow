@@ -191,11 +191,13 @@ impl CreativeCanvas {
                 cx,
             ));
         }
-        if crate::asset_export::has_media_output(node) {
+        if crate::asset_export::has_media_output(node)
+            || matches!(node.kind.as_str(), "shape" | "pencil")
+        {
             bar = bar.child(self.icon_button(
                 "object-export",
                 "download",
-                "导出已完成的素材",
+                "导出素材或矢量对象",
                 Action::ExportAsset(asset_export_ui::ExportAction::Open),
                 self.project.is_none() || self.importing || self.saving,
                 cx,

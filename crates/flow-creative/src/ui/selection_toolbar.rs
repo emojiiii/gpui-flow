@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) const SELECTION_TOOLBAR_WIDTH: f32 = 280.;
+pub(super) const SELECTION_TOOLBAR_WIDTH: f32 = 318.;
 
 /// The object/selection rectangle is already in screen coordinates. Keep the
 /// controls at a readable size and within reach while the canvas moves/zooms.
@@ -144,6 +144,14 @@ impl CreativeCanvas {
                     .child(format!("{count} 个对象")),
             )
             .child(chrome::separator())
+            .child(self.icon_button(
+                "selection-export",
+                "download",
+                "导出所选形状与笔迹为 SVG",
+                Action::ExportAsset(asset_export_ui::ExportAction::Open),
+                self.project.is_none() || self.importing || self.saving,
+                cx,
+            ))
             .child(
                 self.button(
                     "selection-arrange",

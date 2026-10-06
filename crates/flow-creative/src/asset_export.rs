@@ -127,25 +127,7 @@ fn cancelled(cancel: &AtomicBool, started: Instant) -> Result<(), ProjectError> 
     Ok(())
 }
 
-/// Copy original bytes on a worker. Never overwrite a destination, never export
-/// into the current project, and clean up only the new incomplete output owned
-/// by this operation. No transcoding, network access or project mutation occurs.
-pub fn export_asset(
-    project: &LocalProject,
-    key: &str,
-    destination: &Path,
-    cancel: &AtomicBool,
-) -> Result<ExportResult, ProjectError> {
-    let started = Instant::now();
-    cancelled(cancel, started)?;
-    let asset = project
-        .assets()
-        .iter()
-        .find(|a| a.key == key)
-        .ok_or_else(|| ProjectError::Invalid("素材不属于当前项目".into()))?;
-    if asset.byte_len > crate::MAX_MEDIA_BYTES {
-        return Err(ProjectError::TooLarge("单次导出最多128 MiB".into()));
-    }
+fn export_destination(project: &LocalProject, destination: &Path) -> Result<PathBuf, ProjectError> {
     if !destination.is_absolute() {
         return Err(ProjectError::Invalid("请选择导出文件的完整绝对路径".into()));
     }
@@ -165,6 +147,86 @@ pub fn export_asset(
             "请导出到项目目录之外，项目原始素材会保留".into(),
         ));
     }
+    Ok(destination)
+}
+
+/// Write a validated vector snapshot on a worker, without adding an asset to
+/// the project. The caller invalidates the snapshot on selection/data changes.
+/// A cancelled or failed write removes only its newly created incomplete file.
+pub fn export_vector(
+    project: &LocalProject,
+    vector: &crate::vector_export::VectorExport,
+    destination: &Path,
+    cancel: &AtomicBool,
+) -> Result<ExportResult, ProjectError> {
+    let started = Instant::now();
+    cancelled(cancel, started)?;
+    let destination = export_destination(project, destination)?;
+    if !destination
+        .extension()
+        .and_then(|s| s.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("svg"))
+    {
+        return Err(ProjectError::Invalid("矢量导出请使用 .svg 后缀".into()));
+    }
+    let bytes = vector.to_svg().map_err(ProjectError::Invalid)?;
+    cancelled(cancel, started)?;
+    let mut output = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&destination)
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                ProjectError::Invalid("目标文件已存在，未覆盖；请换一个文件名".into())
+            } else {
+                error.into()
+            }
+        })?;
+    let result = (|| {
+        for chunk in bytes.chunks(64 * 1024) {
+            cancelled(cancel, started)?;
+            output.write_all(chunk)?;
+        }
+        output.sync_all()?;
+        cancelled(cancel, started)?;
+        Ok(ExportResult {
+            path: destination.clone(),
+            byte_len: bytes.len() as u64,
+        })
+    })();
+    drop(output);
+    if result.is_err()
+        && let Err(error) = fs::remove_file(&destination)
+        && error.kind() != std::io::ErrorKind::NotFound
+    {
+        return Err(ProjectError::Invalid(format!(
+            "导出未完成，部分文件无法移除，请检查 {}：{error}",
+            destination.display()
+        )));
+    }
+    result
+}
+
+/// Copy original bytes on a worker. Never overwrite a destination, never export
+/// into the current project, and clean up only the new incomplete output owned
+/// by this operation. No transcoding, network access or project mutation occurs.
+pub fn export_asset(
+    project: &LocalProject,
+    key: &str,
+    destination: &Path,
+    cancel: &AtomicBool,
+) -> Result<ExportResult, ProjectError> {
+    let started = Instant::now();
+    cancelled(cancel, started)?;
+    let asset = project
+        .assets()
+        .iter()
+        .find(|a| a.key == key)
+        .ok_or_else(|| ProjectError::Invalid("素材不属于当前项目".into()))?;
+    if asset.byte_len > crate::MAX_MEDIA_BYTES {
+        return Err(ProjectError::TooLarge("单次导出最多128 MiB".into()));
+    }
+    let destination = export_destination(project, destination)?;
     let extension = destination
         .extension()
         .and_then(|s| s.to_str())
@@ -291,6 +353,79 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.root);
         }
+    }
+
+    #[test]
+    fn vector_export_writes_new_svg_preserves_project_and_refuses_unsafe_destinations() {
+        use crate::shapes::{ShapeData, ShapeKind, create_shape_node};
+        let fixture = Fixture::new();
+        let before = fs::read(fixture.project.directory().join("project.json")).unwrap();
+        let mut graph = Graph::new();
+        graph
+            .add_node(
+                create_shape_node(
+                    "shape",
+                    "Square",
+                    Point::new(10., 20.),
+                    gpui_flow_core::Size::new(100., 80.),
+                    ShapeData::new(ShapeKind::Rectangle),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let selection = gpui_flow_core::Selection {
+            nodes: ["shape".into()].into_iter().collect(),
+            ..Default::default()
+        };
+        let vector = crate::vector_export::prepare_vector_export(&graph, &selection).unwrap();
+        let destination = fixture.root.join("vector.svg");
+        let result = export_vector(
+            &fixture.project,
+            &vector,
+            &destination,
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        let bytes = fs::read(&destination).unwrap();
+        assert_eq!(bytes, vector.to_svg().unwrap());
+        assert_eq!(result.byte_len, bytes.len() as u64);
+        assert!(
+            export_vector(
+                &fixture.project,
+                &vector,
+                &destination,
+                &AtomicBool::new(false)
+            )
+            .is_err()
+        );
+        assert_eq!(fs::read(&destination).unwrap(), bytes);
+        for invalid in [
+            fixture.project.directory().join("blocked.svg"),
+            fixture.root.join("wrong.png"),
+            PathBuf::from("relative.svg"),
+        ] {
+            assert!(
+                export_vector(&fixture.project, &vector, &invalid, &AtomicBool::new(false))
+                    .is_err()
+            );
+            assert!(!invalid.exists());
+        }
+        let cancelled = fixture.root.join("cancelled.svg");
+        assert!(
+            export_vector(
+                &fixture.project,
+                &vector,
+                &cancelled,
+                &AtomicBool::new(true)
+            )
+            .is_err()
+        );
+        assert!(!cancelled.exists());
+        assert_eq!(
+            fs::read(fixture.project.directory().join("project.json")).unwrap(),
+            before
+        );
+        assert_eq!(fixture.project.assets().len(), 1);
     }
 
     #[test]

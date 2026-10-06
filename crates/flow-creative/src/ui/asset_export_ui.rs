@@ -1,5 +1,7 @@
 use super::*;
-use crate::asset_export::{ExportAsset, export_asset, export_assets};
+use crate::asset_export::{ExportAsset, export_asset, export_assets, export_vector};
+use crate::vector_export::{VectorExport, prepare_vector_export};
+use gpui_flow_core::Selection;
 use gpui_kit::component::input::{Input, InputState};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -14,13 +16,81 @@ pub(super) enum ExportAction {
 }
 
 pub(super) struct AssetExportDialog {
-    node: NodeId,
+    selection: Selection,
     project: String,
-    outputs: Vec<ExportAsset>,
+    outputs: Vec<ExportChoice>,
     selected: usize,
     path: Entity<InputState>,
     choosing: bool,
     error: Option<String>,
+}
+
+#[derive(Clone, PartialEq)]
+enum ExportChoice {
+    Media(ExportAsset),
+    Vector(VectorExport),
+}
+impl ExportChoice {
+    fn name(&self) -> &str {
+        match self {
+            Self::Media(asset) => &asset.suggested_name,
+            Self::Vector(vector) => vector.suggested_name(),
+        }
+    }
+    fn label(&self) -> String {
+        match self {
+            Self::Media(asset) => asset.label.clone(),
+            Self::Vector(vector) => format!("{} 个矢量对象", vector.object_count()),
+        }
+    }
+    fn details(&self) -> String {
+        match self {
+            Self::Media(output) => {
+                let asset = &output.asset;
+                let format = Path::new(&asset.key)
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("media")
+                    .to_ascii_uppercase();
+                let dimensions = if asset.width > 0 && asset.height > 0 {
+                    format!(" · {} × {}", asset.width, asset.height)
+                } else {
+                    String::new()
+                };
+                format!(
+                    "{format}{dimensions} · {:.1} MiB",
+                    asset.byte_len as f64 / 1_048_576.
+                )
+            }
+            Self::Vector(vector) => {
+                let size = vector.bounds().size;
+                format!("SVG · {:.0} × {:.0} · 透明背景", size.width, size.height)
+            }
+        }
+    }
+    fn is_mask(&self) -> bool {
+        matches!(self, Self::Media(output) if output.asset.media_type == MASK_MEDIA_TYPE)
+    }
+}
+
+fn export_choices(
+    graph: &gpui_flow_core::Graph,
+    selection: &Selection,
+    assets: &[ProjectAsset],
+) -> Result<Vec<ExportChoice>, String> {
+    if selection.nodes.len() == 1
+        && selection.groups.is_empty()
+        && selection.edges.is_empty()
+        && let Some(id) = selection.nodes.iter().next()
+        && graph
+            .node(id)
+            .is_some_and(crate::asset_export::has_media_output)
+    {
+        return export_assets(graph, id, assets)
+            .map(|assets| assets.into_iter().map(ExportChoice::Media).collect())
+            .map_err(|error| error.to_string());
+    }
+    prepare_vector_export(graph, selection).map(|vector| vec![ExportChoice::Vector(vector)])
 }
 
 fn default_directory() -> PathBuf {
@@ -51,10 +121,10 @@ impl CreativeCanvas {
                 return false;
             };
             project.metadata().id == dialog.project
-                && self.selected(cx).is_some_and(|node| node.id == dialog.node)
-                && export_assets(
+                && self.canvas.read(cx).editor.selection == dialog.selection
+                && export_choices(
                     self.canvas.read(cx).editor.graph(),
-                    &dialog.node,
+                    &dialog.selection,
                     project.assets(),
                 )
                 .is_ok_and(|outputs| {
@@ -84,17 +154,15 @@ impl CreativeCanvas {
             return;
         }
         if matches!(action, ExportAction::Open) {
-            let Some(node) = self.selected(cx) else {
-                return;
-            };
+            let selection = self.canvas.read(cx).editor.selection.clone();
             let Some(project) = &self.project else { return };
-            match export_assets(
+            match export_choices(
                 self.canvas.read(cx).editor.graph(),
-                &node.id,
+                &selection,
                 project.assets(),
             ) {
                 Ok(outputs) => {
-                    let path = default_directory().join(&outputs[0].suggested_name);
+                    let path = default_directory().join(outputs[0].name());
                     let project = project.metadata().id.clone();
                     self.clear_asset_export();
                     let input = cx.new(|cx| {
@@ -103,7 +171,7 @@ impl CreativeCanvas {
                         state
                     });
                     self.export_dialog = Some(AssetExportDialog {
-                        node: node.id,
+                        selection,
                         project,
                         outputs,
                         selected: 0,
@@ -135,7 +203,7 @@ impl CreativeCanvas {
                     .filter(|p| p.is_absolute())
                     .map(Path::to_path_buf)
                     .unwrap_or_else(default_directory)
-                    .join(&output.suggested_name);
+                    .join(output.name());
                 dialog.selected = index;
                 dialog.error = None;
                 dialog.path.update(cx, |state, cx| {
@@ -152,10 +220,8 @@ impl CreativeCanvas {
                 .filter(|p| p.is_absolute())
                 .map(Path::to_path_buf)
                 .unwrap_or_else(default_directory);
-            let receiver = cx.prompt_for_new_path(
-                &directory,
-                Some(&dialog.outputs[dialog.selected].suggested_name),
-            );
+            let receiver =
+                cx.prompt_for_new_path(&directory, Some(dialog.outputs[dialog.selected].name()));
             dialog.choosing = true;
             let serial = self.export_serial;
             cx.spawn_in(window, async move |this, cx| {
@@ -196,7 +262,7 @@ impl CreativeCanvas {
                 cx.notify();
                 return;
             }
-            let asset = dialog.outputs[dialog.selected].asset.clone();
+            let choice = dialog.outputs[dialog.selected].clone();
             let Some(project) = self.project.clone() else {
                 return;
             };
@@ -208,8 +274,15 @@ impl CreativeCanvas {
                 let result = cx
                     .background_executor()
                     .spawn(async move {
-                        export_asset(&project, &asset.key, &destination, &cancel)
-                            .map_err(|e| e.to_string())
+                        match choice {
+                            ExportChoice::Media(output) => {
+                                export_asset(&project, &output.asset.key, &destination, &cancel)
+                            }
+                            ExportChoice::Vector(vector) => {
+                                export_vector(&project, &vector, &destination, &cancel)
+                            }
+                        }
+                        .map_err(|error| error.to_string())
                     })
                     .await;
                 let _ = this.update(cx, |this, cx| {
@@ -244,16 +317,6 @@ impl CreativeCanvas {
         let dialog = self.export_dialog.as_ref().expect("visible export dialog");
         let busy = self.importing || self.saving || dialog.choosing;
         let selected = &dialog.outputs[dialog.selected];
-        let format = Path::new(&selected.asset.key)
-            .extension()
-            .and_then(|s| s.to_str())
-            .unwrap_or("media")
-            .to_ascii_uppercase();
-        let dimensions = if selected.asset.width > 0 && selected.asset.height > 0 {
-            format!(" · {} × {}", selected.asset.width, selected.asset.height)
-        } else {
-            String::new()
-        };
         let mut outputs = div()
             .id("export-outputs")
             .max_h(px(150.))
@@ -265,7 +328,7 @@ impl CreativeCanvas {
             outputs = outputs.child(
                 self.button(
                     SharedString::from(format!("export-output-{index}")),
-                    format!("{} · {}", output.label, output.suggested_name),
+                    format!("{} · {}", output.label(), output.name()),
                     Action::ExportAsset(ExportAction::Choose(index)),
                     busy,
                     cx,
@@ -306,11 +369,11 @@ impl CreativeCanvas {
                     )),
             )
             .child(outputs)
-            .child(label(format!(
-                "{format}{dimensions} · {:.1} MiB",
-                selected.asset.byte_len as f64 / 1_048_576.
-            )))
-            .when(selected.asset.media_type == MASK_MEDIA_TYPE, |v| {
+            .child(label(selected.details()))
+            .when(matches!(selected, ExportChoice::Vector(_)), |v| {
+                v.child(label("仅形状与笔迹 · 保留图层、线宽和透明度"))
+            })
+            .when(selected.is_mask(), |v| {
                 v.child(label("灰度Mask：0 保留，255 编辑；未转换供应商语义"))
             })
             .child(self.button(
@@ -359,5 +422,63 @@ impl CreativeCanvas {
                     this.handle_asset_export(ExportAction::Cancel, window, cx);
                 }
             }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ::core::prelude::v1::test;
+    #[test]
+    fn media_and_vector_choices_use_distinct_outputs_and_reject_mixed_selection() {
+        let asset = ProjectAsset {
+            key: "assets/a-123.png".into(),
+            name: "Image".into(),
+            media_type: "image/png".into(),
+            byte_len: 64,
+            width: 20,
+            height: 10,
+        };
+        let mut graph = gpui_flow_core::Graph::new();
+        graph
+            .add_node(
+                standard_registry()
+                    .make_node(
+                        "image",
+                        "image",
+                        WorldPoint::ZERO,
+                        Some(serde_json::json!({"asset":asset.key,"caption":""})),
+                    )
+                    .unwrap(),
+            )
+            .unwrap();
+        graph
+            .add_node(
+                crate::shapes::create_shape_node(
+                    "shape",
+                    "Shape",
+                    WorldPoint::ZERO,
+                    WorldSize::new(100., 80.),
+                    crate::shapes::ShapeData::new(crate::shapes::ShapeKind::Rectangle),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let mut selection = Selection {
+            nodes: ["image".into()].into_iter().collect(),
+            ..Default::default()
+        };
+        let assets = [asset];
+        assert!(matches!(
+            &export_choices(&graph, &selection, &assets).unwrap()[0],
+            ExportChoice::Media(_)
+        ));
+        selection.nodes = ["shape".into()].into_iter().collect();
+        assert!(matches!(
+            &export_choices(&graph, &selection, &assets).unwrap()[0],
+            ExportChoice::Vector(_)
+        ));
+        selection.nodes.insert("image".into());
+        assert!(export_choices(&graph, &selection, &assets).is_err());
     }
 }

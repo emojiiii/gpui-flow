@@ -41,3 +41,4 @@ pub mod image_rotation;
 pub mod pencil;
 pub mod shapes;
 pub mod text_placement;
+pub mod vector_export;
