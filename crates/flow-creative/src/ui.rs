@@ -363,6 +363,7 @@ fn theme() -> FlowTheme {
 }
 #[derive(Clone)]
 enum Action {
+    Layer(layers::LayerAction),
     ImageEdit(image_edit_controls::ImageEditAction),
     NewCustom,
     CustomDesigner(custom_designer::CustomDesignerAction),
@@ -391,7 +392,6 @@ enum Action {
     UseReference,
     OriginalRatio,
     Layers,
-    SelectObject(NodeId),
     ReplaceImage,
     ImportImagePath,
     CloseImportPath,
@@ -518,7 +518,7 @@ impl CreativeCanvas {
             view.options.show_controls = false;
             view.options.show_minimap = false;
             view.show_grid = false;
-            view.set_selection_on_top(true);
+            view.set_selection_on_top(false);
             view.set_port_labels(false);
             view.install_plugin(CreativeGuard(guard), cx)
                 .expect("unique guard id");
@@ -716,6 +716,11 @@ impl CreativeCanvas {
     }
     fn sync_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let node = self.selected(cx);
+        if node.as_ref().is_some_and(|n| {
+            crate::layer_guard::node_is_locked(self.canvas.read(cx).editor.graph(), &n.id)
+        }) {
+            self.clear_text_edit();
+        }
         let source = node.as_ref().map(form_identity);
         if source == self.form_source {
             return;
@@ -778,6 +783,10 @@ impl CreativeCanvas {
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
         }
         let command = match action {
+            Action::Layer(action) => {
+                self.layer_action(action, cx);
+                return;
+            }
             Action::ImageEdit(action) => {
                 self.handle_image_edit(action, window, cx);
                 return;
@@ -927,10 +936,6 @@ impl CreativeCanvas {
                 cx.notify();
                 return;
             }
-            Action::SelectObject(node) => CanvasCommand::SelectNode {
-                node,
-                mode: SelectionMode::Replace,
-            },
             Action::UseReference => {
                 self.use_image_reference(cx);
                 return;
@@ -1310,7 +1315,7 @@ fn action_flushes_form(action: &Action) -> bool {
     !matches!(action, Action::Apply | Action::Undo | Action::Redo)
 }
 fn form_data_update(node: &Node, source: &(NodeId, String, Value), text: &str) -> Option<Value> {
-    if source != &form_identity(node) {
+    if node.locked || source != &form_identity(node) {
         return None;
     }
     let field = primary_field(node)?;
@@ -1567,9 +1572,6 @@ impl Render for CreativeCanvas {
             ));
             surface = surface.child(menu);
         }
-        if self.show_layers {
-            surface = surface.child(self.layers_panel(cx));
-        }
         if count == 0 {
             surface = surface.child(
                 div()
@@ -1599,6 +1601,11 @@ impl Render for CreativeCanvas {
             );
         }
         if let Some(node) = &node {
+            let editable = editable
+                && !crate::layer_guard::node_is_locked(
+                    self.canvas.read(cx).editor.graph(),
+                    &node.id,
+                );
             let r = viewport.world_rect_to_screen(node.bounds());
             if let Some(overlay) = self.image_edit_overlay(node, r, cx) {
                 surface = surface.child(overlay);
@@ -1726,10 +1733,23 @@ impl Render for CreativeCanvas {
             let r = viewport.world_rect_to_screen(bounds);
             let toolbar_at = selection_toolbar::toolbar_position(r, self.canvas_size, 230.);
             surface = surface.child(
-                self.selection_toolbar(selection.nodes.len(), editable, cx)
-                    .absolute()
-                    .left(px(toolbar_at.x))
-                    .top(px(toolbar_at.y)),
+                self.selection_toolbar(
+                    selection.nodes.len(),
+                    editable
+                        && selection
+                            .expanded_nodes(self.canvas.read(cx).editor.graph())
+                            .iter()
+                            .all(|id| {
+                                !crate::layer_guard::node_is_locked(
+                                    self.canvas.read(cx).editor.graph(),
+                                    id,
+                                )
+                            }),
+                    cx,
+                )
+                .absolute()
+                .left(px(toolbar_at.x))
+                .top(px(toolbar_at.y)),
             );
         }
         if self.show_import_path {
@@ -2022,6 +2042,9 @@ impl Render for CreativeCanvas {
                     .child(notice.clone()),
             );
         }
+        if self.show_layers {
+            surface = surface.child(self.layers_panel(cx));
+        }
         if self.asset_picker.is_some() {
             surface = surface.child(self.asset_panel(cx));
         }
@@ -2143,3 +2166,5 @@ mod tests {
         }
     }
 }
+
+mod layers;

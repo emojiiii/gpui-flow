@@ -27,3 +27,5 @@ pub mod custom_nodes;
 pub mod image_edit;
 pub mod processing;
 pub mod processing_node;
+
+mod layer_guard;

@@ -18,6 +18,7 @@ impl CanvasPlugin for CreativeGuard {
         cx: &PluginContext<'_>,
         _: &mut Vec<CanvasEffect>,
     ) -> Result<(), String> {
+        crate::layer_guard::filter_layer_command(command, cx)?;
         let graph = cx.editor.graph();
         let registry = crate::custom_nodes::registry_with_custom_definitions(&self.0, graph)
             .map_err(|e| e.to_string())?;

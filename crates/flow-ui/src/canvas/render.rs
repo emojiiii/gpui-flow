@@ -215,7 +215,11 @@ impl Render for FlowCanvas {
             );
         }
         let visible = viewport.visible_world_rect(self.extent).expanded(100.);
-        for node in self.editor.graph().nodes.values() {
+        let ordered_nodes: Vec<_> = model::ordered_node_ids(self.editor.graph())
+            .into_iter()
+            .filter_map(|id| self.editor.graph().node(&id))
+            .collect();
+        for node in &ordered_nodes {
             if visible.intersects(node.bounds())
                 && (!self.selection_on_top || !self.editor.selection.nodes.contains(&node.id))
             {
@@ -223,11 +227,8 @@ impl Render for FlowCanvas {
             }
         }
         if self.selection_on_top {
-            for node in self
-                .editor
-                .graph()
-                .nodes
-                .values()
+            for node in ordered_nodes
+                .into_iter()
                 .filter(|n| self.editor.selection.nodes.contains(&n.id))
             {
                 if visible.intersects(node.bounds()) {

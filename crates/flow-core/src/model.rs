@@ -391,7 +391,20 @@ impl Graph {
         if !issues.is_empty() {
             return Err(GraphError::Validation(issues));
         }
-        self.nodes.insert(node.id.clone(), node);
+        let has_order = self
+            .data
+            .get("flow_presentation")
+            .and_then(|v| v.get("node_order"))
+            .and_then(Value::as_array)
+            .is_some_and(|ids| ids.iter().all(Value::is_string));
+        let id = node.id.clone();
+        self.nodes.insert(id.clone(), node);
+        if has_order {
+            // Opted-in presentation metadata stays in insertion order. Legacy
+            // application metadata remains untouched, including scalar data.
+            crate::append_nodes_to_front(self, [id])
+                .expect("the order metadata was validated above");
+        }
         Ok(())
     }
     /// Removes the node, incident edges, and its membership in all groups.

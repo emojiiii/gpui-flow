@@ -271,7 +271,10 @@ fn hit_at_editor_ordered(
     selection_on_top: bool,
 ) -> input::HitTarget {
     let viewport = editor.viewport;
-    let mut nodes: Vec<_> = editor.graph().nodes.values().collect();
+    let mut nodes: Vec<_> = model::ordered_node_ids(editor.graph())
+        .into_iter()
+        .filter_map(|id| editor.graph().node(&id))
+        .collect();
     if selection_on_top {
         nodes.sort_by_key(|node| editor.selection.nodes.contains(&node.id));
     }
@@ -350,6 +353,39 @@ mod tests {
             input::HitTarget::Node("a".into())
         );
     }
+    #[test]
+    fn explicit_stack_order_drives_overlap_hits_even_after_selection_and_history() {
+        let mut graph = Graph::new();
+        for id in ["a", "b", "c"] {
+            graph
+                .add_node(Node::new(id, id, model::Point::ZERO))
+                .unwrap();
+        }
+        let mut editor = Editor::new(graph).unwrap();
+        editor.selection.select_node("c", false);
+        let targets = editor.selection.nodes.clone();
+        editor
+            .transaction("Send back", |graph| {
+                model::reorder_nodes(graph, &targets, model::NodeOrderAction::SendToBack)?;
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(
+            hit_at_editor(&editor, model::Point::new(30., 40.), false),
+            input::HitTarget::Node("b".into())
+        );
+        assert!(editor.undo());
+        assert_eq!(
+            hit_at_editor(&editor, model::Point::new(30., 40.), false),
+            input::HitTarget::Node("c".into())
+        );
+        assert!(editor.redo());
+        assert_eq!(
+            hit_at_editor(&editor, model::Point::new(30., 40.), false),
+            input::HitTarget::Node("b".into())
+        );
+    }
+
     #[test]
     fn body_hit_never_becomes_background_pan_and_exact_ports_do_not_magnet_snap() {
         let editor = editor();

@@ -116,11 +116,10 @@ impl CreativeCanvas {
             let canvas = self.canvas.read(cx);
             canvas.editor.selection.nodes.len() != 1
                 || !canvas.editor.selection.nodes.contains(&edit.node)
-                || canvas
-                    .editor
-                    .graph()
-                    .node(&edit.node)
-                    .is_none_or(|n| n.data != edit.original_data || n.locked)
+                || canvas.editor.graph().node(&edit.node).is_none_or(|n| {
+                    n.data != edit.original_data
+                        || crate::layer_guard::node_is_locked(canvas.editor.graph(), &n.id)
+                })
         }) {
             self.clear_image_edit();
         }

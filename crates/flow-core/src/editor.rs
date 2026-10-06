@@ -470,8 +470,9 @@ impl Editor {
     pub fn copy_selection(&self) -> Clipboard {
         let nodes = self.selection.expanded_nodes(&self.graph);
         Clipboard {
-            nodes: nodes
+            nodes: ordered_node_ids(&self.graph)
                 .iter()
+                .filter(|id| nodes.contains(*id))
                 .filter_map(|id| self.graph.nodes.get(id).cloned())
                 .collect(),
             edges: self
@@ -507,6 +508,7 @@ impl Editor {
         let mut graph = self.graph.clone();
         let mut mapping = BTreeMap::new();
         let mut selection = Selection::default();
+        let mut inserted = Vec::with_capacity(clipboard.nodes.len());
         for original in &clipboard.nodes {
             let mut node = original.clone();
             let id = NodeId::from(graph.fresh_id("node"));
@@ -514,7 +516,24 @@ impl Editor {
             node.id = id.clone();
             node.position += offset;
             graph.add_node(node)?;
+            inserted.push(id.clone());
             selection.nodes.insert(id);
+        }
+        // Preserve the clipboard's visual order even when fresh IDs cross a
+        // lexical boundary (node-9, node-10). Legacy scalar host metadata keeps
+        // its previous behavior rather than being replaced implicitly.
+        let needs_order = inserted.windows(2).any(|ids| ids[0] > ids[1])
+            || clipboard
+                .nodes
+                .windows(2)
+                .any(|nodes| nodes[0].id > nodes[1].id)
+            || graph
+                .data
+                .get("flow_presentation")
+                .and_then(|v| v.get("node_order"))
+                .is_some();
+        if needs_order && (graph.data.is_null() || graph.data.is_object()) {
+            append_nodes_to_front(&mut graph, inserted)?;
         }
         for original in &clipboard.edges {
             let mut edge = original.clone();

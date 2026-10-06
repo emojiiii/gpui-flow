@@ -56,6 +56,12 @@ impl CreativeCanvas {
                 .editor
                 .graph()
                 .node(&edit.node)
+                .filter(|node| {
+                    !crate::layer_guard::node_is_locked(
+                        self.canvas.read(cx).editor.graph(),
+                        &node.id,
+                    )
+                })
                 .and_then(|node| MaskNodeData::from_value(&node.data).ok())
                 .is_some_and(|data| data.state.source_matches(&edit.source))
                 && self
