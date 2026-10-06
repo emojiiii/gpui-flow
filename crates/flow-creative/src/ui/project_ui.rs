@@ -344,6 +344,23 @@ impl CreativeCanvas {
         .detach();
     }
     pub(super) fn import_image(&mut self, replace_selection: bool, cx: &mut Context<Self>) {
+        self.import_image_at(replace_selection, None, cx);
+    }
+    pub(super) fn import_image_at(
+        &mut self,
+        replace_selection: bool,
+        at: Option<WorldPoint>,
+        cx: &mut Context<Self>,
+    ) {
+        if self.saving || self.importing || !self.canvas.read(cx).is_editable() {
+            return;
+        }
+        if at.is_some_and(|at| !at.is_finite()) {
+            self.notice = Some("导入位置无效，请重新选择画布位置".into());
+            cx.notify();
+            return;
+        }
+        self.import_at = at;
         self.import_replacement = self
             .selected(cx)
             .filter(|n| replace_selection && n.kind == "image")
@@ -366,7 +383,7 @@ impl CreativeCanvas {
         });
         self.import_image_request(
             self.import_replacement.clone(),
-            None,
+            self.import_at,
             async move {
                 match dialog.await {
                     Ok(Ok(paths)) => Ok(paths),
@@ -387,7 +404,7 @@ impl CreativeCanvas {
         }
         self.import_image_request(
             self.import_replacement.clone(),
-            None,
+            self.import_at,
             std::future::ready(Ok(Some(vec![path]))),
             cx,
         );
@@ -398,12 +415,17 @@ impl CreativeCanvas {
         at: WorldPoint,
         cx: &mut Context<Self>,
     ) {
+        if self.saving || self.importing || !self.canvas.read(cx).is_editable() {
+            return;
+        }
         if paths.len() > MAX_CARDS.saturating_sub(self.canvas.read(cx).editor.graph().nodes.len()) {
             self.notice = Some("画布对象数量已达上限，请减少本次导入数量".into());
             cx.notify();
             return;
         }
         self.import_replacement = None;
+        self.import_model = false;
+        self.import_at = Some(at);
         self.import_image_request(None, Some(at), std::future::ready(Ok(Some(paths))), cx);
     }
     pub(super) fn import_image_request(
@@ -415,6 +437,11 @@ impl CreativeCanvas {
     ) {
         self.apply_form_edit(cx);
         if self.saving || self.importing || !self.canvas.read(cx).is_editable() {
+            return;
+        }
+        if drop_at.is_some_and(|at| !at.is_finite()) {
+            self.notice = Some("导入位置无效，请重新选择画布位置".into());
+            cx.notify();
             return;
         }
         let Some(mut project) = self.project.clone() else {
@@ -504,90 +531,68 @@ impl CreativeCanvas {
                         this.refresh_assets(cx);
                         let replace = if assets.len() == 1 { replacement } else { None };
                         let imported_count = assets.len();
+                        let mut placed_count = 0;
+                        let mut placement_errors = vec![];
                         for (index, asset) in assets.into_iter().enumerate() {
-                            let is_model = asset.media_type == "model/gltf-binary";
-                            let kind = if is_model {
-                                "model"
-                            } else if asset.media_type.starts_with("video/") {
-                                "video"
-                            } else if asset.media_type.starts_with("audio/") {
-                                "audio"
-                            } else {
-                                "image"
-                            };
-                            if let Some(id) = replace.as_ref() {
-                                if let Some(node) =
-                                    this.canvas.read(cx).editor.graph().node(id).cloned()
-                                {
+                            let asset_name = asset.name.clone();
+                            this.notice = None;
+                            let placed = if let Some(id) = replace.as_ref() {
+                                if let Some(node) = this.canvas.read(cx).editor.graph().node(id).cloned() {
                                     let mut data = node.data;
                                     data["asset"] = Value::String(asset.key);
                                     data["caption"] = Value::String(asset.name);
-                                    this.command(
-                                        CanvasCommand::SetNodeData {
-                                            node: id.clone(),
-                                            data,
-                                        },
-                                        cx,
-                                    );
+                                    this.command(CanvasCommand::SetNodeData { node: id.clone(), data }, cx)
+                                } else {
+                                    this.notice = Some("要替换的节点已不存在".into());
+                                    false
                                 }
                             } else {
                                 let view = this.canvas.read(cx);
-                                let id = view
-                                    .editor
-                                    .graph()
-                                    .fresh_id(&format!("{}-{}", kind, this.next_id));
+                                let id = view.editor.graph().fresh_id(&format!("import-{}", this.next_id));
                                 this.next_id += 1;
                                 let position = drop_at
-                                    .map(|at| {
-                                        at + WorldPoint::new(index as f32 * 28., index as f32 * 28.)
-                                    })
-                                    .unwrap_or_else(|| {
-                                        view.editor.viewport.screen_to_world(WorldPoint::new(
-                                            this.canvas_size.width / 2. - 180. + index as f32 * 28.,
-                                            if is_model {
-                                                ((this.canvas_size.height
-                                                    - 315. * view.editor.viewport.zoom
-                                                    - 250.)
-                                                    / 2.)
-                                                    .max(96.)
-                                                    + index as f32 * 28.
-                                            } else {
-                                                this.canvas_size.height / 2. - 160.
-                                                    + index as f32 * 28.
-                                            },
-                                        ))
-                                    });
-                                if let Ok(mut node) = this.registry.make_node(
-                                    kind,
-                                    id.clone(),
-                                    position,
-                                    Some(serde_json::json!({"asset":asset.key,"caption":""})),
-                                ) {
-                                    node.title = asset.name;
-                                    node.size = if is_model {
-                                        WorldSize::new(420., 315.)
-                                    } else if kind == "audio" {
-                                        WorldSize::new(400., 144.)
-                                    } else {
-                                        imported_image_size(asset.width, asset.height)
-                                    };
-                                    if this.command(CanvasCommand::AddNode(node), cx) {
-                                        this.command(
-                                            CanvasCommand::SelectNode {
-                                                node: id.into(),
-                                                mode: SelectionMode::Replace,
-                                            },
-                                            cx,
-                                        );
+                                    .map(|at| at + WorldPoint::new(index as f32 * 28., index as f32 * 28.))
+                                    .unwrap_or_else(|| view.editor.viewport.screen_to_world(WorldPoint::new(
+                                        this.canvas_size.width / 2. - 180.,
+                                        (this.canvas_size.height / 2. - 160.).max(116.),
+                                    )));
+                                match imported_asset_node(&this.registry, &asset, id.into(), position) {
+                                    Ok(node) => {
+                                        let id = node.id.clone();
+                                        let added = if drop_at.is_some() {
+                                            this.add_drawn_object(node, cx)
+                                        } else {
+                                            this.add_object_in_free_space(node, cx)
+                                        };
+                                        if added {
+                                            this.command(CanvasCommand::SelectNode {
+                                                node: id, mode: SelectionMode::Replace,
+                                            }, cx);
+                                        }
+                                        added
                                     }
+                                    Err(error) => { this.notice = Some(error); false }
                                 }
+                            };
+                            if placed {
+                                placed_count += 1;
+                            } else {
+                                placement_errors.push(format!("{}：{}", asset_name,
+                                    this.notice.take().unwrap_or_else(|| "无法放置到画布".into())));
                             }
                         }
-                        this.notice = Some(if errors.is_empty() {
-                            format!("已导入 {imported_count} 个素材，已复制到本地项目")
+                        let mut notice = format!("已复制 {imported_count} 个素材到本地项目，已放入/更新画布 {placed_count} 个");
+                        if !placement_errors.is_empty() {
+                            notice.push_str("；未放置的素材保留在“本项目素材”中：");
+                            notice.push_str(&placement_errors.join("；"));
+                        }
+                        if !errors.is_empty() {
+                            notice.push('；');
+                            notice.push_str(&errors.join("；"));
                         } else {
-                            format!("已导入 {imported_count} 个；{}", errors.join("；"))
-                        });
+                            this.import_at = None;
+                        }
+                        this.notice = Some(notice);
                         this.show_import_path = !errors.is_empty();
                         this.queue_autosave(cx);
                     }
@@ -600,6 +605,7 @@ impl CreativeCanvas {
                     }
                     None => {
                         this.import_replacement = None;
+                        this.import_at = None;
                         this.show_import_path = false;
                     }
                 }
@@ -650,6 +656,38 @@ impl CreativeCanvas {
         );
     }
 }
+/// A copied project asset becomes a typed visible object. No external path is
+/// stored on the node, and explicit placement is validated by the Frame helper.
+fn imported_asset_node(
+    registry: &CreativeRegistry,
+    asset: &ProjectAsset,
+    id: NodeId,
+    position: WorldPoint,
+) -> Result<Node, String> {
+    let (kind, size) = match asset.media_type.as_str() {
+        "model/gltf-binary" => ("model", WorldSize::new(420., 315.)),
+        media if media.starts_with("audio/") => ("audio", WorldSize::new(400., 144.)),
+        media if media.starts_with("video/") => {
+            ("video", imported_image_size(asset.width, asset.height))
+        }
+        media if media.starts_with("image/") => {
+            ("image", imported_image_size(asset.width, asset.height))
+        }
+        _ => return Err("该素材类型不能直接作为媒体对象导入".into()),
+    };
+    let mut node = registry
+        .make_node(
+            kind,
+            id,
+            position,
+            Some(serde_json::json!({"asset":asset.key,"caption":""})),
+        )
+        .map_err(|error| error.to_string())?;
+    node.title = asset.name.clone();
+    node.size = size;
+    Ok(node)
+}
+
 pub(super) fn imported_image_size(width: u32, height: u32) -> WorldSize {
     let width = width.max(1) as f32;
     let height = height.max(1) as f32;
@@ -663,6 +701,73 @@ pub(super) fn imported_image_size(width: u32, height: u32) -> WorldSize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[::core::prelude::v1::test]
+    fn copied_media_types_keep_explicit_position_asset_identity_and_atomic_frame_membership() {
+        use gpui_flow_core::{Editor, Graph, Group, Rect};
+        use gpui_flow_interaction::PluginHost;
+        let registry = Arc::new(standard_registry());
+        let mut graph = Graph::new();
+        graph
+            .add_group(Group::new(
+                "frame",
+                "Frame",
+                Rect::new(WorldPoint::ZERO, WorldSize::new(800., 700.)),
+            ))
+            .unwrap();
+        for (media_type, kind, expected_size) in [
+            ("image/png", "image", WorldSize::new(420., 262.5)),
+            ("video/mp4", "video", WorldSize::new(420., 262.5)),
+            ("audio/mp4", "audio", WorldSize::new(400., 144.)),
+            ("model/gltf-binary", "model", WorldSize::new(420., 315.)),
+        ] {
+            let asset = ProjectAsset {
+                key: "assets/copied-file.png".into(),
+                name: "Asset".into(),
+                media_type: media_type.into(),
+                width: 640,
+                height: 400,
+                byte_len: 123,
+            };
+            let at = WorldPoint::new(100., 120.);
+            let node = imported_asset_node(&registry, &asset, "media".into(), at).unwrap();
+            assert_eq!(node.kind, kind);
+            assert_eq!(node.position, at);
+            assert_eq!(node.size, expected_size);
+            assert_eq!(node.data["asset"], asset.key);
+            let (placed, owner) = crate::object_frame::placed_object_graph(&graph, node).unwrap();
+            assert_eq!(owner, Some("frame".into()));
+            let mut editor = Editor::new(graph.clone()).unwrap();
+            let mut host = PluginHost::with_defaults();
+            host.install(CreativeGuard(registry.clone())).unwrap();
+            host.execute(&mut editor, CanvasCommand::ImportGraph(placed.clone()))
+                .unwrap();
+            host.execute(&mut editor, CanvasCommand::Undo).unwrap();
+            assert_eq!(editor.graph(), &graph);
+            host.execute(&mut editor, CanvasCommand::Redo).unwrap();
+            assert_eq!(editor.graph(), &placed);
+        }
+    }
+    #[::core::prelude::v1::test]
+    fn mask_and_unknown_assets_are_not_reinterpreted_as_images() {
+        let registry = standard_registry();
+        for media_type in [
+            MASK_MEDIA_TYPE,
+            "application/octet-stream",
+            "model/gltf+json",
+        ] {
+            let asset = ProjectAsset {
+                key: "assets/misleading.png".into(),
+                name: "image.png".into(),
+                media_type: media_type.into(),
+                width: 640,
+                height: 400,
+                byte_len: 123,
+            };
+            assert!(
+                imported_asset_node(&registry, &asset, "media".into(), WorldPoint::ZERO).is_err()
+            );
+        }
+    }
     #[::core::prelude::v1::test]
     fn image_import_preserves_aspect_ratio_at_default_size() {
         let size = imported_image_size(1600, 900);

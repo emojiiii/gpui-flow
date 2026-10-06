@@ -443,6 +443,7 @@ enum Action {
     RenameProject,
     ConfirmRename,
     ImportImage,
+    ImportAt(WorldPoint),
     ImportModel,
     BrowseAssets,
     CloseAssets,
@@ -516,6 +517,7 @@ pub struct CreativeCanvas {
     pending_project_name: Option<String>,
     show_import_path: bool,
     import_replacement: Option<NodeId>,
+    import_at: Option<WorldPoint>,
     quick_edit: bool,
     show_layers: bool,
     show_arrangement: bool,
@@ -842,6 +844,7 @@ impl CreativeCanvas {
             pending_project_name: None,
             show_import_path: false,
             import_replacement: None,
+            import_at: None,
             quick_edit: false,
             show_layers: false,
             show_arrangement: false,
@@ -1049,7 +1052,11 @@ impl CreativeCanvas {
         if self.asset_picker.is_some()
             && matches!(
                 &action,
-                Action::Layers | Action::ImportImage | Action::ImportModel | Action::Add(_)
+                Action::Layers
+                    | Action::ImportImage
+                    | Action::ImportAt(_)
+                    | Action::ImportModel
+                    | Action::Add(_)
             )
         {
             // Toolbar buttons preserve focus. Return it before removing the
@@ -1329,6 +1336,7 @@ impl CreativeCanvas {
             Action::CloseImportPath => {
                 self.show_import_path = false;
                 self.import_replacement = None;
+                self.import_at = None;
                 self.canvas.read(cx).focus_handle(cx).focus(window, cx);
                 cx.notify();
                 return;
@@ -1336,6 +1344,11 @@ impl CreativeCanvas {
             Action::ImportImage => {
                 self.import_model = false;
                 self.import_image(false, cx);
+                return;
+            }
+            Action::ImportAt(at) => {
+                self.import_model = false;
+                self.import_image_at(false, Some(at), cx);
                 return;
             }
             Action::ImportModel => {
@@ -1736,7 +1749,12 @@ pub enum CreativeEvent {
 impl EventEmitter<CreativeEvent> for CreativeCanvas {}
 
 impl Render for CreativeCanvas {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // A completed path import removes its panel asynchronously. Return only
+        // that now-hidden input's focus; never steal focus from another editor.
+        if !self.show_import_path && self.local_path.read(cx).focus_handle(cx).is_focused(window) {
+            self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+        }
         let view = self.canvas.read(cx);
         let t = FlowTheme {
             background: view.theme.background,
@@ -2353,6 +2371,8 @@ impl Render for CreativeCanvas {
                         "替换已选择的图片 · 保留节点与连线"
                     } else if self.import_model {
                         "导入已选择的本地 GLB 模型"
+                    } else if self.import_at.is_some() {
+                        "导入到选定画布位置"
                     } else {
                         "导入本地图片、视频或音频"
                     }))
@@ -2770,6 +2790,7 @@ mod tests {
             Action::Duplicate,
             Action::Setting("aspect_ratio", serde_json::json!("16:9")),
             Action::ImportImage,
+            Action::ImportAt(WorldPoint::new(100., 100.)),
             Action::ReplaceImage,
             Action::ImportImagePath,
             Action::ReadOnly,

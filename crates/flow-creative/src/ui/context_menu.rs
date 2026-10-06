@@ -307,9 +307,19 @@ impl CreativeCanvas {
                 self.project.is_none() || self.importing || self.saving,
             ));
         }
+        if selection.is_empty() || (selection.nodes.is_empty() && selection.groups.len() == 1) {
+            let frame_locked = selection
+                .groups
+                .iter()
+                .any(|id| graph.groups.get(id).is_some_and(|g| g.locked));
+            rows.push((
+                "导入素材到此处…",
+                Action::ImportAt(world),
+                !editable || frame_locked,
+            ));
+        }
         if selection.is_empty() {
             rows.extend([
-                ("导入本地素材…", Action::ImportImage, !editable),
                 (
                     "添加文字",
                     Action::TextPlacement(text_placement_tools::TextPlacementAction::At(world)),
