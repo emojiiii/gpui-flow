@@ -447,6 +447,7 @@ enum Action {
     BrowseAssets,
     CloseAssets,
     AssetsPage(bool),
+    FilterAssets(asset_filter::AssetFilter),
     PlaceAsset(String),
     PanTool(bool),
     QuickEdit,
@@ -1177,10 +1178,7 @@ impl CreativeCanvas {
                 return;
             }
             Action::BrowseAssets => {
-                self.asset_picker = Some(asset_browser::AssetPicker { page: 0 });
-                self.show_layers = false;
-                self.asset_picker_focus.focus(window, cx);
-                cx.notify();
+                self.open_asset_picker(window, cx);
                 return;
             }
             Action::CloseAssets => {
@@ -1196,6 +1194,14 @@ impl CreativeCanvas {
                     } else {
                         picker.page.saturating_sub(1)
                     };
+                }
+                cx.notify();
+                return;
+            }
+            Action::FilterAssets(kind) => {
+                if let Some(picker) = &mut self.asset_picker {
+                    picker.kind = kind;
+                    picker.page = 0;
                 }
                 cx.notify();
                 return;

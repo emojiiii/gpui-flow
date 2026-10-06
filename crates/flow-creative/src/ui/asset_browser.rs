@@ -1,9 +1,14 @@
 use super::asset_thumbnails::ThumbnailRequest;
 use super::*;
+use crate::asset_filter::AssetFilter;
+use gpui_kit::component::input::{Input, InputState};
 
 const PAGE_SIZE: usize = 8;
 pub(super) struct AssetPicker {
     pub page: usize,
+    pub kind: AssetFilter,
+    query: Entity<InputState>,
+    _subscription: Subscription,
 }
 
 fn asset_kind(asset: &ProjectAsset) -> &'static str {
@@ -28,6 +33,32 @@ fn asset_description(asset: &ProjectAsset) -> String {
     }
 }
 impl CreativeCanvas {
+    pub(super) fn open_asset_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let query = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("搜索素材名称…")
+                .context_menu(false)
+        });
+        let subscription = cx.subscribe(&query, |this, input, event, cx| {
+            if matches!(event, InputEvent::Change)
+                && let Some(picker) = &mut this.asset_picker
+                && picker.query.entity_id() == input.entity_id()
+            {
+                picker.page = 0;
+                cx.notify();
+            }
+        });
+        query.read(cx).focus_handle(cx).focus(window, cx);
+        self.asset_picker = Some(AssetPicker {
+            page: 0,
+            kind: AssetFilter::All,
+            query,
+            _subscription: subscription,
+        });
+        self.show_layers = false;
+        cx.notify();
+    }
+
     pub(super) fn place_project_asset(&mut self, key: &str, cx: &mut Context<Self>) {
         if !self.canvas.read(cx).is_editable() {
             return;
@@ -110,10 +141,25 @@ impl CreativeCanvas {
     }
     pub(super) fn asset_panel(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let picker = self.asset_picker.as_ref().expect("open picker");
+        let query = picker.query.clone();
+        let query_text = query.read(cx).value().to_string();
+        let kind = picker.kind;
+        let total = self
+            .project
+            .as_ref()
+            .map_or(0, |project| project.assets().len());
         let assets = self
             .project
             .as_ref()
-            .map(|project| project.assets().iter().rev().cloned().collect::<Vec<_>>())
+            .map(|project| {
+                project
+                    .assets()
+                    .iter()
+                    .rev()
+                    .filter(|asset| kind.matches(asset, &query_text))
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
             .unwrap_or_default();
         let page = picker.page.min(assets.len().saturating_sub(1) / PAGE_SIZE);
         let visible = assets.iter().skip(page * PAGE_SIZE).take(PAGE_SIZE);
@@ -217,13 +263,45 @@ impl CreativeCanvas {
                     .p_4()
                     .text_size(px(12.))
                     .text_color(rgb(0x929aa8))
-                    .child("导入的素材会保留在这里，随时放回画布。"),
+                    .child(if total == 0 {
+                        "导入的素材会保留在这里，随时放回画布。"
+                    } else {
+                        "没有匹配的素材，试试其他名称或类型。"
+                    }),
+            );
+        }
+        let mut filters = div().flex().gap_1();
+        for (index, filter) in [
+            AssetFilter::All,
+            AssetFilter::Image,
+            AssetFilter::Video,
+            AssetFilter::Audio,
+            AssetFilter::Model,
+            AssetFilter::Mask,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            filters = filters.child(
+                self.button(
+                    SharedString::from(format!("asset-filter-{index}")),
+                    filter.label(),
+                    Action::FilterAssets(filter),
+                    false,
+                    cx,
+                )
+                .flex_1()
+                .min_w(px(0.))
+                .px_1()
+                .text_size(px(11.))
+                .bg(rgb(if filter == kind { 0xe7edfb } else { 0xf4f5f7 }))
+                .text_color(rgb(if filter == kind { 0x355fc7 } else { 0x616775 })),
             );
         }
         let mut panel = div()
             .id("project-asset-picker")
             .track_focus(&self.asset_picker_focus)
-            .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+            .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
                 if event.keystroke.key == "escape" {
                     this.action(Action::CloseAssets, window, cx);
                     cx.stop_propagation();
@@ -259,9 +337,16 @@ impl CreativeCanvas {
                     )),
             )
             .child(
+                Input::new(&query)
+                    .w_full()
+                    .h(px(32.))
+                    .aria_label("搜索本项目素材名称"),
+            )
+            .child(filters)
+            .child(
                 div()
                     .id("project-asset-grid")
-                    .max_h(px((self.canvas_size.height - 244.).max(120.)))
+                    .max_h(px((self.canvas_size.height - 318.).max(96.)))
                     .overflow_y_scroll()
                     .child(grid),
             )
@@ -275,8 +360,9 @@ impl CreativeCanvas {
                             .text_size(px(10.))
                             .text_color(rgb(0x959ca8))
                             .child(format!(
-                                "{} 个素材 · {} / {}",
+                                "{} / {} 个素材 · {} / {}",
                                 assets.len(),
+                                total,
                                 page + 1,
                                 assets.len().div_ceil(PAGE_SIZE).max(1)
                             )),
