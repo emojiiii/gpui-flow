@@ -3,6 +3,7 @@ use std::time::Duration;
 
 impl CreativeCanvas {
     pub(super) fn close_ready(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        self.clear_asset_export();
         if let Some(cancel) = &self.image_edit_cancel {
             cancel.store(true, std::sync::atomic::Ordering::Release);
         }

@@ -169,6 +169,16 @@ impl CreativeCanvas {
                 cx,
             ));
         }
+        if crate::asset_export::has_media_output(node) {
+            bar = bar.child(self.icon_button(
+                "object-export",
+                "download",
+                "导出已完成的素材",
+                Action::ExportAsset(asset_export_ui::ExportAction::Open),
+                self.project.is_none() || self.importing || self.saving,
+                cx,
+            ));
+        }
         bar.child(self.icon_button(
             "object-copy",
             "copy",

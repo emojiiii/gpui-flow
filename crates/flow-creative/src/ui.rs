@@ -363,6 +363,7 @@ fn theme() -> FlowTheme {
 }
 #[derive(Clone)]
 enum Action {
+    ExportAsset(asset_export_ui::ExportAction),
     Layer(layers::LayerAction),
     ImageEdit(image_edit_controls::ImageEditAction),
     NewCustom,
@@ -471,6 +472,10 @@ pub struct CreativeCanvas {
     image_editing: Option<image_edit_controls::ImageEditing>,
     image_edit_focus: FocusHandle,
     image_edit_cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
+    export_dialog: Option<asset_export_ui::AssetExportDialog>,
+    export_focus: FocusHandle,
+    export_serial: u64,
+    export_cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
     form_source: Option<(NodeId, String, Value)>,
     deferred_edits: BTreeMap<NodeId, DeferredFormEdit>,
     show_data: bool,
@@ -532,6 +537,7 @@ impl CreativeCanvas {
                         .sync(canvas.read(cx).editor.graph(), this.project.as_ref());
                     this.reconcile_mask_edit(cx);
                     this.reconcile_image_edit(cx);
+                    this.reconcile_asset_export(cx);
                     this.sync_processing_views(cx);
                     this.sync_custom_views(cx);
                     let kinds = canvas
@@ -601,6 +607,9 @@ impl CreativeCanvas {
         let asset_thumbnails = cx.new(asset_thumbnails::AssetThumbnails::new);
         let thumbnail_observer = cx.observe(&asset_thumbnails, |_, _, cx| cx.notify());
         cx.on_release(|this: &mut Self, _| {
+            if let Some(cancel) = &this.export_cancel {
+                cancel.store(true, std::sync::atomic::Ordering::Release);
+            }
             if let Some(cancel) = &this.image_edit_cancel {
                 cancel.store(true, std::sync::atomic::Ordering::Release);
             }
@@ -668,6 +677,10 @@ impl CreativeCanvas {
             image_editing: None,
             image_edit_focus: cx.focus_handle(),
             image_edit_cancel: None,
+            export_dialog: None,
+            export_focus: cx.focus_handle(),
+            export_serial: 0,
+            export_cancel: None,
             form_source: None,
             deferred_edits: BTreeMap::new(),
             show_data: false,
@@ -784,6 +797,10 @@ impl CreativeCanvas {
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
         }
         let command = match action {
+            Action::ExportAsset(action) => {
+                self.handle_asset_export(action, window, cx);
+                return;
+            }
             Action::Layer(action) => {
                 self.layer_action(action, cx);
                 return;
@@ -964,6 +981,7 @@ impl CreativeCanvas {
                 }
             }
             Action::Home => {
+                self.clear_asset_export();
                 self.clear_image_edit();
                 self.finish_mask_stroke(cx);
                 self.clear_mask_edit();
@@ -1347,6 +1365,7 @@ fn label(text: impl Into<SharedString>) -> Div {
     div().text_xs().text_color(rgb(theme().muted)).child(text)
 }
 mod asset_browser;
+mod asset_export_ui;
 mod asset_thumbnails;
 mod chrome;
 mod custom_designer;
@@ -1394,7 +1413,9 @@ impl Render for CreativeCanvas {
             .last_saved_document
             .as_ref()
             .is_some_and(|d| d != &view.editor.document());
-        let save_status = if self.image_edit_cancel.is_some() {
+        let save_status = if self.export_cancel.is_some() {
+            "正在导出素材…"
+        } else if self.image_edit_cancel.is_some() {
             "正在应用图片编辑…"
         } else if self.custom_job.is_some() {
             "正在运行宿主接口…"
@@ -1619,15 +1640,20 @@ impl Render for CreativeCanvas {
             if node.kind == "text" && self.is_editing_text(&node.id) {
                 surface = surface.child(self.text_editor(node, r, viewport.zoom, cx));
             }
+            let export_width = if crate::asset_export::has_media_output(node) {
+                38.
+            } else {
+                0.
+            };
             let toolbar_width = if self.is_image_editing(&node.id) {
                 470.
             } else {
-                match node.kind.as_str() {
+                (match node.kind.as_str() {
                     "image" => 448.,
                     "video" | "audio" | "process_image" | "process_video" | "process_audio" => 222.,
                     "text" => 456.,
                     _ => 184.,
-                }
+                }) + export_width
             };
             let composer_size = self.composer_size(node, cx);
             let composer_bounds = gpui_flow_core::Rect::new(
@@ -2051,6 +2077,9 @@ impl Render for CreativeCanvas {
         }
         if self.custom_designer.is_some() {
             surface = surface.child(self.custom_designer_panel(cx));
+        }
+        if self.export_dialog.is_some() {
+            surface = surface.child(self.asset_export_panel(cx));
         }
         div()
             .size_full()
