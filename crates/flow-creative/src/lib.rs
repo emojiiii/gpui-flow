@@ -30,6 +30,7 @@ pub mod processing_node;
 
 mod layer_guard;
 
+pub mod arrangement;
 pub mod asset_export;
 pub mod frames;
 

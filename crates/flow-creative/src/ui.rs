@@ -414,6 +414,7 @@ fn theme() -> FlowTheme {
 }
 #[derive(Clone)]
 enum Action {
+    Arrange(Option<crate::arrangement::Arrangement>),
     Shape(shape_tools::ShapeAction),
     Pencil(pencil_tools::PencilAction),
     ExportAsset(asset_export_ui::ExportAction),
@@ -505,6 +506,7 @@ pub struct CreativeCanvas {
     import_replacement: Option<NodeId>,
     quick_edit: bool,
     show_layers: bool,
+    show_arrangement: bool,
     import_model: bool,
     asset_picker: Option<asset_browser::AssetPicker>,
     asset_picker_focus: FocusHandle,
@@ -606,6 +608,9 @@ impl CreativeCanvas {
         let subscription = cx.subscribe_in(&canvas, window, |this, canvas, event, window, cx| {
             match event {
                 FlowEvent::DocumentChanged | FlowEvent::SelectionChanged => {
+                    if matches!(event, FlowEvent::SelectionChanged) {
+                        this.show_arrangement = false;
+                    }
                     this.model_views.retain(canvas.read(cx).editor.graph());
                     this.mask_views
                         .sync(canvas.read(cx).editor.graph(), this.project.as_ref());
@@ -775,6 +780,7 @@ impl CreativeCanvas {
             import_replacement: None,
             quick_edit: false,
             show_layers: false,
+            show_arrangement: false,
             import_model: false,
             asset_picker: None,
             asset_picker_focus: cx.focus_handle(),
@@ -927,6 +933,9 @@ impl CreativeCanvas {
         result.is_ok()
     }
     fn action(&mut self, action: Action, window: &mut Window, cx: &mut Context<Self>) {
+        if !matches!(&action, Action::Arrange(_)) {
+            self.show_arrangement = false;
+        }
         if action_flushes_form(&action) {
             self.apply_form_edit(cx);
         }
@@ -967,6 +976,10 @@ impl CreativeCanvas {
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
         }
         let command = match action {
+            Action::Arrange(arrangement) => {
+                self.handle_arrangement(arrangement, window, cx);
+                return;
+            }
             Action::ImageAdjust(action) => {
                 self.handle_image_adjustment(action, window, cx);
                 return;
@@ -1555,6 +1568,7 @@ fn label(text: impl Into<SharedString>) -> Div {
     let text: SharedString = text.into();
     div().text_xs().text_color(rgb(theme().muted)).child(text)
 }
+mod arrangement_tools;
 mod asset_browser;
 mod asset_export_ui;
 mod asset_thumbnails;
@@ -1691,6 +1705,12 @@ impl Render for CreativeCanvas {
                 }),
             )
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                if event.keystroke.key == "escape" && this.show_arrangement {
+                    cx.stop_propagation();
+                    this.show_arrangement = false;
+                    cx.notify();
+                    return;
+                }
                 if event.keystroke.key == "escape" && this.image_adjustment.is_some() {
                     cx.stop_propagation();
                     this.handle_image_adjustment(
@@ -2085,7 +2105,22 @@ impl Render for CreativeCanvas {
                 .node_bounds(selection.nodes.iter())
         {
             let r = viewport.world_rect_to_screen(bounds);
-            let toolbar_at = selection_toolbar::toolbar_position(r, self.canvas_size, 230.);
+            let panel_size = bounded_panel_size(self.canvas_size, WorldSize::new(294., 174.));
+            let panel_at = anchored_panel(r, self.canvas_size, panel_size);
+            let toolbar_at = if self.show_arrangement {
+                selection_toolbar::toolbar_avoiding_composer(
+                    r,
+                    self.canvas_size,
+                    selection_toolbar::SELECTION_TOOLBAR_WIDTH,
+                    gpui_flow_core::Rect::new(panel_at, panel_size),
+                )
+            } else {
+                selection_toolbar::toolbar_position(
+                    r,
+                    self.canvas_size,
+                    selection_toolbar::SELECTION_TOOLBAR_WIDTH,
+                )
+            };
             surface = surface.child(
                 self.selection_toolbar(
                     selection.nodes.len(),
@@ -2105,6 +2140,14 @@ impl Render for CreativeCanvas {
                 .left(px(toolbar_at.x))
                 .top(px(toolbar_at.y)),
             );
+            if self.show_arrangement {
+                surface = surface.child(
+                    self.arrangement_panel(panel_size, cx)
+                        .absolute()
+                        .left(px(panel_at.x))
+                        .top(px(panel_at.y)),
+                );
+            }
         }
         if self.pencil_active {
             surface = surface.child(

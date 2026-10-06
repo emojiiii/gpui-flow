@@ -1,5 +1,7 @@
 use super::*;
 
+pub(super) const SELECTION_TOOLBAR_WIDTH: f32 = 280.;
+
 /// The object/selection rectangle is already in screen coordinates. Keep the
 /// controls at a readable size and within reach while the canvas moves/zooms.
 pub(super) fn toolbar_position(
@@ -120,7 +122,7 @@ impl CreativeCanvas {
     ) -> Div {
         div()
             .occlude()
-            .w(px(230.))
+            .w(px(SELECTION_TOOLBAR_WIDTH))
             .h(px(38.))
             .px_1()
             .rounded(px(10.))
@@ -139,6 +141,16 @@ impl CreativeCanvas {
                     .child(format!("{count} 个对象")),
             )
             .child(chrome::separator())
+            .child(
+                self.button(
+                    "selection-arrange",
+                    "排列",
+                    Action::Arrange(None),
+                    false,
+                    cx,
+                )
+                .when(self.show_arrangement, |v| v.bg(rgb(0xeff4ff))),
+            )
             .child(self.icon_button(
                 "selection-copy",
                 "copy",
@@ -181,7 +193,7 @@ mod tests {
             Point::new(-100., 900.),
             Point::new(1200., 900.),
         ] {
-            for width in [184., 230., 334., 456.] {
+            for width in [184., SELECTION_TOOLBAR_WIDTH, 334., 456.] {
                 let p = toolbar_position(Rect::new(origin, Size::new(400., 300.)), canvas, width);
                 assert!(p.x >= 78. && p.x + width <= canvas.width - 12.);
                 assert!(p.y >= 62. && p.y + 38. <= canvas.height - 12.);
