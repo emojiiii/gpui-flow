@@ -13,8 +13,9 @@ use std::{
     sync::{Arc, atomic::AtomicBool},
 };
 
+/// Immutable identity and font epoch of an application's native text backend.
 #[derive(Clone)]
-pub(crate) struct TextBackendSnapshot {
+pub struct TextBackendSnapshot {
     bridge: Arc<GpuiTextRasterizer>,
     epoch: u64,
 }
@@ -64,13 +65,14 @@ pub(crate) struct TextPreparation<'a> {
 }
 impl TextPreparation<'_> {
     pub fn domain(&mut self, source: &DomainSource, inputs: &mut TextInputs) {
-        self.domain_inner(source, inputs, false);
+        self.domain_inner(source, inputs, false, false);
     }
     fn domain_inner(
         &mut self,
         source: &DomainSource,
         inputs: &mut TextInputs,
         bounded_strings: bool,
+        ink_overflow: bool,
     ) {
         for (object, world, full_source) in source.text_sources() {
             let mut exact_local_clip = None;
@@ -88,6 +90,26 @@ impl TextPreparation<'_> {
                     return Err(CompositeError::UnsupportedTextStyle(object.id.clone()));
                 }
                 let m = self.viewport.world_to_screen * world;
+                if ink_overflow {
+                    if !positive_uniform(m) || m.a != m.d {
+                        return Err(CompositeError::TextRasterization {
+                            text: object.id.clone(),
+                            reason: "text ink overflow requires positive uniform scale without rotation, reflection or shear".into(),
+                        });
+                    }
+                    if full_source
+                        || object.style.has_shadows()
+                        || object.style.has_inner_shadows()
+                        || object.style.has_blur()
+                        || object.style.has_background_blur()
+                        || object.style.has_grayscale()
+                    {
+                        return Err(CompositeError::TextRasterization {
+                            text: object.id.clone(),
+                            reason: "text ink overflow does not support text effects or full-source effect sampling".into(),
+                        });
+                    }
+                }
                 let Some(Paint::Solid { color }) = object.style.fills().next() else {
                     return Ok(None);
                 };
@@ -161,9 +183,8 @@ impl TextPreparation<'_> {
                     device_scale: self.viewport.device_scale,
                     color: [color.r, color.g, color.b, color.a],
                 };
-                let raster = backend
-                    .bridge
-                    .rasterize_writing_mode(
+                let raster = if ink_overflow {
+                    backend.bridge.rasterize_writing_mode_with_ink_overflow(
                         &request,
                         crate::text_measure::writing_mode(text.writing_mode),
                         backend.epoch,
@@ -171,22 +192,30 @@ impl TextPreparation<'_> {
                         capacity as usize,
                         self.remaining_work,
                     )
-                    .map_err(|error| match error {
-                        gpui_flow_text::WritingModeError::Unsupported(_) => {
-                            CompositeError::UnsupportedTextStyle(object.id.clone())
-                        }
-                        gpui_flow_text::WritingModeError::Invalid(reason) => {
-                            match reason.as_str() {
-                                "text working-set limit" => CompositeError::WorkingSetLimit,
-                                "text pixel work limit" => CompositeError::WorkLimit,
-                                "text snapshot superseded" => CompositeError::Superseded,
-                                _ => CompositeError::TextRasterization {
-                                    text: object.id.clone(),
-                                    reason,
-                                },
-                            }
-                        }
-                    })?;
+                } else {
+                    backend.bridge.rasterize_writing_mode(
+                        &request,
+                        crate::text_measure::writing_mode(text.writing_mode),
+                        backend.epoch,
+                        self.cancelled,
+                        capacity as usize,
+                        self.remaining_work,
+                    )
+                }
+                .map_err(|error| match error {
+                    gpui_flow_text::WritingModeError::Unsupported(_) => {
+                        CompositeError::UnsupportedTextStyle(object.id.clone())
+                    }
+                    gpui_flow_text::WritingModeError::Invalid(reason) => match reason.as_str() {
+                        "text working-set limit" => CompositeError::WorkingSetLimit,
+                        "text pixel work limit" => CompositeError::WorkLimit,
+                        "text snapshot superseded" => CompositeError::Superseded,
+                        _ => CompositeError::TextRasterization {
+                            text: object.id.clone(),
+                            reason,
+                        },
+                    },
+                })?;
                 let Some(raster) = raster else {
                     return Ok(None);
                 };
@@ -249,6 +278,29 @@ pub(crate) fn canvas_inputs_with_cancel(
     backend: Option<&TextBackendSnapshot>,
     cancelled: &AtomicBool,
 ) -> Result<gpui_flow_composite::CanvasTextOutput, CompositeError> {
+    inputs_with_cancel(request, backend, cancelled, false)
+}
+
+/// Explicitly overflow native ink beyond layout bounds, retaining the viewport
+/// and cumulative producer budgets. Ordinary Scene/Canvas producers stay clipped.
+pub(crate) fn overflow_inputs_with_cancel(
+    mut request: gpui_flow_composite::CanvasTextRequest<'_>,
+    backend: Option<&TextBackendSnapshot>,
+    cancelled: &AtomicBool,
+) -> Result<gpui_flow_composite::CanvasTextOutput, CompositeError> {
+    canvas::check(backend, cancelled)?;
+    request.limits = request.limits.bounded();
+    let output = inputs_with_cancel(request, backend, cancelled, true)?;
+    canvas::check(backend, cancelled)?;
+    Ok(output)
+}
+
+fn inputs_with_cancel(
+    request: gpui_flow_composite::CanvasTextRequest<'_>,
+    backend: Option<&TextBackendSnapshot>,
+    cancelled: &AtomicBool,
+    ink_overflow: bool,
+) -> Result<gpui_flow_composite::CanvasTextOutput, CompositeError> {
     let mut source_bytes = 0;
     let mut remaining_work = request.limits.max_surface_writes;
     let mut inputs = TextInputs::default();
@@ -261,7 +313,7 @@ pub(crate) fn canvas_inputs_with_cancel(
         remaining_work: &mut remaining_work,
         limits: request.limits,
     }
-    .domain(request.source, &mut inputs);
+    .domain_inner(request.source, &mut inputs, ink_overflow, ink_overflow);
     if backend.is_some_and(|b| !b.current()) {
         return Err(CompositeError::Superseded);
     }

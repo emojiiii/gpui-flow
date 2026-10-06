@@ -159,9 +159,14 @@ pub fn export_vector(
     destination: &Path,
     cancel: &AtomicBool,
 ) -> Result<ExportResult, ProjectError> {
-    export_generated(project, destination, "svg", cancel, || {
-        vector.to_svg().map_err(ProjectError::Invalid)
-    })
+    export_generated(
+        project,
+        destination,
+        "svg",
+        cancel,
+        || vector.to_svg().map_err(ProjectError::Invalid),
+        || Ok(()),
+    )
 }
 
 /// Compose a bounded immutable static Frame snapshot on a worker before
@@ -173,9 +178,36 @@ pub fn export_frame_png(
     destination: &Path,
     cancel: &AtomicBool,
 ) -> Result<ExportResult, ProjectError> {
-    export_generated(project, destination, "png", cancel, || {
-        frame.encode(project, cancel).map_err(ProjectError::Invalid)
-    })
+    export_frame_png_with_text(project, frame, None, destination, cancel)
+}
+
+/// The captured font epoch is checked through the final file sync, alongside cancellation.
+#[cfg(feature = "desktop")]
+pub fn export_frame_png_with_text(
+    project: &LocalProject,
+    frame: &crate::frame_png::FramePngExport,
+    backend: Option<&crate::frame_text::FrameTextBackend>,
+    destination: &Path,
+    cancel: &AtomicBool,
+) -> Result<ExportResult, ProjectError> {
+    export_generated(
+        project,
+        destination,
+        "png",
+        cancel,
+        || {
+            frame
+                .encode_with_text_backend(project, backend, cancel)
+                .map_err(ProjectError::Invalid)
+        },
+        || {
+            if backend.is_some_and(|backend| !backend.current()) {
+                Err(ProjectError::Invalid("文字字体已变化，请重新导出".into()))
+            } else {
+                Ok(())
+            }
+        },
+    )
 }
 
 fn export_generated(
@@ -184,9 +216,11 @@ fn export_generated(
     extension: &str,
     cancel: &AtomicBool,
     encode: impl FnOnce() -> Result<Vec<u8>, ProjectError>,
+    current: impl Fn() -> Result<(), ProjectError>,
 ) -> Result<ExportResult, ProjectError> {
     let started = Instant::now();
     cancelled(cancel, started)?;
+    current()?;
     let destination = export_destination(project, destination)?;
     if !destination
         .extension()
@@ -199,6 +233,7 @@ fn export_generated(
     }
     let bytes = encode()?;
     cancelled(cancel, started)?;
+    current()?;
     if bytes.len() as u64 > crate::MAX_MEDIA_BYTES {
         return Err(ProjectError::Invalid(
             "生成的导出文件超出128 MiB上限".into(),
@@ -218,10 +253,12 @@ fn export_generated(
     let result = (|| {
         for chunk in bytes.chunks(64 * 1024) {
             cancelled(cancel, started)?;
+            current()?;
             output.write_all(chunk)?;
         }
         output.sync_all()?;
         cancelled(cancel, started)?;
+        current()?;
         Ok(ExportResult {
             path: destination.clone(),
             byte_len: bytes.len() as u64,
@@ -386,6 +423,38 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.root);
         }
+    }
+
+    #[test]
+    fn generated_export_discards_new_file_when_resource_epoch_changes_after_sync() {
+        let fixture = Fixture::new();
+        let destination = fixture.root.join("stale.png");
+        let checks = std::cell::Cell::new(0);
+        let result = export_generated(
+            &fixture.project,
+            &destination,
+            "png",
+            &AtomicBool::new(false),
+            || Ok(vec![1, 2, 3]),
+            || {
+                checks.set(checks.get() + 1);
+                if checks.get() == 4 {
+                    Err(ProjectError::Invalid("font snapshot superseded".into()))
+                } else {
+                    Ok(())
+                }
+            },
+        );
+        assert!(result.unwrap_err().to_string().contains("superseded"));
+        assert_eq!(checks.get(), 4);
+        assert!(!destination.exists());
+        assert!(
+            fixture
+                .project
+                .resolve_asset_path(&fixture.asset.key)
+                .unwrap()
+                .exists()
+        );
     }
 
     #[test]

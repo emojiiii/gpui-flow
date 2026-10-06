@@ -816,6 +816,10 @@ impl CreativeCanvas {
             }
         })
         .detach();
+        let export_theme = cx.observe_global::<gpui_kit::component::Theme>(|this, cx| {
+            this.reconcile_asset_export(cx);
+            cx.notify();
+        });
         Ok(Self {
             canvas,
             registry,
@@ -948,6 +952,7 @@ impl CreativeCanvas {
                 text_placement_blur,
                 text_placement_activation,
                 temporary_hand_activation,
+                export_theme,
             ],
         })
     }
@@ -1703,6 +1708,8 @@ fn label(text: impl Into<SharedString>) -> Div {
 mod arrangement_tools;
 mod asset_browser;
 mod asset_export_ui;
+mod text_export;
+pub use text_export::install_creative_text_export_backend;
 mod asset_thumbnails;
 mod canvas_tools;
 mod chrome;

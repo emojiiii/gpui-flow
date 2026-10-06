@@ -1,5 +1,8 @@
 use super::*;
-use crate::{display::composite_text::canvas_inputs, scene_view::export::export_images};
+use crate::{
+    SceneTextBackendSnapshot, prepare_scene_export_overflow_text_inputs,
+    prepare_scene_export_text_inputs, scene_view::export::export_images,
+};
 use gpui_flow_composite::{
     CanvasPixels, CompositeError, CompositeLimits, ImageInputs, SceneExportFormat, SceneExportPlan,
     SceneExportPreparation, SceneExportRequest, TextInputs,
@@ -307,7 +310,7 @@ fn export_text_requires_real_font_bridge_and_does_not_fabricate_bounds_pixels() 
     let p = SceneExportPlan::new(&s, request(), CompositeLimits::default()).unwrap();
     assert!(matches!(
         p.encode_with_text(&ImageInputs::default(), 0, &AtomicBool::new(false), |r| {
-            canvas_inputs(r, None)
+            prepare_scene_export_text_inputs(r, None, &AtomicBool::new(false))
         }),
         Err(CompositeError::TextBackendRequired(_))
     ));
@@ -315,11 +318,13 @@ fn export_text_requires_real_font_bridge_and_does_not_fabricate_bounds_pixels() 
 
 #[test]
 fn scene_export_native_glyphs_preserve_case_paragraph_affine_and_font_epochs() {
-    use crate::display::composite_text::TextBackendSnapshot;
     use gpui_flow_scene::Affine;
     let (_app, bridge) =
         gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
-    let backend = TextBackendSnapshot::new(&bridge);
+    let backend = SceneTextBackendSnapshot::new(&bridge);
+    assert_eq!(backend, backend.clone());
+    assert!(backend.current());
+    let cancelled = AtomicBool::new(false);
     let mut s = Scene::new();
     let mut text = display::Text::new("Straße\nnext", Size::new(140., 80.));
     text.text_case = display::TextCase::Upper;
@@ -352,7 +357,7 @@ fn scene_export_native_glyphs_preserve_case_paragraph_affine_and_font_epochs() {
             )
             .unwrap();
             p.encode_with_text(&ImageInputs::default(), 0, &AtomicBool::new(false), |r| {
-                canvas_inputs(r, Some(&backend))
+                prepare_scene_export_text_inputs(r, Some(&backend), &cancelled)
             })
             .unwrap()
         };
@@ -381,6 +386,8 @@ fn scene_export_native_glyphs_preserve_case_paragraph_affine_and_font_epochs() {
     }
     assert_eq!(s.to_json().unwrap(), canonical);
     bridge.invalidate();
+    assert!(!backend.current());
+    assert_ne!(backend, SceneTextBackendSnapshot::new(&bridge));
     let p = SceneExportPlan::new(
         &s,
         SceneExportRequest {
@@ -392,8 +399,216 @@ fn scene_export_native_glyphs_preserve_case_paragraph_affine_and_font_epochs() {
     .unwrap();
     assert!(matches!(
         p.encode_with_text(&ImageInputs::default(), 0, &AtomicBool::new(false), |r| {
-            canvas_inputs(r, Some(&backend))
+            prepare_scene_export_text_inputs(r, Some(&backend), &cancelled)
         }),
         Err(CompositeError::Superseded)
+    ));
+}
+
+#[test]
+fn explicit_native_ink_overflow_preserves_alignment_wrap_padding_and_offscreen_ink() {
+    use gpui_flow_scene::Affine;
+    let (app, bridge) =
+        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    app.text_system()
+        .add_fonts(vec![std::borrow::Cow::Borrowed(include_bytes!(
+            "../../../flow-text/tests/fixtures/stroke-quadratic.ttf"
+        ))])
+        .unwrap();
+    assert!(bridge.matches_text_system(&app.text_system()));
+    let backend = SceneTextBackendSnapshot::new(&bridge);
+    let cancelled = AtomicBool::new(false);
+    let encode = |scene: &Scene, overflow: bool, ratio: f32| {
+        let plan = SceneExportPlan::new(
+            scene,
+            SceneExportRequest {
+                world_bounds: Bounds::new(Point::ZERO, Size::new(320., 160.)),
+                pixel_ratio: ratio,
+                ..request()
+            },
+            CompositeLimits::default(),
+        )
+        .unwrap();
+        plan.encode_with_text(&ImageInputs::default(), 0, &cancelled, |r| {
+            if overflow {
+                prepare_scene_export_overflow_text_inputs(r, Some(&backend), &cancelled)
+            } else {
+                prepare_scene_export_text_inputs(r, Some(&backend), &cancelled)
+            }
+        })
+    };
+    let mut scene = Scene::new();
+    let mut text = display::Text::new("MMMMMMMMMM\nMMMMMMMMMM\nMMMMMMMMMM", Size::new(60., 30.));
+    text.font_family = "Flow Stroke Quadratic Fixture".into();
+    text.font_size = 20.;
+    text.padding = [8., 10., 8., 10.];
+    text.wrap = false;
+    scene
+        .insert(
+            DisplayObject::new("text", text)
+                .with_transform(Affine::translation(100., 16.))
+                .with_style(Style::fill(Color::WHITE)),
+            None,
+            None,
+        )
+        .unwrap();
+    for wrap in [false, true] {
+        for align in [
+            display::TextAlign::Start,
+            display::TextAlign::Center,
+            display::TextAlign::End,
+        ] {
+            scene
+                .update_object(&"text".into(), |o| {
+                    if let Shape::Text(t) = &mut o.shape {
+                        t.wrap = wrap;
+                        t.align = align;
+                    }
+                })
+                .unwrap();
+            let canonical = scene.to_json().unwrap();
+            for ratio in [1., 2.] {
+                let ordinary =
+                    image::load_from_memory(&encode(&scene, false, ratio).unwrap().bytes)
+                        .unwrap()
+                        .into_rgba8();
+                let overflow = image::load_from_memory(&encode(&scene, true, ratio).unwrap().bytes)
+                    .unwrap()
+                    .into_rgba8();
+                let mut horizontal_ink = 0;
+                let mut vertical_ink = 0;
+                let mut inside_ink = 0;
+                for (x, y, pixel) in overflow.enumerate_pixels() {
+                    let inside_x = x >= (110. * ratio) as u32 && x < (150. * ratio) as u32;
+                    let inside_y = y >= (24. * ratio) as u32 && y < (38. * ratio) as u32;
+                    if inside_x && inside_y {
+                        assert_eq!(pixel, ordinary.get_pixel(x, y), "layout changed at {x},{y}");
+                        inside_ink += usize::from(pixel[3] > 0);
+                    } else {
+                        assert_eq!(ordinary.get_pixel(x, y)[3], 0);
+                    }
+                    horizontal_ink += usize::from(!inside_x && pixel[3] > 0);
+                    vertical_ink += usize::from(!inside_y && pixel[3] > 0);
+                }
+                assert!(inside_ink > 0);
+                assert!(vertical_ink > 0);
+                if !wrap {
+                    assert!(horizontal_ink > 0);
+                }
+            }
+            assert_eq!(scene.to_json().unwrap(), canonical);
+        }
+    }
+    // The complete layout box is left of the export; long unwrapped native ink
+    // still enters the viewport and survives TextImage lowering and culling.
+    scene
+        .update_object(&"text".into(), |o| {
+            o.transform = Affine::translation(-70., 16.);
+            if let Shape::Text(t) = &mut o.shape {
+                t.wrap = false;
+                t.align = display::TextAlign::Start;
+            }
+        })
+        .unwrap();
+    let ordinary = image::load_from_memory(&encode(&scene, false, 1.).unwrap().bytes)
+        .unwrap()
+        .into_rgba8();
+    let overflow = image::load_from_memory(&encode(&scene, true, 1.).unwrap().bytes)
+        .unwrap()
+        .into_rgba8();
+    assert!(ordinary.pixels().all(|p| p[3] == 0));
+    assert!(overflow.pixels().any(|p| p[3] > 0));
+    bridge.invalidate();
+    assert!(matches!(
+        encode(&scene, true, 1.),
+        Err(CompositeError::Superseded)
+    ));
+}
+
+#[test]
+fn explicit_native_ink_overflow_rejects_unsupported_sources_and_shared_budget_exhaustion() {
+    use gpui_flow_scene::Affine;
+    let (_app, bridge) =
+        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let backend = SceneTextBackendSnapshot::new(&bridge);
+    let mut scene = Scene::new();
+    scene
+        .insert(
+            DisplayObject::new("text", display::Text::new("MMMM", Size::new(20., 20.)))
+                .with_style(Style::fill(Color::WHITE)),
+            None,
+            None,
+        )
+        .unwrap();
+    let encode = |scene: &Scene, bytes: Option<u64>, work: Option<u64>, cancelled: &AtomicBool| {
+        let plan = SceneExportPlan::new(
+            scene,
+            SceneExportRequest {
+                world_bounds: Bounds::new(Point::ZERO, Size::new(64., 64.)),
+                ..request()
+            },
+            CompositeLimits::default(),
+        )
+        .unwrap();
+        plan.encode_with_text(&ImageInputs::default(), 0, cancelled, |mut r| {
+            if let Some(bytes) = bytes {
+                r.limits.max_surface_bytes = r.retained_bytes + bytes;
+            }
+            if let Some(work) = work {
+                r.limits.max_surface_writes = work;
+            }
+            prepare_scene_export_overflow_text_inputs(r, Some(&backend), cancelled)
+        })
+    };
+    let cancelled = AtomicBool::new(false);
+    for transform in [
+        Affine::rotation(0.1),
+        Affine::scale(2., 1.),
+        Affine::scale(-1., -1.),
+    ] {
+        scene
+            .update_object(&"text".into(), |o| o.transform = transform)
+            .unwrap();
+        assert!(matches!(encode(&scene, None, None, &cancelled),
+            Err(CompositeError::TextRasterization { reason, .. })
+                if reason.contains("positive uniform scale")));
+    }
+    scene
+        .update_object(&"text".into(), |o| {
+            o.transform = Affine::IDENTITY;
+            o.style.blur = 2.;
+        })
+        .unwrap();
+    assert!(matches!(encode(&scene, None, None, &cancelled),
+        Err(CompositeError::TextRasterization { reason, .. })
+            if reason.contains("full-source effect sampling")));
+    scene
+        .update_object(&"text".into(), |o| o.style.blur = 0.)
+        .unwrap();
+    assert!(matches!(
+        encode(&scene, None, Some(4095), &cancelled),
+        Err(CompositeError::WorkLimit)
+    ));
+    assert!(matches!(
+        encode(&scene, None, None, &AtomicBool::new(true)),
+        Err(CompositeError::Superseded)
+    ));
+    assert!(encode(&scene, Some(64 * 1024), None, &cancelled).is_ok());
+    for index in 0..4 {
+        scene
+            .insert(
+                DisplayObject::new(
+                    format!("more-{index}"),
+                    display::Text::new("MMMM", Size::new(20., 20.)),
+                )
+                .with_style(Style::fill(Color::WHITE)),
+                None,
+                None,
+            )
+            .unwrap();
+    }
+    assert!(matches!(
+        encode(&scene, Some(64 * 1024), None, &cancelled),
+        Err(CompositeError::WorkingSetLimit)
     ));
 }

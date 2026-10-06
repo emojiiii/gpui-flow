@@ -58,7 +58,7 @@ pub(crate) fn canvas_font_inputs(
         remaining_work: &mut remaining_work,
         limits,
     }
-    .domain_inner(request.fills.source, &mut inputs, true);
+    .domain_inner(request.fills.source, &mut inputs, true, false);
     check(backend, cancelled)?;
     Ok(CanvasFontOutput {
         fills: CanvasTextOutput {

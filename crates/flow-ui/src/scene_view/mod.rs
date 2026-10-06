@@ -8,6 +8,10 @@ mod compatibility;
 pub use compatibility::{LeaferCompatibilityProfile, LeaferPlainContainerContext};
 mod composite;
 pub(crate) mod export;
+pub use export::{
+    SceneTextBackendSnapshot, prepare_scene_export_overflow_text_inputs,
+    prepare_scene_export_text_inputs,
+};
 mod flow_layout;
 pub use flow_layout::FlowFrameEvent;
 mod input_trace;

@@ -33,10 +33,14 @@ fn main() {
             std::process::exit(2)
         }
     };
-    gpui_kit::application()
+    let (application, text_backend) =
+        gpui_flow::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(false));
+    application
         .with_assets(gpui_kit::assets::AllAssets)
         .run(move |cx| {
             gpui_kit::init(cx);
+            install_creative_text_export_backend(text_backend.clone(), cx)
+                .expect("text exporter must share the application font backend");
             gpui_kit::open_window(
                 WindowOptions {
                     window_bounds: Some(WindowBounds::Windowed(Bounds::centered(

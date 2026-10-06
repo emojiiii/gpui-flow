@@ -30,7 +30,8 @@ pub struct TextRasterRequest {
     pub vertical_align: crate::VerticalAlign,
     pub overflow: crate::TextOverflow,
     pub decoration: crate::TextDecoration,
-    /// Full alignment/clip box, before viewport clipping: [x, y, width, height].
+    /// Full layout/alignment box: [x, y, width, height]. Ordinary raster methods
+    /// also clip to this box; explicit ink-overflow methods only clip to `clip`.
     pub bounds: [f32; 4],
     /// Viewport/host intersection in the chosen raster space: [x, y, width, height].
     pub clip: [f32; 4],
@@ -196,13 +197,66 @@ impl GpuiTextRasterizer {
         max_bytes: usize,
         remaining_work: &mut u64,
     ) -> Result<Option<RasterizedText>, crate::WritingModeError> {
+        self.rasterize_with_ink_clip(
+            request,
+            mode,
+            false,
+            epoch,
+            cancelled,
+            max_bytes,
+            remaining_work,
+        )
+    }
+    /// Keep layout, wrapping and alignment in `request.bounds`, while allowing
+    /// native glyph ink outside that box. Only `request.clip` bounds the bitmap.
+    /// This explicit opt-in shares the ordinary raster validation, native glyph
+    /// pipeline, cancellation, font epoch and per-job storage/work limits.
+    #[allow(clippy::too_many_arguments)]
+    pub fn rasterize_writing_mode_with_ink_overflow(
+        &self,
+        request: &TextRasterRequest,
+        mode: crate::WritingMode,
+        epoch: u64,
+        cancelled: &AtomicBool,
+        max_bytes: usize,
+        remaining_work: &mut u64,
+    ) -> Result<Option<RasterizedText>, crate::WritingModeError> {
+        self.rasterize_with_ink_clip(
+            request,
+            mode,
+            true,
+            epoch,
+            cancelled,
+            max_bytes,
+            remaining_work,
+        )
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn rasterize_with_ink_clip(
+        &self,
+        request: &TextRasterRequest,
+        mode: crate::WritingMode,
+        ink_overflow: bool,
+        epoch: u64,
+        cancelled: &AtomicBool,
+        max_bytes: usize,
+        remaining_work: &mut u64,
+    ) -> Result<Option<RasterizedText>, crate::WritingModeError> {
         if cfg!(target_family = "wasm") {
             return Err(crate::WritingModeError::Unsupported(
                 crate::UnsupportedWritingMode::Backend,
             ));
         }
         catch_unwind(AssertUnwindSafe(|| {
-            self.rasterize_inner(request, mode, epoch, cancelled, max_bytes, remaining_work)
+            self.rasterize_inner(
+                request,
+                mode,
+                ink_overflow,
+                epoch,
+                cancelled,
+                max_bytes,
+                remaining_work,
+            )
         }))
         .map_err(|_| {
             crate::WritingModeError::Invalid("native text rasterization panicked".into())
@@ -220,6 +274,7 @@ impl GpuiTextRasterizer {
         &self,
         r: &TextRasterRequest,
         mode: crate::WritingMode,
+        ink_overflow: bool,
         epoch: u64,
         cancelled: &AtomicBool,
         max_bytes: usize,
@@ -245,7 +300,7 @@ impl GpuiTextRasterizer {
                 "unsupported text raster dimensions (font at most 512 device pixels)".into(),
             );
         }
-        let Some([x0, y0, x1, y1]) = clipped_box(r)? else {
+        let Some([x0, y0, x1, y1]) = clipped_box(r, ink_overflow)? else {
             return Ok(None);
         };
         let width = (x1 - x0) as usize;
@@ -468,15 +523,19 @@ fn quantize(origin: [f32; 2], emoji: bool) -> ([i32; 2], [u8; 2]) {
     )
 }
 pub(crate) use crate::gpui_placement::aligned_x;
-fn clipped_box(r: &TextRasterRequest) -> Result<Option<[i32; 4]>, String> {
+fn clipped_box(r: &TextRasterRequest, ink_overflow: bool) -> Result<Option<[i32; 4]>, String> {
     let a = r.bounds;
     let b = r.clip;
-    let values = [
-        a[0].max(b[0]),
-        a[1].max(b[1]),
-        (a[0] + a[2]).min(b[0] + b[2]),
-        (a[1] + a[3]).min(b[1] + b[3]),
-    ];
+    let values = if ink_overflow {
+        [b[0], b[1], b[0] + b[2], b[1] + b[3]]
+    } else {
+        [
+            a[0].max(b[0]),
+            a[1].max(b[1]),
+            (a[0] + a[2]).min(b[0] + b[2]),
+            (a[1] + a[3]).min(b[1] + b[3]),
+        ]
+    };
     let pixels = values.map(|v| round_half_zero(v * r.device_scale));
     if pixels
         .iter()
@@ -645,6 +704,122 @@ fn charge_work(remaining: &mut u64, n: u64) -> Result<(), String> {
 mod tests {
     use super::*;
     use gpui::size;
+    fn request() -> TextRasterRequest {
+        TextRasterRequest {
+            text: TextMeasureRequest {
+                content: "ink".into(),
+                font_family: "sans-serif".into(),
+                font_size: 16.,
+                font_weight: 400,
+                italic: false,
+                line_height: 20.,
+                text_case: crate::TextCase::None,
+                para_spacing: 0.,
+                letter_spacing: 0.,
+                word_spacing: 0.,
+                para_indent: 0.,
+                wrap_width: Some(20.),
+            },
+            align: TextAlign::Center,
+            vertical_align: crate::VerticalAlign::Top,
+            overflow: crate::TextOverflow::Clip,
+            decoration: crate::TextDecoration::None,
+            bounds: [10., 20., 20., 10.],
+            clip: [0., 0., 100., 80.],
+            device_scale: 2.,
+            color: [255; 4],
+        }
+    }
+    #[test]
+    fn ink_overflow_only_expands_bitmap_clip_and_keeps_offscreen_layout_ink_admitted() {
+        let mut request = request();
+        assert_eq!(
+            clipped_box(&request, false).unwrap(),
+            Some([20, 40, 60, 60])
+        );
+        assert_eq!(clipped_box(&request, true).unwrap(), Some([0, 0, 200, 160]));
+        assert_eq!(request.bounds, [10., 20., 20., 10.]);
+        assert_eq!(request.text.wrap_width, Some(20.));
+        request.bounds[0] = -40.;
+        assert_eq!(clipped_box(&request, false).unwrap(), None);
+        assert_eq!(clipped_box(&request, true).unwrap(), Some([0, 0, 200, 160]));
+        request.clip[0] = 1_000_000.;
+        assert!(clipped_box(&request, true).is_err());
+    }
+    #[test]
+    fn ink_overflow_keeps_validation_snapshot_and_allocation_limits_before_native_shaping() {
+        let raster: Arc<dyn PlatformTextSystem> = Arc::new(gpui::NoopTextSystem);
+        let shaping = Arc::new(TextSystem::new(raster.clone()));
+        let bridge = GpuiTextRasterizer::unbound(shaping.clone(), raster);
+        assert!(bridge.matches_text_system(&shaping));
+        assert!(
+            !bridge
+                .matches_text_system(&Arc::new(TextSystem::new(Arc::new(gpui::NoopTextSystem,))))
+        );
+        let cancelled = AtomicBool::new(false);
+        let mut request = request();
+        let mut work = MAX_WRITES;
+        let rasterize = |request: &TextRasterRequest, epoch, max_bytes, work: &mut u64| {
+            bridge.rasterize_writing_mode_with_ink_overflow(
+                request,
+                crate::WritingMode::X,
+                epoch,
+                &cancelled,
+                max_bytes,
+                work,
+            )
+        };
+        request.clip[2] = 4097.;
+        assert!(
+            rasterize(&request, 0, MAX_BYTES, &mut work)
+                .unwrap_err()
+                .to_string()
+                .contains("text bitmap too large")
+        );
+        request.clip = [0., 0., 1100., 1100.];
+        assert!(
+            rasterize(&request, 0, MAX_BYTES, &mut work)
+                .unwrap_err()
+                .to_string()
+                .contains("text bitmap too large")
+        );
+        request.clip = [0., 0., 100., 80.];
+        assert!(
+            rasterize(&request, 0, 127_999, &mut work)
+                .unwrap_err()
+                .to_string()
+                .contains("text working-set limit")
+        );
+        work = 31_999;
+        assert!(
+            rasterize(&request, 0, MAX_BYTES, &mut work)
+                .unwrap_err()
+                .to_string()
+                .contains("text pixel work limit")
+        );
+        assert_eq!(work, 31_999);
+        request.bounds[2] = 0.;
+        assert!(
+            rasterize(&request, 0, MAX_BYTES, &mut work)
+                .unwrap_err()
+                .to_string()
+                .contains("unsupported text raster dimensions")
+        );
+        bridge.invalidate();
+        assert!(
+            rasterize(&request, 0, MAX_BYTES, &mut work)
+                .unwrap_err()
+                .to_string()
+                .contains("text snapshot superseded")
+        );
+        cancelled.store(true, Ordering::Relaxed);
+        assert!(
+            rasterize(&request, 1, MAX_BYTES, &mut work)
+                .unwrap_err()
+                .to_string()
+                .contains("text snapshot superseded")
+        );
+    }
     fn bounds(w: i32, h: i32) -> Bounds<DevicePixels> {
         Bounds::new(
             point(DevicePixels(0), DevicePixels(0)),

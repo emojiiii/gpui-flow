@@ -2,12 +2,13 @@
 //! Only manifest-owned PNG/JPEG copies are read, on the caller's worker thread.
 //! This module never changes the canvas, loads a URI, or writes an output file.
 
+use crate::frame_text::{FrameTextBackend, FrameTextSnapshot};
 use crate::pencil::{PENCIL_NODE_KIND, PencilData};
 use crate::project::{LocalProject, MAX_IMAGE_BYTES, ProjectAsset, validate_asset_key};
 use crate::shapes::{SHAPE_NODE_KIND, ShapeData, ShapeKind};
 use gpui_flow_composite::{
-    CompositeLimits, ImageInputs, SceneExportFormat, SceneExportPlan, SceneExportPreparation,
-    SceneExportRequest, StaticImage, TextInputs,
+    CompositeError, CompositeLimits, ImageInputs, SceneExportFormat, SceneExportPlan,
+    SceneExportRequest, StaticImage,
 };
 use gpui_flow_core::{
     Graph, GroupId, NodeId, Point, Rect, Selection, Size, hidden_node_ids, ordered_node_ids,
@@ -62,6 +63,7 @@ enum Primitive {
     Image(ProjectAsset),
     Shape(ShapeData),
     Pencil(PencilData),
+    Text(FrameTextSnapshot),
 }
 
 impl FramePngExport {
@@ -94,6 +96,12 @@ impl FramePngExport {
         self.objects.len()
     }
 
+    pub fn has_text(&self) -> bool {
+        self.objects
+            .iter()
+            .any(|object| matches!(object.primitive, Primitive::Text(_)))
+    }
+
     pub fn has_white_background(&self) -> bool {
         self.white_background
     }
@@ -111,25 +119,48 @@ impl FramePngExport {
         project: &LocalProject,
         cancelled: &AtomicBool,
     ) -> Result<Vec<u8>, String> {
+        self.encode_with_text_backend(project, None, cancelled)
+    }
+
+    pub fn encode_with_text_backend(
+        &self,
+        project: &LocalProject,
+        backend: Option<&FrameTextBackend>,
+        cancelled: &AtomicBool,
+    ) -> Result<Vec<u8>, String> {
         check_active(cancelled)?;
+        if self.has_text() && !backend.is_some_and(FrameTextBackend::current) {
+            return Err(
+                "Frame PNG text requires the current application's native font backend".into(),
+            );
+        }
         self.check_assets(project.assets())?;
-        // Admission of unsupported geometry, output dimensions and compositor
-        // complexity happens before any asset file is read or decoded.
-        let plan = self.plan()?;
-        let (images, pixel_work) = self.load_images(project, cancelled)?;
+        let plan = self.plan(backend)?;
+        let (images, image_work) = self.load_images(project, cancelled)?;
         check_active(cancelled)?;
         let result = plan
-            .encode_with_inputs(
-                &images,
-                &TextInputs::default(),
-                SceneExportPreparation {
-                    pixel_work,
-                    retained_bytes: HOST_RETAINED_BYTES,
-                },
-                cancelled,
-            )
+            .encode_with_text(&images, HOST_RETAINED_BYTES, cancelled, |mut request| {
+                request.limits.max_surface_writes = request
+                    .limits
+                    .max_surface_writes
+                    .checked_sub(image_work)
+                    .ok_or(CompositeError::WorkLimit)?;
+                let mut text = gpui_flow::prepare_scene_export_overflow_text_inputs(
+                    request,
+                    backend.map(FrameTextBackend::backend),
+                    cancelled,
+                )?;
+                text.pixel_work = text
+                    .pixel_work
+                    .checked_add(image_work)
+                    .ok_or(CompositeError::WorkLimit)?;
+                Ok(text)
+            })
             .map_err(|error| error.to_string())?;
         check_active(cancelled)?;
+        if backend.is_some_and(|backend| !backend.current()) {
+            return Err("Frame PNG font snapshot changed; prepare the export again".into());
+        }
         Ok(result.bytes)
     }
 
@@ -145,10 +176,14 @@ impl FramePngExport {
         Ok(())
     }
 
-    fn plan(&self) -> Result<SceneExportPlan, String> {
+    fn plan(&self, backend: Option<&FrameTextBackend>) -> Result<SceneExportPlan, String> {
         let mut scene = Scene::new();
         for object in &self.objects {
-            let mut display = object.display_object();
+            let mut display = if let Primitive::Text(text) = &object.primitive {
+                text.display_object(object.id.as_str(), object.size, backend)?
+            } else {
+                object.display_object()
+            };
             display.transform =
                 Affine::translation(object.position.x, object.position.y) * display.transform;
             // Scene roots with equal z-index retain insertion order. Objects
@@ -271,11 +306,13 @@ pub fn prepare_frame_png_export(
     }
     if visible_count == 0 {
         return Err(
-            "The selected Frame has no visible image, shape or pencil members to export".into(),
+            "The selected Frame has no visible image, text, shape or pencil members to export"
+                .into(),
         );
     }
     let mut objects = Vec::with_capacity(visible_count);
     let mut points = 0usize;
+    let mut text_bytes = 0usize;
     for id in ordered_node_ids(graph) {
         if !frame.node_ids.contains(&id) || hidden.contains(&id) {
             continue;
@@ -302,6 +339,16 @@ pub fn prepare_frame_png_export(
                 validate_asset(asset)?;
                 Primitive::Image(asset.clone())
             }
+            "text" => {
+                let text = FrameTextSnapshot::from_node(node)?;
+                text_bytes += text.content_bytes();
+                if text_bytes > 256 * 1024 {
+                    return Err("Frame PNG text exceeds the combined 256 KiB source budget".into());
+                }
+                // Admit padded geometry before offering a file destination.
+                text.display_object(id.as_str(), node.size, None)?;
+                Primitive::Text(text)
+            }
             SHAPE_NODE_KIND => Primitive::Shape(ShapeData::from_node(node)?),
             PENCIL_NODE_KIND => {
                 points = points.saturating_add(node.data["pencil"]["points"].as_array().map_or(0, Vec::len));
@@ -310,7 +357,7 @@ pub fn prepare_frame_png_export(
                 }
                 Primitive::Pencil(PencilData::from_node(node)?)
             }
-            _ => return Err("Frame PNG supports only local static PNG/JPEG images, shapes and pencil strokes; a visible member has an unsupported kind".into()),
+            _ => return Err("Frame PNG supports local static PNG/JPEG images, text, shapes and pencil strokes; a visible member has an unsupported kind".into()),
         };
         objects.push(FrameObject {
             id,
@@ -333,6 +380,7 @@ pub fn prepare_frame_png_export(
 impl FrameObject {
     fn display_object(&self) -> DisplayObject {
         match &self.primitive {
+            Primitive::Text(_) => unreachable!("text conversion needs an explicit backend context"),
             Primitive::Image(asset) => {
                 let mut image = scene::display::Image::new(asset.key.clone(), self.size);
                 image.fit = scene::display::ImageFit::Cover;
@@ -905,6 +953,90 @@ mod tests {
     }
 
     #[test]
+    fn text_snapshot_tracks_rendered_fields_and_needs_the_real_font_backend() {
+        let home = TestHome::new();
+        let project = home.project();
+        let node = Node::new("label", "Title", Point::new(20., 30.))
+            .with_kind("text")
+            .with_size(Size::new(200., 40.))
+            .with_data(serde_json::json!({"text":"Frame label\n第二行", "style":{"font_size":28,"bold":false,"alignment":"left"}}));
+        let (mut graph, selection) = framed(
+            vec![node],
+            Rect::new(Point::ZERO, Size::new(300., 200.)),
+            true,
+        );
+        let export = FramePngExport::prepare(&graph, &selection, &[]).unwrap();
+        assert!(export.has_text());
+        assert!(
+            export
+                .encode(&project, &AtomicBool::new(false))
+                .unwrap_err()
+                .contains("native font backend")
+        );
+        assert_eq!(export.objects[0].size, Size::new(200., 40.));
+        graph.nodes.get_mut(&"label".into()).unwrap().data["unrelated"] = serde_json::json!(true);
+        assert!(export.matches(&graph, &selection, &[]));
+        graph.nodes.get_mut(&"label".into()).unwrap().data["text"] = serde_json::json!("changed");
+        assert!(!export.matches(&graph, &selection, &[]));
+        let next = FramePngExport::prepare(&graph, &selection, &[]).unwrap();
+        graph.nodes.get_mut(&"label".into()).unwrap().data["style"]["color"] =
+            serde_json::json!(0xB45309);
+        assert!(!next.matches(&graph, &selection, &[]));
+        graph.nodes.get_mut(&"label".into()).unwrap().size.width = 20.;
+        assert!(FramePngExport::prepare(&graph, &selection, &[]).is_err());
+    }
+
+    #[test]
+    fn creative_native_text_keeps_ink_outside_its_layout_box_and_font_epoch() {
+        let home = TestHome::new();
+        let project = home.project();
+        let (_app, bridge) =
+            gpui_flow::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+        let backend = FrameTextBackend::new(&bridge, "sans-serif".into(), Arc::default()).unwrap();
+        let node = Node::new("label", "Label", Point::new(20., 20.))
+            .with_kind("text")
+            .with_size(Size::new(24., 18.))
+            .with_data(serde_json::json!({"text":"W\nW", "style":{
+                "font_size":28,"bold":true,"alignment":"left","color":0xb45309}}));
+        let (graph, selection) = framed(
+            vec![node],
+            Rect::new(Point::ZERO, Size::new(160., 120.)),
+            true,
+        );
+        let source = serde_json::to_string(&graph).unwrap();
+        let export = FramePngExport::prepare(&graph, &selection, &[]).unwrap();
+        let cancelled = AtomicBool::new(false);
+        let bytes = export
+            .encode_with_text_backend(&project, Some(&backend), &cancelled)
+            .unwrap();
+        let pixels = image::load_from_memory(&bytes).unwrap().into_rgba8();
+        let ink: Vec<_> = pixels
+            .enumerate_pixels()
+            .filter(|(_, _, p)| p[2] < 220)
+            .collect();
+        assert!(ink.len() > 50);
+        assert!(
+            ink.iter().any(|(x, _, _)| *x >= 44),
+            "wide glyph ink must overflow the narrow layout box"
+        );
+        assert!(
+            ink.iter().any(|(_, y, _)| *y >= 38),
+            "second-line ink must overflow the short layout box"
+        );
+        assert!(
+            ink.iter().any(|(_, _, p)| p.0 == [180, 83, 9, 255]),
+            "native glyph fill must retain the selected text color"
+        );
+        assert_eq!(serde_json::to_string(&graph).unwrap(), source);
+        bridge.invalidate();
+        assert!(
+            export
+                .encode_with_text_backend(&project, Some(&backend), &cancelled)
+                .is_err()
+        );
+    }
+
+    #[test]
     fn mixed_png_uses_world_crop_cover_stack_order_and_shared_image_pixels() {
         let home = TestHome::new();
         let mut project = home.project();
@@ -1031,7 +1163,6 @@ mod tests {
         let export = FramePngExport::prepare(&graph, &selection, &[]).unwrap();
         assert_eq!(export.object_count(), 1);
         for kind in [
-            "text",
             "video",
             "audio",
             "model",

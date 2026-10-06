@@ -1,6 +1,6 @@
 use super::*;
 use crate::asset_export::{
-    ExportAsset, export_asset, export_assets, export_frame_png, export_vector,
+    ExportAsset, export_asset, export_assets, export_frame_png_with_text, export_vector,
 };
 use crate::frame_png::{FramePngExport, prepare_frame_png_export};
 use crate::vector_export::{VectorExport, prepare_vector_export};
@@ -23,6 +23,7 @@ pub(super) struct AssetExportDialog {
     project: String,
     outputs: Vec<ExportChoice>,
     selected: usize,
+    text_backend: Option<crate::frame_text::FrameTextBackend>,
     path: Entity<InputState>,
     choosing: bool,
     error: Option<String>,
@@ -162,7 +163,12 @@ impl CreativeCanvas {
             let Some(project) = &self.project else {
                 return false;
             };
-            project.metadata().id == dialog.project
+            dialog.text_backend.as_ref().is_none_or(|backend| {
+                backend.current()
+                    && self
+                        .frame_text_backend(cx)
+                        .is_ok_and(|current| current == *backend)
+            }) && project.metadata().id == dialog.project
                 && self.canvas.read(cx).editor.selection == dialog.selection
                 && export_choices(
                     self.canvas.read(cx).editor.graph(),
@@ -204,6 +210,12 @@ impl CreativeCanvas {
                 project.assets(),
             ) {
                 Ok(outputs) => {
+                    let text_backend = if outputs.iter().any(|output| matches!(output, ExportChoice::FramePng(frame) if frame.has_text())) {
+                        match self.frame_text_backend(cx) {
+                            Ok(backend) => Some(backend),
+                            Err(error) => { self.notice = Some(error); cx.notify(); return; }
+                        }
+                    } else { None };
                     let path = default_directory().join(outputs[0].name());
                     let project = project.metadata().id.clone();
                     self.clear_asset_export();
@@ -217,6 +229,7 @@ impl CreativeCanvas {
                         project,
                         outputs,
                         selected: 0,
+                        text_backend,
                         path: input,
                         choosing: false,
                         error: None,
@@ -305,6 +318,7 @@ impl CreativeCanvas {
                 return;
             }
             let choice = dialog.outputs[dialog.selected].clone();
+            let text_backend = dialog.text_backend.clone();
             let Some(project) = self.project.clone() else {
                 return;
             };
@@ -323,9 +337,13 @@ impl CreativeCanvas {
                             ExportChoice::Vector(vector) => {
                                 export_vector(&project, &vector, &destination, &cancel)
                             }
-                            ExportChoice::FramePng(frame) => {
-                                export_frame_png(&project, &frame, &destination, &cancel)
-                            }
+                            ExportChoice::FramePng(frame) => export_frame_png_with_text(
+                                &project,
+                                &frame,
+                                text_backend.as_ref(),
+                                &destination,
+                                &cancel,
+                            ),
                         }
                         .map_err(|error| error.to_string())
                     })
@@ -419,7 +437,7 @@ impl CreativeCanvas {
                 v.child(label("仅形状与笔迹 · 保留图层、线宽和透明度"))
             })
             .when(matches!(selected, ExportChoice::FramePng(_)), |v| {
-                v.child(label("静态PNG/JPEG图片、形状与笔迹 · 按画框裁切"))
+                v.child(label("静态图片、文字、形状与笔迹 · 按画框裁切"))
             })
             .when(selected.is_mask(), |v| {
                 v.child(label("灰度Mask：0 保留，255 编辑；未转换供应商语义"))
@@ -565,6 +583,9 @@ mod tests {
             .unwrap()
             .node_ids
             .insert("text".into());
-        assert!(export_choices(&graph, &selection, &assets).is_err());
+        assert!(
+            matches!(&export_choices(&graph, &selection, &assets).unwrap()[0],
+            ExportChoice::FramePng(frame) if frame.has_text())
+        );
     }
 }
