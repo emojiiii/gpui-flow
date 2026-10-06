@@ -230,7 +230,7 @@ impl CreativeCanvas {
             match pencil::create_pencil_node_from_points(id, "笔迹", &draft.points, draft.style) {
                 Ok(node) => {
                     let id = node.id.clone();
-                    if self.command(CanvasCommand::AddNode(node), cx) {
+                    if self.add_drawn_object(node, cx) {
                         self.command(
                             CanvasCommand::SelectNode {
                                 node: id,

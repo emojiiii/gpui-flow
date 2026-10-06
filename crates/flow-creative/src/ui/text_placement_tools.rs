@@ -240,32 +240,14 @@ fn placed_text_graph(
     bounds: Rect,
     id: NodeId,
 ) -> Result<(gpui_flow_core::Graph, NodeId), String> {
-    if graph
-        .groups
-        .values()
-        .any(|frame| frame.locked && frame.bounds.contains_rect(bounds))
-    {
-        return Err("该画框已锁定，请解锁后添加文字".into());
-    }
-    let frame = crate::text_placement::containing_text_frame(graph, bounds);
     let mut node = registry
         .make_node("text", id, bounds.origin, None)
         .map_err(|error| error.to_string())?;
     node.size = bounds.size;
     node.data["text"] = Value::String(String::new());
     let id = node.id.clone();
-    let mut candidate = graph.clone();
-    candidate
-        .add_node(node)
-        .map_err(|error| error.to_string())?;
-    if let Some(frame) = frame {
-        crate::frames::add_frame_members(
-            &mut candidate,
-            &frame,
-            &[id.clone()].into_iter().collect(),
-        )
-        .map_err(|error| error.to_string())?;
-    }
+    let (candidate, _) =
+        crate::object_frame::placed_object_graph(graph, node).map_err(|error| error.to_string())?;
     Ok((candidate, id))
 }
 

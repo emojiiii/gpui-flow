@@ -279,7 +279,7 @@ impl CreativeCanvas {
             match result {
                 Ok(node) => {
                     let id = node.id.clone();
-                    if self.command(CanvasCommand::AddNode(node), cx) {
+                    if self.add_drawn_object(node, cx) {
                         self.command(
                             CanvasCommand::SelectNode {
                                 node: id,
