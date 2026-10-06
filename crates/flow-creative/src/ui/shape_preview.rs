@@ -11,11 +11,11 @@ use gpui_flow::{
 use gpui_flow_scene::{self as scene, Affine, Color, DisplayObject, Shape, Stroke, Style};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-const MAX_PREVIEWS: usize = 12;
+const MAX_PREVIEWS: usize = 32;
 const MAX_RASTER_EDGE: u32 = 1024;
 const MAX_RASTER_PIXELS: u64 = MAX_RASTER_EDGE as u64 * MAX_RASTER_EDGE as u64;
 
-/// At most twelve retained 4 MiB images and one 16 MiB compositor working set.
+/// At most thirty-two retained 4 MiB images and one 16 MiB compositor working set.
 /// There is one worker per owner, not one blocked worker per request. Pending
 /// requests occupy the same fixed cache slots and replace their predecessor.
 #[derive(Default)]
@@ -27,9 +27,11 @@ impl ShapeViews {
         let mut cache = self.0.lock().unwrap();
         cache.entries.retain(|id, _| {
             !hidden.contains(id)
-                && graph.node(id).is_some_and(|node| {
-                    node.kind == SHAPE_NODE_KIND
-                        && ShapeData::from_node(node).is_ok_and(needs_composite)
+                && graph.node(id).is_some_and(|node| match node.kind.as_str() {
+                    SHAPE_NODE_KIND => ShapeData::from_node(node).is_ok_and(needs_composite),
+                    crate::pencil::PENCIL_NODE_KIND => crate::pencil::PencilData::from_node(node)
+                        .is_ok_and(|d| needs_pencil_composite(&d)),
+                    _ => false,
                 })
         });
         if let Some(job) = &cache.running
@@ -71,11 +73,35 @@ impl ShapeViews {
                 .into_any_element();
         }
 
+        self.render_composited(node, object, zoom, cx)
+    }
+
+    pub(super) fn render_pencil(&self, node: &Node, zoom: f32, cx: &mut App) -> AnyElement {
+        let Ok(data) = crate::pencil::PencilData::from_node(node) else {
+            return message("笔迹数据无效");
+        };
+        if !needs_pencil_composite(&data) {
+            self.remove(&node.id);
+            return pencil_preview::render(node, zoom);
+        }
+        let Ok(object) = pencil_preview::object_for_node(node) else {
+            return message("笔迹几何无效");
+        };
+        self.render_composited(node, object, zoom, cx)
+    }
+
+    fn render_composited(
+        &self,
+        node: &Node,
+        object: DisplayObject,
+        zoom: f32,
+        cx: &mut App,
+    ) -> AnyElement {
         let request = PreviewRequest::new(object, zoom);
         let (view, clear, changed) = {
             let mut cache = self.0.lock().unwrap();
             if !cache.entries.contains_key(&node.id) && cache.entries.len() >= MAX_PREVIEWS {
-                return message("最多同时预览 12 个半透明形状；隐藏其他形状可释放预览");
+                return message("最多同时预览 32 个半透明矢量对象；隐藏其他对象可释放预览");
             }
             let changed = cache
                 .entries
@@ -135,6 +161,12 @@ impl ShapeViews {
             job.cancelled.store(true, Ordering::Release);
         }
     }
+}
+
+fn needs_pencil_composite(data: &crate::pencil::PencilData) -> bool {
+    data.style.opacity > 0.
+        && data.style.opacity < 1.
+        && data.points.windows(2).any(|points| points[0] != points[1])
 }
 
 fn needs_composite(shape: ShapeData) -> bool {
@@ -494,6 +526,52 @@ mod tests {
 
     fn node(shape: ShapeData, size: WorldSize) -> Node {
         create_shape_node("shape", "形状", WorldPoint::new(80., 120.), size, shape).unwrap()
+    }
+
+    #[test]
+    fn pencil_self_overlap_composites_opacity_once() {
+        let node = crate::pencil::create_pencil_node_from_points(
+            "stroke",
+            "stroke",
+            &[
+                WorldPoint::new(0., 0.),
+                WorldPoint::new(80., 80.),
+                WorldPoint::new(0., 80.),
+                WorldPoint::new(80., 0.),
+            ],
+            crate::pencil::PencilStyle {
+                color: 0x3b82f6,
+                stroke_width: 12.,
+                opacity: 0.5,
+            },
+        )
+        .unwrap();
+        let data = crate::pencil::PencilData::from_node(&node).unwrap();
+        assert!(needs_pencil_composite(&data));
+        let request = PreviewRequest::new(pencil_preview::object_for_node(&node).unwrap(), 1.);
+        let frame = raster_frame(&request, &AtomicBool::new(false))
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            frame
+                .premul_rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|p| p[3])
+                .max(),
+            Some(128)
+        );
+        assert!(
+            frame
+                .premul_rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .filter(|p| p[3] == 128)
+                .count()
+                > 100
+        );
     }
 
     #[test]

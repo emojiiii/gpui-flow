@@ -46,6 +46,9 @@ pub(super) fn toolbar_avoiding_composer(
 
 impl CreativeCanvas {
     pub(super) fn composer_size(&self, node: &Node, cx: &App) -> WorldSize {
+        if node.kind == "pencil" {
+            return WorldSize::new(360., 116.);
+        }
         if node.kind == "shape" {
             return WorldSize::new(360., 205.);
         }

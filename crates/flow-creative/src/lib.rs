@@ -33,4 +33,5 @@ mod layer_guard;
 pub mod asset_export;
 pub mod frames;
 
+pub mod pencil;
 pub mod shapes;

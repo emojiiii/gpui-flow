@@ -28,14 +28,19 @@ impl CanvasPlugin for CreativeGuard {
                     return Err("最多 128 张卡片".into());
                 }
                 registry.validate_node(node).map_err(|e| e.to_string())?;
+                crate::pencil::validate_pencil_collection(
+                    graph.nodes.values().chain(std::iter::once(&*node)),
+                )?;
             }
             CanvasCommand::ResizeNode { node, size } => {
                 if let Some(current) = graph.node(node)
-                    && current.kind == crate::shapes::SHAPE_NODE_KIND
+                    && matches!(current.kind.as_str(), "shape" | "pencil")
                 {
                     let mut candidate = current.clone();
                     candidate.size = *size;
-                    crate::shapes::validate_shape_node(&candidate)?;
+                    registry
+                        .validate_node(&candidate)
+                        .map_err(|e| e.to_string())?;
                 }
             }
             CanvasCommand::SetNodeData { node, data } => {
@@ -44,6 +49,13 @@ impl CanvasPlugin for CreativeGuard {
                 registry
                     .validate_node(&candidate)
                     .map_err(|e| e.to_string())?;
+                crate::pencil::validate_pencil_collection(
+                    graph
+                        .nodes
+                        .values()
+                        .filter(|n| n.id != *node)
+                        .chain(std::iter::once(&candidate)),
+                )?;
             }
             CanvasCommand::ImportGraph(graph) => {
                 self.0.validate_graph(graph).map_err(|e| e.to_string())?
@@ -63,6 +75,9 @@ impl CanvasPlugin for CreativeGuard {
                 for node in &clipboard.nodes {
                     registry.validate_node(node).map_err(|e| e.to_string())?;
                 }
+                crate::pencil::validate_pencil_collection(
+                    graph.nodes.values().chain(clipboard.nodes.iter()),
+                )?;
             }
             CanvasCommand::Duplicate { .. } => {
                 let clipboard = cx.editor.copy_selection();
@@ -75,6 +90,9 @@ impl CanvasPlugin for CreativeGuard {
                 for node in &clipboard.nodes {
                     registry.validate_node(node).map_err(|e| e.to_string())?;
                 }
+                crate::pencil::validate_pencil_collection(
+                    graph.nodes.values().chain(clipboard.nodes.iter()),
+                )?;
             }
             CanvasCommand::CompleteConnection { .. } if graph.edges.len() >= MAX_LINKS => {
                 return Err("最多 512 条连接".into());

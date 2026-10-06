@@ -82,16 +82,14 @@ impl CreativeCanvas {
         self.show_shapes = false;
     }
     pub(super) fn sync_shape_fields(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let selected = self
-            .selected(cx)
-            .filter(|n| n.kind == shapes::SHAPE_NODE_KIND);
+        let selected = self.selected(cx);
         if let Some(drag) = &self.shape_drag
             && let Some(source) = &drag.source
             && selected.as_ref() != Some(source)
         {
             self.shape_drag = None;
         }
-        let Some(node) = selected else {
+        let Some(node) = selected.filter(|n| n.kind == shapes::SHAPE_NODE_KIND) else {
             self.shape_fields = None;
             return;
         };
@@ -223,7 +221,7 @@ impl CreativeCanvas {
             WorldPoint::new(f32::from(point.x), f32::from(point.y)) - self.canvas_origin,
         )
     }
-    fn finish_shape_drag(
+    pub(super) fn finish_shape_drag(
         &mut self,
         position: Point<Pixels>,
         window: &mut Window,
@@ -348,7 +346,7 @@ impl CreativeCanvas {
                 .bg(rgb(0xffffff))
                 .shadow_sm()
                 .text_size(px(12.))
-                .child("拖动调整图形 · Esc 取消"),
+                .child("拖动调整对象 · Esc 取消"),
         );
         Some(
             overlay

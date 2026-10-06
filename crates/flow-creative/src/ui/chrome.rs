@@ -237,6 +237,20 @@ impl CreativeCanvas {
                 .shadow_sm()
                 .child(self.image_edit_footer(cx));
         }
+        if node.kind == "pencil" {
+            let p = anchored_panel(bounds, self.canvas_size, self.composer_size(node, cx));
+            return div()
+                .occlude()
+                .absolute()
+                .left(px(p.x))
+                .top(px(p.y))
+                .w(px(360.))
+                .p_2()
+                .rounded(px(12.))
+                .bg(rgb(0xffffff))
+                .shadow_sm()
+                .child(self.pencil_panel(editable, cx));
+        }
         if node.kind == "shape" {
             let p = anchored_panel(bounds, self.canvas_size, self.composer_size(node, cx));
             return div()

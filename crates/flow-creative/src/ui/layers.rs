@@ -160,6 +160,7 @@ impl CreativeCanvas {
                 "model" => "box",
                 "mask" => "paintbrush",
                 "shape" => "circle",
+                "pencil" => "pencil",
                 _ => "layers",
             };
             rows = rows.child(

@@ -147,6 +147,9 @@ impl CreativeRegistry {
         if node.kind == crate::shapes::SHAPE_NODE_KIND {
             crate::shapes::validate_shape_node(node).map_err(CreativeError)?;
         }
+        if node.kind == crate::pencil::PENCIL_NODE_KIND {
+            crate::pencil::validate_pencil_node(node).map_err(CreativeError)?;
+        }
         validate_payload(def, &node.data)
     }
     pub fn validate_graph(&self, graph: &Graph) -> Result<(), CreativeError> {
@@ -161,6 +164,7 @@ impl CreativeRegistry {
         for node in graph.nodes.values() {
             registry.validate_node(node)?;
         }
+        crate::pencil::validate_pencil_collection(graph.nodes.values()).map_err(CreativeError)?;
         Ok(())
     }
     pub fn validate_document(&self, document: &FlowDocument) -> Result<(), CreativeError> {
@@ -304,8 +308,16 @@ impl CreativeRegistry {
     }
 }
 fn validate_payload(def: &NodeDefinition, data: &Value) -> Result<(), CreativeError> {
-    if serde_json::to_vec(data)?.len() > MAX_PAYLOAD_BYTES {
-        return Err(CreativeError("card payload exceeds 64 KiB".into()));
+    let limit = if def.kind == crate::pencil::PENCIL_NODE_KIND {
+        crate::pencil::MAX_PENCIL_PAYLOAD_BYTES
+    } else {
+        MAX_PAYLOAD_BYTES
+    };
+    if serde_json::to_vec(data)?.len() > limit {
+        return Err(CreativeError(format!(
+            "card payload exceeds {} KiB",
+            limit / 1024
+        )));
     }
     (def.validator)(data).map_err(CreativeError)
 }
@@ -512,6 +524,18 @@ pub fn standard_registry() -> CreativeRegistry {
             crate::shapes::validate_shape_data,
         ))
         .expect("valid shape definition");
+    registry
+        .register(NodeDefinition::new(
+            crate::pencil::PENCIL_NODE_KIND,
+            "笔迹",
+            Size::new(1., 1.),
+            vec![],
+            crate::pencil::PencilData::new(vec![Point::new(0.5, 0.5)])
+                .to_data()
+                .expect("valid pencil dot"),
+            crate::pencil::validate_pencil_data,
+        ))
+        .expect("valid pencil definition");
     crate::generation::register_generation_nodes(&mut registry);
     crate::mask_node::register_mask_nodes(&mut registry);
     crate::processing_node::register_processing_nodes(&mut registry);

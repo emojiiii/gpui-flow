@@ -57,10 +57,10 @@ struct CardRenderer {
 }
 impl NodeRenderer for CardRenderer {
     fn transparent_background(&self, node: &Node) -> bool {
-        matches!(node.kind.as_str(), "text" | "shape")
+        matches!(node.kind.as_str(), "text" | "shape" | "pencil")
     }
     fn object_caption(&self, node: &Node) -> Option<SharedString> {
-        if matches!(node.kind.as_str(), "text" | "shape") {
+        if matches!(node.kind.as_str(), "text" | "shape" | "pencil") {
             return Some("".into());
         }
         let key = node.data["asset"].as_str().map(str::to_string).or_else(|| {
@@ -83,11 +83,14 @@ impl NodeRenderer for CardRenderer {
         }
     }
     fn unframed_body(&self, node: &Node) -> bool {
-        node.kind == crate::shapes::SHAPE_NODE_KIND
+        matches!(node.kind.as_str(), "shape" | "pencil")
     }
     fn body_hit_test(&self, node: &Node, local: WorldPoint, zoom: f32) -> Option<bool> {
-        (node.kind == crate::shapes::SHAPE_NODE_KIND)
-            .then(|| shape_preview::hit_shape(node, local, 5. / zoom.max(0.1)))
+        match node.kind.as_str() {
+            "shape" => Some(shape_preview::hit_shape(node, local, 5. / zoom.max(0.1))),
+            "pencil" => Some(pencil_preview::hit(node, local, 5. / zoom.max(0.1))),
+            _ => None,
+        }
     }
     fn full_bleed(&self) -> bool {
         true
@@ -100,6 +103,9 @@ impl NodeRenderer for CardRenderer {
         cx: &mut App,
     ) -> AnyElement {
         let z = context.zoom;
+        if node.kind == crate::pencil::PENCIL_NODE_KIND {
+            return self.assets.shapes.render_pencil(node, z, cx);
+        }
         if node.kind == crate::shapes::SHAPE_NODE_KIND {
             return self.assets.shapes.render(node, z, cx);
         }
@@ -327,6 +333,7 @@ pub fn demo_renderers(assets: CreativeAssets) -> NodeRegistry {
     let mut registry = NodeRegistry::default();
     for kind in [
         "shape",
+        "pencil",
         "text",
         "image",
         "video",
@@ -376,6 +383,7 @@ fn theme() -> FlowTheme {
 #[derive(Clone)]
 enum Action {
     Shape(shape_tools::ShapeAction),
+    Pencil(pencil_tools::PencilAction),
     ExportAsset(asset_export_ui::ExportAction),
     Layer(layers::LayerAction),
     ImageEdit(image_edit_controls::ImageEditAction),
@@ -492,6 +500,11 @@ pub struct CreativeCanvas {
     shape_drag: Option<shape_tools::ShapeDrag>,
     show_shapes: bool,
     shape_focus: FocusHandle,
+    pencil_focus: FocusHandle,
+    pencil_active: bool,
+    pencil_draft: Option<pencil_tools::PencilDraft>,
+    pencil_fields: Option<pencil_tools::PencilFields>,
+    pencil_style: crate::pencil::PencilStyle,
     frame_fields: Option<frame_tools::FrameFields>,
     frame_drawing: bool,
     frame_drag: Option<frame_tools::FrameDrag>,
@@ -564,6 +577,7 @@ impl CreativeCanvas {
                     this.reconcile_asset_export(cx);
                     this.sync_frame_fields(window, cx);
                     this.sync_shape_fields(window, cx);
+                    this.sync_pencil_fields(window, cx);
                     this.shape_views.retain(canvas.read(cx).editor.graph());
                     this.sync_processing_views(cx);
                     this.sync_custom_views(cx);
@@ -629,6 +643,19 @@ impl CreativeCanvas {
             }
             if matches!(event, InputEvent::Blur) {
                 this.apply_form_edit(cx);
+            }
+        });
+        let pencil_focus = cx.focus_handle();
+        let pencil_blur = cx.on_focus_out(&pencil_focus, window, |this, _, _, cx| {
+            if this.pencil_draft.take().is_some() {
+                cx.notify();
+            }
+        });
+        let pencil_activation = cx.observe_window_activation(window, |this, window, cx| {
+            if !window.is_window_active() && this.pencil_active {
+                this.clear_pencil_tool();
+                this.sync_pencil_fields(window, cx);
+                cx.notify();
             }
         });
         let shape_focus = cx.focus_handle();
@@ -738,6 +765,11 @@ impl CreativeCanvas {
             shape_drag: None,
             show_shapes: false,
             shape_focus,
+            pencil_focus,
+            pencil_active: false,
+            pencil_draft: None,
+            pencil_fields: None,
+            pencil_style: Default::default(),
             frame_fields: None,
             frame_drawing: false,
             frame_drag: None,
@@ -770,6 +802,8 @@ impl CreativeCanvas {
                 observer,
                 form_subscription,
                 thumbnail_observer,
+                pencil_blur,
+                pencil_activation,
                 shape_blur,
                 shape_activation,
                 frame_focus_out,
@@ -877,7 +911,16 @@ impl CreativeCanvas {
             self.clear_shape_tool();
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
         }
+        if !matches!(&action, Action::Pencil(_)) && self.pencil_active {
+            self.clear_pencil_tool();
+            self.sync_pencil_fields(window, cx);
+            self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+        }
         let command = match action {
+            Action::Pencil(action) => {
+                self.handle_pencil_action(action, window, cx);
+                return;
+            }
             Action::Shape(action) => {
                 self.handle_shape_action(action, window, cx);
                 return;
@@ -1469,6 +1512,8 @@ mod mask_preview;
 mod mask_tasks;
 mod media_view;
 mod model_view;
+mod pencil_preview;
+mod pencil_tools;
 mod processing_panel;
 mod processing_tasks;
 mod project_ui;
@@ -1497,9 +1542,10 @@ impl Render for CreativeCanvas {
         let frame_count = view.editor.graph().groups.len();
         let zoom = view.editor.viewport.zoom;
         let viewport = view.editor.viewport;
-        let node = self
-            .selected(cx)
-            .filter(|n| n.kind != "shape" || self.shape_drag.is_none());
+        let node = self.selected(cx).filter(|n| {
+            !self.pencil_active
+                && (!matches!(n.kind.as_str(), "shape" | "pencil") || self.shape_drag.is_none())
+        });
         let project_name = self
             .project
             .as_ref()
@@ -1560,6 +1606,41 @@ impl Render for CreativeCanvas {
                 .size_full(),
             )
             .child(self.canvas.clone())
+            // The handle can start and release a drag before the next frame
+            // mounts its overlay. Keep the finalizer on the persistent surface.
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|this, event: &MouseUpEvent, window, cx| {
+                    if this.shape_drag.is_some() {
+                        cx.stop_propagation();
+                        this.finish_shape_drag(event.position, window, cx);
+                    }
+                }),
+            )
+            .on_mouse_up_out(
+                MouseButton::Left,
+                cx.listener(|this, event: &MouseUpEvent, window, cx| {
+                    if this.shape_drag.is_some() {
+                        cx.stop_propagation();
+                        this.finish_shape_drag(event.position, window, cx);
+                    }
+                }),
+            )
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                if event.keystroke.key == "p"
+                    && !event.keystroke.modifiers.control
+                    && !event.keystroke.modifiers.alt
+                    && !event.keystroke.modifiers.platform
+                    && this.canvas.read(cx).focus_handle(cx).is_focused(window)
+                {
+                    cx.stop_propagation();
+                    this.action(
+                        Action::Pencil(pencil_tools::PencilAction::Toggle),
+                        window,
+                        cx,
+                    );
+                }
+            }))
             .on_drop(cx.listener(|this, paths: &ExternalPaths, window, cx| {
                 let point = window.mouse_position();
                 let screen =
@@ -1571,6 +1652,9 @@ impl Render for CreativeCanvas {
             surface = surface.child(overlay);
         }
         if let Some(overlay) = self.shape_draw_overlay(cx) {
+            surface = surface.child(overlay);
+        }
+        if let Some(overlay) = self.pencil_overlay(cx) {
             surface = surface.child(overlay);
         }
         let pan_mode = self.canvas.read(cx).pan_mode();
@@ -1604,7 +1688,10 @@ impl Render for CreativeCanvas {
                     cx,
                 )
                 .when(
-                    !pan_mode && !self.frame_drawing && self.shape_tool.is_none(),
+                    !pan_mode
+                        && !self.frame_drawing
+                        && self.shape_tool.is_none()
+                        && !self.pencil_active,
                     |b| b.bg(rgb(0xeef1f6)),
                 ),
             )
@@ -1654,6 +1741,17 @@ impl Render for CreativeCanvas {
                 cx,
             ));
         }
+        rail = rail.child(
+            self.icon_button(
+                "tool-pencil",
+                "pencil",
+                "自由绘制 · P",
+                Action::Pencil(pencil_tools::PencilAction::Toggle),
+                !editable || count >= MAX_CARDS,
+                cx,
+            )
+            .when(self.pencil_active, |b| b.bg(rgb(0xeef1f6))),
+        );
         rail = rail.child(
             self.icon_button(
                 "tool-shape",
@@ -1730,7 +1828,12 @@ impl Render for CreativeCanvas {
             ));
             surface = surface.child(menu);
         }
-        if count == 0 && frame_count == 0 && !self.frame_drawing && self.shape_tool.is_none() {
+        if count == 0
+            && frame_count == 0
+            && !self.frame_drawing
+            && self.shape_tool.is_none()
+            && !self.pencil_active
+        {
             surface = surface.child(
                 div()
                     .absolute()
@@ -1765,7 +1868,7 @@ impl Render for CreativeCanvas {
                     &node.id,
                 );
             let r = viewport.world_rect_to_screen(node.bounds());
-            if node.kind == "shape"
+            if matches!(node.kind.as_str(), "shape" | "pencil")
                 && let Some(handle) = self.shape_resize_handle(node, r, editable, cx)
             {
                 surface = surface.child(handle);
@@ -1792,7 +1895,7 @@ impl Render for CreativeCanvas {
                 (match node.kind.as_str() {
                     "image" => 448.,
                     "video" | "audio" | "process_image" | "process_video" | "process_audio" => 222.,
-                    "shape" => 146.,
+                    "shape" | "pencil" => 146.,
                     "text" => 456.,
                     _ => 184.,
                 }) + export_width
@@ -1919,6 +2022,21 @@ impl Render for CreativeCanvas {
                 .absolute()
                 .left(px(toolbar_at.x))
                 .top(px(toolbar_at.y)),
+            );
+        }
+        if self.pencil_active {
+            surface = surface.child(
+                div()
+                    .absolute()
+                    .top(px(76.))
+                    .left(px(90.))
+                    .w(px(360.))
+                    .p_3()
+                    .rounded_lg()
+                    .bg(rgb(0xffffff))
+                    .shadow_sm()
+                    .occlude()
+                    .child(self.pencil_panel(editable, cx)),
             );
         }
         if let Some(controls) = self.frame_controls(cx) {
