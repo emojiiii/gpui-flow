@@ -46,6 +46,9 @@ pub(super) fn toolbar_avoiding_composer(
 
 impl CreativeCanvas {
     pub(super) fn composer_size(&self, node: &Node, cx: &App) -> WorldSize {
+        if self.is_image_editing(&node.id) {
+            return WorldSize::new(340., 42.);
+        }
         if node.kind.starts_with("custom.") {
             return WorldSize::new(360., (110. + node.inputs().count() as f32 * 24.).min(280.));
         }

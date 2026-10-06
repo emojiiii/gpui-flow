@@ -91,6 +91,9 @@ impl CreativeCanvas {
         editable: bool,
         cx: &mut Context<Self>,
     ) -> Div {
+        if self.is_image_editing(&node.id) {
+            return self.image_crop_toolbar(cx);
+        }
         let mut bar = div()
             .occlude()
             .h(px(38.))
@@ -105,6 +108,14 @@ impl CreativeCanvas {
             .gap_1();
         if node.kind == "image" {
             bar = bar
+                .child(self.icon_button(
+                    "image-crop",
+                    "crop",
+                    "裁剪、旋转和翻转",
+                    Action::ImageEdit(image_edit_controls::ImageEditAction::Begin),
+                    !editable || self.project.is_none() || self.saving,
+                    cx,
+                ))
                 .child(self.icon_button(
                     "image-mask",
                     "paintbrush",
@@ -268,6 +279,21 @@ impl CreativeCanvas {
         editable: bool,
         cx: &mut Context<Self>,
     ) -> Div {
+        if self.is_image_editing(&node.id) {
+            let p = anchored_panel(bounds, self.canvas_size, self.composer_size(node, cx));
+            return div()
+                .occlude()
+                .absolute()
+                .left(px(p.x))
+                .top(px(p.y))
+                .w(px(340.))
+                .h(px(42.))
+                .px_2()
+                .rounded(px(10.))
+                .bg(rgb(0xffffff))
+                .shadow_sm()
+                .child(self.image_edit_footer(cx));
+        }
         if node.kind.starts_with("custom.") {
             let p = anchored_panel(bounds, self.canvas_size, self.composer_size(node, cx));
             return div()

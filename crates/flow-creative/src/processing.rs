@@ -21,7 +21,7 @@ use std::{
 };
 
 #[cfg(feature = "desktop")]
-mod image;
+pub(crate) mod image;
 mod media;
 
 pub const MAX_PROCESS_IMAGE_BYTES: u64 = 32 * 1024 * 1024;

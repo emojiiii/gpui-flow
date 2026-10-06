@@ -23,53 +23,10 @@ pub(super) fn execute(
         ));
     };
     let start = Instant::now();
-    let bytes = read_bounded(source, MAX_PROCESS_IMAGE_BYTES, cancel)?;
-    if bytes.len() as u64 != asset.byte_len {
-        return Err(ProcessingError::InvalidSource(
-            "image changed while reading it".into(),
-        ));
-    }
-    let source_format = static_format(&bytes, &asset.media_type)?;
-    let mut reader = ImageReader::with_format(
-        DeadlineReader {
-            cursor: Cursor::new(bytes.as_slice()),
-            cancel,
-            start,
-        },
-        source_format,
-    );
-    let mut limits = Limits::default();
-    limits.max_image_width = Some(MAX_DIMENSION);
-    limits.max_image_height = Some(MAX_DIMENSION);
-    limits.max_alloc = Some(MAX_DECODE_BYTES);
-    reader.limits(limits);
-    let decoder = reader
-        .into_decoder()
-        .map_err(|error| codec_error(error, cancel, start))?;
-    let (width, height) = decoder.dimensions();
-    if width == 0
-        || height == 0
-        || u64::from(width) * u64::from(height) > MAX_PROCESS_IMAGE_PIXELS
-        || decoder.total_bytes() > MAX_DECODE_BYTES
-    {
-        return Err(ProcessingError::ResourceLimit(
-            "image processing accepts at most 16 MP and 128 MiB of decoded pixels".into(),
-        ));
-    }
-    if (width, height) != (asset.width, asset.height) {
-        return Err(ProcessingError::InvalidSource(
-            "decoded dimensions do not match the selected image asset".into(),
-        ));
-    }
-    check_deadline(cancel, start, PROCESS_IMAGE_TIMEOUT)?;
-    let decoded =
-        DynamicImage::from_decoder(decoder).map_err(|error| codec_error(error, cancel, start))?;
-    drop(bytes);
-    check_deadline(cancel, start, PROCESS_IMAGE_TIMEOUT)?;
-    // Explicit bound: <=128 MiB decoded + <=64 MiB RGBA conversion. After the
-    // conversion, resize uses <=64 MiB each for source/output and <=256 MiB
-    // for the image crate's intermediate RGBA32F image (all axes shrink).
-    let rgba = decoded.into_rgba8();
+    let rgba = decode_rgba(source, asset, cancel, start)?;
+    let (width, height) = rgba.dimensions();
+    // Resize uses <=64 MiB each for source/output and <=256 MiB for the image
+    // crate's intermediate RGBA32F image (all axes shrink).
     let dimensions = fit_dimensions(width, height, max_edge);
     let rgba = if dimensions != (width, height) {
         ::image::imageops::resize(
@@ -135,6 +92,123 @@ pub(super) fn execute(
     output.finish(settings, dimensions, MAX_PROCESS_IMAGE_BYTES, cancel)
 }
 
+/// Share the same gate, host-path checks, static-format checks, resource limits
+/// and whole-job deadline with the image editor. The callback runs while the
+/// processing gate is held and receives the canonical, checked source path.
+pub(crate) fn with_decoded_source<T>(
+    source: &Path,
+    asset: &ProjectAsset,
+    cancel: &AtomicBool,
+    action: impl FnOnce(::image::RgbaImage, &Path, Instant) -> Result<T, ProcessingError>,
+) -> Result<T, ProcessingError> {
+    check_cancel(cancel)?;
+    let _gate = PROCESS_GATE.try_lock().map_err(|_| ProcessingError::Busy)?;
+    let start = Instant::now();
+    let source = checked_source(
+        source,
+        asset,
+        ProcessingKind::Image,
+        MAX_PROCESS_IMAGE_BYTES,
+    )?;
+    let rgba = decode_rgba(&source, asset, cancel, start)?;
+    action(rgba, &source, start)
+}
+
+fn decode_rgba(
+    source: &Path,
+    asset: &ProjectAsset,
+    cancel: &AtomicBool,
+    start: Instant,
+) -> Result<::image::RgbaImage, ProcessingError> {
+    let bytes = read_bounded(source, MAX_PROCESS_IMAGE_BYTES, cancel)?;
+    if bytes.len() as u64 != asset.byte_len {
+        return Err(ProcessingError::InvalidSource(
+            "image changed while reading it".into(),
+        ));
+    }
+    let source_format = static_format(&bytes, &asset.media_type)?;
+    let mut reader = ImageReader::with_format(
+        DeadlineReader {
+            cursor: Cursor::new(bytes.as_slice()),
+            cancel,
+            start,
+        },
+        source_format,
+    );
+    let mut limits = Limits::default();
+    limits.max_image_width = Some(MAX_DIMENSION);
+    limits.max_image_height = Some(MAX_DIMENSION);
+    limits.max_alloc = Some(MAX_DECODE_BYTES);
+    reader.limits(limits);
+    let decoder = reader
+        .into_decoder()
+        .map_err(|error| codec_error(error, cancel, start))?;
+    let (width, height) = decoder.dimensions();
+    if width == 0
+        || height == 0
+        || u64::from(width) * u64::from(height) > MAX_PROCESS_IMAGE_PIXELS
+        || decoder.total_bytes() > MAX_DECODE_BYTES
+    {
+        return Err(ProcessingError::ResourceLimit(
+            "image processing accepts at most 16 MP and 128 MiB of decoded pixels".into(),
+        ));
+    }
+    if (width, height) != (asset.width, asset.height) {
+        return Err(ProcessingError::InvalidSource(
+            "decoded dimensions do not match the selected image asset".into(),
+        ));
+    }
+    check_deadline(cancel, start, PROCESS_IMAGE_TIMEOUT)?;
+    let decoded =
+        DynamicImage::from_decoder(decoder).map_err(|error| codec_error(error, cancel, start))?;
+    drop(bytes);
+    check_deadline(cancel, start, PROCESS_IMAGE_TIMEOUT)?;
+    // At most 128 MiB decoded + 64 MiB converted RGBA; only RGBA survives.
+    let rgba = decoded.into_rgba8();
+    check_deadline(cancel, start, PROCESS_IMAGE_TIMEOUT)?;
+    Ok(rgba)
+}
+
+/// Called inside with_decoded_source's gate. The source remains immutable and
+/// a failed/cancelled write only removes the file newly created by this call.
+pub(crate) fn write_rgba_png(
+    source: &Path,
+    rgba: &::image::RgbaImage,
+    destination: &Path,
+    cancel: &AtomicBool,
+    start: Instant,
+) -> Result<ProcessingOutput, ProcessingError> {
+    check_deadline(cancel, start, PROCESS_IMAGE_TIMEOUT)?;
+    let destination = checked_destination(source, destination)?;
+    let mut output = OutputGuard::create(&destination)?;
+    let mut writer = BudgetWriter {
+        file: output.file.as_mut().expect("new output"),
+        written: 0,
+        cancel,
+        start,
+    };
+    ::image::codecs::png::PngEncoder::new(&mut writer)
+        .write_image(
+            rgba.as_raw(),
+            rgba.width(),
+            rgba.height(),
+            ::image::ExtendedColorType::Rgba8,
+        )
+        .map_err(|error| codec_error(error, cancel, start))?;
+    writer.flush()?;
+    check_deadline(cancel, start, PROCESS_IMAGE_TIMEOUT)?;
+    output.finish(
+        &ProcessingSettings::Image {
+            format: ImageOutputFormat::Png,
+            quality: 100,
+            max_edge: 8192,
+        },
+        rgba.dimensions(),
+        MAX_PROCESS_IMAGE_BYTES,
+        cancel,
+    )
+}
+
 fn codec_error(error: ::image::ImageError, cancel: &AtomicBool, start: Instant) -> ProcessingError {
     match check_deadline(cancel, start, PROCESS_IMAGE_TIMEOUT) {
         Err(error) => error,
@@ -142,7 +216,7 @@ fn codec_error(error: ::image::ImageError, cancel: &AtomicBool, start: Instant) 
     }
 }
 
-fn fit_dimensions(width: u32, height: u32, max_edge: u32) -> (u32, u32) {
+pub(crate) fn fit_dimensions(width: u32, height: u32, max_edge: u32) -> (u32, u32) {
     let longest = width.max(height);
     if longest <= max_edge {
         return (width, height);

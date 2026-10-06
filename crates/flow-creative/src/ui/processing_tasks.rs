@@ -10,12 +10,12 @@ pub(super) struct ProcessingJob {
     pub node: NodeId,
     pub cancel: Arc<AtomicBool>,
 }
-struct ProcessingScratch {
+pub(super) struct ProcessingScratch {
     directory: PathBuf,
-    output: PathBuf,
+    pub(super) output: PathBuf,
 }
 impl ProcessingScratch {
-    fn new(extension: &str) -> Result<Self, String> {
+    pub(super) fn new(extension: &str) -> Result<Self, String> {
         let nonce = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| e.to_string())?

@@ -31,6 +31,7 @@ pub struct CreativeAssets {
     custom_kinds: Vec<String>,
     media: Arc<media_view::MediaViews>,
     editing_text: Arc<Mutex<Option<NodeId>>>,
+    editing_image: Arc<Mutex<Option<NodeId>>>,
     begin_text_edit: Option<TextEditCallback>,
 }
 impl CreativeAssets {
@@ -91,6 +92,9 @@ impl NodeRenderer for CardRenderer {
         cx: &mut App,
     ) -> AnyElement {
         let z = context.zoom;
+        if self.assets.editing_image.lock().unwrap().as_ref() == Some(&node.id) {
+            return div().size_full().bg(rgb(0xf5f6f8)).into_any_element();
+        }
         if node.kind.starts_with("custom.") {
             let preview = self
                 .assets
@@ -359,6 +363,7 @@ fn theme() -> FlowTheme {
 }
 #[derive(Clone)]
 enum Action {
+    ImageEdit(image_edit_controls::ImageEditAction),
     NewCustom,
     CustomDesigner(custom_designer::CustomDesignerAction),
     Custom(custom_tasks::CustomAction),
@@ -462,6 +467,10 @@ pub struct CreativeCanvas {
     known_custom_kinds: Vec<String>,
     media_views: Arc<media_view::MediaViews>,
     editing_text: Arc<Mutex<Option<NodeId>>>,
+    editing_image: Arc<Mutex<Option<NodeId>>>,
+    image_editing: Option<image_edit_controls::ImageEditing>,
+    image_edit_focus: FocusHandle,
+    image_edit_cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
     form_source: Option<(NodeId, String, Value)>,
     deferred_edits: BTreeMap<NodeId, DeferredFormEdit>,
     show_data: bool,
@@ -522,6 +531,7 @@ impl CreativeCanvas {
                     this.mask_views
                         .sync(canvas.read(cx).editor.graph(), this.project.as_ref());
                     this.reconcile_mask_edit(cx);
+                    this.reconcile_image_edit(cx);
                     this.sync_processing_views(cx);
                     this.sync_custom_views(cx);
                     let kinds = canvas
@@ -591,6 +601,9 @@ impl CreativeCanvas {
         let asset_thumbnails = cx.new(asset_thumbnails::AssetThumbnails::new);
         let thumbnail_observer = cx.observe(&asset_thumbnails, |_, _, cx| cx.notify());
         cx.on_release(|this: &mut Self, _| {
+            if let Some(cancel) = &this.image_edit_cancel {
+                cancel.store(true, std::sync::atomic::Ordering::Release);
+            }
             if let Some(job) = &this.custom_job {
                 job.cancel.store(true, std::sync::atomic::Ordering::Release);
             }
@@ -651,6 +664,10 @@ impl CreativeCanvas {
             known_custom_kinds: Vec::new(),
             media_views: Arc::default(),
             editing_text: Arc::default(),
+            editing_image: Arc::default(),
+            image_editing: None,
+            image_edit_focus: cx.focus_handle(),
+            image_edit_cancel: None,
             form_source: None,
             deferred_edits: BTreeMap::new(),
             show_data: false,
@@ -761,6 +778,10 @@ impl CreativeCanvas {
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
         }
         let command = match action {
+            Action::ImageEdit(action) => {
+                self.handle_image_edit(action, window, cx);
+                return;
+            }
             Action::NewCustom => {
                 let graph = self.canvas.read(cx).editor.graph();
                 let definitions =
@@ -937,6 +958,7 @@ impl CreativeCanvas {
                 }
             }
             Action::Home => {
+                self.clear_image_edit();
                 self.finish_mask_stroke(cx);
                 self.clear_mask_edit();
                 self.apply_form_edit(cx);
@@ -1323,6 +1345,9 @@ mod asset_thumbnails;
 mod chrome;
 mod custom_designer;
 mod custom_tasks;
+mod image_edit_controls;
+mod image_edit_preview;
+mod image_edit_tasks;
 mod mask_editor;
 mod mask_preview;
 mod mask_tasks;
@@ -1363,7 +1388,9 @@ impl Render for CreativeCanvas {
             .last_saved_document
             .as_ref()
             .is_some_and(|d| d != &view.editor.document());
-        let save_status = if self.custom_job.is_some() {
+        let save_status = if self.image_edit_cancel.is_some() {
+            "正在应用图片编辑…"
+        } else if self.custom_job.is_some() {
             "正在运行宿主接口…"
         } else if self.processing_job.is_some() {
             "正在本地处理…"
@@ -1573,6 +1600,9 @@ impl Render for CreativeCanvas {
         }
         if let Some(node) = &node {
             let r = viewport.world_rect_to_screen(node.bounds());
+            if let Some(overlay) = self.image_edit_overlay(node, r, cx) {
+                surface = surface.child(overlay);
+            }
             if node.kind == "mask"
                 && let Some(overlay) = self.mask_editor_overlay(node, r, cx)
             {
@@ -1581,11 +1611,15 @@ impl Render for CreativeCanvas {
             if node.kind == "text" && self.is_editing_text(&node.id) {
                 surface = surface.child(self.text_editor(node, r, viewport.zoom, cx));
             }
-            let toolbar_width = match node.kind.as_str() {
-                "image" => 410.,
-                "video" | "audio" | "process_image" | "process_video" | "process_audio" => 222.,
-                "text" => 456.,
-                _ => 184.,
+            let toolbar_width = if self.is_image_editing(&node.id) {
+                470.
+            } else {
+                match node.kind.as_str() {
+                    "image" => 448.,
+                    "video" | "audio" | "process_image" | "process_video" | "process_audio" => 222.,
+                    "text" => 456.,
+                    _ => 184.,
+                }
             };
             let composer_size = self.composer_size(node, cx);
             let composer_bounds = gpui_flow_core::Rect::new(

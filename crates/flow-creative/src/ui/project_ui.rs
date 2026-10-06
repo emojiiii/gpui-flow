@@ -3,6 +3,9 @@ use std::time::Duration;
 
 impl CreativeCanvas {
     pub(super) fn close_ready(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if let Some(cancel) = &self.image_edit_cancel {
+            cancel.store(true, std::sync::atomic::Ordering::Release);
+        }
         if let Some(job) = &self.custom_job {
             job.cancel.store(true, std::sync::atomic::Ordering::Release);
         }
@@ -234,6 +237,7 @@ impl CreativeCanvas {
         assets.media = self.media_views.clone();
         self.media_views.set_owner(cx.entity().downgrade());
         assets.editing_text = self.editing_text.clone();
+        assets.editing_image = self.editing_image.clone();
         let owner = cx.entity().downgrade();
         assets.begin_text_edit = Some(Arc::new(move |node, window, cx| {
             let _ = owner.update(cx, |this, cx| this.begin_text_edit(node, window, cx));
