@@ -167,7 +167,22 @@ impl Render for FlowCanvas {
             .on_mouse_down(
                 MouseButton::Right,
                 cx.listener(|this, event: &MouseDownEvent, window, cx| {
-                    this.pointer_down(HitTarget::Background, event, window, cx)
+                    if !this.space_held
+                        && !this.pan_mode
+                        && let Some(handler) = this.context_menu_handler.clone()
+                    {
+                        this.cancel_interaction(cx);
+                        let request = CanvasContextMenuRequest {
+                            hit: this.hit_at(this.local(event.position)),
+                            position: this.local(event.position),
+                        };
+                        cx.stop_propagation();
+                        window.focus(&this.focus, cx);
+                        // Return the canvas to the app before the host reads or updates it.
+                        window.defer(cx, move |window, cx| handler(request, window, cx));
+                    } else {
+                        this.pointer_down(HitTarget::Background, event, window, cx);
+                    }
                 }),
             )
             .on_mouse_move(cx.listener(|this, event, _, cx| this.move_pointer(event, cx)))

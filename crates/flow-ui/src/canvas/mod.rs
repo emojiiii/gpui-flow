@@ -44,6 +44,7 @@ pub struct FlowCanvas {
     port_labels: bool,
     pan_mode: bool,
     document_validator: Option<FlowDocumentValidator>,
+    context_menu_handler: Option<CanvasContextMenuHandler>,
     focus: FocusHandle,
     space_held: bool,
     native_pointer: crate::native_pointer::NativePointerState,
@@ -60,6 +61,8 @@ pub struct FlowCanvas {
     input_subscription: Option<Subscription>,
 }
 
+mod context_menu;
+pub use context_menu::{CanvasContextMenuHandler, CanvasContextMenuRequest};
 mod inspector;
 mod interaction;
 mod media;
@@ -171,6 +174,7 @@ impl FlowCanvas {
             port_labels: true,
             pan_mode: false,
             document_validator: None,
+            context_menu_handler: None,
             focus: cx.focus_handle(),
             space_held: false,
             native_pointer: Default::default(),

@@ -421,6 +421,7 @@ fn theme() -> FlowTheme {
 }
 #[derive(Clone)]
 enum Action {
+    Context(context_menu::ContextAction),
     CanvasAppearance(canvas_tools::CanvasAppearanceAction),
     TextAppearance(text_appearance_tools::TypographyAction),
     Arrange(Option<crate::arrangement::Arrangement>),
@@ -519,6 +520,8 @@ pub struct CreativeCanvas {
     typography: Option<text_appearance_tools::TypographyPanel>,
     font_families: Arc<Vec<String>>,
     background_panel: Option<canvas_tools::BackgroundPanel>,
+    object_menu: Option<context_menu::ObjectMenu>,
+    object_menu_focus: FocusHandle,
     import_model: bool,
     asset_picker: Option<asset_browser::AssetPicker>,
     asset_picker_focus: FocusHandle,
@@ -598,6 +601,7 @@ impl CreativeCanvas {
             crate::canvas_preferences::read_canvas_preferences(&document.graph).unwrap_or_default();
         let guard = registry.clone();
         let validator = registry.clone();
+        let menu_owner = cx.entity().downgrade();
         let canvas = cx.new(|cx| {
             let mut view = FlowCanvas::new(document.graph, cx).expect("document validated");
             view.editor.viewport = document.viewport;
@@ -618,6 +622,10 @@ impl CreativeCanvas {
             view.show_grid = false;
             view.set_selection_on_top(false);
             view.set_port_labels(false);
+            view.set_context_menu_handler(Some(Arc::new(move |request, window, cx| {
+                let _ =
+                    menu_owner.update(cx, |this, cx| this.open_object_menu(request, window, cx));
+            })));
             view.install_plugin(CreativeGuard(guard), cx)
                 .expect("unique guard id");
             view
@@ -625,6 +633,7 @@ impl CreativeCanvas {
         let subscription = cx.subscribe_in(&canvas, window, |this, canvas, event, window, cx| {
             match event {
                 FlowEvent::DocumentChanged | FlowEvent::SelectionChanged => {
+                    this.reconcile_object_menu(window, cx);
                     if matches!(event, FlowEvent::DocumentChanged) {
                         this.sync_canvas_appearance(window, cx);
                     }
@@ -684,7 +693,12 @@ impl CreativeCanvas {
                         );
                     }
                 }
-                FlowEvent::ViewportChanged => this.queue_autosave(cx),
+                FlowEvent::ViewportChanged => {
+                    if this.object_menu.take().is_some() {
+                        this.canvas.read(cx).focus_handle(cx).focus(window, cx);
+                    }
+                    this.queue_autosave(cx);
+                }
                 FlowEvent::SaveRequested => {
                     this.apply_form_edit(cx);
                     this.save_project(cx);
@@ -804,6 +818,8 @@ impl CreativeCanvas {
             show_arrangement: false,
             typography: None,
             background_panel: None,
+            object_menu: None,
+            object_menu_focus: cx.focus_handle(),
             font_families: Arc::new(
                 cx.text_system()
                     .all_font_names()
@@ -970,6 +986,9 @@ impl CreativeCanvas {
         result.is_ok()
     }
     fn action(&mut self, action: Action, window: &mut Window, cx: &mut Context<Self>) {
+        if self.object_menu.take().is_some() {
+            self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+        }
         if !matches!(&action, Action::CanvasAppearance(_)) && self.background_panel.is_some() {
             self.background_panel = None;
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
@@ -1021,6 +1040,10 @@ impl CreativeCanvas {
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
         }
         let command = match action {
+            Action::Context(action) => {
+                self.context_action(action, window, cx);
+                return;
+            }
             Action::CanvasAppearance(action) => {
                 self.canvas_appearance_action(action, window, cx);
                 return;
@@ -1627,6 +1650,7 @@ mod asset_export_ui;
 mod asset_thumbnails;
 mod canvas_tools;
 mod chrome;
+mod context_menu;
 mod custom_designer;
 mod custom_tasks;
 mod frame_tools;
@@ -2583,6 +2607,9 @@ impl Render for CreativeCanvas {
         }
         if self.export_dialog.is_some() {
             surface = surface.child(self.asset_export_panel(cx));
+        }
+        if self.object_menu.is_some() {
+            surface = surface.child(self.object_context_menu(cx));
         }
         div()
             .size_full()
