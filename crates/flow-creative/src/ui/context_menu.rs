@@ -296,13 +296,19 @@ impl CreativeCanvas {
                 !editable,
             ));
         }
-        if expanded.iter().any(|id| {
-            graph
-                .node(id)
-                .is_some_and(|node| matches!(node.kind.as_str(), "shape" | "pencil"))
-        }) {
+        if (selection.groups.len() == 1 && selection.nodes.is_empty() && selection.edges.is_empty())
+            || expanded.iter().any(|id| {
+                graph
+                    .node(id)
+                    .is_some_and(|node| matches!(node.kind.as_str(), "shape" | "pencil"))
+            })
+        {
             rows.push((
-                "导出矢量 SVG…",
+                if selection.groups.len() == 1 {
+                    "导出画框 SVG…"
+                } else {
+                    "导出矢量 SVG…"
+                },
                 Action::ExportAsset(asset_export_ui::ExportAction::Open),
                 self.project.is_none() || self.importing || self.saving,
             ));

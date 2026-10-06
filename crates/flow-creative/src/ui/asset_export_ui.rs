@@ -40,7 +40,11 @@ impl ExportChoice {
     fn label(&self) -> String {
         match self {
             Self::Media(asset) => asset.label.clone(),
-            Self::Vector(vector) => format!("{} 个矢量对象", vector.object_count()),
+            Self::Vector(vector) => format!(
+                "{}{} 个矢量对象",
+                if vector.is_frame() { "画框 · " } else { "" },
+                vector.object_count()
+            ),
         }
     }
     fn details(&self) -> String {
@@ -64,7 +68,16 @@ impl ExportChoice {
             }
             Self::Vector(vector) => {
                 let size = vector.bounds().size;
-                format!("SVG · {:.0} × {:.0} · 透明背景", size.width, size.height)
+                format!(
+                    "SVG · {:.0} × {:.0} · {}",
+                    size.width,
+                    size.height,
+                    if vector.has_white_background() {
+                        "画框白底"
+                    } else {
+                        "透明背景"
+                    }
+                )
             }
         }
     }
@@ -479,6 +492,26 @@ mod tests {
             ExportChoice::Vector(_)
         ));
         selection.nodes.insert("image".into());
+        assert!(export_choices(&graph, &selection, &assets).is_err());
+        let mut frame = gpui_flow_core::Group::new(
+            "frame",
+            "Artboard",
+            gpui_flow_core::Rect::new(WorldPoint::ZERO, WorldSize::new(320., 240.)),
+        )
+        .with_nodes(["shape".into()]);
+        frame.data = serde_json::json!({"flow_creative_frame": 1});
+        graph.add_group(frame).unwrap();
+        selection.nodes.clear();
+        selection.groups.insert("frame".into());
+        let choices = export_choices(&graph, &selection, &assets).unwrap();
+        assert!(matches!(&choices[0], ExportChoice::Vector(v)
+            if v.is_frame() && v.has_white_background() && v.bounds().size == WorldSize::new(320., 240.)));
+        graph
+            .groups
+            .get_mut(&"frame".into())
+            .unwrap()
+            .node_ids
+            .insert("image".into());
         assert!(export_choices(&graph, &selection, &assets).is_err());
     }
 }

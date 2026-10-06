@@ -396,14 +396,19 @@ impl CreativeCanvas {
         let canvas_editable = view.is_editable();
         let disabled = group.locked || !canvas_editable || self.importing || self.saving;
         let bounds = view.editor.viewport.world_rect_to_screen(group.bounds);
-        let at = selection_toolbar::toolbar_position(bounds, self.canvas_size, 545.);
         let panel = anchored_panel(bounds, self.canvas_size, WorldSize::new(340., 70.));
+        let at = selection_toolbar::toolbar_avoiding_composer_sized(
+            bounds,
+            self.canvas_size,
+            WorldSize::new(585., 42.),
+            Rect::new(panel, WorldSize::new(340., 70.)),
+        );
         let bar = div()
             .occlude()
             .absolute()
             .left(px(at.x))
             .top(px(at.y))
-            .w(px(545.))
+            .w(px(585.))
             .h(px(42.))
             .px_2()
             .rounded(px(10.))
@@ -441,6 +446,14 @@ impl CreativeCanvas {
                 "应用",
                 Action::FrameEdit(FrameAction::Apply),
                 disabled,
+                cx,
+            ))
+            .child(self.icon_button(
+                "export-frame-svg",
+                "download",
+                "导出画框 SVG · 仅形状和笔迹",
+                Action::ExportAsset(asset_export_ui::ExportAction::Open),
+                self.project.is_none() || self.importing || self.saving,
                 cx,
             ))
             .child(self.icon_button(

@@ -9,10 +9,18 @@ pub(super) fn toolbar_position(
     canvas: WorldSize,
     width: f32,
 ) -> WorldPoint {
-    let right = (canvas.width - width - 12.).max(12.);
-    let bottom = (canvas.height - 38. - 12.).max(12.);
+    toolbar_position_sized(bounds, canvas, WorldSize::new(width, 38.))
+}
+
+fn toolbar_position_sized(
+    bounds: gpui_flow_core::Rect,
+    canvas: WorldSize,
+    size: WorldSize,
+) -> WorldPoint {
+    let right = (canvas.width - size.width - 12.).max(12.);
+    let bottom = (canvas.height - size.height - 12.).max(12.);
     WorldPoint::new(
-        (bounds.center().x - width / 2.).clamp(78_f32.min(right), right),
+        (bounds.center().x - size.width / 2.).clamp(78_f32.min(right), right),
         (bounds.origin.y - 68.).clamp(62_f32.min(bottom), bottom),
     )
 }
@@ -23,19 +31,28 @@ pub(super) fn toolbar_avoiding_composer(
     width: f32,
     composer: gpui_flow_core::Rect,
 ) -> WorldPoint {
-    let at = toolbar_position(bounds, canvas, width);
+    toolbar_avoiding_composer_sized(bounds, canvas, WorldSize::new(width, 38.), composer)
+}
+
+pub(super) fn toolbar_avoiding_composer_sized(
+    bounds: gpui_flow_core::Rect,
+    canvas: WorldSize,
+    size: WorldSize,
+    composer: gpui_flow_core::Rect,
+) -> WorldPoint {
+    let at = toolbar_position_sized(bounds, canvas, size);
     let overlaps = |point: WorldPoint| {
         point.x < composer.origin.x + composer.size.width + 12.
-            && point.x + width + 12. > composer.origin.x
+            && point.x + size.width + 12. > composer.origin.x
             && point.y < composer.origin.y + composer.size.height + 12.
-            && point.y + 38. + 12. > composer.origin.y
+            && point.y + size.height + 12. > composer.origin.y
     };
     if !overlaps(at) {
         return at;
     }
-    let bottom = (canvas.height - 50.).max(12.);
+    let bottom = (canvas.height - size.height - 12.).max(12.);
     for y in [
-        composer.origin.y - 50.,
+        composer.origin.y - size.height - 12.,
         composer.origin.y + composer.size.height + 12.,
     ] {
         let candidate = WorldPoint::new(at.x, y);
@@ -243,5 +260,18 @@ mod tests {
                 assert!(at.y >= 62. && at.y + 38. <= canvas.height - 12.);
             }
         }
+    }
+
+    #[test]
+    fn frame_export_bar_reserves_its_full_height_above_a_flipped_panel() {
+        let canvas = Size::new(1180., 812.);
+        let bounds = Rect::new(Point::new(318., 386.), Size::new(610., 420.));
+        let panel_size = Size::new(340., 70.);
+        let panel = Rect::new(anchored_panel(bounds, canvas, panel_size), panel_size);
+        let size = Size::new(585., 42.);
+        let at = toolbar_avoiding_composer_sized(bounds, canvas, size, panel);
+        assert!(at.y + size.height + 12. <= panel.min_y() || at.y >= panel.max_y() + 12.);
+        assert!(at.x >= 78. && at.x + size.width <= canvas.width - 12.);
+        assert!(at.y >= 62. && at.y + size.height <= canvas.height - 12.);
     }
 }

@@ -1,4 +1,5 @@
-//! Immutable, bounded SVG snapshots of selected native shape and pencil nodes.
+//! Immutable, bounded SVG snapshots of native shape and pencil selections or a
+//! single Frame's visible vector members, clipped to its exact bounds.
 //!
 //! Only validated paint and geometry are serialized. Host metadata, node IDs,
 //! external resources, and arbitrary SVG/CSS never become document markup.
@@ -7,7 +8,7 @@
 use crate::pencil::{PENCIL_NODE_KIND, PencilData};
 use crate::shapes::{SHAPE_NODE_KIND, ShapeData, ShapeKind};
 use gpui_flow_core::{
-    Graph, NodeId, Point, Rect, Selection, Size, hidden_node_ids, ordered_node_ids,
+    Graph, GroupId, NodeId, Point, Rect, Selection, Size, hidden_node_ids, ordered_node_ids,
 };
 use std::fmt::{self, Write};
 
@@ -17,13 +18,22 @@ pub const MAX_VECTOR_EXPORT_SPAN: f32 = 32_768.0;
 pub const MAX_VECTOR_EXPORT_BYTES: usize = 4 * 1024 * 1024;
 
 /// A validated export request, isolated from subsequent editor changes.
-/// Equality covers selected identities, paint, geometry, titles and draw order;
+/// Equality covers selected identities, paint, geometry, titles and draw order,
+/// plus the source Frame and its visible membership. Hidden member content,
 /// unrelated metadata and locks do not change the exported picture.
 #[derive(Debug, Clone, PartialEq)]
 pub struct VectorExport {
     objects: Vec<VectorObject>,
     bounds: Rect,
     suggested_name: String,
+    frame: Option<VectorFrame>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct VectorFrame {
+    id: GroupId,
+    title: String,
+    white_background: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -42,7 +52,8 @@ enum Primitive {
 }
 
 impl VectorExport {
-    /// World-space paint bounds, rounded outward with one unit of extra padding.
+    /// Exact world-space Frame bounds, or direct-node paint bounds rounded
+    /// outward with one unit of extra padding.
     pub fn bounds(&self) -> Rect {
         self.bounds
     }
@@ -53,6 +64,18 @@ impl VectorExport {
 
     pub fn object_count(&self) -> usize {
         self.objects.len()
+    }
+
+    pub fn is_frame(&self) -> bool {
+        self.frame.is_some()
+    }
+
+    /// Matches the native renderer's Creative Frame marker. Legacy groups have
+    /// a transparent background; neither group borders nor titles are painted.
+    pub fn has_white_background(&self) -> bool {
+        self.frame
+            .as_ref()
+            .is_some_and(|frame| frame.white_background)
     }
 
     /// Reject a stale save request if selection, visibility or exported content
@@ -80,6 +103,24 @@ impl VectorExport {
             self.bounds.size.width,
             self.bounds.size.height,
         )?;
+        if self.is_frame() {
+            // This fixed local fragment is generated here, never read from
+            // graph metadata. Clip in viewport coordinates before translating
+            // each member, including stroke paint crossing any frame edge.
+            writeln!(
+                svg,
+                "  <defs><clipPath id=\"frame-clip\" clipPathUnits=\"userSpaceOnUse\"><rect x=\"0\" y=\"0\" width=\"{}\" height=\"{}\"/></clipPath></defs>",
+                self.bounds.size.width, self.bounds.size.height,
+            )?;
+            svg.write_str("  <g clip-path=\"url(#frame-clip)\">\n")?;
+            if self.has_white_background() {
+                writeln!(
+                    svg,
+                    "    <rect x=\"0\" y=\"0\" width=\"{}\" height=\"{}\" fill=\"#ffffff\" stroke=\"none\"/>",
+                    self.bounds.size.width, self.bounds.size.height,
+                )?;
+            }
+        }
         for object in &self.objects {
             let x = f64::from(object.position.x) - f64::from(self.bounds.origin.x);
             let y = f64::from(object.position.y) - f64::from(self.bounds.origin.y);
@@ -100,41 +141,88 @@ impl VectorExport {
             }
             svg.write_str("  </g>\n")?;
         }
+        if self.is_frame() {
+            svg.write_str("  </g>\n")?;
+        }
         svg.write_str("</svg>\n")
     }
 }
 
-/// Prepare every selected node, or reject the entire request. Frames, edges,
-/// hidden/missing nodes and mixed unsupported selections are never omitted.
-/// Locks protect editing, so locked visible vector nodes can still be exported.
+/// Prepare every directly selected node, or the visible members of exactly one
+/// selected Frame. Unsupported visible kinds, edges, mixed selections and
+/// missing members reject the whole request. Hidden direct selections reject;
+/// hidden Frame members are skipped just as they are by the native renderer.
+/// Locks protect editing, so locked Frames and visible members remain exportable.
 pub fn prepare_vector_export(graph: &Graph, selection: &Selection) -> Result<VectorExport, String> {
-    if !selection.groups.is_empty() || !selection.edges.is_empty() {
-        return Err("仅支持形状和笔迹，请取消选择文字、媒体、画框或连接".into());
+    if !selection.edges.is_empty() {
+        return Err("仅支持形状和笔迹或单个纯矢量画框，请取消选择连接".into());
     }
-    if selection.nodes.is_empty() {
+    if selection.groups.len() > 1 || (!selection.groups.is_empty() && !selection.nodes.is_empty()) {
+        return Err("Export one Frame by itself, without other Frames or direct objects".into());
+    }
+    let selected_frame = selection
+        .groups
+        .iter()
+        .next()
+        .map(|id| {
+            let frame = graph
+                .groups
+                .get(id)
+                .ok_or("The selected SVG export Frame no longer exists")?;
+            if &frame.id != id || frame.id.as_str().trim().is_empty() || frame.title.len() > 512 {
+                return Err("SVG Frame requires a matching nonempty ID and title of at most 512 bytes");
+            }
+            let bounds = frame.bounds;
+            // Preserve the original origin and dimensions, without padding,
+            // snapping or the editing normalizer's minimum Frame dimensions.
+            if !bounds.is_valid()
+                || !bounds.size.is_positive()
+                || bounds.size.width > MAX_VECTOR_EXPORT_SPAN
+                || bounds.size.height > MAX_VECTOR_EXPORT_SPAN
+                || bounds.max_x() <= bounds.min_x()
+                || bounds.max_y() <= bounds.min_y()
+            {
+                return Err("SVG Frame bounds must be finite, positive and no larger than 32768 units per axis");
+            }
+            Ok(frame)
+        })
+        .transpose()?;
+    let node_ids = selected_frame.map_or(&selection.nodes, |frame| &frame.node_ids);
+    if selected_frame.is_none() && node_ids.is_empty() {
         return Err("Select at least one shape or pencil stroke to export".into());
     }
-    if selection.nodes.len() > MAX_VECTOR_EXPORT_OBJECTS {
-        return Err("SVG export supports at most 128 selected objects".into());
-    }
     let hidden = hidden_node_ids(graph);
-    for id in &selection.nodes {
+    let mut visible_count = 0usize;
+    for id in node_ids {
         if !graph.nodes.contains_key(id) {
-            return Err("A selected SVG export object no longer exists".into());
+            return Err("A selected SVG export object or Frame member no longer exists".into());
         }
         if hidden.contains(id) {
-            return Err("所选对象包含隐藏图层，请先显示该图层或取消选择".into());
+            if selected_frame.is_none() {
+                return Err("所选对象包含隐藏图层，请先显示该图层或取消选择".into());
+            }
+        } else {
+            visible_count += 1;
+            if visible_count > MAX_VECTOR_EXPORT_OBJECTS {
+                return Err("SVG export supports at most 128 visible objects".into());
+            }
         }
     }
+    if selected_frame.is_some() && visible_count == 0 {
+        return Err("The selected Frame has no visible shape or pencil members to export".into());
+    }
 
-    let mut objects = Vec::with_capacity(selection.nodes.len());
+    let mut objects = Vec::with_capacity(visible_count);
     let mut points = 0usize;
     let mut paint_bounds: Option<PaintBounds> = None;
     for id in ordered_node_ids(graph) {
-        if !selection.nodes.contains(&id) {
+        if !node_ids.contains(&id) || hidden.contains(&id) {
             continue;
         }
         let node = &graph.nodes[&id];
+        if node.id != id {
+            return Err("SVG export object identity does not match the graph".into());
+        }
         let primitive = match node.kind.as_str() {
             SHAPE_NODE_KIND => Primitive::Shape(ShapeData::from_node(node)?),
             PENCIL_NODE_KIND => {
@@ -147,7 +235,9 @@ pub fn prepare_vector_export(graph: &Graph, selection: &Selection) -> Result<Vec
                 Primitive::Pencil(PencilData::from_node(node)?)
             }
             _ => {
-                return Err("仅支持形状和笔迹，请取消选择文字、媒体、画框或连接".into());
+                return Err(
+                    "仅支持形状和笔迹，所选对象或画框含有不支持的可见文字、媒体或生成节点".into(),
+                );
             }
         };
         // Both parsers validate the title's 512-byte budget before this clone.
@@ -162,10 +252,16 @@ pub fn prepare_vector_export(graph: &Graph, selection: &Selection) -> Result<Vec
         paint_bounds = Some(paint_bounds.map_or(bounds, |previous| previous.union(bounds)));
         objects.push(object);
     }
-    let bounds = paint_bounds
-        .ok_or("Select at least one shape or pencil stroke to export")?
-        .padded_rect()?;
-    let suggested_name = if objects.len() == 1 {
+    let bounds = if let Some(frame) = selected_frame {
+        frame.bounds
+    } else {
+        paint_bounds
+            .ok_or("Select at least one shape or pencil stroke to export")?
+            .padded_rect()?
+    };
+    let suggested_name = if let Some(frame) = selected_frame {
+        suggested_name(&frame.title)
+    } else if objects.len() == 1 {
         suggested_name(&objects[0].title)
     } else {
         "Vector-selection.svg".into()
@@ -174,6 +270,12 @@ pub fn prepare_vector_export(graph: &Graph, selection: &Selection) -> Result<Vec
         objects,
         bounds,
         suggested_name,
+        frame: selected_frame.map(|frame| VectorFrame {
+            id: frame.id.clone(),
+            title: frame.title.clone(),
+            // Keep precisely the same marker interpretation as render.rs.
+            white_background: frame.data["flow_creative_frame"].as_u64() == Some(1),
+        }),
     })
 }
 
@@ -456,7 +558,7 @@ mod tests {
     use super::*;
     use crate::pencil::{PencilStyle, create_pencil_node};
     use crate::shapes::{ShapeLine, ShapeStyle, create_shape_node};
-    use gpui_flow_core::{Node, set_node_visible, write_node_order};
+    use gpui_flow_core::{Group, Node, set_node_visible, write_node_order};
 
     fn rectangle(id: &str) -> Node {
         create_shape_node(
@@ -481,6 +583,325 @@ mod tests {
 
     fn svg(export: &VectorExport) -> String {
         String::from_utf8(export.to_svg().unwrap()).unwrap()
+    }
+
+    fn framed(nodes: Vec<Node>) -> (Graph, Selection) {
+        let (mut graph, mut selection) = selected(nodes);
+        let mut frame = Group::new(
+            "frame",
+            "Frame artboard",
+            Rect::new(Point::new(20.25, -10.5), Size::new(63.5, 47.25)),
+        )
+        .with_nodes(selection.nodes.iter().cloned());
+        frame.data = serde_json::json!({"flow_creative_frame": 1});
+        graph.add_group(frame).unwrap();
+        selection.select_group("frame", false);
+        (graph, selection)
+    }
+
+    #[test]
+    fn frame_preserves_exact_viewport_clips_crossing_paint_and_keeps_graph_order() {
+        let mut front = rectangle("z");
+        front.position = Point::new(70.75, 30.75);
+        let (mut graph, selection) = framed(vec![rectangle("a"), front]);
+        graph.add_node(rectangle("outside-membership")).unwrap();
+        write_node_order(&mut graph, [NodeId::from("z"), NodeId::from("a")]).unwrap();
+        let before = (graph.clone(), selection.clone());
+        let export = prepare_vector_export(&graph, &selection).unwrap();
+        assert_eq!(
+            export.bounds(),
+            graph.groups[&GroupId::from("frame")].bounds
+        );
+        assert_eq!(export.object_count(), 2);
+        assert_eq!(export.suggested_name(), "Frame artboard.svg");
+        assert!(export.is_frame());
+        assert!(export.has_white_background());
+        let text = svg(&export);
+        assert!(text.contains("width=\"63.5\" height=\"47.25\" viewBox=\"0 0 63.5 47.25\""));
+        assert!(text.contains("<clipPath id=\"frame-clip\" clipPathUnits=\"userSpaceOnUse\"><rect x=\"0\" y=\"0\" width=\"63.5\" height=\"47.25\"/></clipPath>"));
+        let clip = text.find("<g clip-path=\"url(#frame-clip)\">").unwrap();
+        let background = text.find("fill=\"#ffffff\" stroke=\"none\"").unwrap();
+        let back = text.find("<title>z</title>").unwrap();
+        let front = text.find("<title>a</title>").unwrap();
+        assert!(clip < background && background < back && back < front);
+        assert!(text.contains("translate(50.5 41.25)"));
+        assert!(text.contains("translate(-10 -10)"));
+        assert!(text.contains("width=\"100\" height=\"40\""));
+        assert!(text.ends_with("  </g>\n  </g>\n</svg>\n"));
+        assert!(!text.contains("Frame artboard"));
+        assert!(!text.contains("outside-membership"));
+        assert_eq!((graph.clone(), selection.clone()), before);
+
+        graph.groups.get_mut(&GroupId::from("frame")).unwrap().data =
+            serde_json::json!({"background": "url(https://example.invalid)", "onclick": "bad"});
+        let legacy = prepare_vector_export(&graph, &selection).unwrap();
+        assert!(legacy.is_frame());
+        assert!(!legacy.has_white_background());
+        assert!(!svg(&legacy).contains("#ffffff"));
+        assert!(!svg(&legacy).contains("example.invalid"));
+        assert!(!export.matches(&graph, &selection));
+    }
+
+    #[test]
+    fn frame_skips_hidden_members_but_rejects_every_visible_unsupported_kind() {
+        let (mut graph, selection) = framed(vec![rectangle("visible"), rectangle("hidden")]);
+        set_node_visible(&mut graph, &NodeId::from("hidden"), false).unwrap();
+        graph.nodes.get_mut(&NodeId::from("hidden")).unwrap().data = serde_json::Value::Null;
+        // Hidden content is not decoded and does not consume the object budget.
+        for index in 0..MAX_VECTOR_EXPORT_OBJECTS {
+            let id = NodeId::from(format!("hidden-{index}"));
+            graph
+                .add_node(Node::new(id.clone(), "Hidden media", Point::ZERO).with_kind("image"))
+                .unwrap();
+            graph
+                .groups
+                .get_mut(&GroupId::from("frame"))
+                .unwrap()
+                .node_ids
+                .insert(id.clone());
+            set_node_visible(&mut graph, &id, false).unwrap();
+        }
+        let export = prepare_vector_export(&graph, &selection).unwrap();
+        assert_eq!(export.object_count(), 1);
+        assert!(!svg(&export).contains("<title>hidden</title>"));
+        for kind in ["image", "text", "video", "model", "generate_image"] {
+            graph.nodes.get_mut(&NodeId::from("hidden")).unwrap().kind = kind.into();
+            assert!(export.matches(&graph, &selection));
+            set_node_visible(&mut graph, &NodeId::from("hidden"), true).unwrap();
+            assert!(
+                prepare_vector_export(&graph, &selection)
+                    .unwrap_err()
+                    .contains("仅支持形状和笔迹")
+            );
+            assert!(!export.matches(&graph, &selection));
+            set_node_visible(&mut graph, &NodeId::from("hidden"), false).unwrap();
+        }
+    }
+
+    #[test]
+    fn frame_empty_mixed_missing_and_invalid_requests_fail_without_mutation() {
+        let (empty, selection) = framed(vec![]);
+        assert!(
+            prepare_vector_export(&empty, &selection)
+                .unwrap_err()
+                .contains("no visible")
+        );
+        let (mut graph, selection) = framed(vec![rectangle("a")]);
+        set_node_visible(&mut graph, &NodeId::from("a"), false).unwrap();
+        assert!(
+            prepare_vector_export(&graph, &selection)
+                .unwrap_err()
+                .contains("no visible")
+        );
+        set_node_visible(&mut graph, &NodeId::from("a"), true).unwrap();
+        let before = (graph.clone(), selection.clone());
+        let mut mixed = selection.clone();
+        mixed.select_node("a", true);
+        assert!(prepare_vector_export(&graph, &mixed).is_err());
+        mixed = selection.clone();
+        mixed.select_edge("edge", true);
+        assert!(prepare_vector_export(&graph, &mixed).is_err());
+        mixed = selection.clone();
+        mixed.select_group("other", true);
+        assert!(prepare_vector_export(&graph, &mixed).is_err());
+        mixed.select_group("missing", false);
+        assert!(
+            prepare_vector_export(&graph, &mixed)
+                .unwrap_err()
+                .contains("no longer exists")
+        );
+        assert_eq!((graph.clone(), selection.clone()), before);
+        graph
+            .groups
+            .get_mut(&GroupId::from("frame"))
+            .unwrap()
+            .node_ids
+            .insert(NodeId::from("missing"));
+        assert!(
+            prepare_vector_export(&graph, &selection)
+                .unwrap_err()
+                .contains("no longer exists")
+        );
+        graph
+            .groups
+            .get_mut(&GroupId::from("frame"))
+            .unwrap()
+            .node_ids
+            .remove(&NodeId::from("missing"));
+        for bounds in [
+            Rect::new(Point::ZERO, Size::new(0.0, 1.0)),
+            Rect::new(Point::new(f32::NAN, 0.0), Size::new(1.0, 1.0)),
+            Rect::new(Point::new(f32::MAX, 0.0), Size::new(1.0, 1.0)),
+            Rect::new(Point::ZERO, Size::new(MAX_VECTOR_EXPORT_SPAN + 1.0, 1.0)),
+        ] {
+            graph
+                .groups
+                .get_mut(&GroupId::from("frame"))
+                .unwrap()
+                .bounds = bounds;
+            assert!(prepare_vector_export(&graph, &selection).is_err());
+        }
+        graph
+            .groups
+            .get_mut(&GroupId::from("frame"))
+            .unwrap()
+            .bounds = Rect::new(Point::ZERO, Size::new(MAX_VECTOR_EXPORT_SPAN, 0.5));
+        assert_eq!(
+            prepare_vector_export(&graph, &selection)
+                .unwrap()
+                .bounds()
+                .size
+                .height,
+            0.5
+        );
+        graph.groups.get_mut(&GroupId::from("frame")).unwrap().title = "x".repeat(513);
+        assert!(
+            prepare_vector_export(&graph, &selection)
+                .unwrap_err()
+                .contains("512")
+        );
+    }
+
+    #[test]
+    fn frame_snapshot_tracks_source_and_visible_members_while_ignoring_locks() {
+        let (mut graph, selection) =
+            framed(vec![rectangle("a"), rectangle("z"), rectangle("hidden")]);
+        set_node_visible(&mut graph, &NodeId::from("hidden"), false).unwrap();
+        let export = prepare_vector_export(&graph, &selection).unwrap();
+        let original = svg(&export);
+        graph
+            .groups
+            .get_mut(&GroupId::from("frame"))
+            .unwrap()
+            .locked = true;
+        graph.nodes.get_mut(&NodeId::from("a")).unwrap().locked = true;
+        graph.groups.get_mut(&GroupId::from("frame")).unwrap().data["host"] =
+            serde_json::json!({"ignored": true});
+        graph
+            .nodes
+            .get_mut(&NodeId::from("hidden"))
+            .unwrap()
+            .position
+            .x += 50.0;
+        assert!(export.matches(&graph, &selection));
+        for change in 0..10 {
+            let mut changed = graph.clone();
+            match change {
+                0 => changed
+                    .groups
+                    .get_mut(&GroupId::from("frame"))
+                    .unwrap()
+                    .title
+                    .push('!'),
+                1 => {
+                    changed
+                        .groups
+                        .get_mut(&GroupId::from("frame"))
+                        .unwrap()
+                        .bounds
+                        .origin
+                        .x += 1.0
+                }
+                2 => {
+                    changed
+                        .groups
+                        .get_mut(&GroupId::from("frame"))
+                        .unwrap()
+                        .bounds
+                        .size
+                        .width += 1.0
+                }
+                3 => {
+                    changed
+                        .groups
+                        .get_mut(&GroupId::from("frame"))
+                        .unwrap()
+                        .data["flow_creative_frame"] = serde_json::json!(0)
+                }
+                4 => {
+                    changed
+                        .groups
+                        .get_mut(&GroupId::from("frame"))
+                        .unwrap()
+                        .node_ids
+                        .remove(&NodeId::from("a"));
+                }
+                5 => {
+                    set_node_visible(&mut changed, &NodeId::from("a"), false).unwrap();
+                }
+                6 => {
+                    write_node_order(&mut changed, [NodeId::from("z"), NodeId::from("a")]).unwrap();
+                }
+                7 => {
+                    changed.nodes.get_mut(&NodeId::from("a")).unwrap().data["shape"]["style"]["opacity"] =
+                        serde_json::json!(0.5)
+                }
+                8 => {
+                    changed
+                        .nodes
+                        .get_mut(&NodeId::from("a"))
+                        .unwrap()
+                        .position
+                        .x += 1.0
+                }
+                _ => {
+                    changed.nodes.remove(&NodeId::from("hidden"));
+                }
+            }
+            assert!(
+                !export.matches(&changed, &selection),
+                "stale frame change {change}"
+            );
+        }
+        let mut other = graph.groups[&GroupId::from("frame")].clone();
+        other.id = GroupId::from("other");
+        graph.groups.remove(&GroupId::from("frame"));
+        graph.groups.insert(other.id.clone(), other);
+        let mut other_selection = selection.clone();
+        other_selection.select_group("other", false);
+        assert!(!export.matches(&graph, &other_selection));
+        assert_eq!(svg(&export), original);
+    }
+
+    #[test]
+    fn frame_visible_objects_and_pencil_points_keep_existing_budgets() {
+        let (mut graph, selection) = framed(
+            (0..=MAX_VECTOR_EXPORT_OBJECTS)
+                .map(|index| rectangle(&index.to_string()))
+                .collect(),
+        );
+        assert!(
+            prepare_vector_export(&graph, &selection)
+                .unwrap_err()
+                .contains("128")
+        );
+        set_node_visible(&mut graph, &NodeId::from("128"), false).unwrap();
+        assert_eq!(
+            prepare_vector_export(&graph, &selection)
+                .unwrap()
+                .object_count(),
+            MAX_VECTOR_EXPORT_OBJECTS
+        );
+        let (mut graph, selection) = framed(
+            (0..8)
+                .map(|index| pencil(&index.to_string(), vec![Point::ZERO; 8192]))
+                .collect(),
+        );
+        assert!(prepare_vector_export(&graph, &selection).is_ok());
+        graph.add_node(pencil("extra", vec![Point::ZERO])).unwrap();
+        graph
+            .groups
+            .get_mut(&GroupId::from("frame"))
+            .unwrap()
+            .node_ids
+            .insert(NodeId::from("extra"));
+        assert!(
+            prepare_vector_export(&graph, &selection)
+                .unwrap_err()
+                .contains("65536")
+        );
+        set_node_visible(&mut graph, &NodeId::from("extra"), false).unwrap();
+        assert!(prepare_vector_export(&graph, &selection).is_ok());
     }
 
     #[test]
