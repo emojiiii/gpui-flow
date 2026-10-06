@@ -3,6 +3,7 @@ use std::time::Duration;
 
 impl CreativeCanvas {
     pub(super) fn close_ready(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        self.cancel_clipboard_paste();
         self.clear_asset_export();
         if let Some(cancel) = &self.image_edit_cancel {
             cancel.store(true, std::sync::atomic::Ordering::Release);
@@ -667,7 +668,7 @@ impl CreativeCanvas {
 }
 /// A copied project asset becomes a typed visible object. No external path is
 /// stored on the node, and explicit placement is validated by the Frame helper.
-fn imported_asset_node(
+pub(super) fn imported_asset_node(
     registry: &CreativeRegistry,
     asset: &ProjectAsset,
     id: NodeId,

@@ -34,6 +34,8 @@ const MAX_PROJECT_BYTES: u64 = MAX_JSON_BYTES as u64 + 2 * 1024 * 1024;
 const PROJECT_FILE: &str = "project.json";
 static NEXT_NAME: AtomicU64 = AtomicU64::new(0);
 static TRANSACTION: Mutex<()> = Mutex::new(());
+#[cfg(feature = "desktop")]
+mod clipboard_assets;
 mod mask_assets;
 mod media_assets;
 pub use media_assets::{MAX_MEDIA_BYTES, MAX_MEDIA_DURATION_SECONDS, creative_media_backend};

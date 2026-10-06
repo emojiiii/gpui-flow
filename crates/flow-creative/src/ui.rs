@@ -526,6 +526,8 @@ pub struct CreativeCanvas {
     background_panel: Option<canvas_tools::BackgroundPanel>,
     object_menu: Option<context_menu::ObjectMenu>,
     object_menu_focus: FocusHandle,
+    owned_canvas_copy: Option<clipboard_images::OwnedCanvasCopy>,
+    clipboard_cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
     import_model: bool,
     asset_picker: Option<asset_browser::AssetPicker>,
     asset_picker_focus: FocusHandle,
@@ -799,6 +801,7 @@ impl CreativeCanvas {
         let asset_thumbnails = cx.new(asset_thumbnails::AssetThumbnails::new);
         let thumbnail_observer = cx.observe(&asset_thumbnails, |_, _, cx| cx.notify());
         cx.on_release(|this: &mut Self, _| {
+            this.cancel_clipboard_paste();
             if let Some(cancel) = &this.export_cancel {
                 cancel.store(true, std::sync::atomic::Ordering::Release);
             }
@@ -870,6 +873,8 @@ impl CreativeCanvas {
                     })
                     .collect(),
             ),
+            owned_canvas_copy: None,
+            clipboard_cancel: None,
             import_model: false,
             asset_picker: None,
             asset_picker_focus: cx.focus_handle(),
@@ -1325,6 +1330,7 @@ impl CreativeCanvas {
                 }
             }
             Action::Home => {
+                self.cancel_clipboard_paste();
                 self.clear_asset_export();
                 self.clear_image_edit();
                 self.finish_mask_stroke(cx);
@@ -1708,6 +1714,7 @@ fn label(text: impl Into<SharedString>) -> Div {
 mod arrangement_tools;
 mod asset_browser;
 mod asset_export_ui;
+mod clipboard_images;
 mod text_export;
 pub use text_export::install_creative_text_export_backend;
 mod asset_thumbnails;
@@ -1863,7 +1870,9 @@ impl Render for CreativeCanvas {
                 }),
             )
             .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
-                this.tool_key_down(event, window, cx);
+                if !this.clipboard_key_down(event, window, cx) {
+                    this.tool_key_down(event, window, cx);
+                }
             }))
             .capture_key_up(cx.listener(|this, event: &KeyUpEvent, window, cx| {
                 if matches!(event.keystroke.key.as_str(), "space" | " ")

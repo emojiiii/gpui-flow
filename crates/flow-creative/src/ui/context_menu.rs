@@ -139,20 +139,8 @@ impl CreativeCanvas {
                     self.action(*action, window, cx);
                 }
             }
-            ContextAction::Copy => {
-                if self.command(CanvasCommand::CopySelection, cx) {
-                    self.notice = Some("已复制对象，可在本画布粘贴".into());
-                }
-            }
-            ContextAction::Paste(at) => {
-                if self.importing || self.saving {
-                    return;
-                }
-                let result = self
-                    .canvas
-                    .update(cx, |canvas, cx| canvas.paste_copied_selection_at(at, cx));
-                self.notice = result.err().map(|error| error.to_string());
-            }
+            ContextAction::Copy => self.copy_canvas_selection(cx),
+            ContextAction::Paste(at) => self.paste_clipboard(Some(at), cx),
         }
         cx.notify();
     }
@@ -215,9 +203,9 @@ impl CreativeCanvas {
                 !has_objects,
             ),
             (
-                "粘贴对象到此处",
+                "粘贴到此处",
                 Action::Context(ContextAction::Paste(world)),
-                !editable || !view.can_paste_selection(),
+                !editable,
             ),
         ];
         if has_objects {
