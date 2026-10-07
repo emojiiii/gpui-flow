@@ -147,16 +147,23 @@ impl Render for AdjustmentPreview {
             Some(pixels) => img(pixels),
             None => img(self.fallback_path.clone()),
         }
-        .w(px(self.view_size.width))
-        .h(px(self.view_size.height))
-        .object_fit(ObjectFit::Contain);
+        // Adjustment changes pixels, never the object's framing. Pin the leaf
+        // to the same viewport used by the normal image renderer so intrinsic
+        // layout and Contain cannot make a freely resized image jump on entry.
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
+        .object_fit(ObjectFit::Cover);
         let status = self
             .error
             .clone()
             .or_else(|| (!self.ready_for(self.desired)).then(|| "正在更新预览…".to_string()));
         div()
             .relative()
-            .size_full()
+            .w(px(self.view_size.width))
+            .h(px(self.view_size.height))
+            .overflow_hidden()
             .child(image)
             .when_some(status, |v, text| {
                 v.child(
