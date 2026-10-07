@@ -73,7 +73,7 @@ impl ShapeViews {
                 .into_any_element();
         }
 
-        self.render_composited(node, object, zoom, cx)
+        self.render_composited(&node.id, object, zoom, false, cx)
     }
 
     pub(super) fn render_pencil(&self, node: &Node, zoom: f32, cx: &mut App) -> AnyElement {
@@ -87,57 +87,104 @@ impl ShapeViews {
         let Ok(object) = pencil_preview::object_for_node(node) else {
             return message("笔迹几何无效");
         };
-        self.render_composited(node, object, zoom, cx)
+        self.render_composited(&node.id, object, zoom, false, cx)
+    }
+
+    /// The caller owns a fresh ShapeViews per live stroke. World-space points
+    /// keep an already-painted prefix at the same location as new points arrive.
+    pub(super) fn render_draft(
+        &self,
+        points: &[WorldPoint],
+        style: crate::pencil::PencilStyle,
+        viewport: gpui_flow_core::Viewport,
+        cx: &mut App,
+    ) -> AnyElement {
+        let id: NodeId = "pencil-draft".into();
+        if points.is_empty() {
+            return div().into_any_element();
+        }
+        if !viewport.pan.is_finite()
+            || !viewport.zoom.is_finite()
+            || viewport.zoom <= 0.
+            || points.len() > crate::pencil::MAX_PENCIL_POINTS
+            || style.validate().is_err()
+        {
+            self.remove(&id);
+            return message("笔迹预览参数无效");
+        }
+        if style.opacity <= 0. || style.opacity >= 1. || points.iter().all(|p| *p == points[0]) {
+            self.remove(&id);
+            return pencil_preview::preview(points, style, viewport);
+        }
+        let object = pencil_preview::object(id.as_str(), points, style);
+        if object.validate().is_err() || object.paint_bounds().is_none() {
+            self.remove(&id);
+            return message("笔迹预览几何无效");
+        }
+        let preview = self.render_composited(&id, object, viewport.zoom, true, cx);
+        div()
+            .absolute()
+            .left(px(viewport.pan.x))
+            .top(px(viewport.pan.y))
+            .size_full()
+            .child(preview)
+            .into_any_element()
     }
 
     fn render_composited(
         &self,
-        node: &Node,
+        id: &NodeId,
         object: DisplayObject,
         zoom: f32,
+        progressive: bool,
         cx: &mut App,
     ) -> AnyElement {
         let request = PreviewRequest::new(object, zoom);
         let (view, clear, changed) = {
             let mut cache = self.0.lock().unwrap();
-            if !cache.entries.contains_key(&node.id) && cache.entries.len() >= MAX_PREVIEWS {
+            if !cache.entries.contains_key(id) && cache.entries.len() >= MAX_PREVIEWS {
                 return message("最多同时预览 32 个半透明矢量对象；隐藏其他对象可释放预览");
             }
             let changed = cache
                 .entries
-                .get(&node.id)
-                .is_none_or(|entry| entry.desired != request);
-            let clear = cache
-                .entries
-                .get(&node.id)
-                .is_none_or(|entry| entry.desired.object != request.object);
+                .get(id)
+                .is_none_or(|entry| entry.desired != request || entry.progressive != progressive);
+            let clear = cache.entries.get(id).is_none_or(|entry| {
+                entry.desired.object != request.object
+                    && !(progressive
+                        && entry.progressive
+                        && is_path_prefix(&entry.desired.object, &request.object))
+            });
             if changed {
                 cache.generation = cache.generation.wrapping_add(1);
                 let generation = cache.generation;
                 if let Some(job) = &cache.running
-                    && job.id == node.id
+                    && &job.id == id
+                    && !(progressive
+                        && job.progressive
+                        && is_path_prefix(&job.request.object, &request.object))
                 {
                     job.cancelled.store(true, Ordering::Release);
                 }
-                let entry = cache
-                    .entries
-                    .entry(node.id.clone())
-                    .or_insert_with(|| Entry {
-                        view: cx.new(ShapePreview::new),
-                        desired: request.clone(),
-                        generation,
-                        completed: None,
-                    });
+                let entry = cache.entries.entry(id.clone()).or_insert_with(|| Entry {
+                    view: cx.new(ShapePreview::new),
+                    desired: request.clone(),
+                    generation,
+                    completed: None,
+                    progressive,
+                });
                 entry.desired = request;
                 entry.generation = generation;
+                entry.progressive = progressive;
             }
-            (cache.entries[&node.id].view.clone(), clear, changed)
+            (cache.entries[id].view.clone(), clear, changed)
         };
         view.update(cx, |view, cx| {
             let moved = view.zoom != zoom;
             view.zoom = zoom;
-            // A zoom-only refresh can reuse the old complete image at its exact
-            // world placement. A content change must not expose an old alpha.
+            // Zoom can reuse an old complete image at its exact world placement.
+            // Only a draft's same-style path prefix may survive appended points;
+            // every other content/style change must discard the older pixels.
             if clear {
                 view.clear(cx);
             }
@@ -268,6 +315,31 @@ struct PreviewRequest {
     object: DisplayObject,
     raster_scale: f32,
 }
+
+/// A progressive frame represents a complete earlier prefix, never a second
+/// translucent layer over the newest frame. All authored state besides added
+/// path commands must stay identical; committed objects never use this rule.
+fn is_path_prefix(older: &DisplayObject, newer: &DisplayObject) -> bool {
+    let (Shape::Path(old), Shape::Path(new)) = (&older.shape, &newer.shape) else {
+        return false;
+    };
+    !old.commands.is_empty()
+        && new.commands.starts_with(&old.commands)
+        && older.id == newer.id
+        && older.name == newer.name
+        && older.classes == newer.classes
+        && older.data == newer.data
+        && older.transform == newer.transform
+        && older.pivot == newer.pivot
+        && older.style == newer.style
+        && older.visible == newer.visible
+        && older.locked == newer.locked
+        && older.z_index == newer.z_index
+        && older.hit_policy == newer.hit_policy
+        && older.hit_children == newer.hit_children
+        && older.mask == newer.mask
+        && older.eraser == newer.eraser
+}
 impl PreviewRequest {
     fn new(object: DisplayObject, zoom: f32) -> Self {
         let bounds = object.paint_bounds().expect("validated primitive bounds");
@@ -290,6 +362,7 @@ struct Entry {
     desired: PreviewRequest,
     generation: u64,
     completed: Option<u64>,
+    progressive: bool,
 }
 #[derive(Default)]
 struct PreviewCache {
@@ -309,6 +382,8 @@ struct Job {
     id: NodeId,
     generation: u64,
     cancelled: Arc<AtomicBool>,
+    request: Arc<PreviewRequest>,
+    progressive: bool,
 }
 
 fn start(owner: &Arc<Mutex<PreviewCache>>, cx: &mut App) {
@@ -329,8 +404,10 @@ fn start(owner: &Arc<Mutex<PreviewCache>>, cx: &mut App) {
             id: id.clone(),
             generation: entry.generation,
             cancelled: Arc::new(AtomicBool::new(false)),
+            request: Arc::new(entry.desired.clone()),
+            progressive: entry.progressive,
         };
-        let request = entry.desired.clone();
+        let request = job.request.clone();
         cache.running = Some(job.clone());
         (job, request)
     };
@@ -353,9 +430,15 @@ fn start(owner: &Arc<Mutex<PreviewCache>>, cx: &mut App) {
                 let mut cache = owner.lock().unwrap();
                 cache.running = None;
                 cache.entries.get_mut(&job.id).and_then(|entry| {
-                    // Generation, not value equality: A/B/A edits and a removed
-                    // then re-created ID cannot accept the old A job.
-                    if entry.generation == job.generation && !job.cancelled.load(Ordering::Acquire)
+                    // Normal objects retain strict generation checks. A live
+                    // draft may accept its older completed prefix while newer
+                    // points are queued. Cancellation remains a one-way barrier
+                    // for style changes, removal and A/B/A edits.
+                    if (entry.generation == job.generation
+                        || (entry.progressive
+                            && job.progressive
+                            && is_path_prefix(&job.request.object, &entry.desired.object)))
+                        && !job.cancelled.load(Ordering::Acquire)
                     {
                         entry.completed = Some(job.generation);
                         Some(entry.view.clone())
@@ -572,6 +655,120 @@ mod tests {
                 .count()
                 > 100
         );
+    }
+
+    #[test]
+    fn draft_prefix_accepts_only_added_points_with_unchanged_style_and_placement() {
+        let style = crate::pencil::PencilStyle {
+            opacity: 0.5,
+            ..Default::default()
+        };
+        let points = [
+            WorldPoint::new(-20., 30.),
+            WorldPoint::new(60., 110.),
+            WorldPoint::new(-20., 110.),
+        ];
+        let old = pencil_preview::object("draft", &points[..2], style);
+        let next = pencil_preview::object("draft", &points, style);
+        assert!(is_path_prefix(&old, &next));
+        assert!(!is_path_prefix(&next, &old));
+        let mut changed = next.clone();
+        changed.style.opacity = 0.75;
+        assert!(!is_path_prefix(&old, &changed));
+        changed = next.clone();
+        changed.style.stroke.as_mut().unwrap().width += 1.;
+        assert!(!is_path_prefix(&old, &changed));
+        changed = next.clone();
+        changed.transform = Affine::translation(1., 0.);
+        assert!(!is_path_prefix(&old, &changed));
+        changed = pencil_preview::object("other-stroke", &points, style);
+        assert!(!is_path_prefix(&old, &changed));
+        changed = pencil_preview::object(
+            "draft",
+            &[points[0], WorldPoint::new(61., 110.), points[2]],
+            style,
+        );
+        assert!(!is_path_prefix(&old, &changed));
+        changed = pencil_preview::object(
+            "draft",
+            &points,
+            crate::pencil::PencilStyle {
+                color: 0xff0000,
+                ..style
+            },
+        );
+        assert!(!is_path_prefix(&old, &changed));
+    }
+
+    #[test]
+    fn draft_world_raster_matches_committed_local_raster_without_double_alpha() {
+        let points = [
+            WorldPoint::new(-20., 30.),
+            WorldPoint::new(60., 110.),
+            WorldPoint::new(-20., 110.),
+            WorldPoint::new(60., 30.),
+        ];
+        let style = crate::pencil::PencilStyle {
+            color: 0x3b82f6,
+            stroke_width: 12.,
+            opacity: 0.5,
+        };
+        let draft = PreviewRequest::new(pencil_preview::object("draft", &points, style), 1.);
+        let node = crate::pencil::create_pencil_node_from_points("saved", "Stroke", &points, style)
+            .unwrap();
+        let committed = PreviewRequest::new(pencil_preview::object_for_node(&node).unwrap(), 1.);
+        let live = raster_frame(&draft, &AtomicBool::new(false))
+            .unwrap()
+            .unwrap();
+        let saved = raster_frame(&committed, &AtomicBool::new(false))
+            .unwrap()
+            .unwrap();
+        assert_eq!((live.width, live.height), (saved.width, saved.height));
+        assert_eq!(live.premul_rgba, saved.premul_rgba);
+        assert_eq!(
+            live.screen_bounds.origin,
+            saved.screen_bounds.origin + node.position * draft.raster_scale
+        );
+        assert_eq!(
+            live.premul_rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|p| p[3])
+                .max(),
+            Some(128)
+        );
+    }
+
+    #[test]
+    fn draft_owner_drop_cancels_its_worker_before_another_stroke_can_attach() {
+        let request = PreviewRequest::new(
+            pencil_preview::object(
+                "draft",
+                &[WorldPoint::ZERO, WorldPoint::new(80., 40.)],
+                crate::pencil::PencilStyle {
+                    opacity: 0.5,
+                    ..Default::default()
+                },
+            ),
+            1.,
+        );
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let owner = Arc::new(Mutex::new(PreviewCache {
+            entries: BTreeMap::new(),
+            generation: 1,
+            running: Some(Job {
+                id: "draft".into(),
+                generation: 1,
+                cancelled: cancelled.clone(),
+                request: Arc::new(request),
+                progressive: true,
+            }),
+        }));
+        let weak = Arc::downgrade(&owner);
+        drop(owner);
+        assert!(cancelled.load(Ordering::Acquire));
+        assert!(weak.upgrade().is_none());
     }
 
     #[test]

@@ -19,6 +19,7 @@ pub(super) struct PencilDraft {
     points: Vec<WorldPoint>,
     style: PencilStyle,
     limited: bool,
+    preview: shape_preview::ShapeViews,
 }
 impl PencilDraft {
     fn append(&mut self, point: WorldPoint, zoom: f32, last: bool) {
@@ -164,6 +165,9 @@ impl CreativeCanvas {
         let result = self.pencil_style_from_fields(cx);
         match result {
             Ok(style) if self.pencil_active => {
+                // A settings edit starts a new brush state, never an alpha
+                // replacement on a still-running older stroke preview.
+                self.pencil_draft = None;
                 self.pencil_style = style;
                 self.pencil_focus.focus(window, cx);
             }
@@ -260,13 +264,11 @@ impl CreativeCanvas {
             .track_focus(&self.pencil_focus)
             .cursor_crosshair();
         if let Some(draft) = &self.pencil_draft {
-            overlay = overlay.child(pencil_preview::preview(
+            overlay = overlay.child(draft.preview.render_draft(
                 &draft.points,
-                PencilStyle {
-                    opacity: 1.,
-                    ..draft.style
-                },
+                draft.style,
                 self.canvas.read(cx).editor.viewport,
+                cx,
             ));
         }
         Some(
@@ -287,6 +289,7 @@ impl CreativeCanvas {
                                     points: vec![this.pencil_world(event.position, cx)],
                                     style,
                                     limited: false,
+                                    preview: Default::default(),
                                 });
                             }
                             Err(error) => this.notice = Some(error),
@@ -393,7 +396,7 @@ impl CreativeCanvas {
             .flex_col()
             .gap_2()
             .child(label(if self.pencil_active {
-                "自由绘制 · 草稿实色预览 · Esc 完成"
+                "自由绘制 · 半透明草稿渐进预览 · Esc 完成"
             } else {
                 "笔迹"
             }))
@@ -441,6 +444,7 @@ mod tests {
             points: vec![WorldPoint::ZERO],
             style: PencilStyle::default(),
             limited: false,
+            preview: Default::default(),
         };
         draft.append(WorldPoint::new(0.5, 0.), 1., false);
         assert_eq!(draft.points.len(), 1);

@@ -4,7 +4,7 @@ use crate::pencil::{PencilData, PencilStyle};
 use gpui_flow::display::{DisplayElement, RenderObject};
 use gpui_flow_scene::{self as scene, Affine, Color, DisplayObject, Shape, Stroke, Style};
 
-fn object(id: &str, points: &[WorldPoint], style: PencilStyle) -> DisplayObject {
+pub(super) fn object(id: &str, points: &[WorldPoint], style: PencilStyle) -> DisplayObject {
     let first = points[0];
     if points.iter().all(|p| *p == first) {
         return DisplayObject::new(id, scene::display::Ellipse::circle(style.stroke_width / 2.))
