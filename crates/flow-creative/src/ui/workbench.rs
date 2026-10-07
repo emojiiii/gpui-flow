@@ -5,6 +5,10 @@ pub struct CreativeWorkbench {
     store: Option<ProjectStore>,
     projects: Vec<ProjectSummary>,
     thumbnails: BTreeMap<String, PathBuf>,
+    previews: Entity<project_previews::ProjectPreviews>,
+    _preview_observer: Subscription,
+    _theme_observer: Subscription,
+    home_generation: u64,
     name: Entity<TextareaState>,
     current: Option<Entity<CreativeCanvas>>,
     current_subscription: Option<Subscription>,
@@ -17,10 +21,21 @@ impl CreativeWorkbench {
             Ok(store) => (Some(store), None),
             Err(error) => (None, Some(format!("无法打开本地项目目录：{error}"))),
         };
+        let previews = cx.new(project_previews::ProjectPreviews::new);
+        let preview_observer = cx.observe(&previews, |_, _, cx| cx.notify());
+        let theme_observer = cx.observe_global::<gpui_kit::component::Theme>(|this, cx| {
+            if this.current.is_none() {
+                this.refresh(cx);
+            }
+        });
         let mut this = Self {
             store,
             projects: vec![],
             thumbnails: BTreeMap::new(),
+            previews,
+            _preview_observer: preview_observer,
+            _theme_observer: theme_observer,
+            home_generation: 0,
             name: cx.new(|cx| {
                 TextareaState::new(window, cx)
                     .placeholder("项目名称，例如：秋日品牌提案")
@@ -48,6 +63,10 @@ impl CreativeWorkbench {
         let Some(store) = self.store.clone() else {
             return;
         };
+        self.home_generation = self.home_generation.wrapping_add(1);
+        let generation = self.home_generation;
+        self.previews.update(cx, |previews, cx| previews.cancel(cx));
+        let preview_store = store.clone();
         cx.spawn(async move |this, cx| {
             let result = cx
                 .background_executor()
@@ -69,10 +88,27 @@ impl CreativeWorkbench {
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
+                if this.home_generation != generation || this.current.is_some() {
+                    return;
+                }
                 match result {
                     Ok((listing, thumbnails)) => {
                         this.projects = listing.projects;
                         this.thumbnails = thumbnails;
+                        let ids = this
+                            .projects
+                            .iter()
+                            .take(16)
+                            .map(|p| p.metadata.id.clone())
+                            .collect();
+                        let backend = text_export::frame_text_backend_for(
+                            Arc::new(cx.text_system().all_font_names()),
+                            cx,
+                        )
+                        .ok();
+                        this.previews.update(cx, |previews, cx| {
+                            previews.request(preview_store, ids, backend, cx)
+                        });
                         if !listing.skipped.is_empty() {
                             this.notice = Some(format!(
                                 "有 {} 个项目无法读取，已保留原文件",
@@ -88,6 +124,8 @@ impl CreativeWorkbench {
         .detach();
     }
     fn activate(&mut self, project: LocalProject, window: &mut Window, cx: &mut Context<Self>) {
+        self.home_generation = self.home_generation.wrapping_add(1);
+        self.previews.update(cx, |previews, cx| previews.cancel(cx));
         let registry = Arc::new(standard_registry());
         let document = project.document().clone();
         let canvas = cx.new(|cx| {
@@ -175,10 +213,28 @@ impl Render for CreativeWorkbench {
         }
         let t = theme();
         let mut projects = div().flex().flex_wrap().gap_5();
-        for project in &self.projects {
+        for (index, project) in self.projects.iter().enumerate() {
             let id = project.metadata.id.clone();
             let name = project.metadata.name.clone();
             let thumbnail = self.thumbnails.get(&id).cloned();
+            let (preview, preview_label) = self
+                .previews
+                .read(cx)
+                .result(&id)
+                .map(|result| (result.image.clone(), result.label))
+                .unwrap_or((
+                    None,
+                    if index < 16 {
+                        "正在绘制作品预览…"
+                    } else {
+                        "暂无作品预览"
+                    },
+                ));
+            let cover_label = if preview.is_none() && thumbnail.is_some() {
+                "素材预览"
+            } else {
+                preview_label
+            };
             projects = projects.child(
                 div()
                     .id(SharedString::from(format!("project-{id}")))
@@ -194,29 +250,59 @@ impl Render for CreativeWorkbench {
                     .on_click(cx.listener(move |this, _, window, cx| this.open(&id, window, cx)))
                     .child(
                         div()
+                            .relative()
                             .h(px(156.))
+                            .overflow_hidden()
                             .bg(rgb(0xebedf3))
                             .flex()
                             .items_center()
                             .justify_center()
-                            .when_some(thumbnail.clone(), |cover, path| {
+                            .when_some(preview.clone(), |cover, image| {
                                 cover.child(
-                                    img(path)
+                                    img(image)
+                                        .absolute()
+                                        .top_0()
+                                        .left_0()
                                         .size_full()
-                                        .object_fit(ObjectFit::Cover)
-                                        .with_fallback(|| {
-                                            div().size_full().bg(rgb(0xebedf3)).into_any_element()
-                                        }),
+                                        .object_fit(ObjectFit::Contain),
                                 )
                             })
-                            .when(thumbnail.is_none(), |cover| {
+                            .when_some(
+                                thumbnail.clone().filter(|_| preview.is_none()),
+                                |cover, path| {
+                                    cover.child(
+                                        img(path)
+                                            .size_full()
+                                            .object_fit(ObjectFit::Cover)
+                                            .with_fallback(|| {
+                                                div()
+                                                    .size_full()
+                                                    .bg(rgb(0xebedf3))
+                                                    .into_any_element()
+                                            }),
+                                    )
+                                },
+                            )
+                            .when(thumbnail.is_none() && preview.is_none(), |cover| {
                                 cover.child(
                                     div()
                                         .text_size(px(24.))
                                         .text_color(rgb(0xb0b6c5))
                                         .child(chrome::icon("layers", 24.)),
                                 )
-                            }),
+                            })
+                            .child(
+                                div()
+                                    .absolute()
+                                    .left(px(6.))
+                                    .bottom(px(4.))
+                                    .px_1()
+                                    .rounded_sm()
+                                    .bg(rgba(0xffffffdd))
+                                    .text_size(px(10.))
+                                    .text_color(rgb(0x7b818b))
+                                    .child(cover_label),
+                            ),
                     )
                     .child(
                         div()

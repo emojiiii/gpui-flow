@@ -41,6 +41,8 @@ pub mod frame_png;
 #[cfg(feature = "desktop")]
 pub mod frame_text;
 pub mod frames;
+#[cfg(feature = "desktop")]
+pub mod project_preview;
 
 pub mod image_adjust;
 pub mod image_rotation;

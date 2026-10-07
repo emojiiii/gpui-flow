@@ -44,6 +44,7 @@ pub struct FramePngExport {
     frame_id: GroupId,
     title: String,
     bounds: Rect,
+    render_scale: f32,
     white_background: bool,
     suggested_name: String,
     objects: Vec<FrameObject>,
@@ -75,6 +76,20 @@ impl FramePngExport {
         prepare_frame_png_export(graph, selection, assets)
     }
 
+    /// Read-only, downscaled artwork preview. Authored geometry, cropping and
+    /// source budgets stay intact; only the final raster viewport is reduced.
+    pub fn prepare_preview(
+        graph: &Graph,
+        selection: &Selection,
+        assets: &[ProjectAsset],
+        max_size: [u32; 2],
+    ) -> Result<Self, String> {
+        if max_size.iter().any(|axis| !(1..=512).contains(axis)) {
+            return Err("Frame preview axes must be between 1 and 512 pixels".into());
+        }
+        prepare_frame_png_internal(graph, selection, assets, Some(max_size))
+    }
+
     pub fn suggested_name(&self) -> &str {
         &self.suggested_name
     }
@@ -83,12 +98,12 @@ impl FramePngExport {
         self.bounds
     }
 
-    /// Physical output dimensions at scale 1 and pixel ratio 1. Fractional
+    /// Physical output dimensions at the chosen scale and pixel ratio 1. Fractional
     /// Frame edges keep their exact coverage inside these outward-ceiled axes.
     pub fn pixel_size(&self) -> [u32; 2] {
         [
-            self.bounds.size.width.ceil() as u32,
-            self.bounds.size.height.ceil() as u32,
+            (f64::from(self.bounds.size.width) * f64::from(self.render_scale)).ceil() as u32,
+            (f64::from(self.bounds.size.height) * f64::from(self.render_scale)).ceil() as u32,
         ]
     }
 
@@ -196,7 +211,7 @@ impl FramePngExport {
             &scene,
             SceneExportRequest {
                 world_bounds: scene::Bounds::new(self.bounds.origin, self.bounds.size),
-                scale: 1.,
+                scale: self.render_scale,
                 pixel_ratio: 1.,
                 background: if self.white_background {
                     Color::WHITE
@@ -254,6 +269,15 @@ pub fn prepare_frame_png_export(
     selection: &Selection,
     assets: &[ProjectAsset],
 ) -> Result<FramePngExport, String> {
+    prepare_frame_png_internal(graph, selection, assets, None)
+}
+
+fn prepare_frame_png_internal(
+    graph: &Graph,
+    selection: &Selection,
+    assets: &[ProjectAsset],
+    preview_size: Option<[u32; 2]>,
+) -> Result<FramePngExport, String> {
     if selection.groups.len() != 1 || !selection.nodes.is_empty() || !selection.edges.is_empty() {
         return Err("Select one Frame by itself to export PNG".into());
     }
@@ -287,9 +311,23 @@ pub fn prepare_frame_png_export(
             "Frame PNG bounds must be finite, positive and inside the supported world".into(),
         );
     }
+    let mut render_scale = preview_size.map_or(1., |max_size| {
+        (f64::from(max_size[0]) / f64::from(bounds.size.width))
+            .min(f64::from(max_size[1]) / f64::from(bounds.size.height))
+            .min(1.) as f32
+    });
+    if let Some(max_size) = preview_size {
+        // Round the scale downward if f32 conversion would exceed the caller's
+        // pixel budget after SceneExportPlan's f64 multiplication and ceil.
+        while f64::from(bounds.size.width) * f64::from(render_scale) > f64::from(max_size[0])
+            || f64::from(bounds.size.height) * f64::from(render_scale) > f64::from(max_size[1])
+        {
+            render_scale = render_scale.next_down();
+        }
+    }
     check_dimensions(
-        bounds.size.width.ceil() as u32,
-        bounds.size.height.ceil() as u32,
+        (f64::from(bounds.size.width) * f64::from(render_scale)).ceil() as u32,
+        (f64::from(bounds.size.height) * f64::from(render_scale)).ceil() as u32,
     )?;
     let hidden = hidden_node_ids(graph);
     let mut visible_count = 0;
@@ -371,6 +409,7 @@ pub fn prepare_frame_png_export(
         frame_id: frame.id.clone(),
         title: frame.title.clone(),
         bounds,
+        render_scale,
         white_background: frame.data["flow_creative_frame"].as_u64() == Some(1),
         suggested_name: suggested_name(&frame.title),
         objects,
@@ -950,6 +989,41 @@ mod tests {
         image::load_from_memory_with_format(&bytes, ImageFormat::Png)
             .unwrap()
             .into_rgba8()
+    }
+
+    #[test]
+    fn project_preview_raster_is_bounded_preserves_layers_and_normal_export_limits() {
+        let home = TestHome::new();
+        let project = home.project();
+        let size = Size::new(8000., 6000.);
+        let (graph, selection) = framed(
+            vec![
+                rectangle("a", Point::ZERO, size, 0xff0000),
+                rectangle("b", Point::ZERO, size, 0x00ff00),
+            ],
+            Rect::new(Point::ZERO, size),
+            true,
+        );
+        assert!(FramePngExport::prepare(&graph, &selection, &[]).is_err());
+        let preview = FramePngExport::prepare_preview(&graph, &selection, &[], [267, 156]).unwrap();
+        let pixels = png(&preview, &project);
+        assert!(pixels.width() <= 267 && pixels.height() <= 156);
+        assert_eq!(
+            pixels.get_pixel(pixels.width() / 2, pixels.height() / 2).0,
+            [0, 255, 0, 255]
+        );
+        assert!(preview.encode(&project, &AtomicBool::new(true)).is_err());
+        let (small, selection) = framed(
+            vec![rectangle("a", Point::ZERO, Size::new(240., 160.), 0xff0000)],
+            Rect::new(Point::ZERO, Size::new(300., 200.)),
+            true,
+        );
+        assert_eq!(
+            FramePngExport::prepare(&small, &selection, &[])
+                .unwrap()
+                .pixel_size(),
+            [300, 200]
+        );
     }
 
     #[test]

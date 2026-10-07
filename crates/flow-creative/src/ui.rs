@@ -1793,6 +1793,7 @@ mod pencil_preview;
 mod pencil_tools;
 mod processing_panel;
 mod processing_tasks;
+mod project_previews;
 mod project_ui;
 mod reference_ui;
 mod selection_toolbar;

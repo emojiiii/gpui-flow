@@ -348,6 +348,27 @@ impl ProjectStore {
         }
         Ok(local)
     }
+
+    /// Read an immutable preview source without asset conversion or migration.
+    /// The preview renderer admits only the assets it actually needs. Legacy
+    /// projects requiring migration must be explicitly opened by the user.
+    #[cfg(feature = "desktop")]
+    pub(crate) fn read_preview_project(
+        &self,
+        id: &str,
+        registry: &CreativeRegistry,
+    ) -> Result<LocalProject, ProjectError> {
+        validate_id(id)?;
+        checked_directory(&self.root, false)?;
+        let directory = self.root.join(id);
+        let project = read_project(&directory, id)?;
+        registry.validate_document(&project.document)?;
+        Ok(LocalProject {
+            directory,
+            project,
+            migrated_reference_count: 0,
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1492,6 +1513,34 @@ mod tests {
             serde_json::to_vec_pretty(&project.project).unwrap(),
         )
         .unwrap();
+    }
+
+    #[cfg(feature = "desktop")]
+    #[test]
+    fn project_preview_read_is_read_only_and_never_migrates_legacy_data() {
+        let home = TestHome::new();
+        let store = home.store();
+        let registry = standard_registry();
+        let project = store
+            .create_project("Preview", &FlowDocument::default(), &registry)
+            .unwrap();
+        let path = project.directory().join(PROJECT_FILE);
+        let bytes = fs::read(&path).unwrap();
+        let snapshot = store
+            .read_preview_project(&project.metadata().id, &registry)
+            .unwrap();
+        assert_eq!(snapshot.document(), project.document());
+        assert_eq!(snapshot.revision(), project.revision());
+        assert_eq!(fs::read(path).unwrap(), bytes);
+        let (legacy, _) = legacy_reference_project(&home, "generate_image");
+        let path = legacy.directory().join(PROJECT_FILE);
+        let bytes = fs::read(&path).unwrap();
+        assert!(
+            store
+                .read_preview_project(&legacy.metadata().id, &registry)
+                .is_err()
+        );
+        assert_eq!(fs::read(path).unwrap(), bytes);
     }
 
     #[test]

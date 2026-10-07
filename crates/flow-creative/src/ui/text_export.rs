@@ -20,13 +20,20 @@ pub fn install_creative_text_export_backend(
 
 impl CreativeCanvas {
     pub(super) fn frame_text_backend(&self, cx: &App) -> Result<FrameTextBackend, String> {
-        let backend = cx
-            .try_global::<CreativeTextExportBackend>()
-            .ok_or("当前宿主未接入同一应用的文字导出服务")?;
-        FrameTextBackend::new(
-            &backend.0,
-            cx.theme().font_family.to_string(),
-            self.font_families.clone(),
-        )
+        frame_text_backend_for(self.font_families.clone(), cx)
     }
+}
+
+pub(super) fn frame_text_backend_for(
+    font_families: Arc<Vec<String>>,
+    cx: &App,
+) -> Result<FrameTextBackend, String> {
+    let backend = cx
+        .try_global::<CreativeTextExportBackend>()
+        .ok_or("当前宿主未接入同一应用的文字导出服务")?;
+    FrameTextBackend::new(
+        &backend.0,
+        cx.theme().font_family.to_string(),
+        font_families,
+    )
 }
