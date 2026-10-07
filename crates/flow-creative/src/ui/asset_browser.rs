@@ -196,8 +196,8 @@ impl CreativeCanvas {
                 "mask" => "paintbrush",
                 _ => "image",
             };
-            grid = grid.child(
-                self.button(
+            let card = self
+                .button(
                     SharedString::from(format!("asset-{}", asset.key)),
                     "",
                     Action::PlaceAsset(asset.key.clone()),
@@ -254,7 +254,32 @@ impl CreativeCanvas {
                         .text_size(px(10.))
                         .text_color(rgb(0x929aa8))
                         .child(asset_description(asset)),
-                ),
+                );
+            grid = grid.child(
+                div()
+                    .w(px(140.))
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(card)
+                    .child(
+                        self.button(
+                            SharedString::from(format!("export-stored-{}", asset.key)),
+                            "导出…",
+                            Action::ExportAsset(asset_export_ui::ExportAction::OpenStored(
+                                asset.key.clone(),
+                            )),
+                            self.importing || self.saving,
+                            cx,
+                        )
+                        .w_full()
+                        .h(px(26.))
+                        .text_size(px(11.))
+                        .accessibility_label(SharedString::from(format!(
+                            "导出项目素材 {}",
+                            asset.name
+                        ))),
+                    ),
             );
         }
         if assets.is_empty() {

@@ -1,6 +1,7 @@
 use super::*;
 use crate::asset_export::{
-    ExportAsset, export_asset, export_assets, export_frame_png_with_text, export_vector,
+    ExportAsset, StoredAssetExport, export_asset, export_assets, export_frame_png_with_text,
+    export_vector, stored_asset_export,
 };
 use crate::frame_png::{FramePngExport, prepare_frame_png_export};
 use crate::vector_export::{VectorExport, prepare_vector_export};
@@ -12,6 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 #[derive(Clone)]
 pub(super) enum ExportAction {
     Open,
+    OpenStored(String),
     Choose(usize),
     Browse,
     Write,
@@ -19,7 +21,7 @@ pub(super) enum ExportAction {
 }
 
 pub(super) struct AssetExportDialog {
-    selection: Selection,
+    origin: ExportOrigin,
     project: String,
     outputs: Vec<ExportChoice>,
     selected: usize,
@@ -29,9 +31,15 @@ pub(super) struct AssetExportDialog {
     error: Option<String>,
 }
 
+enum ExportOrigin {
+    Selection(Selection),
+    StoredAsset(String),
+}
+
 #[derive(Clone, PartialEq)]
 enum ExportChoice {
     Media(ExportAsset),
+    Stored(StoredAssetExport),
     Vector(VectorExport),
     FramePng(FramePngExport),
 }
@@ -39,6 +47,7 @@ impl ExportChoice {
     fn name(&self) -> &str {
         match self {
             Self::Media(asset) => &asset.suggested_name,
+            Self::Stored(asset) => &asset.suggested_name,
             Self::Vector(vector) => vector.suggested_name(),
             Self::FramePng(frame) => frame.suggested_name(),
         }
@@ -46,6 +55,7 @@ impl ExportChoice {
     fn label(&self) -> String {
         match self {
             Self::Media(asset) => asset.label.clone(),
+            Self::Stored(_) => "项目素材文件".into(),
             Self::Vector(vector) => format!(
                 "{}{} 个矢量对象",
                 if vector.is_frame() { "画框 · " } else { "" },
@@ -55,24 +65,24 @@ impl ExportChoice {
         }
     }
     fn details(&self) -> String {
+        if let Some(asset) = self.asset() {
+            let format = Path::new(&asset.key)
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("media")
+                .to_ascii_uppercase();
+            let dimensions = if asset.width > 0 && asset.height > 0 {
+                format!(" · {} × {}", asset.width, asset.height)
+            } else {
+                String::new()
+            };
+            return format!(
+                "{format}{dimensions} · {:.1} MiB",
+                asset.byte_len as f64 / 1_048_576.
+            );
+        }
         match self {
-            Self::Media(output) => {
-                let asset = &output.asset;
-                let format = Path::new(&asset.key)
-                    .extension()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("media")
-                    .to_ascii_uppercase();
-                let dimensions = if asset.width > 0 && asset.height > 0 {
-                    format!(" · {} × {}", asset.width, asset.height)
-                } else {
-                    String::new()
-                };
-                format!(
-                    "{format}{dimensions} · {:.1} MiB",
-                    asset.byte_len as f64 / 1_048_576.
-                )
-            }
+            Self::Media(_) | Self::Stored(_) => unreachable!("media details handled above"),
             Self::Vector(vector) => {
                 let size = vector.bounds().size;
                 format!(
@@ -100,7 +110,28 @@ impl ExportChoice {
         }
     }
     fn is_mask(&self) -> bool {
-        matches!(self, Self::Media(output) if output.asset.media_type == MASK_MEDIA_TYPE)
+        self.asset()
+            .is_some_and(|asset| asset.media_type == MASK_MEDIA_TYPE)
+    }
+    fn asset(&self) -> Option<&ProjectAsset> {
+        match self {
+            Self::Media(output) => Some(&output.asset),
+            Self::Stored(output) => Some(&output.asset),
+            _ => None,
+        }
+    }
+}
+
+fn origin_choices(
+    graph: &gpui_flow_core::Graph,
+    origin: &ExportOrigin,
+    assets: &[ProjectAsset],
+) -> Result<Vec<ExportChoice>, String> {
+    match origin {
+        ExportOrigin::Selection(selection) => export_choices(graph, selection, assets),
+        ExportOrigin::StoredAsset(key) => stored_asset_export(assets, key)
+            .map(|asset| vec![ExportChoice::Stored(asset)])
+            .map_err(|error| error.to_string()),
     }
 }
 
@@ -169,10 +200,15 @@ impl CreativeCanvas {
                         .frame_text_backend(cx)
                         .is_ok_and(|current| current == *backend)
             }) && project.metadata().id == dialog.project
-                && self.canvas.read(cx).editor.selection == dialog.selection
-                && export_choices(
+                && match &dialog.origin {
+                    ExportOrigin::Selection(selection) => {
+                        self.canvas.read(cx).editor.selection == *selection
+                    }
+                    ExportOrigin::StoredAsset(_) => true,
+                }
+                && origin_choices(
                     self.canvas.read(cx).editor.graph(),
-                    &dialog.selection,
+                    &dialog.origin,
                     project.assets(),
                 )
                 .is_ok_and(|outputs| {
@@ -201,12 +237,15 @@ impl CreativeCanvas {
         if self.importing || self.saving {
             return;
         }
-        if matches!(action, ExportAction::Open) {
-            let selection = self.canvas.read(cx).editor.selection.clone();
+        if matches!(&action, ExportAction::Open | ExportAction::OpenStored(_)) {
+            let origin = match action {
+                ExportAction::OpenStored(key) => ExportOrigin::StoredAsset(key),
+                _ => ExportOrigin::Selection(self.canvas.read(cx).editor.selection.clone()),
+            };
             let Some(project) = &self.project else { return };
-            match export_choices(
+            match origin_choices(
                 self.canvas.read(cx).editor.graph(),
-                &selection,
+                &origin,
                 project.assets(),
             ) {
                 Ok(outputs) => {
@@ -225,7 +264,7 @@ impl CreativeCanvas {
                         state
                     });
                     self.export_dialog = Some(AssetExportDialog {
-                        selection,
+                        origin,
                         project,
                         outputs,
                         selected: 0,
@@ -334,6 +373,9 @@ impl CreativeCanvas {
                             ExportChoice::Media(output) => {
                                 export_asset(&project, &output.asset.key, &destination, &cancel)
                             }
+                            ExportChoice::Stored(output) => {
+                                export_asset(&project, &output.asset.key, &destination, &cancel)
+                            }
                             ExportChoice::Vector(vector) => {
                                 export_vector(&project, &vector, &destination, &cancel)
                             }
@@ -433,6 +475,9 @@ impl CreativeCanvas {
             )
             .child(outputs)
             .child(label(selected.details()))
+            .when(matches!(selected, ExportChoice::Stored(_)), |v| {
+                v.child(label("导出已保留的素材文件；不新增节点或改变当前输出"))
+            })
             .when(matches!(selected, ExportChoice::Vector(_)), |v| {
                 v.child(label("仅形状与笔迹 · 保留图层、线宽和透明度"))
             })
@@ -495,6 +540,40 @@ impl CreativeCanvas {
 mod tests {
     use super::*;
     use ::core::prelude::v1::test;
+
+    #[test]
+    fn gallery_origin_uses_manifest_snapshot_without_creating_graph_outputs() {
+        let graph = gpui_flow_core::Graph::new();
+        let asset = ProjectAsset {
+            key: "assets/retained.png".into(),
+            name: "Original.png".into(),
+            media_type: MASK_MEDIA_TYPE.into(),
+            byte_len: 100,
+            width: 40,
+            height: 20,
+        };
+        let origin = ExportOrigin::StoredAsset(asset.key.clone());
+        let choices = origin_choices(&graph, &origin, std::slice::from_ref(&asset)).unwrap();
+        assert_eq!(choices.len(), 1);
+        assert!(matches!(choices[0], ExportChoice::Stored(_)));
+        assert!(choices[0].is_mask());
+        assert!(graph.nodes.is_empty());
+        // Selection exports still require a real node output; retained files
+        // cannot be mistaken for an up-to-date Mask or generation result.
+        assert!(
+            origin_choices(
+                &graph,
+                &ExportOrigin::Selection(Selection::default()),
+                std::slice::from_ref(&asset)
+            )
+            .is_err()
+        );
+        assert!(origin_choices(&graph, &origin, &[]).is_err());
+        let mut changed = asset;
+        changed.byte_len += 1;
+        let next = origin_choices(&graph, &origin, &[changed]).unwrap();
+        assert!(next[0] != choices[0]);
+    }
     #[test]
     fn media_and_vector_choices_use_distinct_outputs_and_reject_mixed_selection() {
         let asset = ProjectAsset {

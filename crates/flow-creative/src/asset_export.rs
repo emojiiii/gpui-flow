@@ -19,6 +19,59 @@ pub struct ExportAsset {
     pub value: CustomValue,
 }
 
+/// A retained project file, independent of a node's current output validity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredAssetExport {
+    pub asset: ProjectAsset,
+    pub suggested_name: String,
+}
+
+pub fn stored_asset_export(
+    assets: &[ProjectAsset],
+    key: &str,
+) -> Result<StoredAssetExport, CreativeError> {
+    let asset = assets
+        .iter()
+        .find(|asset| asset.key == key)
+        .ok_or_else(|| CreativeError("素材不属于当前项目".into()))?;
+    let extension = Path::new(&asset.key)
+        .extension()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| CreativeError("素材缺少原格式后缀".into()))?;
+    if !valid_extension(&asset.media_type, &extension.to_ascii_lowercase()) {
+        return Err(CreativeError("不支持该素材格式导出".into()));
+    }
+    if asset.byte_len > crate::MAX_MEDIA_BYTES {
+        return Err(CreativeError("单次导出最多128 MiB".into()));
+    }
+    let stem = Path::new(&asset.name)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("Export");
+    Ok(StoredAssetExport {
+        suggested_name: format!("{}.{}", safe_stem(stem), extension),
+        asset: asset.clone(),
+    })
+}
+
+fn valid_extension(media_type: &str, extension: &str) -> bool {
+    match media_type {
+        "image/png" | crate::MASK_MEDIA_TYPE => extension == "png",
+        "image/jpeg" => matches!(extension, "jpg" | "jpeg"),
+        "image/gif" => extension == "gif",
+        "image/webp" => extension == "webp",
+        "video/mp4" => extension == "mp4",
+        "video/webm" => extension == "webm",
+        "audio/mpeg" => extension == "mp3",
+        "audio/wav" => extension == "wav",
+        "audio/flac" => extension == "flac",
+        "audio/ogg" => matches!(extension, "ogg" | "opus"),
+        "audio/mp4" => matches!(extension, "m4a" | "mp4"),
+        "model/gltf-binary" => extension == "glb",
+        _ => false,
+    }
+}
+
 pub fn has_media_output(node: &Node) -> bool {
     node.outputs().any(|p| {
         matches!(&p.data_type, DataType::Named(name)
@@ -302,22 +355,7 @@ pub fn export_asset(
         .and_then(|s| s.to_str())
         .unwrap_or_default()
         .to_ascii_lowercase();
-    let valid_extension = match asset.media_type.as_str() {
-        "image/png" | crate::MASK_MEDIA_TYPE => extension == "png",
-        "image/jpeg" => matches!(extension.as_str(), "jpg" | "jpeg"),
-        "image/gif" => extension == "gif",
-        "image/webp" => extension == "webp",
-        "video/mp4" => extension == "mp4",
-        "video/webm" => extension == "webm",
-        "audio/mpeg" => extension == "mp3",
-        "audio/wav" => extension == "wav",
-        "audio/flac" => extension == "flac",
-        "audio/ogg" => matches!(extension.as_str(), "ogg" | "opus"),
-        "audio/mp4" => matches!(extension.as_str(), "m4a" | "mp4"),
-        "model/gltf-binary" => extension == "glb",
-        _ => false,
-    };
-    if !valid_extension {
+    if !valid_extension(&asset.media_type, &extension) {
         return Err(ProjectError::Invalid(
             "导出保留原格式，请使用建议的文件后缀；转码请用处理节点".into(),
         ));
@@ -422,6 +460,86 @@ mod tests {
     impl Drop for Fixture {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
+    #[test]
+    fn stored_gallery_file_exports_without_creating_a_node_or_changing_project() {
+        let fixture = Fixture::new();
+        assert!(fixture.project.document().graph.nodes.is_empty());
+        let before = fs::read(fixture.project.directory().join("project.json")).unwrap();
+        let plan = stored_asset_export(fixture.project.assets(), &fixture.asset.key).unwrap();
+        assert_eq!(plan.suggested_name, "source.png");
+        let source =
+            fs::read(fixture.project.resolve_asset_path(&plan.asset.key).unwrap()).unwrap();
+        let target = fixture.root.join(&plan.suggested_name);
+        // The source fixture itself is already named source.png. Never overwrite it.
+        assert!(
+            export_asset(
+                &fixture.project,
+                &plan.asset.key,
+                &target,
+                &AtomicBool::new(false)
+            )
+            .is_err()
+        );
+        let target = fixture.root.join("retained-original.png");
+        export_asset(
+            &fixture.project,
+            &plan.asset.key,
+            &target,
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        assert_eq!(fs::read(target).unwrap(), source);
+        assert_eq!(
+            fs::read(fixture.project.directory().join("project.json")).unwrap(),
+            before
+        );
+        assert!(fixture.project.document().graph.nodes.is_empty());
+        assert!(stored_asset_export(fixture.project.assets(), "assets/foreign.png").is_err());
+    }
+
+    #[test]
+    fn stored_gallery_names_keep_real_format_and_reject_unknown_or_mismatched_types() {
+        let formats = [
+            ("image/png", "png"),
+            ("image/jpeg", "jpg"),
+            ("image/jpeg", "jpeg"),
+            ("image/gif", "gif"),
+            ("image/webp", "webp"),
+            ("video/mp4", "mp4"),
+            ("video/webm", "webm"),
+            ("audio/mpeg", "mp3"),
+            ("audio/wav", "wav"),
+            ("audio/flac", "flac"),
+            ("audio/ogg", "ogg"),
+            ("audio/ogg", "opus"),
+            ("audio/mp4", "m4a"),
+            ("audio/mp4", "mp4"),
+            ("model/gltf-binary", "glb"),
+            (crate::MASK_MEDIA_TYPE, "png"),
+        ];
+        for (media_type, extension) in formats {
+            let asset = ProjectAsset {
+                key: format!("assets/file.{extension}"),
+                name: "../retained:source.fake".into(),
+                media_type: media_type.into(),
+                byte_len: 64,
+                width: 1,
+                height: 1,
+            };
+            let plan = stored_asset_export(std::slice::from_ref(&asset), &asset.key).unwrap();
+            assert_eq!(plan.suggested_name, format!("retained_source.{extension}"));
+            assert_eq!(plan.asset, asset);
+            let mut unsupported = asset.clone();
+            unsupported.media_type = "text/plain".into();
+            assert!(
+                stored_asset_export(std::slice::from_ref(&unsupported), &unsupported.key).is_err()
+            );
+            let mut mismatch = asset;
+            mismatch.key = "assets/file.bad".into();
+            assert!(stored_asset_export(std::slice::from_ref(&mismatch), &mismatch.key).is_err());
         }
     }
 
