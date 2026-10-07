@@ -1,14 +1,20 @@
 use super::*;
+use gpui_kit::component::input::{Input, InputState};
+
+mod browser;
 
 /// The native local-first application. Projects are created on disk before a canvas opens.
 pub struct CreativeWorkbench {
     store: Option<ProjectStore>,
     projects: Vec<ProjectSummary>,
-    thumbnails: BTreeMap<String, PathBuf>,
     previews: Entity<project_previews::ProjectPreviews>,
     _preview_observer: Subscription,
     _theme_observer: Subscription,
     home_generation: u64,
+    query: Entity<InputState>,
+    _query_subscription: Option<Subscription>,
+    page: usize,
+    listing: bool,
     name: Entity<TextareaState>,
     current: Option<Entity<CreativeCanvas>>,
     current_subscription: Option<Subscription>,
@@ -28,14 +34,22 @@ impl CreativeWorkbench {
                 this.refresh(cx);
             }
         });
+        let listing = store.is_some();
         let mut this = Self {
             store,
             projects: vec![],
-            thumbnails: BTreeMap::new(),
             previews,
             _preview_observer: preview_observer,
             _theme_observer: theme_observer,
             home_generation: 0,
+            query: cx.new(|cx| {
+                InputState::new(window, cx)
+                    .placeholder("搜索本地项目名称")
+                    .context_menu(false)
+            }),
+            _query_subscription: None,
+            page: 0,
+            listing,
             name: cx.new(|cx| {
                 TextareaState::new(window, cx)
                     .placeholder("项目名称，例如：秋日品牌提案")
@@ -46,6 +60,13 @@ impl CreativeWorkbench {
             notice,
             opening: false,
         };
+        this._query_subscription = Some(cx.subscribe(&this.query, |this, _, event, cx| {
+            if matches!(event, InputEvent::Change) && this.current.is_none() {
+                this.page = 0;
+                this.request_covers(cx);
+                cx.notify();
+            }
+        }));
         this.refresh(cx);
         let owner = cx.entity().downgrade();
         window.on_window_should_close(cx, move |window, cx| {
@@ -64,51 +85,23 @@ impl CreativeWorkbench {
             return;
         };
         self.home_generation = self.home_generation.wrapping_add(1);
+        self.listing = true;
         let generation = self.home_generation;
         self.previews.update(cx, |previews, cx| previews.cancel(cx));
-        let preview_store = store.clone();
         cx.spawn(async move |this, cx| {
             let result = cx
                 .background_executor()
-                .spawn(async move {
-                    let listing = store.list_projects()?;
-                    let thumbnails = listing
-                        .projects
-                        .iter()
-                        .take(48)
-                        .filter_map(|project| {
-                            store
-                                .thumbnail_path(&project.metadata.id)
-                                .ok()
-                                .flatten()
-                                .map(|path| (project.metadata.id.clone(), path))
-                        })
-                        .collect::<BTreeMap<_, _>>();
-                    Ok::<_, ProjectError>((listing, thumbnails))
-                })
+                .spawn(async move { store.list_projects() })
                 .await;
             let _ = this.update(cx, |this, cx| {
                 if this.home_generation != generation || this.current.is_some() {
                     return;
                 }
+                this.listing = false;
                 match result {
-                    Ok((listing, thumbnails)) => {
+                    Ok(listing) => {
                         this.projects = listing.projects;
-                        this.thumbnails = thumbnails;
-                        let ids = this
-                            .projects
-                            .iter()
-                            .take(16)
-                            .map(|p| p.metadata.id.clone())
-                            .collect();
-                        let backend = text_export::frame_text_backend_for(
-                            Arc::new(cx.text_system().all_font_names()),
-                            cx,
-                        )
-                        .ok();
-                        this.previews.update(cx, |previews, cx| {
-                            previews.request(preview_store, ids, backend, cx)
-                        });
+                        this.request_covers(cx);
                         if !listing.skipped.is_empty() {
                             this.notice = Some(format!(
                                 "有 {} 个项目无法读取，已保留原文件",
@@ -116,12 +109,40 @@ impl CreativeWorkbench {
                             ));
                         }
                     }
-                    Err(error) => this.notice = Some(error.to_string()),
+                    Err(error) => {
+                        this.notice = Some(error.to_string());
+                        this.request_covers(cx);
+                    }
                 }
                 cx.notify();
             });
         })
         .detach();
+    }
+    fn request_covers(&mut self, cx: &mut Context<Self>) {
+        let Some(store) = self.store.clone() else {
+            return;
+        };
+        let query = self.query.read(cx).value();
+        let page = browser::project_page(&self.projects, query.as_ref(), self.page);
+        self.page = page.index;
+        let ids: Vec<_> = page
+            .items
+            .iter()
+            .filter(|p| p.card_count > 0)
+            .map(|p| p.metadata.id.clone())
+            .collect();
+        let backend =
+            text_export::frame_text_backend_for(Arc::new(cx.text_system().all_font_names()), cx)
+                .ok();
+        self.previews
+            .update(cx, |previews, cx| previews.request(store, ids, backend, cx));
+    }
+
+    fn change_page(&mut self, page: usize, cx: &mut Context<Self>) {
+        self.page = page;
+        self.request_covers(cx);
+        cx.notify();
     }
     fn activate(&mut self, project: LocalProject, window: &mut Window, cx: &mut Context<Self>) {
         self.home_generation = self.home_generation.wrapping_add(1);
@@ -212,11 +233,20 @@ impl Render for CreativeWorkbench {
             return div().size_full().child(current.clone()).into_any_element();
         }
         let t = theme();
+        let query = self.query.read(cx).value();
+        let page = browser::project_page(&self.projects, query.as_ref(), self.page);
+        let page_index = page.index;
+        let page_count = page.pages;
+        let match_count = page.matches;
         let mut projects = div().flex().flex_wrap().gap_5();
-        for (index, project) in self.projects.iter().enumerate() {
+        for project in page.items {
             let id = project.metadata.id.clone();
             let name = project.metadata.name.clone();
-            let thumbnail = self.thumbnails.get(&id).cloned();
+            let thumbnail = self
+                .previews
+                .read(cx)
+                .result(&id)
+                .and_then(|result| result.thumbnail.clone());
             let (preview, preview_label) = self
                 .previews
                 .read(cx)
@@ -224,10 +254,10 @@ impl Render for CreativeWorkbench {
                 .map(|result| (result.image.clone(), result.label))
                 .unwrap_or((
                     None,
-                    if index < 16 {
-                        "正在绘制作品预览…"
+                    if project.card_count == 0 {
+                        "空白画布"
                     } else {
-                        "暂无作品预览"
+                        "正在绘制作品预览…"
                     },
                 ));
             let cover_label = if preview.is_none() && thumbnail.is_some() {
@@ -310,7 +340,7 @@ impl Render for CreativeWorkbench {
                             .flex()
                             .flex_col()
                             .gap_1()
-                            .child(div().text_sm().child(name))
+                            .child(div().text_sm().truncate().child(name))
                             .child(label(format!(
                                 "{} 个对象 · {} 个素材",
                                 project.card_count, project.asset_count
@@ -318,10 +348,14 @@ impl Render for CreativeWorkbench {
                     ),
             );
         }
-        if self.projects.is_empty() {
-            projects = projects.child(div().py_6().child(label(
-                "还没有项目。新建后，画布与导入的素材会自动保存在本机。",
-            )));
+        if match_count == 0 {
+            projects = projects.child(div().py_6().child(label(if self.listing {
+                "正在读取本地项目…"
+            } else if self.projects.is_empty() {
+                "还没有项目。新建后，画布与导入的素材会自动保存在本机。"
+            } else {
+                "没有匹配的项目，试试其他名称或清除搜索。"
+            })));
         }
         let mut root = div()
             .size_full()
@@ -410,7 +444,53 @@ impl Render for CreativeWorkbench {
                             .items_center()
                             .justify_between()
                             .child(div().text_lg().child("最近项目"))
-                            .child(label(format!("{} 个项目", self.projects.len()))),
+                            .child(label(format!(
+                                "{} / {} 个项目",
+                                match_count,
+                                self.projects.len()
+                            ))),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_wrap()
+                            .items_center()
+                            .gap_3()
+                            .child(
+                                div().w(px(300.)).child(
+                                    Input::new(&self.query)
+                                        .h(px(36.))
+                                        .aria_label("搜索本地项目名称"),
+                                ),
+                            )
+                            .child(
+                                ControlButton::new("clear-project-query", "清除")
+                                    .theme(t)
+                                    .disabled(query.is_empty())
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.query.update(cx, |input, cx| {
+                                            input.set_value("", window, cx)
+                                        });
+                                    })),
+                            )
+                            .child(div().flex_1())
+                            .child(
+                                ControlButton::new("previous-project-page", "上一页")
+                                    .theme(t)
+                                    .disabled(page_index == 0 || self.listing)
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.change_page(page_index.saturating_sub(1), cx);
+                                    })),
+                            )
+                            .child(label(format!("{} / {} 页", page_index + 1, page_count)))
+                            .child(
+                                ControlButton::new("next-project-page", "下一页")
+                                    .theme(t)
+                                    .disabled(page_index + 1 >= page_count || self.listing)
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.change_page(page_index.saturating_add(1), cx);
+                                    })),
+                            ),
                     )
                     .child(projects)
                     .child(label("项目自动保存在本机，随时回来继续。")),

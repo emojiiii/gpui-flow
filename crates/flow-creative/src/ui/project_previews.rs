@@ -19,6 +19,7 @@ pub(super) struct ProjectPreviews {
 
 pub(super) struct PreviewResult {
     pub image: Option<Arc<RenderImage>>,
+    pub thumbnail: Option<PathBuf>,
     pub label: &'static str,
 }
 
@@ -93,42 +94,50 @@ impl ProjectPreviews {
         let task_cancel = cancelled.clone();
         let task_id = id.clone();
         cx.spawn(async move |this, cx| {
-            let result = cx
+            let (result, thumbnail) = cx
                 .background_executor()
                 .spawn(async move {
-                    let _gate = PREVIEW_GATE
-                        .lock()
-                        .map_err(|_| "Project preview is unavailable".to_string())?;
-                    if task_cancel.load(Ordering::Acquire) {
-                        return Err("Preview cancelled".into());
-                    }
-                    let project = store
-                        .read_preview_project(&task_id, &standard_registry())
-                        .map_err(|e| e.to_string())?;
-                    let preview = crate::project_preview::prepare_project_preview(
-                        &project.document().graph,
-                        project.assets(),
-                    )?;
-                    let bytes = preview.export.encode_with_text_backend(
-                        &project,
-                        backend.as_ref(),
-                        &task_cancel,
-                    )?;
-                    if task_cancel.load(Ordering::Acquire) {
-                        return Err("Preview cancelled".into());
-                    }
-                    let mut pixels =
-                        image::load_from_memory_with_format(&bytes, image::ImageFormat::Png)
-                            .map_err(|error| error.to_string())?
-                            .into_rgba8();
-                    let [max_width, max_height] = crate::project_preview::PROJECT_PREVIEW_SIZE;
-                    if pixels.width() > max_width || pixels.height() > max_height {
-                        return Err("Preview exceeds its pixel budget".into());
-                    }
-                    for pixel in pixels.pixels_mut() {
-                        pixel.0.swap(0, 2);
-                    }
-                    Ok::<_, String>((pixels, preview.label))
+                    let thumbnail = if task_cancel.load(Ordering::Acquire) {
+                        None
+                    } else {
+                        store.thumbnail_path(&task_id).ok().flatten()
+                    };
+                    let result = (|| {
+                        let _gate = PREVIEW_GATE
+                            .lock()
+                            .map_err(|_| "Project preview is unavailable".to_string())?;
+                        if task_cancel.load(Ordering::Acquire) {
+                            return Err("Preview cancelled".into());
+                        }
+                        let project = store
+                            .read_preview_project(&task_id, &standard_registry())
+                            .map_err(|e| e.to_string())?;
+                        let preview = crate::project_preview::prepare_project_preview(
+                            &project.document().graph,
+                            project.assets(),
+                        )?;
+                        let bytes = preview.export.encode_with_text_backend(
+                            &project,
+                            backend.as_ref(),
+                            &task_cancel,
+                        )?;
+                        if task_cancel.load(Ordering::Acquire) {
+                            return Err("Preview cancelled".into());
+                        }
+                        let mut pixels =
+                            image::load_from_memory_with_format(&bytes, image::ImageFormat::Png)
+                                .map_err(|error| error.to_string())?
+                                .into_rgba8();
+                        let [max_width, max_height] = crate::project_preview::PROJECT_PREVIEW_SIZE;
+                        if pixels.width() > max_width || pixels.height() > max_height {
+                            return Err("Preview exceeds its pixel budget".into());
+                        }
+                        for pixel in pixels.pixels_mut() {
+                            pixel.0.swap(0, 2);
+                        }
+                        Ok::<_, String>((pixels, preview.label))
+                    })();
+                    (result, thumbnail)
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
@@ -141,6 +150,7 @@ impl ProjectPreviews {
                     {
                         PreviewResult {
                             image: None,
+                            thumbnail,
                             label: "文字预览已失效",
                         }
                     } else {
@@ -149,10 +159,12 @@ impl ProjectPreviews {
                                 image: Some(Arc::new(RenderImage::new(vec![image::Frame::new(
                                     pixels,
                                 )]))),
+                                thumbnail,
                                 label,
                             },
                             Err(_) => PreviewResult {
                                 image: None,
+                                thumbnail,
                                 label: "作品预览不可用",
                             },
                         }
