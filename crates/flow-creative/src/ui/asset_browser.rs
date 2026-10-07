@@ -5,10 +5,31 @@ use gpui_kit::component::input::{Input, InputState};
 
 const PAGE_SIZE: usize = 8;
 pub(super) struct AssetPicker {
-    pub page: usize,
-    pub kind: AssetFilter,
+    pub state: AssetBrowseState,
     query: Entity<InputState>,
     _subscription: Subscription,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(super) struct AssetBrowseState {
+    pub page: usize,
+    pub kind: AssetFilter,
+    pub query: String,
+}
+impl AssetBrowseState {
+    fn update_query(&mut self, value: &str) {
+        if self.query != value {
+            self.query = value.to_string();
+            self.page = 0;
+        }
+    }
+}
+impl AssetPicker {
+    pub(super) fn browse_state(&self, cx: &App) -> AssetBrowseState {
+        let mut state = self.state.clone();
+        state.update_query(self.query.read(cx).value().as_ref());
+        state
+    }
 }
 
 fn asset_kind(asset: &ProjectAsset) -> &'static str {
@@ -34,24 +55,35 @@ fn asset_description(asset: &ProjectAsset) -> String {
 }
 impl CreativeCanvas {
     pub(super) fn open_asset_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_asset_picker_at(AssetBrowseState::default(), window, cx);
+    }
+    pub(super) fn open_asset_picker_at(
+        &mut self,
+        state: AssetBrowseState,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let query = cx.new(|cx| {
-            InputState::new(window, cx)
+            let mut input = InputState::new(window, cx)
                 .placeholder("搜索素材名称…")
-                .context_menu(false)
+                .context_menu(false);
+            input.set_value(state.query.clone(), window, cx);
+            input
         });
         let subscription = cx.subscribe(&query, |this, input, event, cx| {
             if matches!(event, InputEvent::Change)
                 && let Some(picker) = &mut this.asset_picker
                 && picker.query.entity_id() == input.entity_id()
             {
-                picker.page = 0;
+                // Initializing a restored input emits Change too. Only a new
+                // value should reset the remembered page.
+                picker.state.update_query(input.read(cx).value().as_ref());
                 cx.notify();
             }
         });
         query.read(cx).focus_handle(cx).focus(window, cx);
         self.asset_picker = Some(AssetPicker {
-            page: 0,
-            kind: AssetFilter::All,
+            state,
             query,
             _subscription: subscription,
         });
@@ -143,7 +175,7 @@ impl CreativeCanvas {
         let picker = self.asset_picker.as_ref().expect("open picker");
         let query = picker.query.clone();
         let query_text = query.read(cx).value().to_string();
-        let kind = picker.kind;
+        let kind = picker.state.kind;
         let total = self
             .project
             .as_ref()
@@ -161,7 +193,10 @@ impl CreativeCanvas {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
-        let page = picker.page.min(assets.len().saturating_sub(1) / PAGE_SIZE);
+        let page = picker
+            .state
+            .page
+            .min(assets.len().saturating_sub(1) / PAGE_SIZE);
         let visible = assets.iter().skip(page * PAGE_SIZE).take(PAGE_SIZE);
         let requests = visible
             .clone()
@@ -425,5 +460,28 @@ impl CreativeCanvas {
             .bg(rgb(0xf0f3f8)),
         );
         panel.into_any_element()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ::core::prelude::v1::test;
+
+    #[test]
+    fn restored_search_initial_change_keeps_page_and_real_edit_resets_it() {
+        let mut state = AssetBrowseState {
+            page: 3,
+            kind: AssetFilter::Image,
+            query: " original ".into(),
+        };
+        let snapshot = state.clone();
+        state.update_query(" original ");
+        assert_eq!(state, snapshot);
+        state.update_query("mask");
+        assert_eq!(state.page, 0);
+        assert_eq!(state.kind, AssetFilter::Image);
+        assert_eq!(snapshot.query, " original ");
+        assert_eq!(snapshot.page, 3);
     }
 }

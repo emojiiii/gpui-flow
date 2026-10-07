@@ -657,6 +657,7 @@ impl CreativeCanvas {
         let subscription = cx.subscribe_in(&canvas, window, |this, canvas, event, window, cx| {
             match event {
                 FlowEvent::DocumentChanged | FlowEvent::SelectionChanged => {
+                    this.discard_export_return();
                     this.reconcile_object_menu(window, cx);
                     if matches!(event, FlowEvent::DocumentChanged) {
                         this.sync_canvas_appearance(window, cx);
@@ -1055,6 +1056,9 @@ impl CreativeCanvas {
         result.is_ok()
     }
     fn action(&mut self, action: Action, window: &mut Window, cx: &mut Context<Self>) {
+        if !matches!(&action, Action::ExportAsset(_)) {
+            self.discard_export_return();
+        }
         if self.temporary_hand.is_some() {
             self.finish_temporary_hand(false, window, cx);
         }
@@ -1258,10 +1262,10 @@ impl CreativeCanvas {
             }
             Action::AssetsPage(forward) => {
                 if let Some(picker) = &mut self.asset_picker {
-                    picker.page = if forward {
-                        picker.page.saturating_add(1)
+                    picker.state.page = if forward {
+                        picker.state.page.saturating_add(1)
                     } else {
-                        picker.page.saturating_sub(1)
+                        picker.state.page.saturating_sub(1)
                     };
                 }
                 cx.notify();
@@ -1269,8 +1273,8 @@ impl CreativeCanvas {
             }
             Action::FilterAssets(kind) => {
                 if let Some(picker) = &mut self.asset_picker {
-                    picker.kind = kind;
-                    picker.page = 0;
+                    picker.state.kind = kind;
+                    picker.state.page = 0;
                 }
                 cx.notify();
                 return;

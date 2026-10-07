@@ -29,6 +29,19 @@ pub(super) struct AssetExportDialog {
     path: Entity<InputState>,
     choosing: bool,
     error: Option<String>,
+    gallery_return: Option<GalleryReturn>,
+    cancel_requested: bool,
+}
+
+struct GalleryReturn {
+    project: String,
+    directory: PathBuf,
+    state: asset_browser::AssetBrowseState,
+}
+impl GalleryReturn {
+    fn allowed(&self, id: &str, directory: &Path, closing: bool, browsing: bool) -> bool {
+        !closing && !browsing && self.project == id && self.directory == directory
+    }
 }
 
 enum ExportOrigin {
@@ -181,6 +194,34 @@ fn default_directory() -> PathBuf {
 }
 
 impl CreativeCanvas {
+    pub(super) fn discard_export_return(&mut self) {
+        if let Some(dialog) = &mut self.export_dialog {
+            dialog.gallery_return = None;
+        }
+    }
+
+    fn return_to_gallery(
+        &mut self,
+        saved: Option<GalleryReturn>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let Some(saved) = saved else { return false };
+        let Some(project) = &self.project else {
+            return false;
+        };
+        if !saved.allowed(
+            &project.metadata().id,
+            project.directory(),
+            self.return_after_save || self.pending_window_close.is_some(),
+            self.asset_picker.is_some(),
+        ) {
+            return false;
+        }
+        self.open_asset_picker_at(saved.state, window, cx);
+        true
+    }
+
     pub(super) fn clear_asset_export(&mut self) {
         if let Some(cancel) = &self.export_cancel {
             cancel.store(true, Ordering::Release);
@@ -229,8 +270,22 @@ impl CreativeCanvas {
         cx: &mut Context<Self>,
     ) {
         if matches!(action, ExportAction::Cancel) {
+            if let Some(cancel) = &self.export_cancel {
+                cancel.store(true, Ordering::Release);
+                if let Some(dialog) = &mut self.export_dialog {
+                    dialog.cancel_requested = true;
+                }
+                cx.notify();
+                return;
+            }
+            let saved = self
+                .export_dialog
+                .as_mut()
+                .and_then(|dialog| dialog.gallery_return.take());
             self.clear_asset_export();
-            self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+            if !self.return_to_gallery(saved, window, cx) {
+                self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+            }
             cx.notify();
             return;
         }
@@ -249,6 +304,15 @@ impl CreativeCanvas {
                 project.assets(),
             ) {
                 Ok(outputs) => {
+                    let gallery_return = if matches!(&origin, ExportOrigin::StoredAsset(_)) {
+                        self.asset_picker.as_ref().map(|picker| GalleryReturn {
+                            project: project.metadata().id.clone(),
+                            directory: project.directory().to_path_buf(),
+                            state: picker.browse_state(cx),
+                        })
+                    } else {
+                        None
+                    };
                     let text_backend = if outputs.iter().any(|output| matches!(output, ExportChoice::FramePng(frame) if frame.has_text())) {
                         match self.frame_text_backend(cx) {
                             Ok(backend) => Some(backend),
@@ -272,6 +336,8 @@ impl CreativeCanvas {
                         path: input,
                         choosing: false,
                         error: None,
+                        gallery_return,
+                        cancel_requested: false,
                     });
                     self.show_layers = false;
                     self.asset_picker = None;
@@ -365,7 +431,7 @@ impl CreativeCanvas {
             self.export_cancel = Some(cancel.clone());
             self.importing = true;
             let serial = self.export_serial;
-            cx.spawn(async move |this, cx| {
+            cx.spawn_in(window, async move |this, cx| {
                 let result = cx
                     .background_executor()
                     .spawn(async move {
@@ -390,17 +456,34 @@ impl CreativeCanvas {
                         .map_err(|error| error.to_string())
                     })
                     .await;
-                let _ = this.update(cx, |this, cx| {
+                let _ = this.update_in(cx, |this, window, cx| {
                     this.importing = false;
                     this.export_cancel = None;
                     if this.export_serial == serial {
                         match result {
                             Ok(output) => {
-                                this.export_dialog = None;
+                                let saved = this
+                                    .export_dialog
+                                    .as_mut()
+                                    .and_then(|dialog| dialog.gallery_return.take());
+                                this.clear_asset_export();
+                                this.return_to_gallery(saved, window, cx);
                                 this.notice = Some(format!("已导出到 {}", output.path.display()));
                             }
                             Err(error) => {
-                                if let Some(dialog) = &mut this.export_dialog {
+                                if this
+                                    .export_dialog
+                                    .as_ref()
+                                    .is_some_and(|dialog| dialog.cancel_requested)
+                                {
+                                    let saved = this
+                                        .export_dialog
+                                        .as_mut()
+                                        .and_then(|dialog| dialog.gallery_return.take());
+                                    this.clear_asset_export();
+                                    this.return_to_gallery(saved, window, cx);
+                                    this.notice = Some(format!("导出已结束：{error}"));
+                                } else if let Some(dialog) = &mut this.export_dialog {
                                     dialog.error = Some(error);
                                 }
                             }
@@ -509,7 +592,9 @@ impl CreativeCanvas {
                     .flex()
                     .justify_between()
                     .items_center()
-                    .child(label(if self.export_cancel.is_some() {
+                    .child(label(if dialog.cancel_requested {
+                        "正在取消导出…"
+                    } else if self.export_cancel.is_some() {
                         "正在导出，可取消"
                     } else {
                         "原素材保留 · 不覆盖已有文件"
@@ -540,6 +625,26 @@ impl CreativeCanvas {
 mod tests {
     use super::*;
     use ::core::prelude::v1::test;
+
+    #[test]
+    fn gallery_return_requires_same_project_directory_and_no_new_navigation() {
+        let saved = GalleryReturn {
+            project: "same-id".into(),
+            directory: PathBuf::from("/projects/one"),
+            state: asset_browser::AssetBrowseState {
+                page: 2,
+                kind: crate::asset_filter::AssetFilter::Image,
+                query: "original".into(),
+            },
+        };
+        assert!(saved.allowed("same-id", Path::new("/projects/one"), false, false));
+        assert!(!saved.allowed("other-id", Path::new("/projects/one"), false, false));
+        assert!(!saved.allowed("same-id", Path::new("/elsewhere/one"), false, false));
+        assert!(!saved.allowed("same-id", Path::new("/projects/one"), true, false));
+        assert!(!saved.allowed("same-id", Path::new("/projects/one"), false, true));
+        assert_eq!(saved.state.page, 2);
+        assert_eq!(saved.state.query, "original");
+    }
 
     #[test]
     fn gallery_origin_uses_manifest_snapshot_without_creating_graph_outputs() {
