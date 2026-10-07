@@ -6,10 +6,11 @@ pub(super) enum SuspendedTool {
     Frame,
     Shape(crate::shapes::ShapeKind),
     Pencil,
+    Model,
 }
 
 impl CreativeCanvas {
-    fn focused_drawing_tool(&self, window: &Window) -> Option<SuspendedTool> {
+    fn focused_drawing_tool(&self, window: &Window, cx: &App) -> Option<SuspendedTool> {
         if self.text_placing && self.text_placement_focus.is_focused(window) {
             Some(SuspendedTool::Text)
         } else if self.frame_drawing && self.frame_focus.is_focused(window) {
@@ -20,6 +21,10 @@ impl CreativeCanvas {
             Some(SuspendedTool::Shape(kind))
         } else if self.pencil_active && self.pencil_focus.is_focused(window) {
             Some(SuspendedTool::Pencil)
+        } else if self.model_interaction.is_some()
+            && self.canvas.read(cx).focus_handle(cx).is_focused(window)
+        {
+            Some(SuspendedTool::Model)
         } else {
             None
         }
@@ -30,6 +35,7 @@ impl CreativeCanvas {
             || self.frame_drag.is_some()
             || self.shape_drag.is_some()
             || self.pencil_draft.is_some()
+            || self.model_drag.is_some()
     }
 
     pub(super) fn finish_temporary_hand(
@@ -63,8 +69,11 @@ impl CreativeCanvas {
                     self.pencil_active = true;
                     self.pencil_focus.clone()
                 }
+                SuspendedTool::Model => self.canvas.read(cx).focus_handle(cx),
             };
             focus.focus(window, cx);
+        } else if matches!(tool, SuspendedTool::Model) {
+            self.clear_model_interaction(cx);
         }
         cx.notify();
     }
@@ -87,13 +96,13 @@ impl CreativeCanvas {
                 window.prevent_default();
                 return;
             }
-            let Some(tool) = self.focused_drawing_tool(window) else {
+            let Some(tool) = self.focused_drawing_tool(window, cx) else {
                 return;
             };
             // An in-progress stroke/rectangle belongs to its current pointer.
             // Leave the draft intact; release it before starting navigation.
             if self.drawing_in_progress() || self.canvas.read(cx).interactions.has_capture() {
-                self.notice = Some("先松开鼠标完成绘制，再按住 Space 临时平移".into());
+                self.notice = Some("先松开鼠标完成当前操作，再按住 Space 临时平移".into());
                 cx.stop_propagation();
                 window.prevent_default();
                 cx.notify();
@@ -105,6 +114,7 @@ impl CreativeCanvas {
                 SuspendedTool::Frame => self.frame_drawing = false,
                 SuspendedTool::Shape(_) => self.shape_tool = None,
                 SuspendedTool::Pencil => self.pencil_active = false,
+                SuspendedTool::Model => {}
             }
             self.canvas
                 .update(cx, |canvas, cx| canvas.set_temporary_pan(true, cx));
@@ -115,7 +125,7 @@ impl CreativeCanvas {
             return;
         }
         let focused = self.canvas.read(cx).focus_handle(cx).is_focused(window)
-            || self.focused_drawing_tool(window).is_some();
+            || self.focused_drawing_tool(window, cx).is_some();
         if !focused || self.drawing_in_progress() {
             return;
         }

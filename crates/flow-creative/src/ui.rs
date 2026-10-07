@@ -486,6 +486,7 @@ enum Action {
     Ungroup,
     Fit,
     Zoom(f32),
+    ModelInteraction,
     ModelOrbit(f32, f32),
     ModelZoom(f32),
     ModelFit,
@@ -540,6 +541,8 @@ pub struct CreativeCanvas {
     asset_picker_focus: FocusHandle,
     asset_thumbnails: Entity<asset_thumbnails::AssetThumbnails>,
     model_views: Arc<model_view::ModelViews>,
+    model_interaction: Option<model_interaction::ModelInteraction>,
+    model_drag: Option<model_interaction::ModelDrag>,
     mask_views: Arc<mask_preview::MaskViews>,
     mask_editing: Option<mask_editor::MaskEditing>,
     mask_focus: FocusHandle,
@@ -666,7 +669,9 @@ impl CreativeCanvas {
                     if matches!(event, FlowEvent::SelectionChanged) {
                         this.show_arrangement = false;
                     }
-                    this.model_views.retain(canvas.read(cx).editor.graph());
+                    let models = this.model_views.clone();
+                    canvas.update(cx, |canvas, cx| models.retain(canvas.editor.graph(), cx));
+                    this.reconcile_model_interaction(cx);
                     this.mask_views
                         .sync(canvas.read(cx).editor.graph(), this.project.as_ref());
                     this.reconcile_mask_edit(cx);
@@ -723,6 +728,7 @@ impl CreativeCanvas {
                     }
                 }
                 FlowEvent::ViewportChanged => {
+                    this.cancel_model_drag(cx);
                     if this.text_placement_drag.is_some() {
                         this.clear_text_placement();
                         this.canvas.read(cx).focus_handle(cx).focus(window, cx);
@@ -822,6 +828,11 @@ impl CreativeCanvas {
                 cx.notify();
             }
         });
+        let model_activation = cx.observe_window_activation(window, |this, window, cx| {
+            if !window.is_window_active() && this.model_interaction.is_some() {
+                this.clear_model_interaction(cx);
+            }
+        });
         let temporary_hand_activation = cx.observe_window_activation(window, |this, window, cx| {
             if !window.is_window_active() && this.temporary_hand.is_some() {
                 this.finish_temporary_hand(false, window, cx);
@@ -910,6 +921,8 @@ impl CreativeCanvas {
             asset_picker_focus: cx.focus_handle(),
             asset_thumbnails,
             model_views: Arc::default(),
+            model_interaction: None,
+            model_drag: None,
             mask_views: Arc::default(),
             mask_editing: None,
             mask_focus: cx.focus_handle(),
@@ -991,6 +1004,7 @@ impl CreativeCanvas {
                 text_placement_blur,
                 text_placement_activation,
                 temporary_hand_activation,
+                model_activation,
                 export_theme,
             ],
         })
@@ -1124,6 +1138,16 @@ impl CreativeCanvas {
             // picker so cancelled imports and the next canvas shortcut work.
             self.asset_picker = None;
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+        }
+        if !matches!(
+            &action,
+            Action::ModelInteraction
+                | Action::ModelOrbit(_, _)
+                | Action::ModelZoom(_)
+                | Action::ModelFit
+        ) && self.model_interaction.is_some()
+        {
+            self.clear_model_interaction(cx);
         }
         if !matches!(&action, Action::FrameEdit(_))
             && (self.frame_drawing || self.frame_drag.is_some())
@@ -1469,15 +1493,22 @@ impl CreativeCanvas {
             Action::Duplicate => CanvasCommand::Duplicate {
                 offset: WorldPoint::new(32., 32.),
             },
+            Action::ModelInteraction => {
+                self.toggle_model_interaction(window, cx);
+                return;
+            }
             Action::ModelOrbit(yaw, pitch) => {
+                self.cancel_model_drag(cx);
                 self.change_model_camera(yaw, pitch, 1., false, cx);
                 return;
             }
             Action::ModelZoom(factor) => {
+                self.cancel_model_drag(cx);
                 self.change_model_camera(0., 0., factor, false, cx);
                 return;
             }
             Action::ModelFit => {
+                self.cancel_model_drag(cx);
                 self.change_model_camera(0., 0., 1., true, cx);
                 return;
             }
@@ -1834,6 +1865,7 @@ mod mask_preview;
 mod mask_tasks;
 mod media_view;
 mod media_waveform;
+mod model_interaction;
 mod model_view;
 mod node_name;
 mod object_creation;
@@ -1957,6 +1989,10 @@ impl Render for CreativeCanvas {
                         cx.stop_propagation();
                         this.finish_shape_drag(event.position, window, cx);
                     }
+                    if this.model_drag.is_some() {
+                        cx.stop_propagation();
+                        this.finish_model_drag(event.position, cx);
+                    }
                 }),
             )
             .on_mouse_up_out(
@@ -1966,9 +2002,22 @@ impl Render for CreativeCanvas {
                         cx.stop_propagation();
                         this.finish_shape_drag(event.position, window, cx);
                     }
+                    if this.model_drag.is_some() {
+                        cx.stop_propagation();
+                        this.finish_model_drag(event.position, cx);
+                    }
                 }),
             )
             .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                if event.keystroke.key == "escape"
+                    && this.model_interaction.is_some()
+                    && this.temporary_hand.is_none()
+                {
+                    this.clear_model_interaction(cx);
+                    cx.stop_propagation();
+                    window.prevent_default();
+                    return;
+                }
                 if event.keystroke.key == "escape"
                     && this.show_layers
                     && this
@@ -2312,6 +2361,9 @@ impl Render for CreativeCanvas {
             if node.kind == "mask"
                 && let Some(overlay) = self.mask_editor_overlay(node, r, cx)
             {
+                surface = surface.child(overlay);
+            }
+            if let Some(overlay) = self.model_interaction_overlay(node, r, cx) {
                 surface = surface.child(overlay);
             }
             if node.kind == "text" && self.is_editing_text(&node.id) {

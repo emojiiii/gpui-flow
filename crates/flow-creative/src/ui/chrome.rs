@@ -665,6 +665,35 @@ impl CreativeCanvas {
                     div()
                         .flex()
                         .items_center()
+                        .gap_2()
+                        .child(
+                            self.button(
+                                "model-interaction",
+                                if self
+                                    .model_interaction
+                                    .as_ref()
+                                    .is_some_and(|mode| mode.node == node.id)
+                                {
+                                    "退出旋转"
+                                } else {
+                                    "旋转模型"
+                                },
+                                Action::ModelInteraction,
+                                !editable,
+                                cx,
+                            ),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(10.))
+                                .text_color(rgb(0x969ca5))
+                                .child("拖动旋转 · Space平移 · Esc退出"),
+                        ),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
                         .justify_between()
                         .child(self.button(
                             "model-left",
