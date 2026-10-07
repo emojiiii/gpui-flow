@@ -1,5 +1,42 @@
 use super::*;
 use gpui_flow_core::{NodeOrderAction, ordered_node_ids, reorder_nodes};
+use gpui_kit::component::input::Input;
+
+struct LayerMatches {
+    nodes: Vec<NodeId>,
+    groups: Vec<gpui_flow_core::GroupId>,
+}
+
+fn filtered_layers(graph: &gpui_flow_core::Graph, query: &str) -> LayerMatches {
+    let query = query.trim().to_lowercase();
+    let named_groups: std::collections::BTreeSet<_> = graph
+        .groups
+        .values()
+        .filter(|group| query.is_empty() || group.title.to_lowercase().contains(&query))
+        .map(|group| group.id.clone())
+        .collect();
+    let nodes: Vec<_> = ordered_node_ids(graph)
+        .into_iter()
+        .filter(|id| {
+            let named = graph
+                .node(id)
+                .is_some_and(|node| query.is_empty() || node.title.to_lowercase().contains(&query));
+            named
+                || named_groups
+                    .iter()
+                    .any(|group| graph.groups[group].node_ids.contains(id))
+        })
+        .collect();
+    let ids: std::collections::BTreeSet<_> = nodes.iter().cloned().collect();
+    let groups = graph
+        .groups
+        .values()
+        .rev()
+        .filter(|group| named_groups.contains(&group.id) || !group.node_ids.is_disjoint(&ids))
+        .map(|group| group.id.clone())
+        .collect();
+    LayerMatches { nodes, groups }
+}
 
 #[derive(Clone)]
 pub(super) enum LayerAction {
@@ -56,7 +93,11 @@ impl CreativeCanvas {
     pub(super) fn layers_panel(&self, cx: &mut Context<Self>) -> Div {
         let view = self.canvas.read(cx);
         let graph = view.editor.graph().clone();
-        let nodes = ordered_node_ids(&graph)
+        let query = self.layer_query.read(cx).value();
+        let matches = filtered_layers(&graph, query.as_ref());
+        let shown = matches.nodes.len() + matches.groups.len();
+        let nodes = matches
+            .nodes
             .into_iter()
             .filter_map(|id| graph.node(&id).cloned())
             .collect::<Vec<_>>();
@@ -120,12 +161,12 @@ impl CreativeCanvas {
         ));
         let mut rows = div()
             .id("object-layers")
-            .max_h(px(420.))
+            .max_h(px((self.canvas_size.height - 290.).clamp(72., 420.)))
             .overflow_y_scroll()
             .flex()
             .flex_col()
             .gap_1();
-        for group in graph.groups.values().rev() {
+        for group in matches.groups.iter().filter_map(|id| graph.groups.get(id)) {
             rows = rows.child(
                 self.button(
                     SharedString::from(format!("frame-layer-{}", group.id)),
@@ -172,9 +213,17 @@ impl CreativeCanvas {
                 "pencil" => "pencil",
                 _ => "layers",
             };
+            let frames = graph
+                .groups
+                .values()
+                .filter(|group| group.node_ids.contains(&id))
+                .map(|group| group.title.as_str())
+                .collect::<Vec<_>>()
+                .join(" / ");
             rows = rows.child(
                 div()
                     .flex()
+                    .flex_shrink_0()
                     .items_center()
                     .gap_1()
                     .rounded(px(7.))
@@ -183,7 +232,7 @@ impl CreativeCanvas {
                         Button::new(SharedString::from(format!("layer-select-{id}")))
                             .flex_1()
                             .min_w_0()
-                            .h(px(34.))
+                            .h(px(if frames.is_empty() { 34. } else { 46. }))
                             .px_2()
                             .flex()
                             .items_center()
@@ -195,10 +244,19 @@ impl CreativeCanvas {
                                 div()
                                     .flex_1()
                                     .min_w_0()
-                                    .overflow_hidden()
-                                    .text_ellipsis()
-                                    .whitespace_nowrap()
-                                    .child(node.title),
+                                    .flex()
+                                    .flex_col()
+                                    .gap_0()
+                                    .child(div().truncate().child(node.title))
+                                    .when(!frames.is_empty(), |v| {
+                                        v.child(
+                                            div()
+                                                .truncate()
+                                                .text_size(px(10.))
+                                                .text_color(rgb(0x9297a0))
+                                                .child(format!("画框：{frames}")),
+                                        )
+                                    }),
                             )
                             .on_mouse_down(
                                 MouseButton::Left,
@@ -260,6 +318,15 @@ impl CreativeCanvas {
                     ),
             );
         }
+        if shown == 0 {
+            rows = rows.child(
+                div()
+                    .p_3()
+                    .text_size(px(12.))
+                    .text_color(rgb(0x9297a0))
+                    .child("没有匹配的对象或画框"),
+            );
+        }
         div()
             .occlude()
             .absolute()
@@ -288,6 +355,30 @@ impl CreativeCanvas {
                         cx,
                     )),
             )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .pb_2()
+                    .child(
+                        Input::new(&self.layer_query)
+                            .w(px(218.))
+                            .h(px(30.))
+                            .aria_label("搜索图层名称"),
+                    )
+                    .child(
+                        Button::new("clear-layer-query")
+                            .size(px(28.))
+                            .child(chrome::icon("x", 14.))
+                            .disabled(query.is_empty())
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.layer_query
+                                    .update(cx, |input, cx| input.set_value("", window, cx));
+                                this.layer_query.read(cx).focus_handle(cx).focus(window, cx);
+                            })),
+                    ),
+            )
             .child(actions)
             .child(rows)
             .child(
@@ -295,7 +386,67 @@ impl CreativeCanvas {
                     .pt_2()
                     .text_size(px(10.))
                     .text_color(rgb(0x9297a0))
-                    .child("上方在前 · Shift 多选 · 锁定后仍可查看"),
+                    .child(format!(
+                        "显示 {shown}/{} · 上方在前 · Shift 多选",
+                        graph.nodes.len() + graph.groups.len()
+                    )),
             )
+            .when(!query.trim().is_empty(), |v| {
+                v.child(label("仅过滤列表，保留选择；画框仍选择整框"))
+            })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ::core::prelude::v1::test;
+    use gpui_flow_core::{Graph, Group, Rect};
+
+    #[test]
+    fn filtering_keeps_layer_order_hidden_and_locked_rows_and_frame_context() {
+        let registry = standard_registry();
+        let mut graph = Graph::new();
+        for (id, title) in [("a", "Hero"), ("b", "Background"), ("c", "HERO 中文")] {
+            let mut node = registry
+                .make_node("text", id, WorldPoint::ZERO, None)
+                .unwrap();
+            node.title = title.into();
+            graph.add_node(node).unwrap();
+        }
+        gpui_flow_core::set_node_visible(&mut graph, &"c".into(), false).unwrap();
+        graph
+            .add_group(
+                Group::new(
+                    "frame",
+                    "Banner",
+                    Rect::new(WorldPoint::ZERO, WorldSize::new(400., 300.)),
+                )
+                .with_nodes(["a".into(), "b".into()]),
+            )
+            .unwrap();
+        reorder_nodes(
+            &mut graph,
+            &["a".into()].into_iter().collect(),
+            NodeOrderAction::BringToFront,
+        )
+        .unwrap();
+        graph.nodes.get_mut(&"a".into()).unwrap().locked = true;
+        let original = graph.clone();
+        let matches = filtered_layers(&graph, "  hero  ");
+        let expected: Vec<_> = ordered_node_ids(&graph)
+            .into_iter()
+            .filter(|id| id.as_str() != "b")
+            .collect();
+        assert_eq!(matches.nodes, expected);
+        assert_eq!(matches.groups, vec!["frame".into()]);
+        let frame = filtered_layers(&graph, "banner");
+        assert_eq!(frame.nodes.len(), 2);
+        assert!(!frame.nodes.contains(&"c".into()));
+        assert_eq!(filtered_layers(&graph, "中文").nodes, vec!["c".into()]);
+        assert!(filtered_layers(&graph, "missing").nodes.is_empty());
+        assert!(filtered_layers(&graph, "missing").groups.is_empty());
+        assert_eq!(filtered_layers(&graph, "").nodes, ordered_node_ids(&graph));
+        assert_eq!(graph, original);
     }
 }

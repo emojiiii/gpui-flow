@@ -8,7 +8,7 @@ use gpui_flow::{
 use gpui_flow_core::{FlowDocument, Node, NodeId, Point as WorldPoint, Size as WorldSize};
 use gpui_flow_interaction::{CanvasCommand, SelectionMode};
 use gpui_kit::base::Button;
-use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
+use gpui_kit::component::input::{InputEvent, InputState, Textarea, TextareaState};
 use serde_json::Value;
 use std::{
     collections::BTreeMap,
@@ -526,6 +526,7 @@ pub struct CreativeCanvas {
     import_at: Option<WorldPoint>,
     quick_edit: bool,
     show_layers: bool,
+    layer_query: Entity<InputState>,
     show_arrangement: bool,
     typography: Option<text_appearance_tools::TypographyPanel>,
     font_families: Arc<Vec<String>>,
@@ -756,6 +757,16 @@ impl CreativeCanvas {
                 this.apply_form_edit(cx);
             }
         });
+        let layer_query = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("搜索对象或画框名称…")
+                .context_menu(false)
+        });
+        let layer_query_subscription = cx.subscribe(&layer_query, |_, _, event, cx| {
+            if matches!(event, InputEvent::Change) {
+                cx.notify();
+            }
+        });
         let pencil_focus = cx.focus_handle();
         let pencil_blur = cx.on_focus_out(&pencil_focus, window, |this, _, _, cx| {
             if this.pencil_draft.take().is_some() {
@@ -872,6 +883,7 @@ impl CreativeCanvas {
             import_at: None,
             quick_edit: false,
             show_layers: false,
+            layer_query,
             show_arrangement: false,
             typography: None,
             background_panel: None,
@@ -968,6 +980,7 @@ impl CreativeCanvas {
                 subscription,
                 observer,
                 form_subscription,
+                layer_query_subscription,
                 thumbnail_observer,
                 pencil_blur,
                 pencil_activation,
@@ -1056,6 +1069,14 @@ impl CreativeCanvas {
         result.is_ok()
     }
     fn action(&mut self, action: Action, window: &mut Window, cx: &mut Context<Self>) {
+        if self
+            .layer_query
+            .read(cx)
+            .focus_handle(cx)
+            .is_focused(window)
+        {
+            self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+        }
         if !matches!(&action, Action::ExportAsset(_)) {
             self.discard_export_return();
         }
@@ -1359,6 +1380,11 @@ impl CreativeCanvas {
             }
             Action::Layers => {
                 self.show_layers = !self.show_layers;
+                if self.show_layers {
+                    self.layer_query.read(cx).focus_handle(cx).focus(window, cx);
+                } else {
+                    self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+                }
                 cx.notify();
                 return;
             }
@@ -1942,6 +1968,19 @@ impl Render for CreativeCanvas {
                 }),
             )
             .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                if event.keystroke.key == "escape"
+                    && this.show_layers
+                    && this
+                        .layer_query
+                        .read(cx)
+                        .focus_handle(cx)
+                        .is_focused(window)
+                {
+                    this.action(Action::Layers, window, cx);
+                    cx.stop_propagation();
+                    window.prevent_default();
+                    return;
+                }
                 if !this.clipboard_key_down(event, window, cx) {
                     this.tool_key_down(event, window, cx);
                 }
