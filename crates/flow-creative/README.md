@@ -338,3 +338,6 @@ cargo clippy --locked -p gpui-flow-creative --features desktop --all-targets -- 
 偏好以 `data.flow_creative_image_aspect_locked` 持久化，缺省锁定；恢复原图比例保持当前宽度。
 拖动是一条可撤销事务，Esc/失焦取消，节点或父画框锁定不能编辑。核心默认 ResizePlugin 不变，
 上述行为只由 Creative 安装的图片宿主插件提供，形状等其它节点保留原交互。
+
+自由调整图片节点的宽高时，图片按实际内容视口居中 cover；源图的固有比例不再把布局框撑高后
+从顶部截断。图片仍保持比例填满节点，原图不修改；选择框和端口使用原有节点几何。

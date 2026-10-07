@@ -227,7 +227,13 @@ impl NodeRenderer for CardRenderer {
             if matches!(node.kind.as_str(), "model" | "generate_model") {
                 return self.assets.models.render(node, path, cx);
             }
+            // Resolve the image against NodeFrame's fixed body viewport before
+            // Cover runs. A normal block leaf otherwise expands to the source
+            // aspect ratio in locked Taffy, leaving the parent to crop its top.
             return img(path.clone())
+                .absolute()
+                .top_0()
+                .left_0()
                 .size_full()
                 .object_fit(ObjectFit::Cover)
                 .with_loading(|| {
