@@ -62,6 +62,7 @@ impl CreativeCanvas {
             .collect::<Vec<_>>();
         let selected = view.editor.selection.expanded_nodes(&graph);
         let selected_groups = view.editor.selection.groups.clone();
+        let can_focus = view.editor.selection_bounds().is_some();
         let hidden = gpui_flow_core::hidden_node_ids(&graph);
         let editable = view.is_editable() && !self.importing && !self.saving;
         let reorderable = editable
@@ -109,6 +110,14 @@ impl CreativeCanvas {
                 cx,
             ));
         }
+        actions = actions.child(self.icon_button(
+            "layer-focus-selection",
+            "focus",
+            "定位选中对象",
+            Action::FocusSelection,
+            !can_focus,
+            cx,
+        ));
         let mut rows = div()
             .id("object-layers")
             .max_h(px(420.))

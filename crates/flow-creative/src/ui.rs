@@ -431,6 +431,7 @@ enum Action {
     Pencil(pencil_tools::PencilAction),
     ExportAsset(asset_export_ui::ExportAction),
     Layer(layers::LayerAction),
+    FocusSelection,
     ImageEdit(image_edit_controls::ImageEditAction),
     ImageVersions(image_version_panel::VersionAction),
     NodeName(node_name::NameAction),
@@ -1137,6 +1138,10 @@ impl CreativeCanvas {
         let command = match action {
             Action::NodeName(action) => {
                 self.handle_node_name(action, window, cx);
+                return;
+            }
+            Action::FocusSelection => {
+                self.focus_selected(window, cx);
                 return;
             }
             Action::ImageVersions(action) => {
@@ -2954,4 +2959,5 @@ mod tests {
     }
 }
 
+mod focus_selection;
 mod layers;

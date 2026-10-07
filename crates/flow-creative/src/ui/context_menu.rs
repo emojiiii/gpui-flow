@@ -210,6 +210,11 @@ impl CreativeCanvas {
             ),
         ];
         if has_objects {
+            rows.push((
+                "定位选中对象",
+                Action::FocusSelection,
+                view.editor.selection_bounds().is_none(),
+            ));
             rows.push(("创建副本", Action::Duplicate, !editable));
             if selection.groups.is_empty() && !selection.nodes.is_empty() {
                 rows.extend([
