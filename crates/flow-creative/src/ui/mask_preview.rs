@@ -72,8 +72,18 @@ impl MaskViews {
             .size_full()
             .overflow_hidden()
             .bg(rgb(0xeef0f3))
-            .child(img(context.path).size_full().object_fit(ObjectFit::Contain));
-        if data.state.source.is_some() && !data.state.source_matches(&context.source) {
+            .child(
+                img(context.path)
+                    .absolute()
+                    .inset_0()
+                    .size_full()
+                    .object_fit(ObjectFit::Contain),
+            );
+        let orientation_changed =
+            crate::mask_node::orientation_review_required(&node.data).unwrap_or(true);
+        if orientation_changed
+            || (data.state.source.is_some() && !data.state.source_matches(&context.source))
+        {
             return body
                 .child(
                     div()
@@ -84,7 +94,11 @@ impl MaskViews {
                         .p_2()
                         .bg(rgb(0xffe8b5))
                         .text_xs()
-                        .child("原图已变更，请重置遮罩"),
+                        .child(if orientation_changed {
+                            crate::mask_node::ORIENTATION_REVIEW_NOTICE
+                        } else {
+                            "原图已变更，请重置遮罩"
+                        }),
                 )
                 .into_any_element();
         }

@@ -1,4 +1,5 @@
 use super::*;
+use crate::image_orientation::{ImageOrientation, RgbaOrientationError, orient_rgba};
 use ::image::{DynamicImage, ImageDecoder, ImageEncoder, ImageFormat, ImageReader, Limits};
 use std::io::{BufRead, Cursor, Seek, SeekFrom, Write};
 
@@ -140,33 +141,74 @@ fn decode_rgba(
     limits.max_image_height = Some(MAX_DIMENSION);
     limits.max_alloc = Some(MAX_DECODE_BYTES);
     reader.limits(limits);
-    let decoder = reader
+    let mut decoder = reader
         .into_decoder()
         .map_err(|error| codec_error(error, cancel, start))?;
     let (width, height) = decoder.dimensions();
-    if width == 0
-        || height == 0
-        || u64::from(width) * u64::from(height) > MAX_PROCESS_IMAGE_PIXELS
-        || decoder.total_bytes() > MAX_DECODE_BYTES
-    {
-        return Err(ProcessingError::ResourceLimit(
-            "image processing accepts at most 16 MP and 128 MiB of decoded pixels".into(),
-        ));
-    }
-    if (width, height) != (asset.width, asset.height) {
-        return Err(ProcessingError::InvalidSource(
-            "decoded dimensions do not match the selected image asset".into(),
-        ));
-    }
+    // Admit the encoded geometry and original channel depth before metadata or
+    // pixel conversion. Logical dimensions may exchange the two axes only.
+    check_decode_dimensions(width, height, decoder.total_bytes())?;
     check_deadline(cancel, start, PROCESS_IMAGE_TIMEOUT)?;
+    let geometry = ImageOrientation::from_decoder(&mut decoder)
+        .map_err(|error| codec_error(error, cancel, start))?;
+    check_deadline(cancel, start, PROCESS_IMAGE_TIMEOUT)?;
+    if geometry.oriented_dimensions != (asset.width, asset.height) {
+        return Err(ProcessingError::InvalidSource(
+            "oriented dimensions do not match the selected image asset".into(),
+        ));
+    }
     let decoded =
         DynamicImage::from_decoder(decoder).map_err(|error| codec_error(error, cancel, start))?;
     drop(bytes);
     check_deadline(cancel, start, PROCESS_IMAGE_TIMEOUT)?;
     // At most 128 MiB decoded + 64 MiB converted RGBA; only RGBA survives.
     let rgba = decoded.into_rgba8();
-    check_deadline(cancel, start, PROCESS_IMAGE_TIMEOUT)?;
-    Ok(rgba)
+    // Encoded bytes and the decoder/conversion buffer are gone. Quarter turns
+    // need at most two 64 MiB RGBA buffers, admitted against the same 128 MiB
+    // pixel allowance before allocation and again using actual capacities.
+    orient_rgba(
+        rgba,
+        geometry.orientation,
+        || check_deadline(cancel, start, PROCESS_IMAGE_TIMEOUT),
+        admit_orientation_peak,
+    )
+    .map_err(|error| match error {
+        RgbaOrientationError::Caller(error) => error,
+        RgbaOrientationError::InvalidBuffer => ProcessingError::InvalidSource(error.to_string()),
+        RgbaOrientationError::SizeOverflow | RgbaOrientationError::AllocationFailed => {
+            ProcessingError::ResourceLimit(error.to_string())
+        }
+        RgbaOrientationError::ColorSpace(error) => codec_error(error, cancel, start),
+    })
+}
+
+fn check_decode_dimensions(
+    width: u32,
+    height: u32,
+    decoded_bytes: u64,
+) -> Result<(), ProcessingError> {
+    if width == 0
+        || height == 0
+        || width > MAX_DIMENSION
+        || height > MAX_DIMENSION
+        || u64::from(width) * u64::from(height) > MAX_PROCESS_IMAGE_PIXELS
+        || decoded_bytes > MAX_DECODE_BYTES
+    {
+        return Err(ProcessingError::ResourceLimit(
+            "image processing accepts at most 16 MP and 128 MiB of decoded pixels".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn admit_orientation_peak(bytes: u64) -> Result<(), ProcessingError> {
+    if bytes > MAX_DECODE_BYTES {
+        Err(ProcessingError::ResourceLimit(
+            "image orientation exceeds 128 MiB of live RGBA pixels".into(),
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 /// Called inside with_decoded_source's gate. The source remains immutable and
@@ -358,6 +400,208 @@ mod tests {
             height: 4,
         };
         (path, asset)
+    }
+
+    fn exif_with_orientation(orientation: u8) -> Vec<u8> {
+        let mut exif = b"II*\0\x08\0\0\0\x01\0\x12\x01\x03\0\x01\0\0\0\x01\0\0\0\0\0\0\0".to_vec();
+        exif[18] = orientation;
+        exif
+    }
+
+    fn asymmetric_pixels() -> ::image::RgbaImage {
+        ::image::RgbaImage::from_fn(3, 2, |x, y| {
+            let id = (1 + y * 3 + x) as u8;
+            ::image::Rgba([id, id * 11, 255 - id, id * 31])
+        })
+    }
+
+    fn exif_png_source(
+        directory: &TestDirectory,
+        exif: Vec<u8>,
+        dimensions: (u32, u32),
+    ) -> (PathBuf, ProjectAsset) {
+        let path = directory.0.join("oriented.png");
+        let mut encoded = Vec::new();
+        let mut encoder = ::image::codecs::png::PngEncoder::new(&mut encoded);
+        encoder.set_exif_metadata(exif).unwrap();
+        encoder
+            .write_image(
+                asymmetric_pixels().as_raw(),
+                3,
+                2,
+                ::image::ExtendedColorType::Rgba8,
+            )
+            .unwrap();
+        fs::write(&path, &encoded).unwrap();
+        let asset = ProjectAsset {
+            key: "assets/oriented.png".into(),
+            name: "oriented".into(),
+            media_type: "image/png".into(),
+            byte_len: encoded.len() as u64,
+            width: dimensions.0,
+            height: dimensions.1,
+        };
+        (path, asset)
+    }
+
+    #[test]
+    fn exif_rotation_and_reflection_reach_editor_and_processing_pixels_once() {
+        let _gate = PROCESS_GATE.lock().unwrap();
+        let directory = TestDirectory::new();
+        let cancel = AtomicBool::new(false);
+        for (orientation, dimensions, expected_ids) in [
+            (6, (2, 3), [4, 1, 5, 2, 6, 3]),
+            (2, (3, 2), [3, 2, 1, 6, 5, 4]),
+        ] {
+            let (source, asset) =
+                exif_png_source(&directory, exif_with_orientation(orientation), dimensions);
+            let original = fs::read(&source).unwrap();
+            let rgba = decode_rgba(&source, &asset, &cancel, Instant::now()).unwrap();
+            assert_eq!(rgba.dimensions(), dimensions);
+            let expected: Vec<_> = expected_ids
+                .into_iter()
+                .flat_map(|id| [id, id * 11, 255 - id, id * 31])
+                .collect();
+            assert_eq!(rgba.as_raw(), &expected, "EXIF {orientation}");
+            let output = execute(
+                &ProcessingSettings::Image {
+                    format: ImageOutputFormat::Png,
+                    quality: 100,
+                    max_edge: 8192,
+                },
+                &source,
+                &asset,
+                &directory.0.join(format!("upright-{orientation}.png")),
+                &cancel,
+            )
+            .unwrap();
+            assert_eq!((output.width, output.height), dimensions);
+            let mut decoder = ImageReader::open(&output.path)
+                .unwrap()
+                .with_guessed_format()
+                .unwrap()
+                .into_decoder()
+                .unwrap();
+            let geometry = ImageOrientation::from_decoder(&mut decoder).unwrap();
+            assert_eq!(
+                geometry.orientation,
+                ::image::metadata::Orientation::NoTransforms
+            );
+            assert_eq!(
+                DynamicImage::from_decoder(decoder).unwrap().into_rgba8(),
+                rgba
+            );
+            assert_eq!(fs::read(&source).unwrap(), original);
+            assert_eq!(
+                ::image::load_from_memory(&original).unwrap().into_rgba8(),
+                asymmetric_pixels()
+            );
+        }
+    }
+
+    #[test]
+    fn jpeg_exif_rotation_and_reflection_use_logical_dimensions() {
+        let _gate = PROCESS_GATE.lock().unwrap();
+        let directory = TestDirectory::new();
+        for (orientation, dimensions, order) in [
+            (6, (2, 3), [3, 0, 4, 1, 5, 2]),
+            (2, (3, 2), [2, 1, 0, 5, 4, 3]),
+        ] {
+            let mut original = Vec::new();
+            let mut encoder =
+                ::image::codecs::jpeg::JpegEncoder::new_with_quality(&mut original, 100);
+            encoder
+                .set_exif_metadata(exif_with_orientation(orientation))
+                .unwrap();
+            encoder
+                .encode_image(&DynamicImage::ImageRgba8(asymmetric_pixels()).into_rgb8())
+                .unwrap();
+            let raw = ::image::load_from_memory(&original).unwrap().into_rgba8();
+            assert_eq!(raw.dimensions(), (3, 2));
+            let source = directory.0.join("oriented.jpg");
+            fs::write(&source, &original).unwrap();
+            let asset = ProjectAsset {
+                key: "assets/oriented.jpg".into(),
+                name: "oriented".into(),
+                media_type: "image/jpeg".into(),
+                byte_len: original.len() as u64,
+                width: dimensions.0,
+                height: dimensions.1,
+            };
+            let rgba =
+                decode_rgba(&source, &asset, &AtomicBool::new(false), Instant::now()).unwrap();
+            assert_eq!(rgba.dimensions(), dimensions);
+            let raw_pixels: Vec<_> = raw.pixels().copied().collect();
+            let expected: Vec<_> = order.into_iter().map(|index| raw_pixels[index]).collect();
+            assert_eq!(rgba.pixels().copied().collect::<Vec<_>>(), expected);
+            assert_eq!(fs::read(source).unwrap(), original);
+        }
+    }
+
+    #[test]
+    fn exif_sources_reject_stale_geometry_bad_metadata_cancellation_and_deadlines() {
+        let _gate = PROCESS_GATE.lock().unwrap();
+        let directory = TestDirectory::new();
+        let cancel = AtomicBool::new(false);
+        let (source, mut asset) = exif_png_source(&directory, exif_with_orientation(6), (2, 3));
+        let original = fs::read(&source).unwrap();
+        assert!(matches!(
+            decode_rgba(&source, &asset, &AtomicBool::new(true), Instant::now()),
+            Err(ProcessingError::Cancelled)
+        ));
+        assert!(matches!(
+            decode_rgba(
+                &source,
+                &asset,
+                &cancel,
+                Instant::now() - PROCESS_IMAGE_TIMEOUT
+            ),
+            Err(ProcessingError::Timeout)
+        ));
+        asset.width = 3;
+        asset.height = 2;
+        assert!(matches!(
+            decode_rgba(&source, &asset, &cancel, Instant::now()),
+            Err(ProcessingError::InvalidSource(_))
+        ));
+        asset.byte_len += 1;
+        assert!(matches!(
+            decode_rgba(&source, &asset, &cancel, Instant::now()),
+            Err(ProcessingError::InvalidSource(_))
+        ));
+        assert_eq!(fs::read(&source).unwrap(), original);
+        for exif in [
+            exif_with_orientation(0),
+            exif_with_orientation(9),
+            b"broken TIFF".to_vec(),
+        ] {
+            let (source, asset) = exif_png_source(&directory, exif, (3, 2));
+            let original = fs::read(&source).unwrap();
+            assert!(decode_rgba(&source, &asset, &cancel, Instant::now()).is_err());
+            assert_eq!(fs::read(source).unwrap(), original);
+        }
+    }
+
+    #[test]
+    fn raw_decode_and_live_orientation_buffers_keep_existing_limits() {
+        assert!(check_decode_dimensions(4096, 4096, MAX_DECODE_BYTES).is_ok());
+        assert!(check_decode_dimensions(MAX_DIMENSION, 1, 4 * u64::from(MAX_DIMENSION)).is_ok());
+        for (width, height, bytes) in [
+            (0, 1, 0),
+            (MAX_DIMENSION + 1, 1, 4 * u64::from(MAX_DIMENSION + 1)),
+            (4096, 4097, 4096 * 4097 * 4),
+            (4096, 4096, MAX_DECODE_BYTES + 1),
+        ] {
+            assert!(matches!(
+                check_decode_dimensions(width, height, bytes),
+                Err(ProcessingError::ResourceLimit(_))
+            ));
+        }
+        assert!(admit_orientation_peak(MAX_DECODE_BYTES).is_ok());
+        assert!(matches!(
+            admit_orientation_peak(MAX_DECODE_BYTES + 1),
+            Err(ProcessingError::ResourceLimit(_))
+        ));
     }
 
     #[test]

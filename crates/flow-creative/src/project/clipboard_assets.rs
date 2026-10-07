@@ -176,19 +176,11 @@ fn validate_clipboard_image(
     let mut decoder = reader
         .into_decoder()
         .map_err(|error| invalid(&format!("invalid clipboard image header: {error}")))?;
-    // The workbench asset schema records stored pixel dimensions. Do not
-    // silently crop a clipboard image whose metadata swaps those dimensions.
-    if decoder
-        .orientation()
-        .map_err(|error| invalid(&format!("invalid image orientation: {error}")))?
-        != image::metadata::Orientation::NoTransforms
-    {
-        return Err(invalid(
-            "clipboard image orientation must already be applied; copy an upright PNG",
-        ));
-    }
+    let geometry = crate::image_orientation::ImageOrientation::from_decoder(&mut decoder)
+        .map_err(|error| invalid(&format!("invalid image orientation: {error}")))?;
+    check_active(cancelled)?;
     let output_bytes = decoder.total_bytes();
-    if decoder.dimensions() != (info.width, info.height) || output_bytes > pixels * 8 {
+    if geometry.oriented_dimensions != (info.width, info.height) || output_bytes > pixels * 8 {
         return Err(invalid(
             "clipboard image decoded geometry disagrees with its header",
         ));
@@ -636,7 +628,7 @@ mod tests {
     }
 
     #[test]
-    fn oriented_jpeg_is_rejected_instead_of_using_unrotated_asset_geometry() {
+    fn oriented_jpeg_keeps_original_bytes_and_uses_logical_geometry() {
         let home = TestHome::new();
         let (_, mut project) = home.project();
         let jpeg = jpeg();
@@ -646,7 +638,15 @@ mod tests {
         rotated.extend_from_slice(&((exif.len() + 2) as u16).to_be_bytes());
         rotated.extend_from_slice(exif);
         rotated.extend_from_slice(&jpeg[2..]);
-        assert_rejected_unchanged(&mut project, &rotated, "image/jpeg");
+        let raw = image::load_from_memory(&rotated).unwrap();
+        let asset = project
+            .import_clipboard_image(&rotated, "image/jpeg", &AtomicBool::new(false))
+            .unwrap();
+        assert_eq!((asset.width, asset.height), (raw.height(), raw.width()));
+        assert_eq!(
+            fs::read(project.directory().join(&asset.key)).unwrap(),
+            rotated
+        );
     }
 
     #[test]

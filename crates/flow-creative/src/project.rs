@@ -25,7 +25,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-pub const PROJECT_SCHEMA_VERSION: u32 = 1;
+pub const PROJECT_SCHEMA_VERSION: u32 = 2;
 pub const MAX_IMAGE_BYTES: u64 = 32 * 1024 * 1024;
 pub const MAX_PROJECT_ASSET_BYTES: u64 = 512 * 1024 * 1024;
 pub const MAX_PROJECT_ASSETS: usize = 512;
@@ -36,8 +36,10 @@ static NEXT_NAME: AtomicU64 = AtomicU64::new(0);
 static TRANSACTION: Mutex<()> = Mutex::new(());
 #[cfg(feature = "desktop")]
 mod clipboard_assets;
+mod image_metadata;
 mod mask_assets;
 mod media_assets;
+mod orientation_migration;
 pub use media_assets::{MAX_MEDIA_BYTES, MAX_MEDIA_DURATION_SECONDS, creative_media_backend};
 
 #[derive(Debug)]
@@ -292,6 +294,7 @@ impl ProjectStore {
                 directory: directory.clone(),
                 project,
                 migrated_reference_count: 0,
+                migrated_orientation_count: 0,
             })
         })();
         if result.is_err() {
@@ -311,62 +314,88 @@ impl ProjectStore {
         validate_id(id)?;
         checked_directory(&self.root, false)?;
         let directory = self.root.join(id);
-        let project = read_project(&directory, id)?;
+        let mut project = read_project(&directory, id)?;
         check_assets_on_disk(&directory, &project.assets)?;
-        for asset in &project.assets {
-            verify_asset(&directory.join(&asset.key), asset)?;
-        }
+        let changed = image_metadata::reconcile_assets(&directory, &mut project, || Ok(()))?;
         let mut local = LocalProject {
             directory,
             project,
             migrated_reference_count: 0,
+            migrated_orientation_count: changed.len(),
         };
-        if local
+        let has_references = local
             .project
             .document
             .graph
             .nodes
             .values()
-            .any(crate::references::has_legacy_reference)
-        {
-            // Older envelopes may contain a project-owned image attachment.
-            // Build and validate its visible replacement before the first write.
+            .any(crate::references::has_legacy_reference);
+        let mut candidate = local.project.clone();
+        if !changed.is_empty() {
+            orientation_migration::guard_legacy_orientation(
+                &mut candidate.document.graph,
+                &changed,
+            )?;
+        }
+        if has_references {
             let (document, converted) = crate::references::migrate_legacy_references(
                 registry,
-                &local.project.document,
-                &local.project.assets,
+                &candidate.document,
+                &candidate.assets,
             )?;
-            validate_document_assets(&document, &local.project.assets)?;
-            let mut candidate = local.next_revision()?;
             candidate.document = document;
+            local.migrated_reference_count = converted;
+        }
+        registry.validate_document(&candidate.document)?;
+        validate_document_assets(&candidate.document, &candidate.assets)?;
+        if !changed.is_empty() || has_references {
+            let revision = local.next_revision()?;
+            candidate.revision = revision.revision;
+            candidate.metadata = revision.metadata;
+            candidate.schema_version = PROJECT_SCHEMA_VERSION;
             local.check_revision()?;
             write_project(&local.directory, &candidate)?;
-            local.project = candidate;
-            local.migrated_reference_count = converted;
-        } else {
-            registry.validate_document(&local.project.document)?;
         }
+        // A v1 project without oriented images upgrades on its next actual save.
+        candidate.schema_version = PROJECT_SCHEMA_VERSION;
+        local.project = candidate;
         Ok(local)
     }
 
     /// Read an immutable preview source without asset conversion or migration.
     /// The preview renderer admits only the assets it actually needs. Legacy
     /// projects requiring migration must be explicitly opened by the user.
-    #[cfg(feature = "desktop")]
+    #[cfg(all(feature = "desktop", test))]
     pub(crate) fn read_preview_project(
         &self,
         id: &str,
         registry: &CreativeRegistry,
     ) -> Result<LocalProject, ProjectError> {
+        self.read_preview_project_cancellable(
+            id,
+            registry,
+            &std::sync::atomic::AtomicBool::new(false),
+        )
+    }
+
+    #[cfg(feature = "desktop")]
+    pub(crate) fn read_preview_project_cancellable(
+        &self,
+        id: &str,
+        registry: &CreativeRegistry,
+        cancelled: &std::sync::atomic::AtomicBool,
+    ) -> Result<LocalProject, ProjectError> {
         validate_id(id)?;
         checked_directory(&self.root, false)?;
         let directory = self.root.join(id);
-        let project = read_project(&directory, id)?;
+        let mut project = read_project(&directory, id)?;
         registry.validate_document(&project.document)?;
+        image_metadata::reconcile_preview(&directory, &mut project, cancelled)?;
         Ok(LocalProject {
             directory,
             project,
             migrated_reference_count: 0,
+            migrated_orientation_count: 0,
         })
     }
 }
@@ -376,6 +405,7 @@ pub struct LocalProject {
     directory: PathBuf,
     project: ProjectFile,
     migrated_reference_count: usize,
+    migrated_orientation_count: usize,
 }
 
 impl LocalProject {
@@ -399,6 +429,11 @@ impl LocalProject {
     /// open. Reopening an already converted project returns zero.
     pub fn migrated_reference_count(&self) -> usize {
         self.migrated_reference_count
+    }
+
+    /// Images whose legacy encoded orientation was reconciled by this open.
+    pub fn migrated_orientation_count(&self) -> usize {
+        self.migrated_orientation_count
     }
 
     /// Validate first, then fsync a unique sibling and atomically replace
@@ -586,6 +621,7 @@ impl LocalProject {
             .revision
             .checked_add(1)
             .ok_or_else(|| ProjectError::Invalid("project revision overflow".into()))?;
+        candidate.schema_version = PROJECT_SCHEMA_VERSION;
         candidate.metadata.updated_at_ms = now_ms().max(candidate.metadata.updated_at_ms);
         Ok(candidate)
     }
@@ -700,8 +736,8 @@ fn validate_document_assets(
                     .find(|asset| asset.key == source.asset_key)
                     .ok_or_else(|| ProjectError::Invalid("Mask 原图不属于当前项目".into()))?;
                 if !matches!(original.media_type.as_str(), "image/png" | "image/jpeg")
-                    || original.width != source.width
-                    || original.height != source.height
+                    || (!crate::mask_node::orientation_review_required(&node.data)?
+                        && (original.width != source.width || original.height != source.height))
                 {
                     return Err(ProjectError::Invalid("Mask 原图尺寸或类型不匹配".into()));
                 }
@@ -838,7 +874,7 @@ fn validate_document_assets(
 }
 
 fn validate_project(project: &ProjectFile, id: &str) -> Result<(), ProjectError> {
-    if project.schema_version != PROJECT_SCHEMA_VERSION {
+    if !matches!(project.schema_version, 1 | PROJECT_SCHEMA_VERSION) {
         return Err(ProjectError::Invalid(format!(
             "unsupported project schema version: {}",
             project.schema_version
@@ -1237,6 +1273,13 @@ fn validate_dimensions(width: u32, height: u32) -> Result<(), ProjectError> {
 }
 
 fn image_info(bytes: &[u8]) -> Result<AssetInfo, ProjectError> {
+    let mut info = encoded_image_info(bytes)?;
+    let orientation = image_metadata::inspect(bytes, &info)?;
+    (info.width, info.height) = orientation.oriented_dimensions;
+    Ok(info)
+}
+
+fn encoded_image_info(bytes: &[u8]) -> Result<AssetInfo, ProjectError> {
     let invalid = || ProjectError::Invalid("choose a valid PNG, JPEG, GIF, or WebP image".into());
     let be32 = |slice: &[u8]| u32::from_be_bytes(slice.try_into().expect("four checked bytes"));
     let le24 = |slice: &[u8]| {
@@ -2678,21 +2721,21 @@ mod tests {
     }
 
     #[test]
-    fn jpeg_gif_and_webp_dimensions_are_read_without_an_image_dependency() {
+    fn encoded_jpeg_gif_and_webp_headers_are_bounded_before_decoder_construction() {
         let jpeg = [
             0xff, 0xd8, 0xff, 0xc0, 0, 11, 8, 0, 12, 0, 34, 1, 1, 0x11, 0, 0xff, 0xd9,
         ];
-        let info = image_info(&jpeg).unwrap();
+        let info = encoded_image_info(&jpeg).unwrap();
         assert_eq!((info.width, info.height, info.extension), (34, 12, "jpg"));
         let gif = b"GIF89a\x02\x00\x03\x00\x00\x00\x00";
-        let info = image_info(gif).unwrap();
+        let info = encoded_image_info(gif).unwrap();
         assert_eq!((info.width, info.height, info.extension), (2, 3, "gif"));
         let mut webp =
             b"RIFF\x16\x00\x00\x00WEBPVP8X\x0a\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x06\x00\x00"
                 .to_vec();
-        let info = image_info(&webp).unwrap();
+        let info = encoded_image_info(&webp).unwrap();
         assert_eq!((info.width, info.height, info.extension), (5, 7, "webp"));
         webp[4] = 0;
-        assert!(image_info(&webp).is_err());
+        assert!(encoded_image_info(&webp).is_err());
     }
 }

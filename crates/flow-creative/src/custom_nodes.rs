@@ -584,6 +584,7 @@ pub fn resolve_node_output(node: &Node, port_id: &str) -> Result<CustomValue, Cr
         // Mask strokes have their own point/work budgets; do not impose the
         // smaller custom-JSON item count on a valid builtin mask editor state.
         check_serialized(&node.data)?;
+        crate::mask_node::ensure_orientation_reviewed(&node.data)?;
         let data = MaskNodeData::from_value(&node.data)?;
         let source = data
             .state

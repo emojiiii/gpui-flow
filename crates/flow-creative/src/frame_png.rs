@@ -3,6 +3,7 @@
 //! This module never changes the canvas, loads a URI, or writes an output file.
 
 use crate::frame_text::{FrameTextBackend, FrameTextSnapshot};
+use crate::image_orientation::{ImageOrientation, orient_rgba};
 use crate::pencil::{PENCIL_NODE_KIND, PencilData};
 use crate::project::{LocalProject, MAX_IMAGE_BYTES, ProjectAsset, validate_asset_key};
 use crate::shapes::{SHAPE_NODE_KIND, ShapeData, ShapeKind};
@@ -620,10 +621,14 @@ fn decode_asset(
     );
     reader.limits(limits);
     check_active(cancelled)?;
-    let decoder = reader
+    let mut decoder = reader
         .into_decoder()
         .map_err(|error| format!("Frame PNG image header is invalid: {error}"))?;
-    if decoder.dimensions() != (asset.width, asset.height) || decoder.total_bytes() > decoded_upper
+    let geometry = ImageOrientation::from_decoder(&mut decoder)
+        .map_err(|error| format!("Frame PNG image orientation is invalid: {error}"))?;
+    check_active(cancelled)?;
+    if geometry.oriented_dimensions != (asset.width, asset.height)
+        || decoder.total_bytes() > decoded_upper
     {
         return Err(
             "Frame PNG decoded dimensions or channels disagree with the admitted asset".into(),
@@ -634,7 +639,14 @@ fn decode_asset(
         .map_err(|error| format!("Frame PNG image decoding failed: {error}"))?;
     check_active(cancelled)?;
     drop(bytes);
-    let mut rgba = decoded.into_rgba8().into_raw();
+    let mut rgba = orient_rgba(
+        decoded.into_rgba8(),
+        geometry.orientation,
+        || check_active(cancelled),
+        |peak| check_memory(retained.saturating_add(peak)),
+    )
+    .map_err(|error| error.to_string())?
+    .into_raw();
     check_active(cancelled)?;
     check_memory(retained.saturating_add(rgba.capacity() as u64))?;
     for chunk in rgba.chunks_mut(16 * 1024) {
@@ -750,8 +762,12 @@ fn inspect_header(
         jpeg_dimensions(bytes, cancelled)?
     };
     check_dimensions(dimensions.0, dimensions.1)?;
-    if dimensions != (asset.width, asset.height) {
-        return Err("Frame PNG image header dimensions disagree with the manifest".into());
+    // The decoder below validates oriented dimensions. The raw header still
+    // must fit the same pixel admission, even when EXIF exchanges the axes.
+    if u64::from(dimensions.0) * u64::from(dimensions.1)
+        != u64::from(asset.width) * u64::from(asset.height)
+    {
+        return Err("Frame PNG image dimensions/pixel count disagree with the manifest".into());
     }
     Ok(format)
 }
@@ -1108,6 +1124,40 @@ mod tests {
                 .encode_with_text_backend(&project, Some(&backend), &cancelled)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn frame_decoding_matches_gpui_orientation_for_all_exif_transforms() {
+        use image::ImageEncoder;
+        let home = TestHome::new();
+        let mut project = home.project();
+        for value in 1..=8 {
+            let source =
+                RgbaImage::from_fn(3, 2, |x, y| Rgba([(x * 70) as u8, (y * 90) as u8, 45, 255]));
+            let mut exif =
+                b"II*\0\x08\0\0\0\x01\0\x12\x01\x03\0\x01\0\0\0\x01\0\0\0\0\0\0\0".to_vec();
+            exif[18] = value;
+            let mut bytes = Vec::new();
+            let mut encoder = image::codecs::png::PngEncoder::new(&mut bytes);
+            encoder.set_exif_metadata(exif).unwrap();
+            encoder
+                .write_image(source.as_raw(), 3, 2, image::ExtendedColorType::Rgba8)
+                .unwrap();
+            let asset = home.import_bytes(&mut project, &format!("exif-{value}.png"), &bytes);
+            let decoded = decode_asset(&project, &asset, 0, &AtomicBool::new(false)).unwrap();
+            let mut expected = DynamicImage::ImageRgba8(source);
+            expected.apply_orientation(image::metadata::Orientation::from_exif(value).unwrap());
+            assert_eq!(
+                (decoded.width(), decoded.height()),
+                (expected.width(), expected.height())
+            );
+            assert_eq!(decoded.premultiplied_rgba(), expected.into_rgba8().as_raw());
+            assert_eq!(
+                fs::read(project.resolve_asset_path(&asset.key).unwrap()).unwrap(),
+                bytes
+            );
+            assert!(decode_asset(&project, &asset, 0, &AtomicBool::new(true)).is_err());
+        }
     }
 
     #[test]

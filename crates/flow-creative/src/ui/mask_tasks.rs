@@ -103,6 +103,7 @@ impl CreativeCanvas {
         }
         let result = (|| {
             let context = self.mask_views.context(&mask.id).map_err(CreativeError)?;
+            crate::mask_node::ensure_orientation_reviewed(&mask.data)?;
             let data = MaskNodeData::from_value(&mask.data)?;
             if !data.output_is_current(&context.source) {
                 return Err(CreativeError("请先应用当前遮罩".into()));
@@ -170,6 +171,7 @@ impl CreativeCanvas {
                 .clone()
                 .ok_or_else(|| CreativeError("请先打开本地项目".into()))?;
             let context = self.mask_views.context(&node.id).map_err(CreativeError)?;
+            crate::mask_node::ensure_orientation_reviewed(&node.data)?;
             let data = MaskNodeData::from_value(&node.data)?;
             if !data.state.source_matches(&context.source) {
                 return Err(CreativeError("请确认原图并重置遮罩".into()));

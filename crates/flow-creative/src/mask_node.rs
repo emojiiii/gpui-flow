@@ -6,6 +6,26 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 pub const MASK_MEDIA_TYPE: &str = "application/vnd.gpui-flow.mask+png";
+pub(crate) const ORIENTATION_REVIEW_REQUIRED: &str = "orientation_review_required";
+pub(crate) const ORIENTATION_REVIEW_NOTICE: &str =
+    "原图显示方向已修正，旧笔画仍保留；请重置遮罩后重新绘制";
+
+/// This migration-only extension deliberately stays outside the editable typed
+/// payload. Only an explicit reset may serialize that payload back without it.
+pub(crate) fn orientation_review_required(value: &Value) -> Result<bool, CreativeError> {
+    match value.get(ORIENTATION_REVIEW_REQUIRED) {
+        None => Ok(false),
+        Some(Value::Bool(required)) => Ok(*required),
+        Some(_) => Err(CreativeError("遮罩方向复核标记必须为布尔值".into())),
+    }
+}
+
+pub(crate) fn ensure_orientation_reviewed(value: &Value) -> Result<(), CreativeError> {
+    if orientation_review_required(value)? {
+        return Err(CreativeError(ORIENTATION_REVIEW_NOTICE.into()));
+    }
+    Ok(())
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -18,7 +38,12 @@ pub struct MaskNodeData {
 
 impl MaskNodeData {
     pub fn from_value(value: &Value) -> Result<Self, CreativeError> {
-        let data: Self = serde_json::from_value(value.clone())?;
+        orientation_review_required(value)?;
+        let mut payload = value.clone();
+        if let Some(object) = payload.as_object_mut() {
+            object.remove(ORIENTATION_REVIEW_REQUIRED);
+        }
+        let data: Self = serde_json::from_value(payload)?;
         data.validate()?;
         Ok(data)
     }
@@ -157,6 +182,25 @@ mod tests {
     use crate::mask::{MaskMode, MaskPoint};
     use gpui_flow_core::{Point, PortRef};
     #[test]
+    fn mask_payload_accepts_only_the_boolean_orientation_extension() {
+        let original = MaskNodeData::default();
+        for required in [false, true] {
+            let mut value = json!(original);
+            value[ORIENTATION_REVIEW_REQUIRED] = json!(required);
+            assert_eq!(MaskNodeData::from_value(&value).unwrap(), original);
+            assert_eq!(orientation_review_required(&value).unwrap(), required);
+            assert_eq!(ensure_orientation_reviewed(&value).is_err(), required);
+            value["unrecognized_extension"] = json!(true);
+            assert!(MaskNodeData::from_value(&value).is_err());
+        }
+        for invalid in [Value::Null, json!(0), json!("true"), json!({}), json!([])] {
+            let mut value = json!(original);
+            value[ORIENTATION_REVIEW_REQUIRED] = invalid;
+            assert!(MaskNodeData::from_value(&value).is_err());
+            assert!(ensure_orientation_reviewed(&value).is_err());
+        }
+    }
+    #[test]
     fn editing_a_published_mask_clears_its_output_without_losing_undo_data() {
         let source = MaskSource::new("assets/source.png", 10, 20).unwrap();
         let mut data = MaskNodeData::default();
@@ -234,6 +278,24 @@ mod tests {
         assert!(request.inputs.iter().any(
             |input| input.port == "mask" && input.asset.as_deref() == Some("assets/output.png")
         ));
+        graph.nodes.get_mut(&"mask".into()).unwrap().data[ORIENTATION_REVIEW_REQUIRED] =
+            json!(true);
+        assert!(
+            crate::custom_nodes::resolve_node_output(graph.node(&"mask".into()).unwrap(), "mask")
+                .is_err()
+        );
+        assert!(
+            crate::GenerationRequest::from_node(graph.node(&"edit".into()).unwrap(), &graph)
+                .is_err()
+        );
+        graph
+            .nodes
+            .get_mut(&"mask".into())
+            .unwrap()
+            .data
+            .as_object_mut()
+            .unwrap()
+            .remove(ORIENTATION_REVIEW_REQUIRED);
         graph.nodes.get_mut(&"image".into()).unwrap().data["asset"] =
             json!("assets/replacement.png");
         assert!(

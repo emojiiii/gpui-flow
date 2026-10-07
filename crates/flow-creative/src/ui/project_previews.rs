@@ -110,7 +110,11 @@ impl ProjectPreviews {
                             return Err("Preview cancelled".into());
                         }
                         let project = store
-                            .read_preview_project(&task_id, &standard_registry())
+                            .read_preview_project_cancellable(
+                                &task_id,
+                                &standard_registry(),
+                                &task_cancel,
+                            )
                             .map_err(|e| e.to_string())?;
                         let preview = crate::project_preview::prepare_project_preview(
                             &project.document().graph,

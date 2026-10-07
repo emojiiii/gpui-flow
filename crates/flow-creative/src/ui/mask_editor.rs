@@ -60,7 +60,7 @@ impl CreativeCanvas {
                     !crate::layer_guard::node_is_locked(
                         self.canvas.read(cx).editor.graph(),
                         &node.id,
-                    )
+                    ) && crate::mask_node::ensure_orientation_reviewed(&node.data).is_ok()
                 })
                 .and_then(|node| MaskNodeData::from_value(&node.data).ok())
                 .is_some_and(|data| data.state.source_matches(&edit.source))
@@ -89,6 +89,14 @@ impl CreativeCanvas {
                 return;
             }
             MaskAction::Apply => {
+                if let Some(node) = self.selected(cx).filter(|node| node.kind == "mask")
+                    && let Err(error) = crate::mask_node::ensure_orientation_reviewed(&node.data)
+                {
+                    self.clear_mask_edit();
+                    self.notice = Some(error.to_string());
+                    cx.notify();
+                    return;
+                }
                 self.finish_mask_stroke(cx);
                 self.apply_mask(cx);
                 return;
@@ -132,6 +140,9 @@ impl CreativeCanvas {
         let result = (|| {
             let context = self.mask_views.context(&node.id).map_err(CreativeError)?;
             let mut data = MaskNodeData::from_value(&node.data)?;
+            if !matches!(action, MaskAction::Reset) {
+                crate::mask_node::ensure_orientation_reviewed(&node.data)?;
+            }
             if matches!(action, MaskAction::Reset) || data.state.source.is_none() {
                 data.reset_source(context.source.clone())?;
                 if !self.command(
@@ -143,6 +154,7 @@ impl CreativeCanvas {
                 ) {
                     return Ok(());
                 }
+                self.mask_views.set_draft(None);
             } else if !data.state.source_matches(&context.source) {
                 return Err(CreativeError(
                     "输入原图已变更；请明确重置遮罩后绘制，旧笔画仍保留".into(),
@@ -196,7 +208,8 @@ impl CreativeCanvas {
         let Ok(mut data) = MaskNodeData::from_value(&node.data) else {
             return;
         };
-        if !data.state.source_matches(&edit.source)
+        if crate::mask_node::ensure_orientation_reviewed(&node.data).is_err()
+            || !data.state.source_matches(&edit.source)
             || !self
                 .mask_views
                 .context(&edit.node)
@@ -260,6 +273,7 @@ impl CreativeCanvas {
                 .cloned()
                 .ok_or_else(|| CreativeError("遮罩节点已删除".into()))?;
             let current = self.mask_views.context(&id).map_err(CreativeError)?;
+            crate::mask_node::ensure_orientation_reviewed(&node.data)?;
             let mut data = MaskNodeData::from_value(&node.data)?;
             if current.source != source || !data.state.source_matches(&source) {
                 return Err(CreativeError("原图已改变，未完成笔画已取消".into()));
@@ -285,6 +299,7 @@ impl CreativeCanvas {
         bounds: Rect,
         cx: &mut Context<Self>,
     ) -> Option<Stateful<Div>> {
+        crate::mask_node::ensure_orientation_reviewed(&node.data).ok()?;
         let edit = self
             .mask_editing
             .as_ref()
@@ -362,24 +377,32 @@ impl CreativeCanvas {
     pub(super) fn mask_controls(&self, node: &Node, editable: bool, cx: &mut Context<Self>) -> Div {
         let context = self.mask_views.context(&node.id);
         let data = MaskNodeData::from_value(&node.data).ok();
-        let stale = context
-            .as_ref()
-            .ok()
-            .zip(data.as_ref())
-            .is_some_and(|(c, d)| d.state.source.is_some() && !d.state.source_matches(&c.source));
+        let orientation_changed =
+            crate::mask_node::orientation_review_required(&node.data).unwrap_or(true);
+        let stale = orientation_changed
+            || context
+                .as_ref()
+                .ok()
+                .zip(data.as_ref())
+                .is_some_and(|(c, d)| {
+                    d.state.source.is_some() && !d.state.source_matches(&c.source)
+                });
         let active = self
             .mask_editing
             .as_ref()
             .filter(|edit| edit.node == node.id);
-        let ready = context
-            .as_ref()
-            .ok()
-            .zip(data.as_ref())
-            .is_some_and(|(c, d)| d.output_is_current(&c.source));
+        let ready = !orientation_changed
+            && context
+                .as_ref()
+                .ok()
+                .zip(data.as_ref())
+                .is_some_and(|(c, d)| d.output_is_current(&c.source));
         let disabled = !editable || self.saving || self.importing || context.is_err();
         let status = match &context {
             Err(e) => e.clone(),
-            Ok(_) => if stale {
+            Ok(_) => if orientation_changed {
+                crate::mask_node::ORIENTATION_REVIEW_NOTICE
+            } else if stale {
                 "原图已变更，旧笔画保留；请重置"
             } else if ready {
                 "Mask 已应用 · 0 保留 / 255 编辑"

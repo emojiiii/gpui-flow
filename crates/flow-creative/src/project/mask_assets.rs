@@ -6,7 +6,13 @@ use crate::MASK_MEDIA_TYPE;
 use std::sync::atomic::AtomicBool;
 
 pub(super) fn mask_info(bytes: &[u8]) -> Result<AssetInfo, ProjectError> {
-    let mut info = image_info(bytes)?;
+    let mut info = encoded_image_info(bytes)?;
+    let geometry = image_metadata::inspect(bytes, &info)?;
+    if geometry.orientation != image::metadata::Orientation::NoTransforms {
+        return Err(ProjectError::Invalid(
+            "Mask 像素坐标必须已规范化，不能携带旋转或镜像方向".into(),
+        ));
+    }
     if info.media_type != "image/png" || bytes.get(24) != Some(&8) || bytes.get(25) != Some(&0) {
         return Err(ProjectError::Invalid("Mask 输出必须是 8 位灰度 PNG".into()));
     }

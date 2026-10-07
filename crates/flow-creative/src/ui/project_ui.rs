@@ -132,12 +132,18 @@ impl CreativeCanvas {
     /// Ctrl/Cmd+S and background changes then use the same local project owner.
     pub fn bind_project(&mut self, project: LocalProject, cx: &mut Context<Self>) {
         let migrated = project.migrated_reference_count();
+        let oriented = project.migrated_orientation_count();
         self.last_saved_document = Some(project.document().clone());
         self.project = Some(project);
         self.refresh_assets(cx);
         self.canvas.update(cx, |v, _| v.set_host_persistence(true));
         self.notice = (migrated > 0)
             .then(|| format!("已将 {migrated} 个旧参考附件转换为画布图片输入，原素材已保留"));
+        if oriented > 0 {
+            self.notice = Some(format!(
+                "已统一 {oriented} 张图片的 EXIF 方向；原图与画布尺寸保留，旧遮罩需明确重置，处理节点需重跑"
+            ));
+        }
         cx.notify();
     }
     pub fn set_generation_available(&mut self, available: bool, cx: &mut Context<Self>) {

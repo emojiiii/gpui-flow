@@ -1,4 +1,7 @@
 //! Small, project-scoped previews. Only explicitly supplied local assets are read.
+use crate::image_orientation::{
+    ImageOrientation, RgbaOrientationError, orient_rgba, oriented_dimensions,
+};
 use gpui::{App, Context, RenderImage};
 use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader, Limits, RgbaImage};
 use std::{
@@ -229,7 +232,7 @@ fn load_thumbnail(
         return Err("thumbnail file changed while reading");
     }
     check_active(cancelled)?;
-    decode_thumbnail(&bytes, format, cancelled)
+    decode_thumbnail(bytes, format, cancelled)
 }
 
 fn check_dimensions(width: u32, height: u32, output_bytes: u64) -> Result<(), &'static str> {
@@ -247,7 +250,7 @@ fn check_dimensions(width: u32, height: u32, output_bytes: u64) -> Result<(), &'
 }
 
 fn decode_thumbnail(
-    bytes: &[u8],
+    bytes: Vec<u8>,
     format: ImageFormat,
     cancelled: &AtomicBool,
 ) -> Result<RgbaImage, &'static str> {
@@ -256,9 +259,9 @@ fn decode_thumbnail(
     limits.max_image_width = Some(MAX_DIMENSION);
     limits.max_image_height = Some(MAX_DIMENSION);
     limits.max_alloc = Some(MAX_DECODE_BYTES);
-    let mut reader = ImageReader::with_format(Cursor::new(bytes), format);
+    let mut reader = ImageReader::with_format(Cursor::new(bytes.as_slice()), format);
     reader.limits(limits);
-    let decoder = reader
+    let mut decoder = reader
         .into_decoder()
         .map_err(|_| "invalid thumbnail image")?;
     let (width, height) = decoder.dimensions();
@@ -266,22 +269,184 @@ fn decode_thumbnail(
     // the actual decoded pixel buffer before DynamicImage allocates it.
     check_dimensions(width, height, decoder.total_bytes())?;
     check_active(cancelled)?;
+    let geometry = ImageOrientation::from_decoder(&mut decoder)
+        .map_err(|_| "invalid thumbnail orientation metadata")?;
+    check_active(cancelled)?;
     // Decode one still image only, including for animated GIF/WebP assets.
     let decoded = DynamicImage::from_decoder(decoder).map_err(|_| "thumbnail decoding failed")?;
+    drop(bytes);
     check_active(cancelled)?;
-    // Convert channels only after downsampling; never allocate a full RGBA copy.
-    let mut thumbnail = decoded.thumbnail(THUMB_WIDTH, THUMB_HEIGHT).into_rgba8();
+    // Resize in encoded coordinates, exchanging the target axes for a quarter
+    // turn so the final logical image still fits the thumbnail rectangle.
+    // Convert/orient only the small pixels; never rotate a full decoded image.
+    let (target_width, target_height) =
+        oriented_dimensions((THUMB_WIDTH, THUMB_HEIGHT), geometry.orientation);
+    let thumbnail = decoded.thumbnail(target_width, target_height).into_rgba8();
+    drop(decoded);
+    let mut thumbnail = orient_rgba(
+        thumbnail,
+        geometry.orientation,
+        || check_active(cancelled),
+        |peak| {
+            // Encoded bytes, decoder and full pixels have been dropped. These
+            // actual RGBA capacities are the only remaining image allocations.
+            if peak > MAX_DECODE_BYTES {
+                Err("thumbnail orientation exceeds allocation limit")
+            } else {
+                Ok(())
+            }
+        },
+    )
+    .map_err(|error| match error {
+        RgbaOrientationError::Caller(error) => error,
+        RgbaOrientationError::InvalidBuffer => "invalid thumbnail orientation pixels",
+        RgbaOrientationError::SizeOverflow | RgbaOrientationError::AllocationFailed => {
+            "thumbnail orientation allocation failed"
+        }
+        RgbaOrientationError::ColorSpace(_) => "thumbnail orientation color space failed",
+    })?;
     check_active(cancelled)?;
     // RenderImage uses BGRA pixels, matching the model/media native bridges.
-    for pixel in thumbnail.pixels_mut() {
+    for (index, pixel) in thumbnail.pixels_mut().enumerate() {
+        if index % 4096 == 0 {
+            check_active(cancelled)?;
+        }
         pixel.0.swap(0, 2);
     }
+    check_active(cancelled)?;
     Ok(thumbnail)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use image::ImageEncoder;
+
+    fn exif_with_orientation(orientation: u8) -> Vec<u8> {
+        let mut exif = b"II*\0\x08\0\0\0\x01\0\x12\x01\x03\0\x01\0\0\0\x01\0\0\0\0\0\0\0".to_vec();
+        exif[18] = orientation;
+        exif
+    }
+
+    fn asymmetric_png(dimensions: (u32, u32), exif: Vec<u8>) -> Vec<u8> {
+        let source = RgbaImage::from_fn(dimensions.0, dimensions.1, |x, y| {
+            let id = (1 + (y * 2 / dimensions.1) * 3 + x * 3 / dimensions.0) as u8;
+            image::Rgba([id * 20, id * 25, 255 - id * 20, id * 31])
+        });
+        let mut encoded = Vec::new();
+        let mut encoder = image::codecs::png::PngEncoder::new(&mut encoded);
+        encoder.set_exif_metadata(exif).unwrap();
+        encoder
+            .write_image(
+                source.as_raw(),
+                dimensions.0,
+                dimensions.1,
+                image::ExtendedColorType::Rgba8,
+            )
+            .unwrap();
+        encoded
+    }
+
+    #[test]
+    fn exif_rotation_and_reflection_preserve_small_bgra_pixels_and_bounds() {
+        for (orientation, source_dimensions, expected_dimensions, columns, rows, expected_ids) in [
+            (6, (336, 224), (56, 84), 2, 3, [4, 1, 5, 2, 6, 3]),
+            (6, (224, 336), (112, 75), 2, 3, [4, 1, 5, 2, 6, 3]),
+            (2, (336, 224), (112, 75), 3, 2, [3, 2, 1, 6, 5, 4]),
+        ] {
+            let encoded = asymmetric_png(source_dimensions, exif_with_orientation(orientation));
+            let thumbnail =
+                decode_thumbnail(encoded, ImageFormat::Png, &AtomicBool::new(false)).unwrap();
+            assert_eq!(thumbnail.dimensions(), expected_dimensions);
+            assert!(thumbnail.width() <= THUMB_WIDTH && thumbnail.height() <= THUMB_HEIGHT);
+            for (index, id) in expected_ids.into_iter().enumerate() {
+                let column = index as u32 % columns;
+                let row = index as u32 / columns;
+                let x = (2 * column + 1) * thumbnail.width() / (2 * columns);
+                let y = (2 * row + 1) * thumbnail.height() / (2 * rows);
+                assert_eq!(
+                    thumbnail.get_pixel(x, y).0,
+                    [255 - id * 20, id * 25, id * 20, id * 31]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn exif_thumbnail_metadata_and_raw_geometry_fail_closed() {
+        let cancel = AtomicBool::new(false);
+        for exif in [
+            exif_with_orientation(0),
+            exif_with_orientation(9),
+            b"broken TIFF".to_vec(),
+        ] {
+            let encoded = asymmetric_png((3, 2), exif);
+            assert_eq!(
+                decode_thumbnail(encoded, ImageFormat::Png, &cancel).unwrap_err(),
+                "invalid thumbnail orientation metadata"
+            );
+        }
+        let encoded = asymmetric_png((MAX_DIMENSION + 1, 1), exif_with_orientation(6));
+        assert!(decode_thumbnail(encoded, ImageFormat::Png, &cancel).is_err());
+        let encoded = asymmetric_png((336, 224), exif_with_orientation(6));
+        assert_eq!(
+            decode_thumbnail(encoded, ImageFormat::Png, &AtomicBool::new(true)).unwrap_err(),
+            "thumbnail request cancelled"
+        );
+    }
+
+    struct TestSource(PathBuf);
+
+    impl TestSource {
+        fn new(bytes: &[u8]) -> Self {
+            static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            let path = std::env::temp_dir().join(format!(
+                "flow-thumbnail-exif-{}-{}.png",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+                .unwrap();
+            std::io::Write::write_all(&mut file, bytes).unwrap();
+            Self(path)
+        }
+    }
+
+    impl Drop for TestSource {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
+
+    #[test]
+    fn loading_oriented_thumbnail_keeps_original_and_byte_checks() {
+        let original = asymmetric_png((336, 224), exif_with_orientation(6));
+        let source = TestSource::new(&original);
+        let mut request = ThumbnailRequest {
+            key: "assets/oriented.png".into(),
+            path: source.0.clone(),
+            media_type: "image/png".into(),
+            byte_len: original.len() as u64,
+        };
+        assert_eq!(
+            load_thumbnail(&request, &AtomicBool::new(false))
+                .unwrap()
+                .dimensions(),
+            (56, 84)
+        );
+        assert_eq!(std::fs::read(&source.0).unwrap(), original);
+        request.byte_len += 1;
+        assert!(load_thumbnail(&request, &AtomicBool::new(false)).is_err());
+        request.byte_len = MAX_BYTES + 1;
+        assert_eq!(
+            load_thumbnail(&request, &AtomicBool::new(false)).unwrap_err(),
+            "thumbnail file exceeds byte limit"
+        );
+        assert_eq!(std::fs::read(&source.0).unwrap(), original);
+    }
 
     #[test]
     fn dimensions_and_output_are_bounded_before_pixel_allocation() {
@@ -300,8 +465,12 @@ mod tests {
         DynamicImage::ImageRgba8(source)
             .write_to(&mut encoded, ImageFormat::Png)
             .unwrap();
-        let thumbnail =
-            decode_thumbnail(encoded.get_ref(), ImageFormat::Png, &AtomicBool::new(false)).unwrap();
+        let thumbnail = decode_thumbnail(
+            encoded.into_inner(),
+            ImageFormat::Png,
+            &AtomicBool::new(false),
+        )
+        .unwrap();
         assert_eq!(thumbnail.dimensions(), (112, 56));
         assert_eq!(thumbnail.get_pixel(0, 0).0, [42, 17, 231, 255]);
     }
@@ -310,7 +479,14 @@ mod tests {
     fn unsupported_corrupt_and_cancelled_previews_fail_closed() {
         assert!(format_for_mime("image/svg+xml").is_err());
         assert!(format_for_mime("https://example.com/image.png").is_err());
-        assert!(decode_thumbnail(b"bad image", ImageFormat::Png, &AtomicBool::new(false)).is_err());
-        assert!(decode_thumbnail(b"", ImageFormat::Png, &AtomicBool::new(true)).is_err());
+        assert!(
+            decode_thumbnail(
+                b"bad image".to_vec(),
+                ImageFormat::Png,
+                &AtomicBool::new(false)
+            )
+            .is_err()
+        );
+        assert!(decode_thumbnail(Vec::new(), ImageFormat::Png, &AtomicBool::new(true)).is_err());
     }
 }

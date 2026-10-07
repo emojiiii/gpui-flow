@@ -12,6 +12,7 @@ pub use ui::*;
 mod generation;
 pub use generation::*;
 
+mod image_orientation;
 mod project;
 pub use project::*;
 
