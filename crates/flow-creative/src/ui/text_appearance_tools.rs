@@ -5,6 +5,7 @@ use crate::text_appearance::{TextAppearance, parse_text_color};
 pub(super) enum TypographyAction {
     Toggle,
     Font(Option<String>),
+    Weight(u16),
     Color(u32),
     ApplyColor,
 }
@@ -48,6 +49,10 @@ impl CreativeCanvas {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if let TypographyAction::Weight(weight) = action {
+            self.set_text_weight(weight, window, cx);
+            return;
+        }
         if matches!(action, TypographyAction::Toggle) && self.typography.is_some() {
             self.typography = None;
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
@@ -127,7 +132,7 @@ impl CreativeCanvas {
                     }
                 }
             }
-            TypographyAction::Toggle => unreachable!(),
+            TypographyAction::Toggle | TypographyAction::Weight(_) => unreachable!(),
         }
         if appearance == original {
             return;
@@ -163,6 +168,7 @@ impl CreativeCanvas {
         let color = panel.color.clone();
         let query = filter.read(cx).value().trim().to_lowercase();
         let appearance = TextAppearance::from_data(&node.data).unwrap_or_default();
+        let weight = crate::text_weight::read_weight(&node.data).unwrap_or(400);
         let fonts = self
             .font_families
             .iter()
@@ -234,6 +240,24 @@ impl CreativeCanvas {
                 .child(div().size(px(16.)).rounded_sm().bg(rgb(rgb_value))),
             );
         }
+        let mut weights = div().flex().flex_wrap().gap_1();
+        for value in (100..=900).step_by(100) {
+            weights = weights.child(
+                self.button(
+                    SharedString::from(format!("text-weight-{value}")),
+                    value.to_string(),
+                    Action::TextAppearance(TypographyAction::Weight(value)),
+                    !editable,
+                    cx,
+                )
+                .w(px(48.))
+                .flex_shrink_0()
+                .accessibility_label(format!("字重 {value}"))
+                .when(value == weight, |v| {
+                    v.bg(rgb(0xeff4ff)).text_color(rgb(0x467bc6))
+                }),
+            );
+        }
         div()
             .flex()
             .flex_col()
@@ -241,10 +265,12 @@ impl CreativeCanvas {
             .child(label(if missing {
                 "所存字体本机不可用，当前使用默认字体"
             } else {
-                "本机字体 · 颜色"
+                "本机字体 · 字重 · 颜色"
             }))
             .child(Textarea::new(&filter).h(px(30.)).aria_label("搜索本机字体"))
             .child(list)
+            .child(label(format!("字重 {weight} · 字体按本机可用款式匹配")))
+            .child(weights)
             .child(label("文字颜色"))
             .child(swatches)
             .child(

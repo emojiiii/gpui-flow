@@ -69,7 +69,7 @@ impl CreativeCanvas {
             return bounded_panel_size(self.canvas_size, WorldSize::new(328., 254.));
         }
         if self.is_typography_open(&node.id) {
-            return bounded_panel_size(self.canvas_size, WorldSize::new(310., 354.));
+            return bounded_panel_size(self.canvas_size, WorldSize::new(310., 446.));
         }
         if self.is_image_adjusting(&node.id) {
             return bounded_panel_size(self.canvas_size, WorldSize::new(286., 246.));

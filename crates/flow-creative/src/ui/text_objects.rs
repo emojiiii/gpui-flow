@@ -1,5 +1,11 @@
 use super::*;
 
+pub(super) fn weight(data: &Value) -> FontWeight {
+    FontWeight(f32::from(
+        crate::text_weight::read_weight(data).unwrap_or(400),
+    ))
+}
+
 pub(super) fn alignment(value: TextAlignment) -> gpui::TextAlign {
     match value {
         TextAlignment::Left => gpui::TextAlign::Left,
@@ -9,6 +15,44 @@ pub(super) fn alignment(value: TextAlignment) -> gpui::TextAlign {
 }
 
 impl CreativeCanvas {
+    pub(super) fn set_text_weight(
+        &mut self,
+        weight: u16,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.importing || self.saving || !self.canvas.read(cx).is_editable() {
+            return;
+        }
+        let Some(node) = self.selected(cx).filter(|node| {
+            node.kind == "text"
+                && !crate::layer_guard::node_is_locked(
+                    self.canvas.read(cx).editor.graph(),
+                    &node.id,
+                )
+        }) else {
+            return;
+        };
+        match crate::text_weight::write_weight(&node.data, weight) {
+            Ok(data) if data != node.data => {
+                if self.command(
+                    CanvasCommand::SetNodeData {
+                        node: node.id,
+                        data,
+                    },
+                    cx,
+                ) {
+                    self.form_source = self.selected(cx).as_ref().map(form_identity);
+                    self.sync_form(window, cx);
+                }
+            }
+            Ok(_) => {}
+            Err(error) => self.notice = Some(error),
+        }
+        self.canvas.read(cx).focus_handle(cx).focus(window, cx);
+        cx.notify();
+    }
+
     pub(super) fn is_editing_text(&self, node: &NodeId) -> bool {
         self.editing_text
             .lock()
@@ -116,11 +160,7 @@ impl CreativeCanvas {
                     .bordered(false)
                     .appearance(false)
                     .text_size(px(style.font_size * zoom))
-                    .font_weight(if style.bold {
-                        FontWeight::BOLD
-                    } else {
-                        FontWeight::NORMAL
-                    })
+                    .font_weight(weight(&node.data))
                     .text_align(alignment(style.alignment))
                     .line_height(relative(1.25))
                     .text_color(rgb(appearance.color))
@@ -178,9 +218,10 @@ impl CreativeCanvas {
             .child(chrome::separator())
             .child(
                 self.icon_button("text-bold", "bold", "粗体", Action::TextBold, !editable, cx)
-                    .when(style.bold, |button| {
-                        button.bg(rgb(0xeaf0fd)).text_color(rgb(0x467bc6))
-                    }),
+                    .when(
+                        crate::text_weight::read_weight(&node.data).unwrap_or(400) >= 600,
+                        |button| button.bg(rgb(0xeaf0fd)).text_color(rgb(0x467bc6)),
+                    ),
             );
         for (id, icon, title, align) in [
             (

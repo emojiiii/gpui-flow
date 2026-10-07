@@ -22,6 +22,7 @@ pub mod mask;
 mod mask_node;
 mod references;
 pub mod text_appearance;
+pub mod text_weight;
 pub use mask_node::{MASK_MEDIA_TYPE, MaskNodeData, mask_source};
 pub mod custom_host;
 pub mod custom_nodes;

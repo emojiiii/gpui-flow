@@ -64,6 +64,7 @@ pub struct FrameTextSnapshot {
     content: String,
     style: TextStyle,
     appearance: TextAppearance,
+    weight: u16,
 }
 
 impl FrameTextSnapshot {
@@ -92,6 +93,7 @@ impl FrameTextSnapshot {
             content: content.to_owned(),
             style: TextStyle::from_data(&node.data)?,
             appearance: TextAppearance::from_data(&node.data)?,
+            weight: crate::text_weight::read_weight(&node.data)?,
         })
     }
 
@@ -141,7 +143,7 @@ impl FrameTextSnapshot {
             .unwrap_or(default_family)
             .to_owned();
         text.font_size = self.style.font_size;
-        text.font_weight = if self.style.bold { 700 } else { 400 };
+        text.font_weight = self.weight;
         text.line_height = LINE_HEIGHT;
         text.align = match self.style.alignment {
             TextAlignment::Left => TextAlign::Start,
@@ -299,6 +301,26 @@ mod tests {
         for invalid in ["", " padded", "/tmp/font", "line\nbreak"] {
             assert!(validate_default_family(invalid).is_err());
         }
+    }
+
+    #[test]
+    fn explicit_weight_reaches_native_export_and_changes_snapshot_identity() {
+        let mut node = node();
+        let legacy = FrameTextSnapshot::from_node(&node).unwrap();
+        for weight in [100, 300, 550, 600, 900] {
+            node.data = crate::text_weight::write_weight(&node.data, weight).unwrap();
+            let snapshot = FrameTextSnapshot::from_node(&node).unwrap();
+            assert_ne!(snapshot, legacy);
+            assert_eq!(
+                snapshot
+                    .scene_text(node.size, "Theme", &[])
+                    .unwrap()
+                    .font_weight,
+                weight
+            );
+        }
+        node.data["style"]["font_weight"] = json!(901);
+        assert!(FrameTextSnapshot::from_node(&node).is_err());
     }
 
     #[test]

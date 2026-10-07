@@ -276,11 +276,7 @@ impl NodeRenderer for CardRenderer {
                 .px(px(10. * z))
                 .py(px(8. * z))
                 .text_size(px(style.font_size * z))
-                .font_weight(if style.bold {
-                    FontWeight::BOLD
-                } else {
-                    FontWeight::NORMAL
-                })
+                .font_weight(text_objects::weight(&node.data))
                 .text_align(text_objects::alignment(style.alignment))
                 .when_some(
                     appearance.installed_family(&self.assets.font_families),
@@ -1286,7 +1282,10 @@ impl CreativeCanvas {
                 return;
             }
             Action::TextBold => {
-                self.edit_text_style(|style| style.bold = !style.bold, window, cx);
+                if let Some(node) = self.selected(cx).filter(|n| n.kind == "text") {
+                    let bold = crate::text_weight::read_weight(&node.data).unwrap_or(400) >= 600;
+                    self.set_text_weight(if bold { 400 } else { 700 }, window, cx);
+                }
                 return;
             }
             Action::TextAlign(alignment) => {

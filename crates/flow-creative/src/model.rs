@@ -396,6 +396,7 @@ pub fn standard_registry() -> CreativeRegistry {
             json!({"text":"让创意从一句话开始"}),
             |v| {
                 text_field(v, "text")?;
+                crate::text_weight::read_weight(v)?;
                 crate::text_appearance::TextAppearance::from_data(v).map(|_| ())
             },
         ),
@@ -791,6 +792,66 @@ mod tests {
                 .is_err()
         );
         assert_eq!(editor.document(), before);
+    }
+    #[test]
+    fn text_weight_roundtrip_undo_and_lock_use_the_real_command_guard() {
+        let registry = Arc::new(standard_registry());
+        let mut editor = Editor::new(document().graph).unwrap();
+        let mut host = PluginHost::with_defaults();
+        host.install(CreativeGuard(registry.clone())).unwrap();
+        let before = editor.document();
+        let data =
+            crate::text_weight::write_weight(&editor.graph().nodes[&"brief".into()].data, 550)
+                .unwrap();
+        host.execute(
+            &mut editor,
+            CanvasCommand::SetNodeData {
+                node: "brief".into(),
+                data,
+            },
+        )
+        .unwrap();
+        let weighted = editor.document();
+        assert_eq!(
+            registry
+                .parse_document(&registry.encode_document(&weighted).unwrap())
+                .unwrap(),
+            weighted
+        );
+        host.execute(&mut editor, CanvasCommand::Undo).unwrap();
+        assert_eq!(editor.document(), before);
+        host.execute(&mut editor, CanvasCommand::Redo).unwrap();
+        assert_eq!(editor.document(), weighted);
+        let mut invalid = editor.graph().nodes[&"brief".into()].data.clone();
+        invalid["style"]["font_weight"] = json!(550.5);
+        assert!(
+            host.execute(
+                &mut editor,
+                CanvasCommand::SetNodeData {
+                    node: "brief".into(),
+                    data: invalid
+                }
+            )
+            .is_err()
+        );
+        assert_eq!(editor.document(), weighted);
+        let mut locked = weighted.graph;
+        locked.nodes.get_mut(&"brief".into()).unwrap().locked = true;
+        let mut editor = Editor::new(locked).unwrap();
+        let data =
+            crate::text_weight::write_weight(&editor.graph().nodes[&"brief".into()].data, 900)
+                .unwrap();
+        assert!(
+            host.execute(
+                &mut editor,
+                CanvasCommand::SetNodeData {
+                    node: "brief".into(),
+                    data
+                }
+            )
+            .is_err()
+        );
+        assert!(!editor.undo());
     }
     #[test]
     fn delete_card_removes_edges_and_undo_restores_them() {
