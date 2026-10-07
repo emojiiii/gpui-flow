@@ -432,6 +432,7 @@ enum Action {
     ImageEdit(image_edit_controls::ImageEditAction),
     ImageRotation(image_rotation_controls::RotationAction),
     ImageAdjust(image_adjust_controls::AdjustAction),
+    ImageSizing(image_sizing_controls::ImageSizingAction),
     NewCustom,
     CustomDesigner(custom_designer::CustomDesignerAction),
     Custom(custom_tasks::CustomAction),
@@ -554,6 +555,7 @@ pub struct CreativeCanvas {
     editing_image: Arc<Mutex<Option<NodeId>>>,
     image_editing: Option<image_edit_controls::ImageEditing>,
     image_rotation: Option<image_rotation_controls::RotationEditing>,
+    image_sizing: Option<image_sizing_controls::ImageSizingFields>,
     image_adjustment: Option<image_adjust_controls::AdjustmentEditing>,
     adjustment_presentation: AdjustmentSlot,
     image_edit_focus: FocusHandle,
@@ -636,6 +638,11 @@ impl CreativeCanvas {
                 let _ =
                     menu_owner.update(cx, |this, cx| this.open_object_menu(request, window, cx));
             })));
+            view.install_plugin(
+                crate::image_sizing::CreativeImageResizePlugin::default(),
+                cx,
+            )
+            .expect("unique Creative image resize plugin");
             view.install_plugin(CreativeGuard(guard), cx)
                 .expect("unique guard id");
             view
@@ -657,6 +664,7 @@ impl CreativeCanvas {
                     this.reconcile_image_edit(cx);
                     this.reconcile_image_rotation(cx);
                     this.reconcile_image_adjustment(cx);
+                    this.reconcile_image_sizing(window, cx);
                     this.reconcile_typography(window, cx);
                     this.reconcile_asset_export(cx);
                     this.sync_frame_fields(window, cx);
@@ -901,6 +909,7 @@ impl CreativeCanvas {
             editing_image: Arc::default(),
             image_editing: None,
             image_rotation: None,
+            image_sizing: None,
             image_adjustment: None,
             adjustment_presentation: Arc::default(),
             image_edit_focus: cx.focus_handle(),
@@ -1099,7 +1108,21 @@ impl CreativeCanvas {
             self.clear_image_adjustment(cx);
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
         }
+        if !matches!(
+            &action,
+            Action::ImageSizing(_)
+                | Action::OriginalRatio
+                | Action::Zoom(_)
+                | Action::Fit
+                | Action::PanTool(_)
+        ) {
+            self.close_image_sizing(window, cx);
+        }
         let command = match action {
+            Action::ImageSizing(action) => {
+                self.handle_image_sizing(action, window, cx);
+                return;
+            }
             Action::TextPlacement(action) => {
                 self.handle_text_placement(action, window, cx);
                 return;
@@ -1321,12 +1344,21 @@ impl CreativeCanvas {
                 if asset.width == 0 || asset.height == 0 {
                     return;
                 }
+                let size = match crate::image_sizing::size_from_height(
+                    WorldSize::new(node.size.width, 1.),
+                    node.size.width * asset.height as f32 / asset.width as f32,
+                    false,
+                ) {
+                    Ok(size) => size,
+                    Err(error) => {
+                        self.notice = Some(error);
+                        cx.notify();
+                        return;
+                    }
+                };
                 CanvasCommand::ResizeNode {
                     node: node.id,
-                    size: WorldSize::new(
-                        node.size.width,
-                        node.size.width * asset.height as f32 / asset.width as f32,
-                    ),
+                    size,
                 }
             }
             Action::Home => {
@@ -1715,6 +1747,7 @@ mod arrangement_tools;
 mod asset_browser;
 mod asset_export_ui;
 mod clipboard_images;
+mod image_sizing_controls;
 mod text_export;
 pub use text_export::install_creative_text_export_backend;
 mod asset_thumbnails;
@@ -1884,6 +1917,13 @@ impl Render for CreativeCanvas {
                 }
             }))
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                if event.keystroke.key == "escape" && this.image_sizing.is_some() {
+                    this.close_image_sizing(window, cx);
+                    this.canvas.read(cx).focus_handle(cx).focus(window, cx);
+                    cx.stop_propagation();
+                    cx.notify();
+                    return;
+                }
                 if event.keystroke.key == "escape" && this.temporary_hand.is_some() {
                     this.finish_temporary_hand(false, window, cx);
                     cx.stop_propagation();

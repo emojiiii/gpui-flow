@@ -164,8 +164,8 @@ impl CreativeCanvas {
                 .child(self.icon_button(
                     "original-ratio",
                     "maximize",
-                    "恢复图片原比例",
-                    Action::OriginalRatio,
+                    "图片显示尺寸与比例锁",
+                    Action::ImageSizing(image_sizing_controls::ImageSizingAction::Toggle),
                     !editable || self.project.is_none(),
                     cx,
                 ))
@@ -246,6 +246,34 @@ impl CreativeCanvas {
         editable: bool,
         cx: &mut Context<Self>,
     ) -> Div {
+        if self.is_image_sizing(&node.id) {
+            let size = self.composer_size(node, cx);
+            let p = anchored_panel(bounds, self.canvas_size, size);
+            return div()
+                .occlude()
+                .absolute()
+                .left(px(p.x))
+                .top(px(p.y))
+                .w(px(size.width))
+                .rounded(px(12.))
+                .bg(rgb(0xffffff))
+                .shadow_sm()
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
+                .child(
+                    div()
+                        .id("image-size-scroll")
+                        .max_h(px(size.height))
+                        .overflow_y_scroll()
+                        .overflow_x_scroll()
+                        .child(
+                            div()
+                                .min_w(px(310.))
+                                .p_2()
+                                .child(self.image_sizing_panel(node, editable, cx)),
+                        ),
+                );
+        }
         if self.is_image_editing(&node.id) {
             let p = anchored_panel(bounds, self.canvas_size, self.composer_size(node, cx));
             return div()
