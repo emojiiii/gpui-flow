@@ -399,6 +399,9 @@ impl Render for MediaObjectView {
                 .bg(rgb(0x15171d))
                 .into_any_element();
         }
+        if self.snapshot.state == PlaybackState::Ended {
+            return message("播放已结束，点击时间轴可返回任意位置");
+        }
         message("正在解码本地视频首帧…")
     }
 }
@@ -473,21 +476,15 @@ impl CreativeCanvas {
                 !ready || !has_audio,
                 cx,
             ));
-        if !matches!(
-            node.kind.as_str(),
-            "audio" | "generate_audio" | "process_audio"
-        ) {
-            return transport;
-        }
         div()
             .flex()
             .flex_col()
             .gap_1()
             .child(transport)
-            .child(self.audio_timeline(node, ready, position, duration, cx))
+            .child(self.media_timeline(node, ready, position, duration, cx))
     }
 
-    fn audio_timeline(
+    fn media_timeline(
         &self,
         node: &Node,
         ready: bool,
@@ -501,8 +498,18 @@ impl CreativeCanvas {
         let progress = media_waveform::progress(position, duration) as f32;
         let id = node.id.clone();
         let asset = node.data["asset"].as_str().unwrap_or_default().to_string();
+        let ready = ready && duration.is_finite() && duration > 0.;
+        let audio = matches!(
+            node.kind.as_str(),
+            "audio" | "generate_audio" | "process_audio"
+        );
+        let (track, fill_color, thumb) = if audio {
+            (0xe7dacc, 0xad7b3e, 0x80541f)
+        } else {
+            (0xdde5f0, 0x5489ce, 0x316db8)
+        };
         div()
-            .id("media-audio-timeline")
+            .id("media-timeline")
             .relative()
             .w_full()
             .h(px(22.))
@@ -518,7 +525,7 @@ impl CreativeCanvas {
                                 actual.origin + point(px(0.), px(9.)),
                                 size(px(width), px(4.)),
                             ),
-                            rgb(0xe7dacc),
+                            rgb(track),
                         ));
                         if progress > 0. {
                             window.paint_quad(fill(
@@ -526,7 +533,7 @@ impl CreativeCanvas {
                                     actual.origin + point(px(0.), px(9.)),
                                     size(px(width * progress), px(4.)),
                                 ),
-                                rgb(0xad7b3e),
+                                rgb(fill_color),
                             ));
                         }
                         if ready {
@@ -540,7 +547,7 @@ impl CreativeCanvas {
                                         ),
                                     size(px(4.), px(10.)),
                                 ),
-                                rgb(0x80541f),
+                                rgb(thumb),
                             ));
                         }
                     },

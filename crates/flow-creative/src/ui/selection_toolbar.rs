@@ -98,10 +98,8 @@ impl CreativeCanvas {
         if crate::processing::ProcessingKind::from_node_kind(&node.kind).is_some() {
             return WorldSize::new(
                 360.,
-                if node.kind == "process_audio" {
+                if matches!(node.kind.as_str(), "process_audio" | "process_video") {
                     328.
-                } else if node.kind == "process_video" {
-                    300.
                 } else {
                     260.
                 },
@@ -111,7 +109,7 @@ impl CreativeCanvas {
             return WorldSize::new(360., 164.);
         }
         if matches!(node.kind.as_str(), "video" | "audio") {
-            return WorldSize::new(272., if node.kind == "audio" { 72. } else { 44. });
+            return WorldSize::new(272., 72.);
         }
         if node.kind == "text" {
             return WorldSize::new(112., 32.);
@@ -124,7 +122,7 @@ impl CreativeCanvas {
             && !node.data["asset"].as_str().unwrap_or_default().is_empty();
         let height = if generation {
             if self.media_views.snapshot(&node.id, cx).is_some() {
-                if node.kind == "generate_audio" {
+                if matches!(node.kind.as_str(), "generate_audio" | "generate_video") {
                     238.
                 } else {
                     210.
