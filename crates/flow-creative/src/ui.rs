@@ -432,6 +432,7 @@ enum Action {
     ExportAsset(asset_export_ui::ExportAction),
     Layer(layers::LayerAction),
     ImageEdit(image_edit_controls::ImageEditAction),
+    ImageVersions(image_version_panel::VersionAction),
     ImageRotation(image_rotation_controls::RotationAction),
     ImageAdjust(image_adjust_controls::AdjustAction),
     ImageSizing(image_sizing_controls::ImageSizingAction),
@@ -556,6 +557,7 @@ pub struct CreativeCanvas {
     temporary_hand: Option<tool_navigation::SuspendedTool>,
     editing_image: Arc<Mutex<Option<NodeId>>>,
     image_editing: Option<image_edit_controls::ImageEditing>,
+    image_versions: Option<image_version_panel::VersionPanel>,
     image_rotation: Option<image_rotation_controls::RotationEditing>,
     image_sizing: Option<image_sizing_controls::ImageSizingFields>,
     image_adjustment: Option<image_adjust_controls::AdjustmentEditing>,
@@ -664,6 +666,7 @@ impl CreativeCanvas {
                         .sync(canvas.read(cx).editor.graph(), this.project.as_ref());
                     this.reconcile_mask_edit(cx);
                     this.reconcile_image_edit(cx);
+                    this.reconcile_image_versions(cx);
                     this.reconcile_image_rotation(cx);
                     this.reconcile_image_adjustment(cx);
                     this.reconcile_image_sizing(window, cx);
@@ -910,6 +913,7 @@ impl CreativeCanvas {
             temporary_hand: None,
             editing_image: Arc::default(),
             image_editing: None,
+            image_versions: None,
             image_rotation: None,
             image_sizing: None,
             image_adjustment: None,
@@ -1064,6 +1068,9 @@ impl CreativeCanvas {
             self.typography = None;
             self.canvas.read(cx).focus_handle(cx).focus(window, cx);
         }
+        if !matches!(&action, Action::ImageVersions(_)) {
+            self.image_versions = None;
+        }
         if !matches!(&action, Action::Arrange(_)) {
             self.show_arrangement = false;
         }
@@ -1121,6 +1128,10 @@ impl CreativeCanvas {
             self.close_image_sizing(window, cx);
         }
         let command = match action {
+            Action::ImageVersions(action) => {
+                self.handle_image_versions(action, window, cx);
+                return;
+            }
             Action::ImageSizing(action) => {
                 self.handle_image_sizing(action, window, cx);
                 return;
@@ -1771,6 +1782,7 @@ mod image_edit_tasks;
 mod image_rotation_controls;
 mod image_rotation_preview;
 mod image_rotation_tasks;
+mod image_version_panel;
 mod mask_editor;
 mod mask_preview;
 mod mask_tasks;
@@ -1922,6 +1934,13 @@ impl Render for CreativeCanvas {
                 }
             }))
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                if event.keystroke.key == "escape" && this.image_versions.is_some() {
+                    this.image_versions = None;
+                    this.canvas.read(cx).focus_handle(cx).focus(window, cx);
+                    cx.stop_propagation();
+                    cx.notify();
+                    return;
+                }
                 if event.keystroke.key == "escape" && this.image_sizing.is_some() {
                     this.close_image_sizing(window, cx);
                     this.canvas.read(cx).focus_handle(cx).focus(window, cx);
@@ -2241,7 +2260,7 @@ impl Render for CreativeCanvas {
                 470.
             } else {
                 (match node.kind.as_str() {
-                    "image" => 524.,
+                    "image" => 562.,
                     "video" | "audio" | "process_image" | "process_video" | "process_audio" => 222.,
                     "shape" | "pencil" => 146.,
                     "text" => 506.,

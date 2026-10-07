@@ -169,6 +169,19 @@ impl CreativeCanvas {
                     !editable || self.project.is_none(),
                     cx,
                 ))
+                .child(
+                    self.icon_button(
+                        "image-versions",
+                        "clock",
+                        "本地图片编辑版本",
+                        Action::ImageVersions(image_version_panel::VersionAction::Toggle),
+                        self.project.is_none() || self.importing,
+                        cx,
+                    )
+                    .when(self.is_image_versions_open(&node.id), |b| {
+                        b.bg(rgb(0xeef1f6))
+                    }),
+                )
                 .child(separator());
         }
         if node.kind == "text" {
@@ -246,6 +259,9 @@ impl CreativeCanvas {
         editable: bool,
         cx: &mut Context<Self>,
     ) -> Div {
+        if self.is_image_versions_open(&node.id) {
+            return self.image_version_composer(node, bounds, editable, cx);
+        }
         if self.is_image_sizing(&node.id) {
             let size = self.composer_size(node, cx);
             let p = anchored_panel(bounds, self.canvas_size, size);

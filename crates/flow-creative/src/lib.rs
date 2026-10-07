@@ -45,6 +45,7 @@ pub mod frames;
 pub mod image_adjust;
 pub mod image_rotation;
 pub mod image_sizing;
+pub mod image_versions;
 pub mod object_frame;
 pub mod object_placement;
 pub mod pencil;

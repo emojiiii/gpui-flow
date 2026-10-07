@@ -87,23 +87,18 @@ impl CreativeCanvas {
                                 this.refresh_assets(cx);
                                 match asset {
                                     Ok(asset) if same_node && !cancel.load(Ordering::Acquire) => {
-                                        let mut graph = this.canvas.read(cx).editor.graph().clone();
-                                        if let Some(node) = graph.nodes.get_mut(&target) {
-                                            node.data["asset"] = Value::String(asset.key);
-                                            node.position = position;
-                                            node.size = size;
-                                        }
                                         this.clear_image_rotation();
-                                        let applied =
-                                            this.command(CanvasCommand::ImportGraph(graph), cx);
-                                        this.notice = Some(
-                                            if applied {
-                                                "旋转已应用；原图保留在本项目素材中"
-                                            } else {
-                                                "对象未接受旋转，结果已保留在素材中"
-                                            }
-                                            .into(),
-                                        );
+                                        if this.apply_image_version_result(
+                                            &target,
+                                            asset.key,
+                                            position,
+                                            size,
+                                            crate::image_versions::ImageVersionOperation::Rotate,
+                                            cx,
+                                        ) {
+                                            this.notice =
+                                                Some("旋转已应用；可从版本面板恢复原图".into());
+                                        }
                                     }
                                     Ok(_) => {
                                         this.clear_image_rotation();

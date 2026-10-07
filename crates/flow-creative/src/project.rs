@@ -656,6 +656,21 @@ fn validate_document_assets(
 ) -> Result<(), ProjectError> {
     for node in document.graph.nodes.values() {
         crate::custom_host::validate_custom_node_assets(node, assets)?;
+        if node.kind == "image" {
+            for version in crate::image_versions::entries(node).map_err(ProjectError::Invalid)? {
+                if assets
+                    .iter()
+                    .find(|asset| asset.key == version.asset_key)
+                    .is_none_or(|asset| {
+                        !matches!(asset.media_type.as_str(), "image/png" | "image/jpeg")
+                    })
+                {
+                    return Err(ProjectError::Invalid(
+                        "图片版本素材不属于本项目静态图片".into(),
+                    ));
+                }
+            }
+        }
         if node.kind == "mask" {
             let data = crate::MaskNodeData::from_value(&node.data)?;
             if let Some(source) = &data.state.source {
@@ -1974,6 +1989,62 @@ mod tests {
         assert_eq!(store.thumbnail_path(&id).unwrap(), Some(copied.clone()));
         fs::remove_file(copied).unwrap();
         assert!(store.thumbnail_path(&id).is_err());
+    }
+
+    #[test]
+    fn image_versions_reopen_with_owned_assets_and_reject_foreign_history() {
+        use crate::image_versions::{ImageVersionOperation, entries, record_edit, restore_version};
+        use gpui_flow_core::Size;
+        let home = TestHome::new();
+        let store = home.store();
+        let registry = standard_registry();
+        let mut project = store
+            .create_project("Versions", &FlowDocument::default(), &registry)
+            .unwrap();
+        let source = home.0.join("source.png");
+        fs::write(&source, png()).unwrap();
+        let first = project.import_image(&source).unwrap();
+        let next = project.import_image(&source).unwrap();
+        let before = registry
+            .make_node(
+                "image",
+                "image",
+                Point::new(100., 100.),
+                Some(json!({"asset":first.key,"caption":"kept"})),
+            )
+            .unwrap();
+        let mut after = before.clone();
+        after.data["asset"] = json!(next.key);
+        after.size = Size::new(160., 120.);
+        let edited = record_edit(&before, &after, ImageVersionOperation::Adjust).unwrap();
+        let mut document = project.document().clone();
+        document.graph.add_node(edited.clone()).unwrap();
+        project.save_document(&document, &registry).unwrap();
+        let mut reopened = store
+            .open_project(&project.metadata().id, &registry)
+            .unwrap();
+        assert_eq!(reopened.document(), &document);
+        for asset in [&first, &next] {
+            assert_eq!(
+                fs::read(reopened.resolve_asset(&asset.key).unwrap()).unwrap(),
+                png()
+            );
+        }
+        let history = entries(&edited).unwrap();
+        assert_eq!(history.len(), 2);
+        let restored = restore_version(&edited, &history[0]).unwrap();
+        document.graph.nodes.insert(restored.id.clone(), restored);
+        reopened.save_document(&document, &registry).unwrap();
+        let saved = fs::read(reopened.directory().join(PROJECT_FILE)).unwrap();
+        let node = document.graph.nodes.get_mut(&"image".into()).unwrap();
+        node.data[crate::image_versions::IMAGE_VERSIONS_KEY]["entries"][1]["asset_key"] =
+            json!("assets/foreign.png");
+        assert!(reopened.save_document(&document, &registry).is_err());
+        assert_eq!(
+            fs::read(reopened.directory().join(PROJECT_FILE)).unwrap(),
+            saved
+        );
+        assert_eq!(fs::read(source).unwrap(), png());
     }
 
     #[test]

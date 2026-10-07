@@ -144,6 +144,9 @@ impl CreativeRegistry {
             return Err(CreativeError("card title exceeds 512 bytes".into()));
         }
         crate::references::reject_legacy_reference(node)?;
+        if node.kind == "image" {
+            crate::image_versions::entries(node).map_err(CreativeError)?;
+        }
         if node.kind == crate::shapes::SHAPE_NODE_KIND {
             crate::shapes::validate_shape_node(node).map_err(CreativeError)?;
         }
@@ -853,6 +856,49 @@ mod tests {
         );
         assert!(!editor.undo());
     }
+    #[test]
+    fn image_version_restore_uses_atomic_history_and_parent_locks() {
+        use crate::image_versions::{ImageVersionOperation, entries, record_edit, restore_version};
+        let registry = Arc::new(standard_registry());
+        let mut document = document();
+        let before = document.graph.nodes.get_mut(&"reference".into()).unwrap();
+        before.data["asset"] = json!("assets/original.png");
+        let before = before.clone();
+        let mut after = before.clone();
+        after.data["asset"] = json!("assets/adjusted.png");
+        let versioned = record_edit(&before, &after, ImageVersionOperation::Adjust).unwrap();
+        let restored = restore_version(&versioned, &entries(&versioned).unwrap()[0]).unwrap();
+        document.graph.nodes.insert(versioned.id.clone(), versioned);
+        for locked in [false, true] {
+            let mut graph = document.graph.clone();
+            graph.groups.get_mut(&"references".into()).unwrap().locked = locked;
+            let mut editor = Editor::new(graph.clone()).unwrap();
+            let mut host = PluginHost::with_defaults();
+            host.install(CreativeGuard(registry.clone())).unwrap();
+            graph.nodes.insert(restored.id.clone(), restored.clone());
+            let before = editor.document();
+            let result = host.execute(&mut editor, CanvasCommand::ImportGraph(graph));
+            if locked {
+                assert!(result.is_err());
+                assert_eq!(editor.document(), before);
+                assert!(!editor.undo());
+            } else {
+                result.unwrap();
+                assert_eq!(
+                    editor.graph().node(&restored.id).unwrap().data["asset"],
+                    "assets/original.png"
+                );
+                host.execute(&mut editor, CanvasCommand::Undo).unwrap();
+                assert_eq!(editor.document(), before);
+                host.execute(&mut editor, CanvasCommand::Redo).unwrap();
+                assert_eq!(
+                    editor.graph().node(&restored.id).unwrap().data["asset"],
+                    "assets/original.png"
+                );
+            }
+        }
+    }
+
     #[test]
     fn delete_card_removes_edges_and_undo_restores_them() {
         let mut editor = Editor::new(document().graph).unwrap();

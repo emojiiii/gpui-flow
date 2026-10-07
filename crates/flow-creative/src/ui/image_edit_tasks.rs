@@ -99,16 +99,18 @@ impl CreativeCanvas {
                                 this.refresh_assets(cx);
                                 match asset {
                                     Ok(asset) if same_node && !cancel.load(Ordering::Acquire) => {
-                                        let mut graph = this.canvas.read(cx).editor.graph().clone();
-                                        if let Some(node) = graph.nodes.get_mut(&target) {
-                                            node.data["asset"] = Value::String(asset.key);
-                                            node.position = position;
-                                            node.size = size;
-                                        }
                                         this.clear_image_edit();
-                                        this.command(CanvasCommand::ImportGraph(graph), cx);
-                                        this.notice =
-                                            Some("图片编辑已应用；原图仍在本项目素材中".into());
+                                        if this.apply_image_version_result(
+                                            &target,
+                                            asset.key,
+                                            position,
+                                            size,
+                                            crate::image_versions::ImageVersionOperation::CropFlip,
+                                            cx,
+                                        ) {
+                                            this.notice =
+                                                Some("图片编辑已应用；可从版本面板恢复原图".into());
+                                        }
                                     }
                                     Ok(_) => {
                                         this.clear_image_edit();
