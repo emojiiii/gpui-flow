@@ -63,6 +63,7 @@ impl CreativeCanvas {
             || self.custom_designer.is_some()
             || self.export_dialog.is_some()
             || self.show_rename
+            || self.node_name.is_some()
             || self.mask_editing.is_some()
             || self.image_editing.is_some()
             || self.image_rotation.is_some()
@@ -243,6 +244,11 @@ impl CreativeCanvas {
             }
         }
         if let Some(node) = single {
+            rows.push((
+                "重命名对象…",
+                Action::NodeName(node_name::NameAction::Begin),
+                !editable || locked,
+            ));
             let group_locked = graph
                 .groups
                 .values()

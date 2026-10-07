@@ -65,6 +65,9 @@ pub(super) fn toolbar_avoiding_composer_sized(
 
 impl CreativeCanvas {
     pub(super) fn composer_size(&self, node: &Node, cx: &App) -> WorldSize {
+        if self.is_node_name_open(&node.id) {
+            return bounded_panel_size(self.canvas_size, WorldSize::new(320., 168.));
+        }
         if self.is_image_versions_open(&node.id) {
             return bounded_panel_size(self.canvas_size, WorldSize::new(320., 366.));
         }

@@ -211,6 +211,14 @@ impl CreativeCanvas {
                                         },
                                         cx,
                                     );
+                                    if event.click_count == 2 && !event.modifiers.shift {
+                                        this.action(
+                                            Action::NodeName(node_name::NameAction::Begin),
+                                            window,
+                                            cx,
+                                        );
+                                        return;
+                                    }
                                     this.canvas.read(cx).focus_handle(cx).focus(window, cx);
                                 }),
                             ),

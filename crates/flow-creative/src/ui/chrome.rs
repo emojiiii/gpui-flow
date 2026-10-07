@@ -259,6 +259,9 @@ impl CreativeCanvas {
         editable: bool,
         cx: &mut Context<Self>,
     ) -> Div {
+        if self.is_node_name_open(&node.id) {
+            return self.node_name_composer(node, bounds, editable, cx);
+        }
         if self.is_image_versions_open(&node.id) {
             return self.image_version_composer(node, bounds, editable, cx);
         }

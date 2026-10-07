@@ -433,6 +433,7 @@ enum Action {
     Layer(layers::LayerAction),
     ImageEdit(image_edit_controls::ImageEditAction),
     ImageVersions(image_version_panel::VersionAction),
+    NodeName(node_name::NameAction),
     ImageRotation(image_rotation_controls::RotationAction),
     ImageAdjust(image_adjust_controls::AdjustAction),
     ImageSizing(image_sizing_controls::ImageSizingAction),
@@ -558,6 +559,7 @@ pub struct CreativeCanvas {
     editing_image: Arc<Mutex<Option<NodeId>>>,
     image_editing: Option<image_edit_controls::ImageEditing>,
     image_versions: Option<image_version_panel::VersionPanel>,
+    node_name: Option<node_name::NamePanel>,
     image_rotation: Option<image_rotation_controls::RotationEditing>,
     image_sizing: Option<image_sizing_controls::ImageSizingFields>,
     image_adjustment: Option<image_adjust_controls::AdjustmentEditing>,
@@ -667,6 +669,7 @@ impl CreativeCanvas {
                     this.reconcile_mask_edit(cx);
                     this.reconcile_image_edit(cx);
                     this.reconcile_image_versions(cx);
+                    this.reconcile_node_name(window, cx);
                     this.reconcile_image_rotation(cx);
                     this.reconcile_image_adjustment(cx);
                     this.reconcile_image_sizing(window, cx);
@@ -914,6 +917,7 @@ impl CreativeCanvas {
             editing_image: Arc::default(),
             image_editing: None,
             image_versions: None,
+            node_name: None,
             image_rotation: None,
             image_sizing: None,
             image_adjustment: None,
@@ -1071,6 +1075,9 @@ impl CreativeCanvas {
         if !matches!(&action, Action::ImageVersions(_)) {
             self.image_versions = None;
         }
+        if !matches!(&action, Action::NodeName(_)) {
+            self.close_node_name(window, cx);
+        }
         if !matches!(&action, Action::Arrange(_)) {
             self.show_arrangement = false;
         }
@@ -1128,6 +1135,10 @@ impl CreativeCanvas {
             self.close_image_sizing(window, cx);
         }
         let command = match action {
+            Action::NodeName(action) => {
+                self.handle_node_name(action, window, cx);
+                return;
+            }
             Action::ImageVersions(action) => {
                 self.handle_image_versions(action, window, cx);
                 return;
@@ -1788,6 +1799,7 @@ mod mask_preview;
 mod mask_tasks;
 mod media_view;
 mod model_view;
+mod node_name;
 mod object_creation;
 mod pencil_preview;
 mod pencil_tools;
@@ -1935,6 +1947,12 @@ impl Render for CreativeCanvas {
                 }
             }))
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                if event.keystroke.key == "escape" && this.node_name.is_some() {
+                    this.close_node_name(window, cx);
+                    cx.stop_propagation();
+                    cx.notify();
+                    return;
+                }
                 if event.keystroke.key == "escape" && this.image_versions.is_some() {
                     this.image_versions = None;
                     this.canvas.read(cx).focus_handle(cx).focus(window, cx);
