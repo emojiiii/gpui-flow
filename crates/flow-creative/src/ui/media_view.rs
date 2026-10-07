@@ -12,6 +12,7 @@ pub(super) enum MediaAction {
     Toggle,
     Seek(f64),
     Mute,
+    SeekFraction(f64),
 }
 
 struct Entry {
@@ -120,7 +121,7 @@ impl MediaViews {
                 node.kind.as_str(),
                 "audio" | "generate_audio" | "process_audio"
             );
-            let view = cx.new(|cx| MediaObjectView::new(controller, owner, audio, cx));
+            let view = cx.new(|cx| MediaObjectView::new(controller, owner, audio, path.into(), cx));
             entries.insert(
                 node.id.clone(),
                 Entry {
@@ -164,6 +165,18 @@ impl MediaViews {
                 MediaAction::Seek(delta) => {
                     view.controller.seek((snapshot.position + delta).max(0.))
                 }
+                MediaAction::SeekFraction(fraction) => {
+                    if !fraction.is_finite()
+                        || !snapshot
+                            .metadata
+                            .as_ref()
+                            .is_some_and(|m| m.duration.is_finite() && m.duration > 0.)
+                    {
+                        return;
+                    }
+                    view.controller
+                        .seek(snapshot.metadata.as_ref().unwrap().duration * fraction.clamp(0., 1.))
+                }
                 MediaAction::Mute => {
                     view.controller
                         .set_volume(if snapshot.volume == 0. { 0.25 } else { 0. })
@@ -199,16 +212,21 @@ struct MediaObjectView {
     // selection change can enqueue Pause behind it instead of missing it.
     play_requested: bool,
     audio: bool,
+    waveform: Option<media_waveform::WaveformLoad>,
 }
 impl MediaObjectView {
     fn new(
         controller: Arc<dyn MediaController>,
         owner: Option<WeakEntity<CreativeCanvas>>,
         audio: bool,
+        source: PathBuf,
         cx: &mut Context<Self>,
     ) -> Self {
         let snapshot = controller.snapshot();
         cx.on_release(|this: &mut Self, cx| {
+            if let Some(waveform) = &this.waveform {
+                waveform.cancel();
+            }
             this.controller.shutdown();
             if std::env::args().any(|arg| arg == "--trace") {
                 eprintln!(
@@ -242,9 +260,39 @@ impl MediaObjectView {
             command_error: None,
             play_requested: false,
             audio,
+            waveform: audio.then(|| media_waveform::WaveformLoad::new(source)),
         }
     }
     fn refresh(&mut self, cx: &mut Context<Self>) {
+        if let Some((path, cancelled, permit)) = self.waveform.as_mut().and_then(|w| w.try_start())
+        {
+            cx.spawn(async move |this, cx| {
+                let result = cx
+                    .background_executor()
+                    .spawn(async move {
+                        let _permit = permit;
+                        creative_media_backend().waveform(&path, &cancelled)
+                    })
+                    .await;
+                let _ = this.update(cx, |this, cx| {
+                    if std::env::args().any(|arg| arg == "--trace") {
+                        match &result {
+                            Ok(waveform) => eprintln!(
+                                "creative-waveform: bins={} duration={:.3}",
+                                waveform.peaks.len(),
+                                waveform.duration_seconds
+                            ),
+                            Err(error) => eprintln!("creative-waveform: {error}"),
+                        }
+                    }
+                    if let Some(waveform) = &mut this.waveform {
+                        waveform.complete(result);
+                    }
+                    cx.notify();
+                });
+            })
+            .detach();
+        }
         let snapshot = self.controller.snapshot();
         let sequence = snapshot.frame.as_ref().map(|frame| frame.sequence);
         if snapshot.revision == self.snapshot.revision && sequence == self.frame_sequence {
@@ -295,26 +343,52 @@ impl Render for MediaObjectView {
             return message(format!("媒体预览失败：{error}"));
         }
         if self.audio {
-            let duration = self
-                .snapshot
-                .metadata
-                .as_ref()
-                .map_or(String::from("正在读取本地音频…"), |m| {
-                    format!("{} · 本地音频", clock(m.duration))
-                });
+            let duration = self.snapshot.metadata.as_ref().map_or_else(
+                || "正在读取本地音频…".to_string(),
+                |m| format!("{} / {}", clock(self.snapshot.position), clock(m.duration)),
+            );
             return div()
                 .size_full()
+                .min_h_0()
+                .overflow_hidden()
                 .bg(rgb(0xf5efe7))
                 .flex()
-                .items_center()
-                .justify_center()
-                .gap_4()
-                .child(chrome::icon("music", 32.).text_color(rgb(0xc39461)))
+                .flex_col()
+                .p_4()
+                .gap_3()
                 .child(
                     div()
-                        .text_size(px(14.))
-                        .text_color(rgb(0x9b805e))
-                        .child(duration),
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .child(chrome::icon("music", 16.).text_color(rgb(0xa77b47)))
+                                .child(
+                                    div()
+                                        .text_size(px(12.))
+                                        .text_color(rgb(0x8c7963))
+                                        .child("本地音频"),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(11.))
+                                .text_color(rgb(0x8c7963))
+                                .child(duration),
+                        ),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_h_0()
+                        .overflow_hidden()
+                        .when_some(self.waveform.as_ref(), |view, waveform| {
+                            view.child(waveform.render(self.snapshot.position))
+                        }),
                 )
                 .into_any_element();
         }
@@ -351,7 +425,7 @@ impl CreativeCanvas {
             .as_ref()
             .and_then(|s| s.metadata.as_ref())
             .map_or(0., |m| m.duration);
-        div()
+        let transport = div()
             .flex()
             .items_center()
             .gap_1()
@@ -398,6 +472,107 @@ impl CreativeCanvas {
                 Action::Media(MediaAction::Mute),
                 !ready || !has_audio,
                 cx,
-            ))
+            ));
+        if !matches!(
+            node.kind.as_str(),
+            "audio" | "generate_audio" | "process_audio"
+        ) {
+            return transport;
+        }
+        div()
+            .flex()
+            .flex_col()
+            .gap_1()
+            .child(transport)
+            .child(self.audio_timeline(node, ready, position, duration, cx))
+    }
+
+    fn audio_timeline(
+        &self,
+        node: &Node,
+        ready: bool,
+        position: f64,
+        duration: f64,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
+        use std::{cell::Cell, rc::Rc};
+        let bounds = Rc::new(Cell::new(None::<Bounds<Pixels>>));
+        let paint_bounds = bounds.clone();
+        let progress = media_waveform::progress(position, duration) as f32;
+        let id = node.id.clone();
+        let asset = node.data["asset"].as_str().unwrap_or_default().to_string();
+        div()
+            .id("media-audio-timeline")
+            .relative()
+            .w_full()
+            .h(px(22.))
+            .occlude()
+            .when(ready, |view| view.cursor_pointer())
+            .child(
+                canvas(
+                    move |actual, _, _| paint_bounds.set(Some(actual)),
+                    move |actual, _, window, _| {
+                        let width: f32 = actual.size.width.into();
+                        window.paint_quad(fill(
+                            Bounds::new(
+                                actual.origin + point(px(0.), px(9.)),
+                                size(px(width), px(4.)),
+                            ),
+                            rgb(0xe7dacc),
+                        ));
+                        if progress > 0. {
+                            window.paint_quad(fill(
+                                Bounds::new(
+                                    actual.origin + point(px(0.), px(9.)),
+                                    size(px(width * progress), px(4.)),
+                                ),
+                                rgb(0xad7b3e),
+                            ));
+                        }
+                        if ready {
+                            window.paint_quad(fill(
+                                Bounds::new(
+                                    actual.origin
+                                        + point(
+                                            px((width * progress - 2.)
+                                                .clamp(0., (width - 4.).max(0.))),
+                                            px(6.),
+                                        ),
+                                    size(px(4.), px(10.)),
+                                ),
+                                rgb(0x80541f),
+                            ));
+                        }
+                    },
+                )
+                .absolute()
+                .size_full(),
+            )
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, event: &MouseDownEvent, window, cx| {
+                    cx.stop_propagation();
+                    if !ready
+                        || !this.selected(cx).is_some_and(|node| {
+                            node.id == id && node.data["asset"].as_str() == Some(asset.as_str())
+                        })
+                    {
+                        return;
+                    }
+                    let Some(bounds) = bounds.get() else {
+                        return;
+                    };
+                    let Some(fraction) = media_waveform::seek_fraction(
+                        event.position.x.into(),
+                        bounds.origin.x.into(),
+                        bounds.size.width.into(),
+                    ) else {
+                        return;
+                    };
+                    this.media_views
+                        .command(&id, MediaAction::SeekFraction(fraction), cx);
+                    this.canvas.read(cx).focus_handle(cx).focus(window, cx);
+                }),
+            )
     }
 }

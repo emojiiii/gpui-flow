@@ -15,6 +15,7 @@ mod pooled_backend;
 mod probe;
 mod process;
 mod types;
+mod waveform;
 
 pub use backend::*;
 pub use image_loader::*;
@@ -22,3 +23,4 @@ pub use loading::*;
 pub use player::*;
 pub use pooled_backend::*;
 pub use types::*;
+pub use waveform::AudioWaveform;

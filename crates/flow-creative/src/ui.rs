@@ -1833,6 +1833,7 @@ mod mask_editor;
 mod mask_preview;
 mod mask_tasks;
 mod media_view;
+mod media_waveform;
 mod model_view;
 mod node_name;
 mod object_creation;

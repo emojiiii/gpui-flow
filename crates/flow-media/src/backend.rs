@@ -28,6 +28,17 @@ pub struct ToolAvailability {
     pub ffplay: Result<String, MediaError>,
 }
 impl FfmpegBackend {
+    /// Extract a real, fixed-size local audio overview without starting playback.
+    /// Run on a background worker. Probe and decode share a 15-second deadline;
+    /// input is capped by `limits` and 30 minutes, with mono/stereo audio only.
+    /// Cancellation kills/reaps the decoder and joins its bounded pipe readers.
+    pub fn waveform(
+        &self,
+        source: &Path,
+        cancel: &Arc<AtomicBool>,
+    ) -> Result<crate::AudioWaveform, MediaError> {
+        crate::waveform::extract(source, &self.tools, &self.limits, cancel)
+    }
     /// Inspect one explicitly selected local file without starting playback.
     /// This bounded subprocess operation belongs on a background worker.
     pub fn probe(&self, source: &Path) -> Result<MediaMetadata, MediaError> {
