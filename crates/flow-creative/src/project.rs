@@ -1164,7 +1164,22 @@ fn check_asset_file(path: &Path, asset: &ProjectAsset) -> Result<(), ProjectErro
 fn verify_asset(path: &Path, asset: &ProjectAsset) -> Result<(), ProjectError> {
     let kind = AssetKind::from_media_type(&asset.media_type)?;
     let bytes = read_regular(path, kind.max_bytes())?;
-    let mut info = kind.inspect(&bytes)?;
+    let mut info = if matches!(kind, AssetKind::Model) {
+        // Existing GLBs were admitted by the original geometry-only contract.
+        // New texture preview limits must not prevent opening their projects.
+        crate::model_preview::validate_stored_glb(&bytes).map_err(|error| match error {
+            PreviewError::BudgetExceeded(_) => ProjectError::TooLarge(error.to_string()),
+            _ => ProjectError::Invalid(error.to_string()),
+        })?;
+        AssetInfo {
+            extension: "glb",
+            media_type: "model/gltf-binary",
+            width: 0,
+            height: 0,
+        }
+    } else {
+        kind.inspect(&bytes)?
+    };
     if matches!(kind, AssetKind::Video | AssetKind::Audio) {
         media_assets::verify_media(path, &mut info)?;
     }

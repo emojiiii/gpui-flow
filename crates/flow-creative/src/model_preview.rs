@@ -3,10 +3,14 @@
 //! This is intentionally a small preview renderer, not a glTF viewer: only an
 //! embedded BIN, triangle primitives, node transforms and opaque base colors are
 //! supported. The default (or first) scene is flattened with instance transforms.
-//! Textures, vertex colors, authored normals and PBR lighting are not reproduced;
+//! Embedded PNG/JPEG base-color textures use perspective-correct TEXCOORD_0.
+//! Vertex colors, authored normals and PBR lighting are not reproduced;
 //! callers must display `PreviewMesh::warnings()` alongside the preview.
-//! Parsing never opens a path, fetches a URI, or decodes an image. Run parsing and
+//! Parsing never opens a path or fetches a URI. Embedded textures are decoded
+//! within fixed pixel/allocation budgets. Run parsing and
 //! rendering off the UI thread, and discard stale results in the calling host.
+
+mod textures;
 
 use gltf::{
     accessor::{DataType, Dimensions},
@@ -17,6 +21,8 @@ use serde_json::Value;
 use std::{
     f64::consts::{FRAC_PI_2, PI, TAU},
     fmt,
+    sync::atomic::{AtomicBool, Ordering},
+    time::{Duration, Instant},
 };
 
 pub const MAX_GLB_BYTES: usize = 32 * 1024 * 1024;
@@ -35,7 +41,7 @@ const MAX_COORDINATE: f64 = 1.0e12;
 // clipped triangle bounding-box areas is charged before any pixel loop starts.
 const MAX_RASTER_SAMPLES: usize = 16_000_000;
 const BACKGROUND: [u8; 4] = [23, 27, 35, 255];
-const SIMPLIFIED_WARNING: &str = "Simplified static preview: opaque baseColorFactor with two-sided flat lighting; textures, PBR, vertex colors, authored normals and scene cameras are not reproduced.";
+const SIMPLIFIED_WARNING: &str = "Simplified static preview: opaque baseColorFactor with two-sided flat lighting; PBR, vertex colors, authored normals and scene cameras are not reproduced. Embedded base-color textures use encoded UV orientation; ICC/Exif metadata is ignored as required/recommended by glTF.";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PreviewError {
@@ -68,12 +74,15 @@ fn unsupported(message: impl Into<String>) -> PreviewError {
 struct Triangle {
     indices: [usize; 3],
     color: [f32; 3],
+    texture: Option<usize>,
 }
 
 /// Validated, flattened geometry. Private storage preserves parser invariants.
 #[derive(Clone, Debug)]
 pub struct PreviewMesh {
     vertices: Vec<Vec3>,
+    texcoords: Vec<[f64; 2]>,
+    textures: textures::TextureSet,
     triangles: Vec<Triangle>,
     min: Vec3,
     max: Vec3,
@@ -87,6 +96,17 @@ impl PreviewMesh {
     }
     pub fn triangle_count(&self) -> usize {
         self.triangles.len()
+    }
+    /// Unique decoded base-color images, shared by material samplers.
+    pub fn texture_count(&self) -> usize {
+        self.textures.image_count()
+    }
+    /// Retained texture pixels, independently capped at 16 MiB.
+    pub fn texture_bytes(&self) -> usize {
+        self.textures.byte_len()
+    }
+    pub fn uses_mip_filter_fallback(&self) -> bool {
+        self.textures.uses_mipmaps()
     }
     /// World-space, axis-aligned minimum and maximum, after node transforms.
     pub fn bounds(&self) -> ([f32; 3], [f32; 3]) {
@@ -219,6 +239,17 @@ impl OrbitCamera {
 /// container/schema parser and accessor readers; additional checks enforce the
 /// preview's stricter resource and feature limits before readers are invoked.
 pub fn parse_glb(bytes: &[u8]) -> Result<PreviewMesh> {
+    parse_glb_internal(bytes, true)
+}
+
+/// Preserve the original geometry-only admission contract for already stored
+/// assets. A newer preview feature must not make an existing project unreadable.
+/// The preview still reports unsupported textures rather than hiding their loss.
+pub(crate) fn validate_stored_glb(bytes: &[u8]) -> Result<()> {
+    parse_glb_internal(bytes, false).map(|_| ())
+}
+
+fn parse_glb_internal(bytes: &[u8], with_textures: bool) -> Result<PreviewMesh> {
     if bytes.len() > MAX_GLB_BYTES {
         return Err(PreviewError::BudgetExceeded("32 MiB file limit"));
     }
@@ -252,25 +283,46 @@ pub fn parse_glb(bytes: &[u8]) -> Result<PreviewMesh> {
     let json: gltf::json::Root =
         serde_json::from_value(root).map_err(|error| invalid(error.to_string()))?;
     let document = gltf::Document::from_json(json).map_err(|error| invalid(error.to_string()))?;
-    validate_document(&document, bin)?;
+    validate_document(&document, bin, with_textures)?;
     let scene = document
         .default_scene()
         .or_else(|| document.scenes().next())
         .ok_or_else(|| unsupported("a scene containing mesh nodes is required"))?;
+    let textures = if with_textures {
+        textures::TextureSet::decode(&document, bin)?
+    } else {
+        textures::TextureSet::default()
+    };
+    let uses_mipmaps = textures.uses_mipmaps();
     let mut mesh = PreviewMesh {
         vertices: Vec::new(),
+        texcoords: Vec::new(),
+        textures,
         triangles: Vec::new(),
         min: Vec3::splat(f64::INFINITY),
         max: Vec3::splat(f64::NEG_INFINITY),
         warnings: vec![SIMPLIFIED_WARNING.into()],
     };
+    if uses_mipmaps {
+        mesh.warnings.push(
+            "Texture mipmap filtering uses only the base image level in this CPU preview.".into(),
+        );
+    }
     if document.scenes().count() > 1 {
         mesh.warnings
             .push("Only the default (or first) scene is previewed.".into());
     }
     let mut visited = vec![false; document.nodes().count()];
     for node in scene.nodes() {
-        append_node(node, Mat4::IDENTITY, bin, &mut mesh, &mut visited, 1)?;
+        append_node(
+            node,
+            Mat4::IDENTITY,
+            bin,
+            &mut mesh,
+            &mut visited,
+            1,
+            with_textures,
+        )?;
     }
     if mesh.triangles.is_empty() {
         return Err(invalid("selected scene has no triangles"));
@@ -373,7 +425,7 @@ fn inspect_json(value: &Value, depth: usize, remaining: &mut usize) -> Result<()
     Ok(())
 }
 
-fn validate_document(document: &gltf::Document, bin: &[u8]) -> Result<()> {
+fn validate_document(document: &gltf::Document, bin: &[u8], with_textures: bool) -> Result<()> {
     let buffers: Vec<_> = document.buffers().collect();
     if buffers.len() != 1 || !matches!(buffers[0].source(), gltf::buffer::Source::Bin) {
         return Err(unsupported("exactly one embedded BIN buffer is required"));
@@ -510,6 +562,28 @@ fn validate_document(document: &gltf::Document, bin: &[u8]) -> Result<()> {
                 }
             }
             let material = primitive.material();
+            if with_textures
+                && let Some(texture) = material.pbr_metallic_roughness().base_color_texture()
+            {
+                if texture.tex_coord() != 0 {
+                    return Err(unsupported(
+                        "base-color textures currently require TEXCOORD_0",
+                    ));
+                }
+                let uv = primitive
+                    .get(&Semantic::TexCoords(0))
+                    .ok_or_else(|| invalid("base-color texture requires TEXCOORD_0"))?;
+                let encoding = match uv.data_type() {
+                    DataType::F32 => !uv.normalized(),
+                    DataType::U8 | DataType::U16 => uv.normalized(),
+                    _ => false,
+                };
+                if uv.dimensions() != Dimensions::Vec2 || !encoding {
+                    return Err(unsupported(
+                        "TEXCOORD_0 must be FLOAT or normalized U8/U16 VEC2",
+                    ));
+                }
+            }
             if material.alpha_mode() != gltf::material::AlphaMode::Opaque {
                 return Err(unsupported("alpha MASK/BLEND materials are not supported"));
             }
@@ -632,6 +706,7 @@ fn append_node(
     output: &mut PreviewMesh,
     visited: &mut [bool],
     depth: usize,
+    with_textures: bool,
 ) -> Result<()> {
     if depth > MAX_NODE_DEPTH {
         return Err(PreviewError::BudgetExceeded("64-level node depth"));
@@ -668,6 +743,34 @@ fn append_node(
                 .read_positions()
                 .ok_or_else(|| invalid("unable to read POSITION data"))?;
             let start = output.vertices.len();
+            let texture = primitive
+                .material()
+                .pbr_metallic_roughness()
+                .base_color_texture()
+                .filter(|_| with_textures)
+                .map(|info| info.texture().index());
+            if let Some(index) = texture {
+                if output.textures.get(index).is_none() {
+                    return Err(invalid("base-color texture was not decoded"));
+                }
+                let uvs = reader
+                    .read_tex_coords(0)
+                    .ok_or_else(|| invalid("unable to read TEXCOORD_0"))?
+                    .into_f32();
+                for uv in uvs {
+                    if uv.iter().any(|v| !v.is_finite() || v.abs() > 1_000_000.) {
+                        return Err(invalid(
+                            "TEXCOORD_0 must be finite and within the preview coordinate budget",
+                        ));
+                    }
+                    output.texcoords.push(uv.map(f64::from));
+                }
+                if output.texcoords.len() != total {
+                    return Err(invalid("truncated TEXCOORD_0"));
+                }
+            } else {
+                output.texcoords.resize(total, [0.; 2]);
+            }
             for position in positions {
                 let point = world.point(Vec3::from_f32(position))?;
                 output.min = output.min.min(point);
@@ -704,12 +807,13 @@ fn append_node(
                         start + triangle[2] as usize,
                     ],
                     color: [r, g, b],
+                    texture,
                 });
             }
         }
     }
     for child in node.children() {
-        append_node(child, world, bin, output, visited, depth + 1)?;
+        append_node(child, world, bin, output, visited, depth + 1, with_textures)?;
     }
     Ok(())
 }
@@ -731,6 +835,23 @@ pub fn render(
     width: u32,
     height: u32,
 ) -> Result<PreviewImage> {
+    render_cancellable(mesh, camera, width, height, &AtomicBool::new(false))
+}
+
+/// The same preview with cooperative cancellation and a three-second raster
+/// deadline. Image codec work is bounded separately during parse_glb.
+pub fn render_cancellable(
+    mesh: &PreviewMesh,
+    camera: &OrbitCamera,
+    width: u32,
+    height: u32,
+    cancelled: &AtomicBool,
+) -> Result<PreviewImage> {
+    let work = RasterWork {
+        cancelled,
+        started: Instant::now(),
+    };
+    work.check()?;
     if width == 0 || height == 0 || width > MAX_PREVIEW_DIMENSION || height > MAX_PREVIEW_DIMENSION
     {
         return Err(PreviewError::BudgetExceeded(
@@ -779,6 +900,7 @@ pub fn render(
     let mut samples = 0;
     let light = Vec3(-0.35, 0.65, -1.0).normalized();
     for triangle in &mesh.triangles {
+        work.check()?;
         let points = triangle.indices.map(|index| vertices[index]);
         let normal = points[1].sub(points[0]).cross(points[2].sub(points[0]));
         if normal.length() <= f64::MIN_POSITIVE {
@@ -791,35 +913,69 @@ pub fn render(
             linear_to_srgb(f64::from(triangle.color[2]) * shade),
             255,
         ];
-        let mut polygon = points.to_vec();
+        let texture = triangle.texture.and_then(|index| mesh.textures.get(index));
+        let mut polygon = triangle
+            .indices
+            .into_iter()
+            .map(|index| ClipVertex {
+                point: vertices[index],
+                uv: mesh.texcoords[index],
+            })
+            .collect::<Vec<_>>();
         for (normal, offset) in planes {
             polygon = clip_polygon(&polygon, normal, offset);
         }
         for index in 1..polygon.len().saturating_sub(1) {
             let projected =
-                [polygon[0], polygon[index], polygon[index + 1]].map(|point| ScreenPoint {
-                    x: f64::from(width) * 0.5 + point.0 * focal / point.2,
-                    y: f64::from(height) * 0.5 - point.1 * focal / point.2,
-                    inverse_z: point.2.recip(),
+                [polygon[0], polygon[index], polygon[index + 1]].map(|vertex| ScreenPoint {
+                    x: f64::from(width) * 0.5 + vertex.point.0 * focal / vertex.point.2,
+                    y: f64::from(height) * 0.5 - vertex.point.1 * focal / vertex.point.2,
+                    inverse_z: vertex.point.2.recip(),
+                    uv_over_z: vertex.uv.map(|uv| uv / vertex.point.2),
                 });
-            raster_triangle(projected, color, &mut image, &mut depth, &mut samples)?;
+            raster_triangle(
+                projected,
+                FragmentPaint {
+                    color,
+                    texture,
+                    factor: triangle.color.map(|component| f64::from(component) * shade),
+                },
+                &mut image,
+                &mut depth,
+                &mut samples,
+                &work,
+            )?;
         }
     }
     Ok(image)
 }
 
-fn clip_polygon(input: &[Vec3], normal: Vec3, offset: f64) -> Vec<Vec3> {
+#[derive(Clone, Copy, Debug)]
+struct ClipVertex {
+    point: Vec3,
+    uv: [f64; 2],
+}
+
+fn clip_polygon(input: &[ClipVertex], normal: Vec3, offset: f64) -> Vec<ClipVertex> {
     let mut output = Vec::with_capacity(input.len() + 1);
     let Some(&last) = input.last() else {
         return output;
     };
     let mut previous = last;
-    let mut previous_distance = normal.dot(previous) + offset;
+    let mut previous_distance = normal.dot(previous.point) + offset;
     for &current in input {
-        let distance = normal.dot(current) + offset;
+        let distance = normal.dot(current.point) + offset;
         if (distance >= 0.0) != (previous_distance >= 0.0) {
             let t = (previous_distance / (previous_distance - distance)).clamp(0.0, 1.0);
-            output.push(previous.add(current.sub(previous).scale(t)));
+            output.push(ClipVertex {
+                point: previous
+                    .point
+                    .add(current.point.sub(previous.point).scale(t)),
+                uv: [
+                    previous.uv[0] + (current.uv[0] - previous.uv[0]) * t,
+                    previous.uv[1] + (current.uv[1] - previous.uv[1]) * t,
+                ],
+            });
         }
         if distance >= 0.0 {
             output.push(current);
@@ -835,27 +991,66 @@ struct ScreenPoint {
     x: f64,
     y: f64,
     inverse_z: f64,
+    uv_over_z: [f64; 2],
 }
 
 fn edge(a: ScreenPoint, b: ScreenPoint, x: f64, y: f64) -> f64 {
     (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x)
 }
 
+struct RasterWork<'a> {
+    cancelled: &'a AtomicBool,
+    started: Instant,
+}
+impl RasterWork<'_> {
+    fn check(&self) -> Result<()> {
+        if self.cancelled.load(Ordering::Acquire) {
+            return Err(invalid("model preview cancelled"));
+        }
+        if self.started.elapsed() > Duration::from_secs(3) {
+            return Err(PreviewError::BudgetExceeded("three-second raster deadline"));
+        }
+        Ok(())
+    }
+}
+struct FragmentPaint<'a> {
+    color: [u8; 4],
+    texture: Option<&'a textures::Texture>,
+    factor: [f64; 3],
+}
+fn minifying(points: [ScreenPoint; 3], dimensions: (u32, u32)) -> bool {
+    (0..3).any(|i| {
+        let a = points[i];
+        let b = points[(i + 1) % 3];
+        let screen = (a.x - b.x).hypot(a.y - b.y).max(1e-9);
+        let u =
+            (a.uv_over_z[0] / a.inverse_z - b.uv_over_z[0] / b.inverse_z) * f64::from(dimensions.0);
+        let v =
+            (a.uv_over_z[1] / a.inverse_z - b.uv_over_z[1] / b.inverse_z) * f64::from(dimensions.1);
+        u.hypot(v) > screen
+    })
+}
+
 fn raster_triangle(
     points: [ScreenPoint; 3],
-    color: [u8; 4],
+    paint: FragmentPaint<'_>,
     image: &mut PreviewImage,
     depth: &mut [f64],
     samples: &mut usize,
+    work: &RasterWork<'_>,
 ) -> Result<()> {
     if points.iter().any(|point| {
         !point.x.is_finite()
             || !point.y.is_finite()
             || !point.inverse_z.is_finite()
             || point.inverse_z <= 0.0
+            || point.uv_over_z.iter().any(|v| !v.is_finite())
     }) {
         return Err(invalid("non-finite projection"));
     }
+    let use_min_filter = paint
+        .texture
+        .is_some_and(|texture| minifying(points, texture.dimensions()));
     let [a, b, c] = points;
     let area = edge(a, b, c.x, c.y);
     if area.abs() < 1.0e-9 {
@@ -888,6 +1083,7 @@ fn raster_triangle(
         "16 million raster sample budget; try a smaller preview",
     )?;
     for y in min_y..max_y {
+        work.check()?;
         for x in min_x..max_x {
             let px = x as f64 + 0.5;
             let py = y as f64 + 0.5;
@@ -904,6 +1100,23 @@ fn raster_triangle(
             let index = y * image.width as usize + x;
             if inverse_z > depth[index] {
                 depth[index] = inverse_z;
+                let color = if let Some(texture) = paint.texture {
+                    let uv = [0, 1].map(|axis| {
+                        (weights[0] * a.uv_over_z[axis]
+                            + weights[1] * b.uv_over_z[axis]
+                            + weights[2] * c.uv_over_z[axis])
+                            / inverse_z
+                    });
+                    let sampled = texture.sample(uv, use_min_filter);
+                    [
+                        linear_to_srgb(sampled[0] * paint.factor[0]),
+                        linear_to_srgb(sampled[1] * paint.factor[1]),
+                        linear_to_srgb(sampled[2] * paint.factor[2]),
+                        255,
+                    ]
+                } else {
+                    paint.color
+                };
                 image.rgba8[index * 4..index * 4 + 4].copy_from_slice(&color);
             }
         }
@@ -1067,12 +1280,12 @@ mod tests {
     // These are actual GLB 2.0 test containers: JSON describes real FLOAT
     // position bytes and unsigned indices in an embedded BIN. They are fixtures,
     // not generated-user-model substitutes or renderer-only placeholder shapes.
-    struct Fixture {
-        json: Value,
-        bin: Vec<u8>,
+    pub(super) struct Fixture {
+        pub(super) json: Value,
+        pub(super) bin: Vec<u8>,
     }
     impl Fixture {
-        fn new() -> Self {
+        pub(super) fn new() -> Self {
             Self {
                 json: json!({
                     "asset": {"version": "2.0"}, "scene": 0,
@@ -1084,7 +1297,7 @@ mod tests {
             }
         }
 
-        fn add(
+        pub(super) fn add(
             &mut self,
             points: &[[f32; 3]],
             indices: Option<&[u32]>,
@@ -1164,7 +1377,7 @@ mod tests {
             self.json["buffers"][0]["byteLength"] = json!(self.bin.len());
         }
 
-        fn bytes(&self) -> Vec<u8> {
+        pub(super) fn bytes(&self) -> Vec<u8> {
             let mut json = serde_json::to_vec(&self.json).unwrap();
             while !json.len().is_multiple_of(4) {
                 json.push(b' ');
@@ -1185,7 +1398,7 @@ mod tests {
             bytes.extend_from_slice(&bin);
             bytes
         }
-        fn parse(&self) -> Result<PreviewMesh> {
+        pub(super) fn parse(&self) -> Result<PreviewMesh> {
             parse_glb(&self.bytes())
         }
     }
@@ -1204,7 +1417,7 @@ mod tests {
         fixture.add(&TRIANGLE, Some(&[0, 1, 2]), 12, 2, [0.9, 0.3, 0.1, 1.0]);
         fixture
     }
-    fn frontal_camera() -> OrbitCamera {
+    pub(super) fn frontal_camera() -> OrbitCamera {
         OrbitCamera {
             yaw: 0.0,
             pitch: 0.0,
@@ -1221,7 +1434,7 @@ mod tests {
             .map(|pixel| pixel != BACKGROUND.as_slice())
             .collect()
     }
-    fn pixel(image: &PreviewImage, x: usize, y: usize) -> &[u8] {
+    pub(super) fn pixel(image: &PreviewImage, x: usize, y: usize) -> &[u8] {
         let offset = (y * image.width as usize + x) * 4;
         &image.rgba8[offset..offset + 4]
     }
@@ -1406,15 +1619,28 @@ mod tests {
         assert_eq!(image.rgba8.len(), 64 * 64 * 4);
         let polygon = clip_polygon(
             &[
-                Vec3(-1.0, 0.0, 1.0),
-                Vec3(1.0, 0.0, 1.0),
-                Vec3(0.0, 1.0, -1.0),
+                ClipVertex {
+                    point: Vec3(-1.0, 0.0, 1.0),
+                    uv: [0., 0.],
+                },
+                ClipVertex {
+                    point: Vec3(1.0, 0.0, 1.0),
+                    uv: [1., 0.],
+                },
+                ClipVertex {
+                    point: Vec3(0.0, 1.0, -1.0),
+                    uv: [0.5, 1.],
+                },
             ],
             Vec3(0.0, 0.0, 1.0),
             -0.01,
         );
         assert_eq!(polygon.len(), 4);
-        assert!(polygon.iter().all(|point| point.2 >= 0.01 - 1.0e-12));
+        assert!(
+            polygon
+                .iter()
+                .all(|vertex| vertex.point.2 >= 0.01 - 1.0e-12)
+        );
         let mut behind = Fixture::new();
         behind.add(&TRIANGLE.map(|p| [p[0], p[1], 4.0]), None, 12, 2, [1.0; 4]);
         let hidden = render(&behind.parse().unwrap(), &frontal_camera(), 64, 64).unwrap();
@@ -1786,3 +2012,7 @@ mod tests {
         assert_eq!(fixture.parse().unwrap().bounds().0[0], -1.0);
     }
 }
+
+#[cfg(test)]
+#[path = "model_preview/texture_tests.rs"]
+mod texture_tests;

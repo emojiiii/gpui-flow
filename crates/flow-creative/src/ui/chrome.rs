@@ -710,7 +710,7 @@ impl CreativeCanvas {
                         .py_1()
                         .text_size(px(10.))
                         .text_color(rgb(0x969ca5))
-                        .child("CPU 静态基色预览 · 无纹理/PBR/动画/骨骼"),
+                        .child("CPU 静态基色/嵌入贴图 · 无PBR/动画/骨骼"),
                 );
         } else {
             panel = panel.child(

@@ -161,8 +161,9 @@ impl ModelView {
                         }
                         None => OrbitCamera::fit(&mesh),
                     };
-                    let pixels = model_preview::render(&mesh, &camera, 512, 384)
-                        .map_err(|e| e.to_string())?;
+                    let pixels =
+                        model_preview::render_cancellable(&mesh, &camera, 512, 384, &cancelled)
+                            .map_err(|e| e.to_string())?;
                     Ok::<_, String>((mesh, pixels.into_bgra8()))
                 })
                 .await;
@@ -185,9 +186,15 @@ impl ModelView {
                             this.image =
                                 Some(Arc::new(RenderImage::new(vec![image::Frame::new(buffer)])));
                             this.status = format!(
-                                "CPU · {} 顶点 · {} 三角面",
+                                "CPU · {} 顶点 · {} 三角面 · {} 贴图{}",
                                 mesh.vertex_count(),
-                                mesh.triangle_count()
+                                mesh.triangle_count(),
+                                mesh.texture_count(),
+                                if mesh.uses_mip_filter_fallback() {
+                                    " · 基础级采样"
+                                } else {
+                                    ""
+                                }
                             );
                             this.error = None;
                         }
@@ -209,6 +216,8 @@ impl Render for ModelView {
         } else if let Some(image) = &self.image {
             body = body.child(
                 img(image.clone())
+                    .absolute()
+                    .inset_0()
                     .size_full()
                     .object_fit(ObjectFit::Contain),
             );
