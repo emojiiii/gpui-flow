@@ -1,5 +1,42 @@
 use super::*;
-use gpui_flow_interaction::{CanvasCommand, InteractionError};
+use gpui_flow_interaction::{CanvasCommand, DispatchReport, InteractionError, PluginHost};
+
+#[derive(PartialEq)]
+struct OpenDocumentVersion {
+    revision: u64,
+    viewport: model::Viewport,
+}
+
+impl OpenDocumentVersion {
+    fn new(editor: &Editor) -> Self {
+        Self {
+            revision: editor.document_revision(),
+            viewport: editor.viewport,
+        }
+    }
+
+    fn install(
+        &self,
+        document: model::FlowDocument,
+        editor: &mut Editor,
+        interactions: &mut PluginHost,
+        validator: Option<&FlowDocumentValidator>,
+    ) -> Result<DispatchReport, String> {
+        if *self != Self::new(editor)
+            || editor.transaction_active()
+            || interactions.has_capture()
+            || interactions.connection().active()
+        {
+            return Err(
+                "Open cancelled because the canvas changed or an edit is in progress".into(),
+            );
+        }
+        validate_host_document(&document, validator)?;
+        interactions
+            .execute(editor, CanvasCommand::LoadDocument(document))
+            .map_err(|error| error.to_string())
+    }
+}
 
 pub(super) fn validate_host_document(
     document: &model::FlowDocument,
@@ -23,6 +60,7 @@ impl FlowCanvas {
             false
         } else {
             self.file_busy = true;
+            cx.notify();
             true
         }
     }
@@ -55,7 +93,7 @@ impl FlowCanvas {
         })
         .detach();
     }
-    /// Load an explicit path. Validation finishes before replacing the current document.
+    /// Load an explicit path, keeping edits made while the file is read.
     pub fn open_path(&mut self, path: impl Into<std::path::PathBuf>, cx: &mut Context<Self>) {
         if !self.is_editable() {
             self.message = "Canvas is read-only".into();
@@ -65,6 +103,7 @@ impl FlowCanvas {
         if !self.begin_file_operation(cx) {
             return;
         }
+        let opened_against = OpenDocumentVersion::new(&self.editor);
         let path = path.into();
         cx.spawn(async move |this, cx| {
             let result = cx
@@ -72,16 +111,7 @@ impl FlowCanvas {
                 .spawn(async move { model::load_document(path).map_err(|e| e.to_string()) })
                 .await;
             let _ = this.update(cx, |this, cx| {
-                this.file_busy = false;
-                match result {
-                    Ok(document) => {
-                        if let Err(error) = this.replace_document(document, cx) {
-                            this.message = error.to_string();
-                        }
-                    }
-                    Err(e) => this.message = format!("Open failed: {e}"),
-                }
-                cx.notify();
+                this.finish_open(opened_against, Some(result), cx);
             });
         })
         .detach();
@@ -147,6 +177,7 @@ impl FlowCanvas {
         if !self.begin_file_operation(cx) {
             return;
         }
+        let opened_against = OpenDocumentVersion::new(&self.editor);
         let dialog = cx.prompt_for_paths(PathPromptOptions {
             files: true,
             directories: false,
@@ -173,24 +204,40 @@ impl FlowCanvas {
                 Err(e) => Some(Err(e.to_string())),
             };
             let _ = this.update(cx, |this, cx| {
-                this.file_busy = false;
-                cx.notify();
+                this.finish_open(opened_against, result, cx);
             });
-            if let Some(result) = result {
-                let _ = this.update(cx, |this, cx| {
-                    match result {
-                        Ok(document) => {
-                            if let Err(error) = this.replace_document(document, cx) {
-                                this.message = error.to_string();
-                            }
-                        }
-                        Err(e) => this.message = format!("Open failed: {e}"),
-                    }
-                    cx.notify();
-                });
-            }
         })
         .detach();
+    }
+    fn finish_open(
+        &mut self,
+        opened_against: OpenDocumentVersion,
+        result: Option<Result<model::FlowDocument, String>>,
+        cx: &mut Context<Self>,
+    ) {
+        self.file_busy = false;
+        match result {
+            Some(Ok(document)) => match opened_against.install(
+                document,
+                &mut self.editor,
+                &mut self.interactions,
+                self.document_validator.as_ref(),
+            ) {
+                Ok(mut report) => {
+                    self.cancel_interaction(cx);
+                    self.reset_document_runtime();
+                    self.message = "Document opened".into();
+                    // Reopening an identical graph still replaces its runtime and history.
+                    report.document_changed = true;
+                    self.apply_interaction_report(report, cx);
+                    return;
+                }
+                Err(error) => self.message = error,
+            },
+            Some(Err(error)) => self.message = format!("Open failed: {error}"),
+            None => {}
+        }
+        cx.notify();
     }
     pub fn export_json(&self) -> Result<String, model::GraphError> {
         self.editor.graph().to_json()
@@ -215,20 +262,6 @@ impl FlowCanvas {
         self.changed(cx);
         Ok(())
     }
-    fn replace_document(
-        &mut self,
-        document: model::FlowDocument,
-        cx: &mut Context<Self>,
-    ) -> Result<(), InteractionError> {
-        validate_host_document(&document, self.document_validator.as_ref())
-            .map_err(InteractionError::InvalidInput)?;
-        self.cancel_interaction(cx);
-        self.execute_command(CanvasCommand::LoadDocument(document), cx)?;
-        self.reset_document_runtime();
-        self.message = "Document opened".into();
-        self.changed(cx);
-        Ok(())
-    }
     fn reset_document_runtime(&mut self) {
         self.runtime = Runtime::default();
         self.workflow = None;
@@ -243,6 +276,107 @@ impl FlowCanvas {
 mod tests {
     use super::*;
     use ::core::prelude::v1::test;
+
+    fn document_with_node(id: &str) -> model::FlowDocument {
+        let mut document = model::FlowDocument::default();
+        document
+            .graph
+            .add_node(Node::new(id, id, model::Point::ZERO))
+            .unwrap();
+        document
+    }
+
+    #[test]
+    fn pending_open_keeps_a_new_edit_and_is_stale_after_undo() {
+        let before = document_with_node("before");
+        let mut editor = Editor::from_document(before.clone()).unwrap();
+        let version = OpenDocumentVersion::new(&editor);
+        let mut host = PluginHost::with_defaults();
+        editor
+            .transaction("Add during open", |graph| {
+                graph.add_node(Node::new("new", "New", model::Point::ZERO))
+            })
+            .unwrap();
+        let edited = editor.document();
+        assert!(
+            version
+                .install(document_with_node("loaded"), &mut editor, &mut host, None)
+                .is_err()
+        );
+        assert_eq!(editor.document(), edited);
+        assert!(editor.undo());
+        assert_eq!(editor.document(), before);
+        assert!(
+            version
+                .install(document_with_node("loaded"), &mut editor, &mut host, None)
+                .is_err()
+        );
+        assert!(editor.can_redo());
+    }
+
+    #[test]
+    fn pending_open_keeps_the_viewport_and_an_active_capture() {
+        let mut editor = Editor::from_document(document_with_node("before")).unwrap();
+        let version = OpenDocumentVersion::new(&editor);
+        let mut host = PluginHost::with_defaults();
+        editor.viewport.pan.x = 120.;
+        let before = editor.document();
+        assert!(
+            version
+                .install(document_with_node("loaded"), &mut editor, &mut host, None)
+                .is_err()
+        );
+        let version = OpenDocumentVersion::new(&editor);
+        host.execute(&mut editor, CanvasCommand::CapturePointer { pointer_id: 1 })
+            .unwrap();
+        assert!(
+            version
+                .install(document_with_node("loaded"), &mut editor, &mut host, None)
+                .is_err()
+        );
+        assert!(host.has_capture());
+        assert_eq!(editor.document(), before);
+    }
+
+    #[test]
+    fn matching_open_preserves_history_on_rejection_and_loads_on_success() {
+        let mut editor = Editor::from_document(document_with_node("before")).unwrap();
+        editor
+            .transaction("Add before open", |graph| {
+                graph.add_node(Node::new("existing", "Existing", model::Point::ZERO))
+            })
+            .unwrap();
+        editor.selection.select_node("existing", false);
+        let document = editor.document();
+        let selection = editor.selection.clone();
+        let mut incoming = document_with_node("loaded");
+        incoming.viewport.pan.x = 80.;
+        let mut host = PluginHost::with_defaults();
+        let version = OpenDocumentVersion::new(&editor);
+        let reject: FlowDocumentValidator = Arc::new(|_| Err("Rejected".into()));
+        assert!(matches!(
+            version.install(incoming.clone(), &mut editor, &mut host, Some(&reject)),
+            Err(error) if error == "Rejected"
+        ));
+        host.set_editable(false, &mut editor);
+        assert!(
+            version
+                .install(incoming.clone(), &mut editor, &mut host, None)
+                .is_err()
+        );
+        assert_eq!(editor.document(), document);
+        assert_eq!(editor.selection, selection);
+        assert!(editor.can_undo());
+        host.set_editable(true, &mut editor);
+        let report = version
+            .install(incoming.clone(), &mut editor, &mut host, None)
+            .unwrap();
+        assert!(report.document_changed && report.selection_changed && report.viewport_changed);
+        assert_eq!(editor.document(), incoming);
+        assert!(editor.selection.is_empty());
+        assert!(!editor.can_undo());
+    }
+
     #[test]
     fn host_document_contract_validates_without_mutation_or_legacy_changes() {
         let document = model::FlowDocument::default();

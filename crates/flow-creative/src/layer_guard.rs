@@ -76,6 +76,9 @@ pub(crate) fn filter_layer_command(
             }
         }
         CanvasCommand::ImportGraph(candidate) => validate_locked_graph_changes(graph, candidate)?,
+        CanvasCommand::ImportDocument(candidate) => {
+            validate_locked_graph_changes(graph, &candidate.graph)?
+        }
         _ => {}
     }
     Ok(())
@@ -198,6 +201,17 @@ mod tests {
                     n.title = "changed".into();
                 }
             }
+            let document = gpui_flow_core::FlowDocument {
+                graph: graph.clone(),
+                viewport: gpui_flow_core::Viewport {
+                    pan: Point::new(20., 30.),
+                    ..before.viewport
+                },
+            };
+            assert!(
+                host.execute(&mut editor, CanvasCommand::ImportDocument(document))
+                    .is_err()
+            );
             assert!(
                 host.execute(&mut editor, CanvasCommand::ImportGraph(graph))
                     .is_err()

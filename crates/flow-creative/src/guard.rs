@@ -60,7 +60,7 @@ impl CanvasPlugin for CreativeGuard {
             CanvasCommand::ImportGraph(graph) => {
                 self.0.validate_graph(graph).map_err(|e| e.to_string())?
             }
-            CanvasCommand::LoadDocument(document) => self
+            CanvasCommand::LoadDocument(document) | CanvasCommand::ImportDocument(document) => self
                 .0
                 .validate_document(document)
                 .map_err(|e| e.to_string())?,

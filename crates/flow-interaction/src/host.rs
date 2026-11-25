@@ -287,7 +287,9 @@ impl PluginHost {
             editor.selection = capture.selection;
             let graph = editor.graph().clone();
             editor.selection.retain_existing(&graph);
-            editor.viewport = capture.viewport;
+            if let Err(error) = editor.set_viewport(capture.viewport) {
+                report.errors.push(error.into());
+            }
         }
         self.connection.cancel();
         self.connection_owner = None;
@@ -691,17 +693,21 @@ impl PluginHost {
             }
             CanvasCommand::ResizeNode { node, size } => editor.resize_node(&node, size)?,
             CanvasCommand::Pan { delta } => {
-                if !editor.viewport.pan_by(delta) {
+                let mut viewport = editor.viewport;
+                if !viewport.pan_by(delta) {
                     return Err(InteractionError::InvalidInput("invalid pan delta".into()));
                 }
+                editor.set_viewport(viewport)?;
             }
             CanvasCommand::Zoom { position, zoom } => {
-                if !editor.viewport.zoom_at(position, zoom) {
+                let mut viewport = editor.viewport;
+                if !viewport.zoom_at(position, zoom) {
                     return Err(InteractionError::InvalidInput("invalid zoom".into()));
                 }
+                editor.set_viewport(viewport)?;
             }
             CanvasCommand::Fit { canvas, padding } => {
-                editor.fit_to_content(canvas, padding);
+                editor.try_fit_to_content(canvas, padding)?;
             }
             CanvasCommand::PreviewConnection {
                 from,
@@ -783,10 +789,10 @@ impl PluginHost {
                 editor.duplicate_selection(offset)?;
             }
             CanvasCommand::Undo => {
-                editor.undo();
+                editor.try_undo()?;
             }
             CanvasCommand::Redo => {
-                editor.redo();
+                editor.try_redo()?;
             }
             CanvasCommand::SetNodeData { node, data } => {
                 editor.transaction("Edit node", move |graph| {
@@ -802,6 +808,9 @@ impl PluginHost {
                 })?
             }
             CanvasCommand::LoadDocument(document) => editor.load_document(document)?,
+            CanvasCommand::ImportDocument(document) => {
+                editor.import_document(document, "Import document")?
+            }
             CanvasCommand::ImportGraph(graph) => {
                 editor.transaction("Import graph", move |target| {
                     *target = graph;
