@@ -1,5 +1,8 @@
-//! Standalone GPUI elements. None requires a `FlowCanvas` or owns an editor.
-//! Compose them in any GPUI view and supply host-owned event callbacks.
+//! GPUI canvas views and standalone controls for composing a host editor.
+//!
+//! Mount a [`FlowCanvas`] or [`SceneView`] as a GPUI entity to give its document,
+//! selection, and history their own canvas. The standalone controls take state
+//! and callbacks from their host.
 pub mod button;
 pub mod inspector;
 pub mod minimap;
@@ -10,7 +13,12 @@ pub mod primitives;
 pub mod toolbar;
 pub mod viewport_controls;
 
+pub use crate::canvas::{FlowCanvas, FlowEvent, FlowNodeHandle};
+pub use crate::options::FlowOptions;
+pub use crate::renderer::{NodeRenderContext, NodeRenderer};
+pub use crate::scene_view::{LeaferCompatibilityProfile, SceneView, SceneViewEvent};
 pub use button::*;
+pub use gpui_flow_engine::ElementHandle;
 pub use inspector::*;
 pub use minimap::*;
 pub use node_frame::*;

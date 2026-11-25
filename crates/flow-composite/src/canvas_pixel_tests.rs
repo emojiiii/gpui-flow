@@ -128,7 +128,7 @@ fn pixel_read_work_budget_precedes_allocation() {
 fn decode(bytes: &[u8]) -> (u32, u32, Vec<u8>) {
     let decoder = png::Decoder::new(Cursor::new(bytes));
     let mut reader = decoder.read_info().unwrap();
-    let mut rgba = vec![0; reader.output_buffer_size()];
+    let mut rgba = vec![0; reader.output_buffer_size().unwrap()];
     let info = reader.next_frame(&mut rgba).unwrap();
     assert_eq!(info.color_type, png::ColorType::Rgba);
     assert_eq!(info.bit_depth, png::BitDepth::Eight);

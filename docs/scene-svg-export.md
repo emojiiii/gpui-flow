@@ -156,7 +156,7 @@ trim/padding, relative coordinate spaces or filename-driven behavior.
 
 ## Validation
 
-The focused tests parse complete XML with locked `roxmltree 0.21.1`, read path
+The focused tests parse complete XML with locked `roxmltree`, read path
 data back through the scene path parser, and rasterize emitted files with locked
 `resvg 0.46.0` using its `raster-images` feature (without system fonts or text).
 Embedded PNG bytes are independently base64-decoded and read with the existing

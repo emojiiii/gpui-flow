@@ -59,8 +59,9 @@ fn render(
 }
 #[test]
 fn affine_text_rotation_reflection_shear_and_nonuniform_scales_use_real_ink() {
-    let (_app, bridge) =
-        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let (_app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
+        crate::display::native_text_test_platform(),
+    );
     for m in [
         Affine::translation(90., 20.) * Affine::rotation(37.),
         Affine::translation(150., 20.) * Affine::scale(-1., 1.),
@@ -105,8 +106,9 @@ fn affine_text_rotation_reflection_shear_and_nonuniform_scales_use_real_ink() {
 }
 #[test]
 fn affine_text_keeps_bridge_and_style_capability_errors_explicit() {
-    let (_app, bridge) =
-        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let (_app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
+        crate::display::native_text_test_platform(),
+    );
     let mut e =
         SceneEngine::new(scene(Affine::translation(80., 10.) * Affine::rotation(15.))).unwrap();
     assert!(matches!(
@@ -126,8 +128,9 @@ fn affine_text_keeps_bridge_and_style_capability_errors_explicit() {
 }
 #[test]
 fn affine_text_transform_change_rejects_late_jobs_and_undo_restores_pixels() {
-    let (_app, bridge) =
-        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let (_app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
+        crate::display::native_text_test_platform(),
+    );
     let mut e = gpui_flow_editor::SceneEditor::new(scene(
         Affine::translation(90., 10.) * Affine::rotation(25.),
     ))
@@ -162,8 +165,9 @@ fn affine_text_transform_change_rejects_late_jobs_and_undo_restores_pixels() {
 }
 #[test]
 fn affine_text_oversampling_respects_existing_pixel_and_font_limits() {
-    let (_app, bridge) =
-        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let (_app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
+        crate::display::native_text_test_platform(),
+    );
     let mut s = scene(Affine::translation(10., 10.) * Affine::scale(1., 1000.));
     s.update_object(&"text".into(), |o| {
         if let Shape::Text(t) = &mut o.shape {

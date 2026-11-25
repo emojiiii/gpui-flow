@@ -952,8 +952,9 @@ fn shadow_mode_undo_restores_pixels_extent_and_semantic_placement() {
 #[test]
 fn shadow_complete_text_source_keeps_backend_epoch_and_capability_provenance() {
     use gpui_flow_scene::{Shadow, Size};
-    let (_app, bridge) =
-        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let (_app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
+        crate::display::native_text_test_platform(),
+    );
     let mut engine = engine();
     engine
         .transaction(|scene| {

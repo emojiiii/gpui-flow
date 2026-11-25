@@ -7,9 +7,9 @@ description = "Retained vector scene graph, transforms, picking, and event propa
 
 [dependencies]
 gpui-flow-core.workspace = true
-kurbo = "=0.11.3"
-svgtypes = "=0.15.3"
-lyon_tessellation = "=1.0.22"
-i_overlay = "=9.0.0"
+kurbo = "=0.13.1"
+svgtypes = "=0.16.2"
+lyon_tessellation = "=1.0.23"
+i_overlay = "=9.2.0"
 serde.workspace = true
 serde_json.workspace = true

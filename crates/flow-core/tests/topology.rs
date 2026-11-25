@@ -1,5 +1,5 @@
 //! Public graph contracts for the private petgraph reachability adapter.
-use gpui_flow_core::{DataType, Edge, Graph, GraphError, Node, Point, Port, PortRef};
+use gpui_flow_core::{DataType, Edge, Editor, Graph, GraphError, Node, Point, Port, PortRef};
 use serde_json::json;
 
 fn node(id: &str) -> Node {
@@ -50,6 +50,23 @@ fn reachability_matches_transitive_closure_for_every_three_node_topology() {
                 }
             }
         }
+        let cyclic_edges: Vec<_> = pairs
+            .iter()
+            .enumerate()
+            .filter(|(index, (source, target))| {
+                mask & (1 << index) != 0 && reachable[*target][*source]
+            })
+            .map(|(index, _)| format!("edges.edge-{index}"))
+            .collect();
+        let issues = graph.validation_issues();
+        assert_eq!(
+            issues.iter().map(|issue| &issue.path).collect::<Vec<_>>(),
+            cyclic_edges.iter().collect::<Vec<_>>(),
+            "full validation, mask={mask}"
+        );
+        assert!(issues.iter().all(|issue| {
+            issue.message == "invalid connection: connection would create a cycle"
+        }));
         for (source, source_id) in ids.iter().enumerate() {
             for (target, target_id) in ids.iter().enumerate() {
                 let duplicate = pairs
@@ -76,6 +93,73 @@ fn reachability_matches_transitive_closure_for_every_three_node_topology() {
             }
         }
     }
+}
+
+#[test]
+fn full_validation_preserves_duplicate_capacity_and_malformed_id_diagnostics() {
+    let mut graph = graph(&["a", "b", "sink"]);
+    graph.nodes.get_mut(&"sink".into()).unwrap().ports[0].max_connections = Some(1);
+    for (key, edge) in [
+        ("first", edge("first", "a", "sink")),
+        ("other", edge("other", "b", "sink")),
+        ("wrong-key", edge("first", "a", "sink")),
+    ] {
+        graph.edges.insert(key.into(), edge);
+    }
+    assert_eq!(
+        graph
+            .validation_issues()
+            .into_iter()
+            .map(|issue| (issue.path, issue.message))
+            .collect::<Vec<_>>(),
+        [
+            (
+                "edges.first",
+                "invalid connection: port connection capacity reached"
+            ),
+            (
+                "edges.other",
+                "invalid connection: port connection capacity reached"
+            ),
+            ("edges.wrong-key.id", "map key and edge id differ"),
+            (
+                "edges.wrong-key",
+                "invalid connection: duplicate connection"
+            ),
+        ]
+        .map(|(path, message)| (String::from(path), String::from(message)))
+    );
+}
+
+#[test]
+fn editor_metadata_edits_keep_validation_for_changed_connection_inputs() {
+    let mut graph = graph(&["a", "b"]);
+    graph.add_edge(edge("a-b", "a", "b")).unwrap();
+    let mut editor = Editor::new(graph).unwrap();
+    editor
+        .transaction("Rename", |graph| {
+            graph.nodes.get_mut(&"b".into()).unwrap().title = "Sink".into();
+            Ok(())
+        })
+        .unwrap();
+    let before = editor.graph().clone();
+    let revision = editor.document_revision();
+    let error = editor
+        .transaction("Limit input capacity", |graph| {
+            graph.nodes.get_mut(&"b".into()).unwrap().ports[0].max_connections = Some(0);
+            Ok(())
+        })
+        .unwrap_err();
+    let GraphError::Validation(issues) = error else {
+        panic!("expected validation error");
+    };
+    assert_eq!(issues[0].path, "edges.a-b");
+    assert_eq!(
+        issues[0].message,
+        "invalid connection: port connection capacity reached"
+    );
+    assert_eq!(editor.graph(), &before);
+    assert_eq!(editor.document_revision(), revision);
 }
 
 #[test]

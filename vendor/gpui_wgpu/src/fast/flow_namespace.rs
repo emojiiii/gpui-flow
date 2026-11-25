@@ -17,16 +17,15 @@ impl FlowLayerNamespace {
     pub fn new() -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(1);
         Self(
-            NEXT.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_add(1))
+            NEXT.try_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_add(1))
                 .expect("Flow layer namespace identities exhausted"),
             false,
         )
     }
 
     /// A producer whose single-scene layer contents use the window's device
-    /// coordinates. Path tiles retain the window projection for identical
-    /// multisample coverage. Generic scrolling/content-space layers must use
-    /// [`Self::new`] instead.
+    /// coordinates. Path tiles evaluate coverage and paint in that space for
+    /// direct-rendering parity. Generic scrolling layers use [`Self::new`].
     pub fn new_window_space() -> Self {
         Self(Self::new().0, true)
     }
@@ -121,7 +120,7 @@ fn publish(receipt: FlowExecutionReceipt) {
 }
 
 /// The entry of an actual renderer draw, before surface acquisition can fail.
-pub(crate) fn begin_draw(state: &mut FrameState) {
+pub(crate) fn begin_draw(state: Option<&mut FrameState>) {
     visit_captures(|capture| {
         capture.attempts = capture.attempts.saturating_add(1).min(2);
         if NAMESPACE.get() != Some(capture.namespace) {
@@ -129,7 +128,9 @@ pub(crate) fn begin_draw(state: &mut FrameState) {
         }
         capture.receipt = None;
     });
-    begin_frame(state);
+    if let Some(state) = state {
+        begin_frame(state);
+    }
 }
 
 /// Successful native recording/submission. Upload bytes include alignment and
@@ -139,8 +140,7 @@ pub(crate) fn begin_draw(state: &mut FrameState) {
 pub struct FlowExecutionReceipt {
     /// Successful receipts always carry Some(the submitting producer identity).
     pub namespace: Option<FlowLayerNamespace>,
-    /// Actual render passes whose target is a layer tile (including resumed
-    /// passes). Path intermediate passes are not tile-target passes.
+    /// Actual render passes targeting layer tiles.
     pub tile_raster_passes: u64,
     pub instance_upload_calls: u64,
     pub instance_upload_bytes: u64,
@@ -206,18 +206,18 @@ impl FlowFrameState {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         commands: wgpu::CommandBuffer,
-    ) -> Result<()> {
+    ) -> Result<wgpu::SubmissionIndex> {
         let errors = GpuErrors::new(device, self.enabled());
         if self.enabled() {
             self.failure.set(Some(FlowFailureStage::Submission));
         }
-        queue.submit(std::iter::once(commands));
+        let submission = queue.submit(std::iter::once(commands));
         if let Err(error) = errors.check() {
             self.fail(FlowFailureStage::Submission);
             return Err(error);
         }
         self.submitted();
-        Ok(())
+        Ok(submission)
     }
     #[cfg(all(feature = "flow-headless", not(target_family = "wasm")))]
     pub(crate) fn readback_completed(&mut self) {
@@ -259,10 +259,10 @@ pub(crate) fn begin_frame(state: &mut FrameState) {
 
 impl crate::WgpuRenderer {
     pub fn flow_execution_receipt(&self) -> Option<&FlowExecutionReceipt> {
-        self.fast_frame.flow.receipt.as_ref()
+        self.core()?.fast_frame.flow.receipt.as_ref()
     }
     pub fn flow_failure_stage(&self) -> Option<FlowFailureStage> {
-        self.fast_frame.flow.failure.get()
+        self.core()?.fast_frame.flow.failure.get()
     }
 }
 
@@ -369,8 +369,10 @@ mod tests {
         let mut state = FrameState::default();
         let (_, empty) = with_flow_layer_namespace_receipt(namespace, || {});
         assert!(empty.is_none());
+        let (_, unavailable) = with_flow_layer_namespace_receipt(namespace, || begin_draw(None));
+        assert!(unavailable.is_none());
         let (_, one) = with_flow_layer_namespace_receipt(namespace, || {
-            begin_draw(&mut state);
+            begin_draw(Some(&mut state));
             state.flow.upload(256);
             state.flow.submitted();
         });
@@ -378,23 +380,23 @@ mod tests {
         assert_eq!(one.namespace, Some(namespace));
         assert!(!one.readback_completed);
         let (_, multiple) = with_flow_layer_namespace_receipt(namespace, || {
-            begin_draw(&mut state);
+            begin_draw(Some(&mut state));
             state.flow.submitted();
-            begin_draw(&mut state); // The second draw never submits.
+            begin_draw(None); // The second draw has no core and never submits.
         });
         assert!(multiple.is_none());
         let (_, failed) = with_flow_layer_namespace_receipt(namespace, || {
-            begin_draw(&mut state);
+            begin_draw(Some(&mut state));
             state.flow.submitted();
             state.flow.fail(FlowFailureStage::Readback);
         });
         assert!(failed.is_none());
         let (_, nested) = with_flow_layer_namespace_receipt(namespace, || {
-            begin_draw(&mut state);
+            begin_draw(Some(&mut state));
             state.flow.submitted();
             let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 with_flow_layer_namespace_receipt(namespace, || {
-                    begin_draw(&mut state);
+                    begin_draw(Some(&mut state));
                     panic!("nested draw failed");
                 })
             }));

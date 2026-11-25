@@ -1,8 +1,37 @@
-# 独立 GPUI 组件：从一个节点到完整画布
+# 画布与 GPUI 组件
 
-`gpui-flow` 的 UI 不是只有 `FlowCanvas` 一个入口。`components/` 中每个公共组件都有自己的源文件，并实现 GPUI 的 `RenderOnce` / `IntoElement`。节点内容位于 `nodes/`，每类节点一个文件。你可以只使用一个节点外壳、一个端口、一个缩略图，或者把它们组合成自己的编辑器。
+从 `gpui_flow::components` 导入 `FlowCanvas`、`SceneView` 和外围控件。画布是有状态的 GPUI Entity，由宿主挂到 `.child(...)`。按钮、节点外壳、端口和缩略图是由宿主传入状态与回调的 GPUI 控件。
 
-所有交互状态都由宿主管理：这些组件不会偷偷创建 `Editor`、后台任务、供应商客户端或全局单例。`FlowCanvas` 是这些组件与 core/runtime 的一个集成实现，实际节点、侧栏、工具栏、缩略图都使用同一套公开组件。
+## 对外画布 API
+
+画布根和容器采用 LeaferJS 的父子模型。`add` 接收待挂载的数据，`find_id` 在当前画布查找，`children` 查询直属子级，`remove` 从所属画布移除对象。`SceneView` 还提供 `add_child` 和 `parent`，用 `Group`、`Box` 或 `Frame` 组织图形子树。[LeaferJS 容器](https://www.leaferjs.com/ui/en/reference/display/Group.html) · [按 ID 查找](https://www.leaferjs.com/ui/en/reference/UI/id.html)
+
+| 操作 | 流程画布 | 图形画布 |
+| --- | --- | --- |
+| 挂载到 GPUI | `FlowCanvas::mount(document, cx)` | `SceneView::mount(scene, cx)` |
+| 添加到根 | `add(node, cx)` | `add(object, cx)` |
+| 查询 | `find_id(&id)`、`children()`、`node(&handle)` | `find_id(&id)`、`children(parent)`、`object(handle)` |
+| 嵌套 | 图节点在所属画布内显示，`NodeRenderer` 提供节点内容 | `add_child(parent, object, cx)`、`parent(handle)` |
+| 编辑 | `select(&handle, cx)`、`remove(&handle, cx)` | `select(handle, cx)`、`remove(handle, cx)` |
+
+`FlowCanvas::mount` 使用 canvas-only 布局。用 `register_node_renderer` 为当前画布注册节点内容，用 `set_options` 调整外围控件。`NodeFrame` 等独立控件可用于宿主自己的布局。挂载后的流程节点和场景元素以句柄引用，由所属画布渲染和编辑。两块画布可以使用相同 ID，跨画布句柄会被拒绝。
+
+宿主可通过 `FlowCanvas::agent_snapshot()` 和 `apply_agent_edit(request, cx)` 读取和批量编辑当前流程画布，见 [Agent 操作与 JSON Schema](agent-canvas.md)。
+
+`SceneView::mount_with_profile(scene, LeaferCompatibilityProfile, cx)` 启用已有的有界 Leafer 鼠标、拖动、缩放和文本编辑行为。布局与容器绘制仍使用文档中显式设置的属性，适配范围见[兼容任务表](leafer-task-ledger.md)。
+
+## 同窗双画布
+
+[同窗示例](../examples/studio/src/bin/dual_canvas.rs)分别创建两块流程画布或两块图形画布。两侧故意使用相同 ID。可分别点击、删除和撤销，也可运行验证模式自动检查选区、撤销、父子关系和外来句柄拒绝。
+
+```bash
+cargo run --locked -p flow-studio --bin dual_canvas
+cargo run --locked -p flow-studio --bin dual_canvas -- --scene
+cargo run --locked -p flow-studio --bin dual_canvas -- --verify
+cargo run --locked -p flow-studio --bin dual_canvas -- --scene --verify
+```
+
+## 独立控件组合
 
 可运行的完整示例：[composition.rs](../examples/studio/src/bin/composition.rs)。左侧卡片完全独立，右侧把 `canvas_only` 画布嵌入自定义宿主界面，并注册自己的结果节点 renderer。
 

@@ -588,3 +588,54 @@ fn rejects_overflowing_aggregate_bounds() {
         .insert(NodeId::from("b"), Node::new("b", "B", Point::new(2e38, 0.)));
     assert!(graph.validate().is_err());
 }
+
+#[test]
+fn document_byte_count_matches_pretty_json_with_multibyte_and_escaped_text() {
+    let mut document = editor().document();
+    document.graph.data = json!({"text": "猫\n\"quoted\""});
+    let size = document.to_json().unwrap().len();
+    assert!(document.validate_json_size(size).is_ok());
+    assert_eq!(
+        document.validate_json_size(size - 1),
+        Err(GraphError::DocumentTooLarge {
+            max_bytes: size - 1
+        })
+    );
+}
+
+#[test]
+fn sized_import_uses_its_camera_and_history_cannot_exceed_the_limit() {
+    let mut before = editor().document();
+    before.viewport.pan.x = 12345.;
+    let mut imported = before.clone();
+    imported.viewport = Viewport::default();
+    imported.graph.data = json!("abcde");
+    let max_bytes = before.to_json().unwrap().len();
+    assert!(imported.validate_json_size(max_bytes).is_ok());
+    let mut editor = Editor::from_document(before.clone()).unwrap();
+    editor.set_document_byte_limit(max_bytes).unwrap();
+
+    let mismatched = FlowDocument {
+        graph: imported.graph.clone(),
+        viewport: before.viewport,
+    };
+    assert_eq!(
+        editor.import_document(mismatched, "Import"),
+        Err(GraphError::DocumentTooLarge { max_bytes })
+    );
+    assert_eq!(editor.document(), before);
+    assert!(!editor.can_undo());
+
+    editor.import_document(imported.clone(), "Import").unwrap();
+    assert!(editor.undo());
+    editor.set_viewport(before.viewport).unwrap();
+    assert_eq!(
+        editor.try_redo(),
+        Err(GraphError::DocumentTooLarge { max_bytes })
+    );
+    assert!(editor.can_redo());
+    assert_eq!(editor.document(), before);
+    editor.set_viewport(imported.viewport).unwrap();
+    assert!(editor.redo());
+    assert_eq!(editor.document(), imported);
+}

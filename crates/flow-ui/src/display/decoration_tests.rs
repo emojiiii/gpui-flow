@@ -33,7 +33,7 @@ fn request(decoration: D) -> TextRasterRequest {
     }
 }
 fn plan(r: &TextRasterRequest) -> gpui_flow_text::gpui_decoration::DecorationLayout {
-    let app = gpui_kit::platform::headless();
+    let app = gpui::Application::with_platform(crate::display::native_text_test_platform());
     let system = WindowTextSystem::new(app.text_system());
     let shaped = shape_text_in_box(
         &system,
@@ -119,7 +119,7 @@ fn decoration_alignment_and_overflow_follow_presented_rows() {
 #[test]
 fn decoration_raster_adds_real_ink_and_empty_rows_stay_empty() {
     let (_app, bridge) =
-        GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+        GpuiTextRasterizer::application(crate::display::native_text_test_platform());
     let plain = raster(&bridge, &request(D::None));
     let under = raster(&bridge, &request(D::Underline));
     let both = raster(&bridge, &request(D::UnderlineStrikethrough));
@@ -144,7 +144,8 @@ fn decoration_raster_adds_real_ink_and_empty_rows_stay_empty() {
 }
 #[test]
 fn decoration_plan_memory_and_pixel_work_fail_without_a_partial_result() {
-    let (app, bridge) = GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let (app, bridge) =
+        GpuiTextRasterizer::application(crate::display::native_text_test_platform());
     let r = request(D::UnderlineStrikethrough);
     let shaped = shape_text_in_box(
         &WindowTextSystem::new(app.text_system()),
@@ -193,7 +194,7 @@ fn decoration_plan_memory_and_pixel_work_fail_without_a_partial_result() {
 }
 #[test]
 fn decoration_limits_apply_to_rows_and_glyphs_before_geometry_allocation() {
-    let app = gpui_kit::platform::headless();
+    let app = gpui::Application::with_platform(crate::display::native_text_test_platform());
     let system = WindowTextSystem::new(app.text_system());
     for text in ["\n".repeat(8192), "a".repeat(8193)] {
         let mut r = request(D::Underline);

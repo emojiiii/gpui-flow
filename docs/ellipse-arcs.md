@@ -15,8 +15,7 @@ It uses each Ellipse's actual `to_path()` output, not hand-drawn diagram geometr
 References: upstream [Ellipse component](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/Ellipse.ts),
 [UI closed default](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/UI.ts),
 and [core arc conversion](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/path/src/BezierHelper.ts).
-The implementation reuses locked Kurbo 0.11.3; upstream implementation code was
-not copied.
+The implementation uses Kurbo for arc geometry.
 
 - Existing `Ellipse::new(width, height)` / `circle(radius)` still make a full oval.
   Old JSON containing only `size` defaults to `start_angle=0`, `end_angle=0`,

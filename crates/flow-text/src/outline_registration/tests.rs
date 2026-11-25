@@ -43,8 +43,8 @@ struct ModelBackend {
     trace: Arc<Mutex<Trace>>,
     expected: Vec<Arc<PreparedFont>>,
     database: HashMap<String, FontId>,
-    // Like the pinned native cache: both absent and present results are sticky,
-    // keys include features/fallback option, and exclude weight and style.
+    // Like the pinned native family cache: adding fonts clears entries, and
+    // the key includes features and fallback options but excludes weight/style.
     cache: HashMap<FamilyKey, Option<FontId>>,
     fault: Fault,
     add_calls: usize,
@@ -97,6 +97,7 @@ impl Backend for ModelBackend {
     }
     fn add_font(&mut self, bytes: &[u8]) -> Result<(), String> {
         self.fail(RegistrationPhase::Register)?;
+        self.cache.clear();
         let expected = &self.expected[self.add_calls];
         assert_eq!(
             bytes,
@@ -291,26 +292,17 @@ fn only_exact_outer_absence_error_is_accepted() {
 }
 
 #[test]
-fn none_probe_does_not_poison_some_empty_but_weight_changes_cannot_repair_a_key() {
+fn registration_refreshes_the_family_cache_for_probe_and_live_descriptors() {
     let requests = requests(1);
     let mut backend = ModelBackend::new(&requests, Fault::None);
-    let mut probe = gpui::font(requests[0].font.private_alias().to_owned());
-    assert_eq!(backend.font_id(&probe).unwrap_err(), ABSENT);
-    backend.add_font(requests[0].font.bytes()).unwrap();
-    probe.weight = FontWeight::BOLD;
-    assert_eq!(backend.font_id(&probe).unwrap_err(), ABSENT);
-    probe.fallbacks = Some(FontFallbacks::default());
-    assert_eq!(backend.font_id(&probe).unwrap(), FontId(7));
-
-    let requests = self::requests(1);
-    let mut backend = ModelBackend::new(&requests, Fault::None);
-    let mut live = gpui::font(requests[0].font.private_alias().to_owned());
+    let probe = gpui::font(requests[0].font.private_alias().to_owned());
+    let mut live = probe.clone();
     live.fallbacks = Some(FontFallbacks::default());
+    assert_eq!(backend.font_id(&probe).unwrap_err(), ABSENT);
     assert_eq!(backend.font_id(&live).unwrap_err(), ABSENT);
     backend.add_font(requests[0].font.bytes()).unwrap();
-    live.weight = FontWeight::BOLD;
-    live.style = gpui::FontStyle::Italic;
-    assert_eq!(backend.font_id(&live).unwrap_err(), ABSENT);
+    assert_eq!(backend.font_id(&probe).unwrap(), FontId(7));
+    assert_eq!(backend.font_id(&live).unwrap(), FontId(7));
 }
 
 #[test]

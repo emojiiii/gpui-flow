@@ -6,6 +6,7 @@ pub use accessibility::{SceneAccessibility, SceneAccessibilityIssue};
 mod canvas_commands;
 mod compatibility;
 pub use compatibility::{LeaferCompatibilityProfile, LeaferPlainContainerContext};
+mod component;
 mod composite;
 pub(crate) mod export;
 mod flow_layout;

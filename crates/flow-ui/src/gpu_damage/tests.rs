@@ -255,60 +255,78 @@ fn unsupported_or_foreign_layers_stay_unmodified_native_input() {
     assert!(fallback.key.is_none());
 }
 
-fn path_source(key: &FrameKey, vertices: usize) -> g::Scene {
+fn path_source(key: &FrameKey) -> g::Scene {
     let mut scene = source(key);
-    let bounds = scene.quads[0].bounds;
-    let mut path = g::Path::new(point(px(0.), px(0.))).scale(1.);
-    path.bounds = bounds;
-    path.content_mask = ContentMask { bounds };
-    path.vertices = vec![
-        g::PathVertex {
-            xy_position: bounds.origin,
-            st_position: point(0., 0.),
-            content_mask: ContentMask { bounds },
-        };
-        vertices
-    ];
-    scene.insert_primitive(path);
+    let canvas = key.viewport.canvas_bounds;
+    let mut path = PathBuilder::fill();
+    path.move_to(point(px(20.), px(20.)));
+    path.line_to(point(px(90.), px(40.)));
+    path.line_to(point(px(55.), px(100.)));
+    path.close();
+    scene.insert_primitive(PaintedPath::new(
+        path.build().unwrap(),
+        key.viewport.device_scale,
+        ContentMask {
+            bounds: Bounds::new(
+                point(px(canvas.origin.x), px(canvas.origin.y)),
+                size(px(canvas.size.width), px(canvas.size.height)),
+            ),
+        },
+        rgb(0xf5c232).into(),
+    ));
     scene.finish();
     scene
 }
 
 #[test]
 fn path_tile_fanout_and_multi_view_uploads_share_one_window_budget() {
-    let mut large = key(1);
-    large.viewport.canvas_bounds.size = WSize::new(4096., 2048.);
-    large.viewport.content_mask = large.viewport.canvas_bounds;
-    let fallback = Cache::default().prepare(
-        path_source(&large, 262_143),
-        large,
+    let a = key(1);
+    let first = Cache::default().prepare(
+        path_source(&a),
+        a.clone(),
         &Damage::new(1),
         LayerKey(1),
         true,
         Admission::budget(32),
+    );
+    assert!(first.key.is_some());
+    assert_eq!(first.admission.tiles, 2);
+    let without_path = Cache::default().prepare(
+        source(&a),
+        a.clone(),
+        &Damage::new(1),
+        LayerKey(1),
+        true,
+        Admission::budget(32),
+    );
+    // A path adds an operation and its packed curve/tile records.
+    assert!(first.admission.upload_bytes > without_path.admission.upload_bytes + 2 * 512);
+    let mut remaining = Admission {
+        tiles: 32,
+        upload_bytes: first.admission.upload_bytes * 2 - 1,
+    };
+    let mut large = key(1);
+    large.viewport.canvas_bounds.size = WSize::new(4096., 2048.);
+    large.viewport.content_mask = large.viewport.canvas_bounds;
+    let fallback = Cache::default().prepare(
+        path_source(&large),
+        large,
+        &Damage::new(1),
+        LayerKey(2),
+        true,
+        remaining,
     );
     assert_eq!(
         fallback.fallback,
         Some("window tile-expanded upload budget exceeded")
     );
     assert!(fallback.scene.layers.frames.is_empty());
-    assert_eq!(fallback.scene.paths[0].vertices.len(), 262_143);
+    assert_eq!(fallback.scene.paths.len(), 1);
 
     // Two otherwise eligible views must not each spend the full allowance.
-    let a = key(1);
-    let mut remaining = Admission::budget(32);
-    let first = Cache::default().prepare(
-        path_source(&a, 120_000),
-        a.clone(),
-        &Damage::new(1),
-        LayerKey(2),
-        true,
-        remaining,
-    );
-    assert!(first.key.is_some());
     remaining.consume(first.admission);
     let second = Cache::default().prepare(
-        path_source(&a, 120_000),
+        path_source(&a),
         a,
         &Damage::new(1),
         LayerKey(3),
@@ -320,5 +338,5 @@ fn path_tile_fanout_and_multi_view_uploads_share_one_window_budget() {
         Some("window tile-expanded upload budget exceeded")
     );
     assert_eq!(second.admission.tiles, 0);
-    assert_eq!(second.scene.paths[0].vertices.len(), 120_000);
+    assert_eq!(second.scene.paths.len(), 1);
 }

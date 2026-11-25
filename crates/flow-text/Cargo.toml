@@ -20,9 +20,9 @@ unicode-segmentation = { version = "=1.13.3", optional = true }
 
 # CPU-only outline preparation; no platform font system or independent shaper.
 ttf-parser = { version = "=0.25.1", default-features = false, features = ["std"], optional = true }
-sha2 = { version = "=0.10.9", optional = true }
-getrandom = { version = "=0.3.4", optional = true }
+sha2 = { version = "=0.11.1", optional = true }
+getrandom = { version = "=0.4.3", optional = true }
 
-# Same explicit source identity as workspace GPUI and the controlled backend.
+# Same published platform package as the workspace, with only the selected backend.
 [target.'cfg(target_os = "linux")'.dependencies]
-gpui_platform = { git = "https://github.com/longbridge/gpui-fast", rev = "26b0dccc97ebd14bbf9715741b6688132ba69491", default-features = false, optional = true }
+gpui_platform = { package = "gpui-fast-platform", version = "=0.1.19", default-features = false, optional = true }

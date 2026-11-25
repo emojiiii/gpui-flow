@@ -514,3 +514,89 @@ fn scene_plugin_replacement_cancels_even_unrelated_active_behavior() {
     );
     assert!(!editor.editing());
 }
+
+struct RewriteChildId;
+impl CanvasPlugin<SceneEditor, SceneCommand> for RewriteChildId {
+    fn id(&self) -> &str {
+        "rewrite-child-id"
+    }
+
+    fn priority(&self) -> i32 {
+        0
+    }
+
+    fn filter_command(
+        &mut self,
+        command: &mut SceneCommand,
+        _: &PluginContext<'_, SceneEditor>,
+        _: &mut Vec<CanvasEffect>,
+    ) -> Result<(), String> {
+        if let SceneCommand::AddObject { object, .. } = command {
+            object.id = "rewritten".into();
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn checked_scene_command_rejects_middleware_identity_rewrite_before_editing() {
+    let mut editor = editor();
+    let mut host = ScenePluginHost::with_defaults();
+    host.install(RewriteChildId).unwrap();
+    let before = editor.scene().clone();
+    let revision = editor.engine.revision();
+    let result = host.execute_checked(
+        &mut editor,
+        SceneCommand::AddObject {
+            object: DisplayObject::new("child", d::Rect::new(20.0, 20.0)),
+            parent: None,
+            index: None,
+        },
+        |command| match command {
+            SceneCommand::AddObject { object, .. } if object.id == "child".into() => Ok(()),
+            _ => Err(InteractionError::InvalidInput(
+                "child ID was changed".into(),
+            )),
+        },
+    );
+    assert!(matches!(result, Err(InteractionError::InvalidInput(_))));
+    assert_eq!(editor.scene(), &before);
+    assert_eq!(editor.engine.revision(), revision);
+    assert!(!editor.can_undo());
+}
+
+#[test]
+fn remove_object_undoes_only_its_own_scene_and_preserves_unrelated_selection() {
+    let mut scene = editor().scene().clone();
+    scene
+        .insert(DisplayObject::new("group", d::Group::new()), None, None)
+        .unwrap();
+    scene
+        .insert(
+            DisplayObject::new("child", d::Rect::new(20.0, 20.0)),
+            Some("group".into()),
+            None,
+        )
+        .unwrap();
+    let mut left = SceneEditor::new(scene.clone()).unwrap();
+    let right = SceneEditor::new(scene.clone()).unwrap();
+    let group = left.engine.handle(&"group".into()).unwrap();
+    assert!(right.engine.attached_id(group).is_err());
+    left.selection.select("a".into(), false);
+    let selection = left.selection.clone();
+    let mut host = ScenePluginHost::with_defaults();
+    let report = host
+        .execute(&mut left, SceneCommand::RemoveObject { id: "group".into() })
+        .unwrap();
+    assert!(report.document_changed);
+    assert!(!report.selection_changed);
+    assert!(left.engine.attached_id(group).is_err());
+    assert!(left.scene().get(&"child".into()).is_none());
+    assert_eq!(left.selection, selection);
+    assert!(left.can_undo());
+    assert!(!right.can_undo());
+    assert_eq!(right.scene(), &scene);
+    host.execute(&mut left, SceneCommand::Undo).unwrap();
+    assert_eq!(left.scene(), &scene);
+    assert!(left.can_redo());
+}

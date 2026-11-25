@@ -109,8 +109,8 @@ Pinned official Leafer plugin revision:
   **This adapter rejects wrapped ratio allocation rather than approximating that
   order.** It does not claim upstream wrap/grow or full alignment-pass equivalence
 
-Taffy 0.13.0 is already the pinned numeric allocator and remains unchanged.
-Its [`Style::aspect_ratio`](https://docs.rs/taffy/0.13.0/taffy/style/struct.Style.html)
+Taffy is the numeric allocator in the per-line adapter.
+Its [`Style::aspect_ratio`](https://docs.rs/taffy/0.15.1/taffy/style/struct.Style.html)
 is a CSS preferred-size relationship. The inspected `flexbox.rs` functions
 `generate_anonymous_flex_items`, `determine_hypothetical_cross_size` and
 `determine_used_cross_size` resolve definite sizes, transfer min/max and allow

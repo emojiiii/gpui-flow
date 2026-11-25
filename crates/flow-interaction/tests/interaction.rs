@@ -218,6 +218,7 @@ fn readonly_blocks_every_edit_command_including_history_paste_and_input() {
     let before = editor.graph().clone();
     for command in [
         CanvasCommand::AddNode(Node::new("extra", "Extra", Point::ZERO)),
+        CanvasCommand::RemoveNode { node: "a".into() },
         CanvasCommand::DeleteSelection,
         CanvasCommand::GroupSelection {
             title: "group".into(),
@@ -237,7 +238,8 @@ fn readonly_blocks_every_edit_command_including_history_paste_and_input() {
             node: "a".into(),
             data: json!({"text":"blocked"}),
         },
-        CanvasCommand::LoadDocument(document),
+        CanvasCommand::LoadDocument(document.clone()),
+        CanvasCommand::ImportDocument(document),
         CanvasCommand::ImportGraph(Graph::new()),
         CanvasCommand::BeginGesture {
             label: "blocked".into(),
@@ -250,6 +252,29 @@ fn readonly_blocks_every_edit_command_including_history_paste_and_input() {
     }
     assert_eq!(editor.graph(), &before);
     assert_eq!(editor.history_len(), 0);
+}
+#[test]
+fn remove_node_keeps_other_selection_and_restores_incident_edges_on_undo() {
+    let mut host = PluginHost::with_defaults();
+    let mut graph = editor().graph().clone();
+    graph
+        .connect("wire", PortRef::new("a", "out"), PortRef::new("b", "in"))
+        .unwrap();
+    let mut editor = Editor::new(graph).unwrap();
+    editor.selection.select_node("b", false);
+    let selected = editor.selection.clone();
+    let report = host
+        .execute(&mut editor, CanvasCommand::RemoveNode { node: "a".into() })
+        .unwrap();
+    assert!(report.document_changed);
+    assert!(!report.selection_changed);
+    assert_eq!(editor.selection, selected);
+    assert!(editor.graph().node(&"a".into()).is_none());
+    assert!(editor.graph().edges.is_empty());
+    assert_eq!(editor.history_len(), 1);
+    assert!(editor.undo());
+    assert!(editor.graph().node(&"a".into()).is_some());
+    assert!(editor.graph().edges.contains_key(&"wire".into()));
 }
 #[test]
 fn readonly_navigation_selection_are_independently_configurable() {
@@ -569,6 +594,22 @@ impl CanvasPlugin for Escalate {
         }
         Ok(())
     }
+}
+#[test]
+fn checked_execution_inspects_rewrites_before_they_mutate_the_editor() {
+    let mut host = PluginHost::default();
+    host.install(Escalate).unwrap();
+    let mut editor = editor();
+    editor.selection.select_node("a", false);
+    let before = editor.document();
+    let result = host.execute_checked(&mut editor, CanvasCommand::SelectAll, |filtered| {
+        assert_eq!(filtered, &CanvasCommand::DeleteSelection);
+        Err::<(), _>(InteractionError::InvalidInput("changed operation".into()))
+    });
+    assert!(matches!(result, Err(InteractionError::InvalidInput(_))));
+    assert_eq!(editor.document(), before);
+    assert!(editor.selection.nodes.contains(&"a".into()));
+    assert!(!editor.can_undo());
 }
 #[test]
 fn middleware_cannot_bypass_readonly_by_rewriting_allowed_commands() {

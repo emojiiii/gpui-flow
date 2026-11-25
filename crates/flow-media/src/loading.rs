@@ -92,7 +92,7 @@ impl ResourceLoadPool {
             ));
         }
         let id = NEXT_POOL
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_add(1))
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_add(1))
             .map_err(|_| MediaError::ResourceLimit("load pool identity exhausted".into()))?;
         Ok(Self(Arc::new(Pool {
             id,

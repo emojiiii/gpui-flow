@@ -1,4 +1,4 @@
-//! Private, headless Taffy 0.13.0 adapter for one already-formed Flow line.
+//! Private, headless Taffy adapter for one already-formed Flow line.
 //!
 //! Taffy owns ordinary grow/max redistribution, item spacing, safe alignment,
 //! and cross-axis stretch/clamping. It never receives Scene IDs or text backends.
@@ -14,23 +14,15 @@
 //! represented safely by Taffy's f32 kernel, retain the previous small f64 path.
 //! This is deliberate bounded reuse, not a complete CSS/Leafer equivalence claim.
 //!
-//! Source checked: taffy 0.13.0 Cargo.toml (MIT; std/taffy_tree/flexbox features),
-//! src/tree/taffy_tree.rs (new_leaf/new_with_children/disable_rounding/layout),
-//! src/compute/flexbox.rs::resolve_flexible_lengths, and
-//! src/style/alignment.rs (SAFE_CENTER/SAFE_END). The package archive SHA-256 is
-//! c034e05f6ee85a12daa63863c2245797715075c70649947aa0da54f3f2ab1d0f
-//! (matches the existing lockfile); the inspected source files match that archive.
-//! License: https://github.com/DioxusLabs/taffy/blob/v0.13.0/LICENSE
-//! Runtime regressions are UNRUN. Taffy computes in f32 instead of the previous
-//! f64 accumulator; ordinary fractional allocations may differ by float rounding.
-//! Compilation, fixed-point convergence, and performance still need verification.
+//! Taffy computes in f32, so ordinary fractional allocations can differ from
+//! the f64 fallback by float rounding.
 use super::{Line, invalid};
 use crate::{AlignItems, FlowError, FlowStyle, JustifyContent};
 use gpui_flow_scene::DisplayId;
 use taffy::prelude::{
     AlignItems as TaffyAlign, AvailableSpace, Dimension, Display, FlexDirection, FlexWrap,
-    FromLength, JustifyContent as TaffyJustify, LengthPercentage, Size, Style, TaffyAuto,
-    TaffyTree,
+    FromLength, JustifyContent as TaffyJustify, LengthPercentage, LengthPercentageAuto, Size,
+    Style, TaffyAuto, TaffyTree,
 };
 
 pub(super) struct Position {
@@ -95,8 +87,8 @@ pub(super) fn solve(
                 },
                 // Explicit minima suppress CSS's automatic min-content minimum.
                 min_size: Size {
-                    width: Dimension::from_length(item.main as f32),
-                    height: Dimension::from_length(item.cross_min as f32),
+                    width: LengthPercentageAuto::from_length(item.main as f32),
+                    height: LengthPercentageAuto::from_length(item.cross_min as f32),
                 },
                 max_size: Size {
                     width: limit(item.main_max),
@@ -120,8 +112,8 @@ pub(super) fn solve(
                     height: Dimension::from_length(line.cross as f32),
                 },
                 min_size: Size {
-                    width: Dimension::from_length(0.0),
-                    height: Dimension::from_length(0.0),
+                    width: LengthPercentageAuto::from_length(0.0),
+                    height: LengthPercentageAuto::from_length(0.0),
                 },
                 flex_direction: FlexDirection::Row,
                 flex_wrap: FlexWrap::NoWrap,
@@ -130,13 +122,13 @@ pub(super) fn solve(
                     width: LengthPercentage::from_length(style.gap),
                     height: LengthPercentage::from_length(0.0),
                 },
-                justify_content: Some(match style.justify {
+                justify_content: match style.justify {
                     JustifyContent::Start => TaffyJustify::START,
                     JustifyContent::Center => TaffyJustify::SAFE_CENTER,
                     JustifyContent::End => TaffyJustify::SAFE_END,
                     JustifyContent::SpaceBetween => TaffyJustify::SPACE_BETWEEN,
-                }),
-                align_items: Some(TaffyAlign::START),
+                },
+                align_items: TaffyAlign::START,
                 ..Default::default()
             },
             &children,
@@ -184,11 +176,11 @@ fn alignment(align: AlignItems) -> TaffyAlign {
         AlignItems::Stretch => TaffyAlign::STRETCH,
     }
 }
-fn limit(value: f64) -> Dimension {
+fn limit(value: f64) -> LengthPercentageAuto {
     if value.is_finite() {
-        Dimension::from_length(value as f32)
+        LengthPercentageAuto::from_length(value as f32)
     } else {
-        Dimension::AUTO
+        LengthPercentageAuto::AUTO
     }
 }
 fn representable(line: &Line, available: f64, gap: f32) -> bool {

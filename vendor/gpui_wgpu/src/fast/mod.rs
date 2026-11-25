@@ -1,3 +1,4 @@
+// Modified by Longbridge for gpui-fast.
 //! Everything gpui-fast adds to the wgpu renderer lives under this module.
 //!
 //! The rest of this crate is kept as close to upstream GPUI (Zed's
@@ -7,17 +8,23 @@
 //! call to it. The logic itself — data structures, algorithms, bookkeeping,
 //! tests — is written here, one file per topic.
 
-// This private upstream cache used its workspace type_complexity allowance.
+pub(crate) mod atlas;
 #[allow(clippy::type_complexity)]
 pub(crate) mod bind_groups;
 #[cfg(not(target_family = "wasm"))]
 pub(crate) mod composition;
+pub(crate) mod dynamic_textures;
+pub(crate) mod emoji_fonts;
+#[cfg(all(feature = "flow-headless", not(target_family = "wasm")))]
+pub(crate) mod flow_headless;
+pub(crate) mod flow_namespace;
 pub(crate) mod frame;
 pub(crate) mod globals;
 #[allow(clippy::chunks_exact_to_as_chunks)]
 pub(crate) mod layers;
+pub(crate) mod native_gl;
 pub(crate) mod pass_state;
-
-#[cfg(all(feature = "flow-headless", not(target_family = "wasm")))]
-pub(crate) mod flow_headless;
-pub(crate) mod flow_namespace;
+pub(crate) mod rounded_clip;
+pub(crate) mod synthetic_italic;
+#[cfg(not(target_family = "wasm"))]
+pub(crate) mod wgpu_context;

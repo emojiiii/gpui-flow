@@ -10,12 +10,6 @@ pub(crate) struct SurfaceElement {
     pub viewport: Viewport,
     pub eligible: bool,
 }
-impl IntoElement for SurfaceElement {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
-}
 impl Element for SurfaceElement {
     type RequestLayoutState = ();
     type PrepaintState = ();

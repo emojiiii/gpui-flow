@@ -920,12 +920,6 @@ struct SemanticElement {
     disabled: bool,
     read_only: bool,
 }
-impl IntoElement for SemanticElement {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
-}
 impl Element for SemanticElement {
     type RequestLayoutState = <Stateful<Div> as Element>::RequestLayoutState;
     type PrepaintState = <Stateful<Div> as Element>::PrepaintState;

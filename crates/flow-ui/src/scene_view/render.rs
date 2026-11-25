@@ -749,7 +749,7 @@ impl Render for SceneView {
                     MouseButton::Right,
                     cx.listener(|this, event, _, cx| this.outside_up(event, cx)),
                 )
-                .on_scroll_wheel(cx.listener(|this, event, _, cx| this.scroll(event, cx)))
+                .on_scroll(cx.listener(|this, event, _, cx| this.scroll(event, cx)))
                 .on_key_down(cx.listener(|this, event, window, cx| {
                     if this.focus.is_focused(window) {
                         this.key(event, window, cx);

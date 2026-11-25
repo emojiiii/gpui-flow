@@ -4,18 +4,17 @@ use gpui::{self as g, *};
 use gpui_flow_composite::RasterViewport;
 use gpui_flow_engine::ChangeSet;
 use gpui_flow_scene::{Affine, Bounds as WorldBounds};
-use std::{collections::BTreeSet, rc::Rc};
+use std::{collections::BTreeSet, mem::size_of_val, rc::Rc};
 
 pub(crate) const TILE: u32 = 512;
 pub(crate) const MAX_TILES: usize = 32;
 const MAX_OPERATIONS: usize = 4096;
-const MAX_VERTICES: usize = 262_144;
+const MAX_PATH_RECORDS: usize = 262_144;
 const MAX_EXPANDED_UPLOAD_BYTES: usize = 48 * 1024 * 1024;
 
 /// Conservative window-wide tiled upload allowance, not a VRAM measurement.
-/// The pinned backend uses 104-byte raster vertices; 128 per vertex and 512
-/// per operation leave room for instances, sprites and alignment. Every input
-/// is charged to every visible tile, even when clipping avoids actual work.
+/// Charge GPUI's packed path data and room for instances, sprites and alignment
+/// to every visible tile, even when clipping avoids actual work.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct Admission {
     pub tiles: usize,
@@ -29,12 +28,30 @@ impl Admission {
         }
     }
     fn expanded(source: &g::Scene, tiles: usize) -> Option<Self> {
-        let vertices = source
-            .paths
-            .iter()
-            .try_fold(0usize, |total, path| total.checked_add(path.vertices.len()))?;
-        let bytes = vertices
-            .checked_mul(128)?
+        let mut paints = Vec::new();
+        let mut curves = Vec::new();
+        let mut path_tiles = Vec::new();
+        let mut path_records = 0usize;
+        let mut path_bytes = 0usize;
+        for path in &source.paths {
+            // GPUI exposes its packed curve data through append_to. Keep only
+            // one source path's staging data while checking the cumulative cost.
+            path.append_to(&mut paints, &mut curves, &mut path_tiles);
+            path_records = path_records
+                .checked_add(curves.len())?
+                .checked_add(path_tiles.len())?;
+            if path_records > MAX_PATH_RECORDS {
+                return None;
+            }
+            path_bytes = path_bytes
+                .checked_add(size_of_val(paints.as_slice()))?
+                .checked_add(size_of_val(curves.as_slice()))?
+                .checked_add(size_of_val(path_tiles.as_slice()))?;
+            paints.clear();
+            curves.clear();
+            path_tiles.clear();
+        }
+        let bytes = path_bytes
             .checked_add(source.len().checked_mul(512)?)?
             .checked_add(4096)?
             .checked_mul(tiles)?
@@ -165,12 +182,18 @@ impl Cache {
             || !source.subpixel_sprites.is_empty()
             || !source.polychrome_sprites.is_empty()
             || !source.surfaces.is_empty()
+            || !source.native_views.is_empty()
             || !source.shadows.is_empty()
             || !source.underlines.is_empty()
         {
             Some("atlas or effect primitives use the native fallback")
         } else if source.len() > MAX_OPERATIONS
-            || source.paths.iter().map(|p| p.vertices.len()).sum::<usize>() > MAX_VERTICES
+            || source
+                .paths
+                .iter()
+                .map(PaintedPath::tile_count)
+                .sum::<usize>()
+                > MAX_PATH_RECORDS
         {
             Some("GPU input budget exceeded")
         } else {

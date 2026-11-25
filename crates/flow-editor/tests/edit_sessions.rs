@@ -148,6 +148,53 @@ fn document_load_and_engine_replacement_never_restore_old_session() {
     assert!(!editor.undo());
 }
 #[test]
+fn engine_replacement_at_same_revision_revokes_playback() {
+    let mut editor = editor();
+    let token = editor.begin_playback().unwrap();
+    let replacement = SceneEngine::new(Scene::new()).unwrap();
+    assert_eq!(editor.engine.revision(), replacement.revision());
+    editor.engine = replacement;
+
+    assert!(!editor.cancel_playback(token));
+    assert_eq!(*editor.scene(), Scene::new());
+    assert!(editor.begin_playback().is_ok());
+}
+#[test]
+fn engine_replacement_at_same_revision_discards_undo_and_redo() {
+    let mut editor = editor();
+    let handle = editor.engine.handle(&"text".into()).unwrap();
+    for content in ["first", "second"] {
+        editor
+            .set_property(handle, PropertyKey::TextContent, json!(content))
+            .unwrap();
+    }
+    assert!(editor.undo());
+    let mut replacement = SceneEngine::new(Scene::new()).unwrap();
+    replacement
+        .transaction(|scene| {
+            scene.insert(
+                DisplayObject::new("replacement", display::Rect::new(10., 10.)),
+                None,
+                None,
+            )
+        })
+        .unwrap();
+    for _ in 0..2 {
+        replacement
+            .transaction(|scene| {
+                scene.update_object(&"replacement".into(), |object| object.transform.tx += 1.)
+            })
+            .unwrap();
+    }
+    assert_eq!(editor.engine.revision(), replacement.revision());
+    let replacement_scene = replacement.scene().clone();
+    editor.engine = replacement;
+
+    assert!(!editor.undo());
+    assert!(!editor.redo());
+    assert_eq!(editor.scene(), &replacement_scene);
+}
+#[test]
 fn gestures_playback_and_stale_tokens_cannot_share_baselines() {
     let mut editor = editor();
     let handle = editor.engine.handle(&"text".into()).unwrap();

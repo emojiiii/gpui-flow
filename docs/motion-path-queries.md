@@ -35,7 +35,7 @@ queries instead of installing JavaScript prototype properties or layout hooks.
 
 ## Reuse, precision and limits
 
-The existing locked Kurbo 0.11.3 supplies curve integration, inverse arc length,
+Kurbo supplies curve integration, inverse arc length,
 Bézier evaluation/derivatives, degree elevation and extrema subdivision. No new
 geometry dependency or display-flattening approximation was added.
 

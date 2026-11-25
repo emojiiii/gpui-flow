@@ -7,7 +7,8 @@ use std::{
     path::Path,
     sync::atomic::{AtomicU64, Ordering},
 };
-const MAX_DOCUMENT_BYTES: u64 = 32 * 1024 * 1024;
+/// Maximum size of a FlowDocument file in bytes.
+pub const MAX_DOCUMENT_BYTES: u64 = 32 * 1024 * 1024;
 static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 #[derive(Debug)]
 pub enum PersistenceError {

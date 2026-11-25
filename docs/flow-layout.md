@@ -349,8 +349,8 @@ unsupported. The bounded ratio-lock allocation subset is covered separately belo
 
 ### Reuse and validation boundary
 
-Taffy 0.13.0 continues to compute item sizes, min/max redistribution, and cross-axis
-alignment/stretch. No new solver dependency or replacement allocator was added.
+Taffy computes item sizes, min/max redistribution, and cross-axis alignment and
+stretch.
 The adapter passes zero numeric gap while computing an automatic line, then applies
 a small f64 signed-spacing policy to its main positions. CSS gap semantics are
 non-negative; Leafer's negative Fit gaps require this policy layer. The previous

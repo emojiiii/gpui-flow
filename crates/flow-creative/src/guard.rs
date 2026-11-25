@@ -36,10 +36,11 @@ impl CanvasPlugin for CreativeGuard {
             CanvasCommand::ImportGraph(graph) => {
                 self.0.validate_graph(graph).map_err(|e| e.to_string())?
             }
-            CanvasCommand::LoadDocument(document) => self
-                .0
-                .validate_document(document)
-                .map_err(|e| e.to_string())?,
+            CanvasCommand::LoadDocument(document) | CanvasCommand::ImportDocument(document) => {
+                self.0
+                    .validate_document(document)
+                    .map_err(|e| e.to_string())?;
+            }
             CanvasCommand::Paste { clipboard, .. } => {
                 clipboard.validate().map_err(|e| e.to_string())?;
                 if graph.nodes.len() + clipboard.nodes.len() > MAX_CARDS
@@ -79,9 +80,12 @@ impl CanvasPlugin for CreativeGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::standard_registry;
-    use gpui_flow_core::{Editor, Graph, Group, Point, Rect, Size};
-    use gpui_flow_interaction::PluginHost;
+    use crate::{MAX_JSON_BYTES, standard_registry};
+    use gpui_flow_core::{
+        Editor, FlowDocument, Graph, GraphError, Group, Point, Rect, Size, save_document,
+    };
+    use gpui_flow_interaction::{InteractionError, PluginHost};
+    use serde_json::{Value, json};
     #[test]
     fn duplicate_counts_implicit_frames_from_actual_clipboard() {
         let registry = Arc::new(standard_registry());
@@ -124,5 +128,76 @@ mod tests {
         assert_eq!(editor.document(), before);
         assert_eq!(editor.selection, selection);
         assert!(!editor.undo());
+    }
+
+    #[test]
+    fn full_board_rejects_growing_edits_and_still_saves() {
+        let registry = Arc::new(standard_registry());
+        let mut document = FlowDocument::default();
+        document
+            .graph
+            .add_node(
+                registry
+                    .make_node("text", "one", Point::ZERO, None)
+                    .unwrap(),
+            )
+            .unwrap();
+        document.graph.data = Value::String(String::new());
+        let overhead = document.to_json().unwrap().len();
+        document.graph.data = Value::String("x".repeat(MAX_JSON_BYTES - overhead));
+        let mut editor = Editor::from_document(document.clone()).unwrap();
+        editor.set_document_byte_limit(MAX_JSON_BYTES).unwrap();
+        editor.selection.select_node("one", false);
+        let selection = editor.selection.clone();
+        let revision = editor.document_revision();
+        let mut host = PluginHost::with_defaults();
+        host.install(CreativeGuard(registry.clone())).unwrap();
+
+        for command in [
+            CanvasCommand::AddNode(
+                registry
+                    .make_node("text", "two", Point::ZERO, None)
+                    .unwrap(),
+            ),
+            CanvasCommand::SetNodeData {
+                node: "one".into(),
+                data: json!({"text": "猫\n".repeat(100)}),
+            },
+            CanvasCommand::Paste {
+                clipboard: editor.copy_selection(),
+                offset: Point::new(24., 24.),
+            },
+            CanvasCommand::Duplicate {
+                offset: Point::new(24., 24.),
+            },
+            CanvasCommand::GroupSelection {
+                title: "Frame".into(),
+                padding: 24.,
+            },
+            CanvasCommand::Pan {
+                delta: Point::new(100., 0.),
+            },
+        ] {
+            assert!(matches!(
+                host.execute(&mut editor, command),
+                Err(InteractionError::Graph(GraphError::DocumentTooLarge {
+                    max_bytes: MAX_JSON_BYTES
+                }))
+            ));
+            assert_eq!(editor.document_revision(), revision);
+            assert_eq!(editor.viewport, document.viewport);
+            assert_eq!(editor.graph(), &document.graph);
+            assert_eq!(editor.selection, selection);
+            assert!(!editor.can_undo());
+        }
+
+        let path = std::env::temp_dir().join(format!(
+            "gpui-flow-creative-budget-{}.json",
+            std::process::id()
+        ));
+        save_document(&path, &editor.document()).unwrap();
+        let saved_size = std::fs::metadata(&path).unwrap().len();
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(saved_size, MAX_JSON_BYTES as u64);
     }
 }

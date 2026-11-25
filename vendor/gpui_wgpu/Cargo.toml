@@ -1,32 +1,38 @@
 [package]
-name = "gpui_wgpu"
-version = "0.1.0"
+name = "gpui-fast-wgpu"
+version = "0.1.19"
 edition = "2024"
 publish = false
 autobenches = false
 license = "Apache-2.0"
 
 [lib]
+name = "gpui_wgpu"
 path = "src/gpui_wgpu.rs"
+doctest = false
 
 [features]
 default = []
+bench-support = ["gpui/bench-support", "dep:image"]
 font-kit = ["dep:font-kit"]
+test-support = ["gpui/test-support", "dep:image"]
 # Explicit construction only; no window, surface, alternate shaders, or mock GPU.
 flow-headless = []
 # Requires the original upstream assets/fonts fixtures, not included here.
 upstream-font-tests = []
 
 [dependencies]
-gpui = { git = "https://github.com/longbridge/gpui-fast", rev = "26b0dccc97ebd14bbf9715741b6688132ba69491", default-features = false }
-collections = { git = "https://github.com/longbridge/gpui-fast", rev = "26b0dccc97ebd14bbf9715741b6688132ba69491" }
-gpui_util = { git = "https://github.com/longbridge/gpui-fast", rev = "26b0dccc97ebd14bbf9715741b6688132ba69491" }
+gpui = { package = "gpui-fast", version = "=0.1.19", default-features = false }
+collections = { package = "gpui-pre-collections", version = "=0.3.14" }
+gpui_util = { package = "gpui-pre-util", version = "=0.3.14" }
 anyhow = "1.0.86"
 bytemuck = "1"
 cosmic-text = "0.19.0"
 etagere = "0.2"
+font-kit = { package = "zed-font-kit", version = "0.14.1-zed", optional = true, default-features = false }
+image = { version = "0.25.1", default-features = false, optional = true, features = ["bmp", "dds", "exr", "ff", "gif", "hdr", "ico", "jpeg", "png", "pnm", "qoi", "rayon", "tga", "tiff", "webp"] }
 itertools = "0.14.0"
-log = { version = "0.4.16", features = ["kv_unstable_serde", "serde"] }
+log = { version = "0.4", default-features = false, features = ["std"] }
 parking_lot = "0.12.1"
 profiling = "1"
 raw-window-handle = "0.6"
@@ -34,12 +40,21 @@ smallvec = { version = "1.6", features = ["union", "const_new"] }
 swash = "0.2.6"
 unicode-bidi = { version = "0.3.18", default-features = false, features = ["hardcoded-data"] }
 unicode-segmentation = "1.10"
-wgpu = "29.0.4"
-font-kit = { git = "https://github.com/zed-industries/font-kit", rev = "94b0f28166665e8fd2f53ff6d268a14955c82269", package = "zed-font-kit", version = "0.14.1-zed", optional = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+wgpu = { version = "=30.0.1", default-features = false, features = ["std", "metal", "gles", "vulkan", "wgsl", "webgpu"] }
+
+[target.'cfg(not(any(target_os = "linux", target_os = "freebsd")))'.dependencies]
+wgpu = { version = "=30.0.1" }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
+js-sys = "0.3"
 web-sys = { version = "0.3", features = ["HtmlCanvasElement"] }
-wgpu = { version = "29.0.4", features = ["webgl"] }
+wgpu = { version = "=30.0.1", default-features = false, features = ["webgl"] }
 
 [dev-dependencies]
-naga = { version = "29.0.4", features = ["wgsl-in"] }
+naga = { version = "30.0.1", features = ["wgsl-in"] }
+
+[lints.rust.unexpected_cfgs]
+level = "allow"
+priority = 0

@@ -35,7 +35,7 @@ fn encode(plan: &SceneExportPlan) -> Result<SceneExport, CompositeError> {
 }
 fn png(bytes: &[u8]) -> (u32, u32, Vec<u8>) {
     let mut decoder = png::Decoder::new(Cursor::new(bytes)).read_info().unwrap();
-    let mut rgba = vec![0; decoder.output_buffer_size()];
+    let mut rgba = vec![0; decoder.output_buffer_size().unwrap()];
     let info = decoder.next_frame(&mut rgba).unwrap();
     assert_eq!(info.color_type, png::ColorType::Rgba);
     rgba.truncate(info.buffer_size());

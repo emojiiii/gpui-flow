@@ -1,6 +1,6 @@
 //! Workflow orchestration is separate from individual node execution.
 use super::*;
-use gpui_flow_runtime::{RunContext, RunnerRegistry, Workflow};
+use gpui_flow_runtime::{RunContext, RunnerRegistry, Workflow, WorkflowRecord};
 use serde_json::{Value, json};
 
 impl FlowCanvas {
@@ -20,6 +20,7 @@ impl FlowCanvas {
             concurrency,
         )?;
         workflow.poll();
+        self.workflow_nodes = workflow.graph().nodes.keys().cloned().collect();
         self.workflow = Some(workflow);
         self.message = "Workflow started from frozen graph snapshot".into();
         cx.notify();
@@ -27,6 +28,13 @@ impl FlowCanvas {
     }
     pub fn register_workflow_runner(&mut self, kind: impl Into<String>, runner: impl AgentRunner) {
         self.workflow_runners.insert(kind.into(), Arc::new(runner));
+    }
+
+    pub(super) fn workflow_record(&self, id: &NodeId) -> Option<&WorkflowRecord> {
+        self.workflow
+            .as_ref()
+            .filter(|_| self.workflow_nodes.contains(id))
+            .and_then(|workflow| workflow.records().get(id))
     }
 }
 /// Explicit offline fixture, not an image generator or media decoder. Named media outputs

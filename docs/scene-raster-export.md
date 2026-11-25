@@ -157,7 +157,7 @@ performs those host actions after complete successful export and decode checks.
 
 ## Formats and locked dependencies
 
-- PNG: existing streaming `StaticImage::encode_png`, `png = 0.17.16`, RGBA8
+- PNG: streaming `StaticImage::encode_png`, `png = 0.18.1`, RGBA8
 - JPEG: locked `image = 0.25.10`, quality **1..=100**, explicit **opaque** request
   background required; no silently selected white matte and no alpha-bearing
   JPEG promise. Scene transparency composites against that background; remaining
@@ -166,8 +166,8 @@ performs those host actions after complete successful export and decode checks.
 - WebP: locked `image = 0.25.10` / `image-webp = 0.2.4`, **VP8L lossless only**,
   straight RGBA8. No lossy WebP or WebP quality control is exposed
 
-The only dependency change enables the existing image `jpeg` and `webp`
-features. Default-format bundles remain disabled; `Cargo.lock` is unchanged.
+The image dependency enables its `jpeg` and `webp` features with the default
+format bundle disabled.
 No metadata profile embedding, color-management conversion, animation export,
 or multi-page/multi-frame file is added. Hidden RGB beneath zero alpha is lost
 in the existing premultiplied representation; lossless means lossless relative

@@ -1,18 +1,12 @@
-//! Opt-in surfaceless host adapted from official fast/layers/tests.rs Harness.
-//! Uses exactly the production pipelines, shaders, atlas, and frame recorder.
-use crate::WgpuAtlas;
+//! Opt-in surfaceless host using the production GPU renderer core.
 use crate::fast::flow_namespace::{
     FlowExecutionReceipt, FlowFailureStage, FlowLayerNamespace, GpuErrors,
     with_flow_layer_namespace,
 };
-use crate::fast::frame::{FrameHost, FrameState, FrameTarget};
-use crate::wgpu_renderer::{
-    GammaParams, GlobalParams, RenderingParameters, WgpuBindGroupLayouts, WgpuPipelines,
-    WgpuRenderer,
-};
+use crate::wgpu_renderer::WgpuRendererCore;
+use crate::{WgpuAtlas, WgpuContext};
 use anyhow::{Context as _, Result};
 use gpui::{DevicePixels, Rgba, Scene, Size};
-use std::num::NonZeroU64;
 use std::sync::Arc;
 
 /// A completed native GPU-backend frame, associated with its producer identity.
@@ -23,160 +17,25 @@ pub struct FlowRenderedFrame {
     pub receipt: FlowExecutionReceipt,
 }
 
-const INITIAL_INSTANCE_CAPACITY: u64 = 2 * 1024 * 1024;
-
 /// Draws scenes into textures without a surface, through the renderer's
 /// pipelines and frame recording.
 pub struct FlowHeadlessRenderer {
-    device: Arc<wgpu::Device>,
-    queue: Arc<wgpu::Queue>,
-    format: wgpu::TextureFormat,
-    atlas: WgpuAtlas,
-    pipelines: WgpuPipelines,
-    bind_group_layouts: WgpuBindGroupLayouts,
-    atlas_sampler: wgpu::Sampler,
-    rendering_params: RenderingParameters,
-    globals_buffer: wgpu::Buffer,
-    path_globals_offset: u64,
-    gamma_offset: u64,
-    globals_bind_group: wgpu::BindGroup,
-    path_globals_bind_group: wgpu::BindGroup,
-    instance_buffer: wgpu::Buffer,
-    instance_capacity: u64,
-    instance_alignment: u64,
-    path_targets: Option<PathTargets>,
-    state: FrameState,
+    core: WgpuRendererCore,
     adapter_info: wgpu::AdapterInfo,
     output: Option<wgpu::Texture>,
 }
 
-/// The path intermediate texture, and its multisampled twin, of one size.
-struct PathTargets {
-    size: Size<DevicePixels>,
-    _intermediate: wgpu::Texture,
-    intermediate_view: wgpu::TextureView,
-    _msaa: Option<wgpu::Texture>,
-    msaa_view: Option<wgpu::TextureView>,
-}
-
 impl FlowHeadlessRenderer {
     /// Requests a real adapter/device; lack of an adapter is an error.
-    pub fn new() -> Result<FlowHeadlessRenderer> {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY | wgpu::Backends::GL,
-            flags: wgpu::InstanceFlags::default(),
-            backend_options: wgpu::BackendOptions::default(),
-            memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
-            display: None,
-        });
-        let adapter = gpui::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            compatible_surface: None,
-            force_fallback_adapter: false,
-        }))
-        .context("no usable headless wgpu adapter")?;
-        let (device, queue, dual_source_blending, color_texture_format) =
-            gpui::block_on(crate::WgpuContext::create_device(&adapter))?;
-        let errors = GpuErrors::new(&device, true);
-        let (device, queue) = (Arc::new(device), Arc::new(queue));
-
-        // The surface's choice when it offers both.
-        let usages = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC;
-        let format = [
-            wgpu::TextureFormat::Bgra8Unorm,
-            wgpu::TextureFormat::Rgba8Unorm,
-        ]
-        .into_iter()
-        .find(|format| {
-            adapter
-                .get_texture_format_features(*format)
-                .allowed_usages
-                .contains(usages)
-        })
-        .context("adapter has no supported RGBA readback target format")?;
-
-        let rendering_params = RenderingParameters::new(&adapter, format);
-        let bind_group_layouts = WgpuRenderer::create_bind_group_layouts(&device, false);
-        let pipelines = WgpuRenderer::create_pipelines(
-            &device,
-            &bind_group_layouts,
-            format,
-            wgpu::CompositeAlphaMode::Opaque,
-            rendering_params.path_sample_count,
-            dual_source_blending,
-            false,
-        );
-        let atlas_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("atlas_sampler"),
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            ..Default::default()
-        });
-
-        let uniform_alignment = device.limits().min_uniform_buffer_offset_alignment as u64;
-        let globals_size = size_of::<GlobalParams>() as u64;
-        let gamma_size = size_of::<GammaParams>() as u64;
-        let path_globals_offset = globals_size.next_multiple_of(uniform_alignment);
-        let gamma_offset = (path_globals_offset + globals_size).next_multiple_of(uniform_alignment);
-        let globals_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("globals_buffer"),
-            size: gamma_offset + gamma_size,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let globals_bind_group = |label: &str, offset: u64| {
-            device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some(label),
-                layout: &bind_group_layouts.globals,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                            buffer: &globals_buffer,
-                            offset,
-                            size: NonZeroU64::new(globals_size),
-                        }),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                            buffer: &globals_buffer,
-                            offset: gamma_offset,
-                            size: NonZeroU64::new(gamma_size),
-                        }),
-                    },
-                ],
-            })
-        };
-        let path_globals_bind_group =
-            globals_bind_group("path_globals_bind_group", path_globals_offset);
-        let globals_bind_group = globals_bind_group("globals_bind_group", 0);
-
-        let instance_alignment = device.limits().min_storage_buffer_offset_alignment as u64;
-        let instance_buffer = create_instance_buffer(&device, INITIAL_INSTANCE_CAPACITY);
-        let atlas = WgpuAtlas::new(device.clone(), queue.clone(), color_texture_format);
-
+    pub fn new() -> Result<Self> {
+        let (context, format) = WgpuContext::create_headless()?;
+        let errors = GpuErrors::new(&context.device, true);
+        let atlas = Arc::new(WgpuAtlas::from_context(&context));
+        let core = WgpuRendererCore::new(&context, atlas, format, wgpu::CompositeAlphaMode::Opaque);
         errors.check().context("headless renderer initialization")?;
-        Ok(FlowHeadlessRenderer {
-            device,
-            queue,
-            format,
-            atlas,
-            pipelines,
-            bind_group_layouts,
-            atlas_sampler,
-            rendering_params,
-            globals_buffer,
-            path_globals_offset,
-            gamma_offset,
-            globals_bind_group,
-            path_globals_bind_group,
-            instance_buffer,
-            instance_capacity: INITIAL_INSTANCE_CAPACITY,
-            instance_alignment,
-            path_targets: None,
-            state: FrameState::default(),
-            adapter_info: adapter.get_info(),
+        Ok(Self {
+            core,
+            adapter_info: context.adapter.get_info(),
             output: None,
         })
     }
@@ -184,14 +43,17 @@ impl FlowHeadlessRenderer {
     pub fn adapter_info(&self) -> &wgpu::AdapterInfo {
         &self.adapter_info
     }
+
     pub fn atlas(&self) -> &WgpuAtlas {
-        &self.atlas
+        &self.core.atlas
     }
+
     pub fn flow_execution_receipt(&self) -> Option<&FlowExecutionReceipt> {
-        self.state.flow.receipt.as_ref()
+        self.core.fast_frame.flow.receipt.as_ref()
     }
+
     pub fn flow_failure_stage(&self) -> Option<FlowFailureStage> {
-        self.state.flow.failure.get()
+        self.core.fast_frame.flow.failure.get()
     }
 
     /// Records through the production frame implementation, retaining the
@@ -205,33 +67,31 @@ impl FlowHeadlessRenderer {
         clear: Rgba,
     ) -> Result<FlowRenderedFrame> {
         with_flow_layer_namespace(namespace, || {
-            super::flow_namespace::begin_draw(&mut self.state);
+            super::flow_namespace::begin_draw(Some(&mut self.core.fast_frame));
             let result = self.render_inner(scene, size, clear);
+            let state = &mut self.core.fast_frame;
             match result {
                 Ok(rgba) => {
-                    self.state.flow.readback_completed();
-                    let receipt = self
-                        .state
+                    state.flow.readback_completed();
+                    let receipt = state
                         .flow
                         .receipt
-                        .as_mut()
                         .context("frame did not produce a submission receipt")?;
                     Ok(FlowRenderedFrame {
                         namespace,
                         rgba,
-                        receipt: *receipt,
+                        receipt,
                     })
                 }
                 Err(error) => {
-                    let stage = self
-                        .state
+                    let stage = state
                         .flow
                         .failure
                         .get()
                         .unwrap_or(FlowFailureStage::Readback);
-                    self.state.flow.fail(stage);
-                    self.state.layers.clear();
-                    self.state.bind_groups = Default::default();
+                    state.flow.fail(stage);
+                    state.layers.clear();
+                    state.bind_groups = Default::default();
                     Err(error)
                 }
             }
@@ -244,7 +104,8 @@ impl FlowHeadlessRenderer {
         size: Size<DevicePixels>,
         clear: Rgba,
     ) -> Result<Vec<u8>> {
-        let max = self.device.limits().max_texture_dimension_2d;
+        let device = &self.core.resources.device;
+        let max = device.limits().max_texture_dimension_2d;
         anyhow::ensure!(
             size.width.0 > 0 && size.height.0 > 0,
             "headless dimensions must be positive"
@@ -254,18 +115,15 @@ impl FlowHeadlessRenderer {
             width <= max && height <= max,
             "headless dimensions exceed adapter limit {max}"
         );
-        let errors = GpuErrors::new(&self.device, true);
-        self.write_globals(width, height);
-        self.ensure_path_targets(size);
-        self.atlas.before_frame();
+        let errors = GpuErrors::new(device, true);
         if self
             .output
             .as_ref()
             .is_none_or(|texture| texture.width() != width || texture.height() != height)
         {
-            self.state.layers.clear();
-            self.state.bind_groups = Default::default();
-            self.output = Some(self.device.create_texture(&wgpu::TextureDescriptor {
+            self.core.fast_frame.layers.clear();
+            self.core.fast_frame.bind_groups = Default::default();
+            self.output = Some(device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("flow_headless_target"),
                 size: wgpu::Extent3d {
                     width,
@@ -275,16 +133,12 @@ impl FlowHeadlessRenderer {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: self.format,
+                format: self.core.target_format,
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
                 view_formats: &[],
             }));
         }
-        let texture = self
-            .output
-            .as_ref()
-            .context("missing headless target")?
-            .clone();
+        let texture = self.output.as_ref().expect("headless target just prepared");
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         errors.check().context("headless frame preparation")?;
         let clear = wgpu::Color {
@@ -293,132 +147,21 @@ impl FlowHeadlessRenderer {
             b: clear.b as f64,
             a: clear.a as f64,
         };
-        crate::fast::frame::record_into(self, scene, &view, clear)?;
+        self.core.render_frame(scene, &view, size, clear)?;
+
         // A submission receipt alone is not an oracle result. Hold it back
         // until the mapping has completed and all readback errors were checked.
-        self.state
-            .flow
-            .failure
-            .set(Some(FlowFailureStage::Readback));
-        let pixels = read_back(&self.device, &self.queue, &texture, self.format)?;
-        self.state.flow.failure.set(None);
+        let flow = &self.core.fast_frame.flow;
+        flow.failure.set(Some(FlowFailureStage::Readback));
+        let pixels = read_back(
+            &self.core.resources.device,
+            &self.core.resources.queue,
+            texture,
+            self.core.target_format,
+        )?;
+        flow.failure.set(None);
         Ok(pixels)
     }
-
-    fn write_globals(&self, width: u32, height: u32) {
-        let globals = GlobalParams {
-            viewport_size: [width as f32, height as f32],
-            premultiplied_alpha: 0,
-            pad: 0,
-        };
-        let gamma = GammaParams {
-            gamma_ratios: self.rendering_params.gamma_ratios,
-            grayscale_enhanced_contrast: self.rendering_params.grayscale_enhanced_contrast,
-            subpixel_enhanced_contrast: self.rendering_params.subpixel_enhanced_contrast,
-            is_bgr: 0,
-            _pad: 0,
-        };
-        self.queue
-            .write_buffer(&self.globals_buffer, 0, bytemuck::bytes_of(&globals));
-        self.queue.write_buffer(
-            &self.globals_buffer,
-            self.path_globals_offset,
-            bytemuck::bytes_of(&globals),
-        );
-        self.queue.write_buffer(
-            &self.globals_buffer,
-            self.gamma_offset,
-            bytemuck::bytes_of(&gamma),
-        );
-    }
-
-    fn ensure_path_targets(&mut self, size: Size<DevicePixels>) {
-        if self
-            .path_targets
-            .as_ref()
-            .is_some_and(|targets| targets.size == size)
-        {
-            return;
-        }
-        let (width, height) = (size.width.0 as u32, size.height.0 as u32);
-        let (intermediate, intermediate_view) =
-            WgpuRenderer::create_path_intermediate(&self.device, self.format, width, height);
-        let (msaa, msaa_view) = WgpuRenderer::create_msaa_if_needed(
-            &self.device,
-            self.format,
-            width,
-            height,
-            self.rendering_params.path_sample_count,
-        )
-        .unzip();
-        self.path_targets = Some(PathTargets {
-            size,
-            _intermediate: intermediate,
-            intermediate_view,
-            _msaa: msaa,
-            msaa_view,
-        });
-    }
-}
-
-impl FrameHost for FlowHeadlessRenderer {
-    fn frame_state(&mut self) -> &mut FrameState {
-        &mut self.state
-    }
-
-    fn instance_data_alignment(&self) -> u64 {
-        self.instance_alignment.max(1)
-    }
-
-    fn reserve_instance_data(&mut self, size: u64) -> Result<()> {
-        if size > self.instance_capacity {
-            let capacity = size
-                .checked_next_power_of_two()
-                .context("instance capacity overflow")?;
-            anyhow::ensure!(
-                capacity <= self.device.limits().max_buffer_size,
-                "instance buffer exceeds device limit"
-            );
-            self.instance_capacity = capacity;
-            self.instance_buffer = create_instance_buffer(&self.device, self.instance_capacity);
-        }
-        Ok(())
-    }
-
-    fn target(&self) -> Result<FrameTarget<'_>> {
-        let path_targets = self.path_targets.as_ref();
-        Ok(FrameTarget {
-            device: &self.device,
-            queue: &self.queue,
-            pipelines: &self.pipelines,
-            bind_group_layouts: &self.bind_group_layouts,
-            atlas: &self.atlas,
-            atlas_sampler: &self.atlas_sampler,
-            globals_bind_group: &self.globals_bind_group,
-            path_globals_bind_group: &self.path_globals_bind_group,
-            path_intermediate_view: path_targets.map(|targets| &targets.intermediate_view),
-            path_msaa_view: path_targets.and_then(|targets| targets.msaa_view.as_ref()),
-            instance_buffer: &self.instance_buffer,
-            globals_buffer: &self.globals_buffer,
-            gamma_offset: self.gamma_offset,
-            gamma_size: size_of::<GammaParams>() as u64,
-            format: self.format,
-            path_sample_count: self.rendering_params.path_sample_count,
-            premultiplied_alpha: false,
-            viewport_size: path_targets.map_or([1., 1.], |targets| {
-                [targets.size.width.0 as f32, targets.size.height.0 as f32]
-            }),
-        })
-    }
-}
-
-fn create_instance_buffer(device: &wgpu::Device, size: u64) -> wgpu::Buffer {
-    device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("instance_buffer"),
-        size,
-        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    })
 }
 
 /// The pixels of `texture` as RGBA bytes, row by row.
@@ -484,7 +227,7 @@ fn read_back(
         .context("headless readback callback timed out")?
         .context("headless readback mapping failed")?;
     errors.check().context("headless readback GPU validation")?;
-    let mapped = slice.get_mapped_range();
+    let mapped = slice.get_mapped_range()?;
     let mut pixels = Vec::with_capacity(row as usize * height as usize);
     for y in 0..height {
         let start = y as usize * padded_row as usize;
@@ -504,9 +247,9 @@ fn read_back(
 mod tests {
     use super::*;
     use gpui::{
-        AtlasTile, Bounds, ContentMask, Corners, Hsla, LayerFrame, LayerKey, Path,
-        PolychromeSprite, Quad, ScaledPixels, TileCoord, layer_tile_id, layer_tile_texture_id,
-        point, px, rgba, size,
+        AtlasTile, Bounds, ContentMask, Corners, Hsla, LayerFrame, LayerKey, PaintedPath,
+        PathBuilder, PolychromeSprite, Quad, ScaledPixels, TileCoord, layer_tile_id,
+        layer_tile_texture_id, point, px, rgba, size,
     };
 
     fn scene(color: Rgba) -> Scene {
@@ -555,29 +298,32 @@ mod tests {
         scene
     }
 
-    /// These are the two original, unmodified solid triangles at a native
-    /// Flow rounded rectangle's edge after fractional zoom. A tile-local
-    /// projection covered four MSAA samples at (1024, 200), while the window
-    /// projection covered three. Adapter absence is an error, not a skip.
+    /// Replays a captured Flow rounded rectangle edge after fractional zoom.
+    /// It crosses a tile boundary and must match the direct analytical path.
     #[test]
-    fn window_space_path_tiles_preserve_fractional_msaa_coverage() -> Result<()> {
+    fn window_space_path_tiles_match_direct_at_a_fractional_edge() -> Result<()> {
         let mut renderer = FlowHeadlessRenderer::new()?;
         let dimensions = size(DevicePixels(1280), DevicePixels(640));
         let background = rgba(0x182028ff);
         let clip = Bounds::new(point(px(640.), px(0.)), size(px(640.), px(640.)));
-        let mut path = Path::new(point(px(0.), px(0.)));
+        let mut path = PathBuilder::fill();
         // Binary fractions preserve the captured f32 values exactly.
         let a = point(px(262_565. / 256.), px(46_308. / 256.));
         let b = point(px(259_770. / 256.), px(46_308. / 256.));
         let c = point(px(262_565. / 256.), px(51_354. / 256.));
         let d = point(px(1017.), px(51_510. / 256.));
-        let solid = (point(0., 1.), point(0., 1.), point(0., 1.));
-        path.push_triangle((a, b, c), solid);
-        path.push_triangle((c, b, d), solid);
-        path.color = Hsla::from(rgba(0xf8aa2689)).into();
-        path.content_mask = ContentMask { bounds: clip };
+        path.move_to(a);
+        path.line_to(b);
+        path.line_to(d);
+        path.line_to(c);
+        path.close();
         let mut content = Scene::default();
-        content.insert_primitive(path.scale(1.));
+        content.insert_primitive(PaintedPath::new(
+            path.build()?,
+            1.,
+            ContentMask { bounds: clip },
+            Hsla::from(rgba(0xf8aa2689)).into(),
+        ));
         content.finish();
         let direct =
             renderer.render(FlowLayerNamespace::new(), &content, dimensions, background)?;
@@ -643,31 +389,24 @@ mod tests {
     /// Assert the inclusive pixel-center clip contract independently of a
     /// tiled/reference comparison that would exercise the same shader twice.
     #[test]
-    fn path_fragment_clip_includes_an_exact_half_pixel_edge() -> Result<()> {
+    fn path_clip_includes_an_exact_half_pixel_edge() -> Result<()> {
         let mut renderer = FlowHeadlessRenderer::new()?;
-        let rectangle = |left: f32, right: f32, clip_right: f32, color: Rgba| {
-            let mut path = Path::new(point(px(0.), px(0.)));
-            let a = point(px(left), px(100.));
-            let b = point(px(right), px(100.));
-            let c = point(px(left), px(200.));
-            let d = point(px(right), px(200.));
-            let solid = (point(0., 1.), point(0., 1.), point(0., 1.));
-            path.push_triangle((a, b, c), solid);
-            path.push_triangle((b, d, c), solid);
-            path.color = Hsla::from(color).into();
-            path.content_mask = ContentMask {
-                bounds: Bounds::new(point(px(0.), px(0.)), size(px(clip_right), px(640.))),
-            };
-            path.scale(1.)
-        };
+        let mut path = PathBuilder::fill();
+        path.move_to(point(px(300.), px(100.)));
+        path.line_to(point(px(400.), px(100.)));
+        path.line_to(point(px(400.), px(200.)));
+        path.line_to(point(px(300.), px(200.)));
+        path.close();
         let mut content = Scene::default();
-        content.insert_primitive(rectangle(300., 400., 331.5, rgba(0xff0000ff)));
-        // Its bounds include the origin, so it shares one path batch at a
-        // later draw order. The union sprite extends past the tested clip;
-        // otherwise sprite-edge coverage could hide the fragment clip result.
-        content.insert_primitive(rectangle(400., 420., 420., rgba(0)));
+        content.insert_primitive(PaintedPath::new(
+            path.build()?,
+            1.,
+            ContentMask {
+                bounds: Bounds::new(point(px(0.), px(0.)), size(px(331.5), px(640.))),
+            },
+            Hsla::from(rgba(0xff0000ff)).into(),
+        ));
         content.finish();
-        assert_ne!(content.paths[0].order, content.paths[1].order);
         let output = renderer.render(
             FlowLayerNamespace::new(),
             &content,
@@ -756,28 +495,29 @@ mod tests {
         // Encoding is valid; destroying an input afterwards makes the actual
         // Queue::submit fail. Exercise the same checked submission as frames,
         // rather than fabricating a failure flag or trusting an old receipt.
-        let input = renderer.device.create_buffer(&wgpu::BufferDescriptor {
+        let device = &renderer.core.resources.device;
+        let queue = &renderer.core.resources.queue;
+        let format = renderer.core.target_format;
+        let input = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("destroyed_submit_input"),
             size: 4,
             usage: wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
-        let output = renderer.device.create_buffer(&wgpu::BufferDescriptor {
+        let output = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("failed_submit_output"),
             size: 4,
             usage: wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let mut encoder = renderer.device.create_command_encoder(&Default::default());
+        let mut encoder = device.create_command_encoder(&Default::default());
         encoder.copy_buffer_to_buffer(&input, 0, &output, 0, 4);
         let commands = encoder.finish();
         input.destroy();
         let (result, receipt) = crate::with_flow_layer_namespace_receipt(namespace, || {
-            crate::fast::flow_namespace::begin_draw(&mut renderer.state);
-            renderer
-                .state
-                .flow
-                .submit(&renderer.device, &renderer.queue, commands)
+            let state = &mut renderer.core.fast_frame;
+            crate::fast::flow_namespace::begin_draw(Some(state));
+            state.flow.submit(device, queue, commands)
         });
         assert!(
             result.is_err(),
@@ -789,7 +529,7 @@ mod tests {
             renderer.flow_failure_stage(),
             Some(FlowFailureStage::Submission)
         );
-        let invalid_source = renderer.device.create_texture(&wgpu::TextureDescriptor {
+        let invalid_source = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("invalid_readback_source"),
             size: wgpu::Extent3d {
                 width: 16,
@@ -799,19 +539,11 @@ mod tests {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: renderer.format,
+            format,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT, // Deliberately lacks COPY_SRC.
             view_formats: &[],
         });
-        assert!(
-            read_back(
-                &renderer.device,
-                &renderer.queue,
-                &invalid_source,
-                renderer.format
-            )
-            .is_err()
-        );
+        assert!(read_back(device, queue, &invalid_source, format).is_err());
         Ok(())
     }
 }

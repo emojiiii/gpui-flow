@@ -64,6 +64,8 @@ cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative
 cargo run --locked -p flow-studio --bin primitives
 cargo run --locked -p flow-studio --bin stroke_alignment
 cargo run --locked -p flow-studio --bin composition
+cargo run --locked -p flow-studio --bin dual_canvas
+cargo run --locked -p flow-studio --bin dual_canvas -- --scene
 cargo run --locked -p flow-studio --bin interactions
 cargo run --locked -p flow-studio --bin gradients
 cargo run --locked -p flow-studio --bin layout_appearance
@@ -91,6 +93,7 @@ cargo run --locked -p flow-studio -- --file ./canvas.flow.json
 - **Gradients**：多色标线性/径向渐变、变换和裁切
 - **Media**：真实本地视频帧与音频播放控制，需本机 FFmpeg 工具
 - **Composition**：独立 NodeFrame/Handle 与宿主 Toolbar/Inspector，嵌入 canvas-only 画布并注册自定义节点
+- **Dual canvas**：同窗嵌入两个流程或图形画布，验证相同 ID、选择、撤销和节点归属。[画布组件 API](docs/components.md#对外画布-api)
 
 ## 快速开始
 
@@ -174,6 +177,7 @@ cargo +1.98.1 run --locked -p flow-studio
 - [Custom元素测量、尺寸编辑与异步资源](docs/custom-element-protocol.md)（代际身份、ready/cancel和token会话）
 - [自定义节点、主题与连线](docs/custom-nodes.md)
 - [实现 AgentRunner 与接入宿主](docs/runtime.md)
+- [让 Agent 读取与批量编辑流程画布](docs/agent-canvas.md)
 - [工作流依赖调度、类型校验与重试](docs/workflows.md)
 - [音视频解码与播放器集成](docs/media.md)
 - [渐变渲染与资源边界](docs/gradients.md)
@@ -183,7 +187,7 @@ cargo +1.98.1 run --locked -p flow-studio
 
 ## 依赖与实现来源
 
-底层 [gpui-fast](https://github.com/longbridge/gpui-fast) 精确固定为 `26b0dccc97ebd14bbf9715741b6688132ba69491`，GPUI Kit 为 `4c7f1350331562436df868c55ac33bebc4c6406c`；官方 gpui-pre facade 复用同一核心。仅 gpui_wgpu 使用保留 Apache 许可的本仓受控桥，支持可选[Linux GPU damage](docs/gpu-damage.md)，不是默认整帧路径或跨平台验收替代。外部宿主也须携带文档中的 root Cargo patch 配置。本批新增直接复用petgraph 0.8.3、Kurbo 0.11.3、Taffy 0.13.0和Lyon tessellation 1.0.22；headless crate仍不依赖GPUI，数值库不替代本项目文档/身份/事务契约。构建请使用 `--locked`，不要无意更新 lockfile；升级时应同时验证二者兼容性。
+工作区使用 [GPUI Fast 0.1.19](https://crates.io/crates/gpui-fast/0.1.19) 和启用 `gpui-fast` feature 的 GPUI Kit 0.11.0。GPUI Fast 在 Linux 上用 WGPU 渲染窗口。本仓通过 Cargo patch 接入保留 Apache 许可的 `gpui-fast-wgpu` 桥，外部宿主启用 [Linux GPU damage](docs/gpu-damage.md) 时也需要配置该 patch。无界面 crate 独立于 GPUI，使用 petgraph、Kurbo、Taffy 和 Lyon tessellation。请使用 `--locked` 构建，升级时一起验证 GPUI Fast、Kit 和渲染后端。
 
 设计参考 [React Flow 的自定义节点思路](https://reactflow.dev/learn/customization/custom-nodes) 和 [Leafer UI 的画布编辑方式](https://github.com/leaferjs/leafer-ui)，本项目是独立 Rust 实现，不是这些项目的移植，也未声明 API 兼容。当前不为本项目源代码授予开源许可证；各第三方依赖保留其各自许可，分发前需独立审查。
 

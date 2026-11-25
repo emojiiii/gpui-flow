@@ -28,6 +28,18 @@ impl Default for ConnectionDrag {
     }
 }
 impl ConnectionDrag {
+    /// Model a proposed connection for a host policy check. The edit still
+    /// validates the endpoints against its graph before adding an edge.
+    pub fn for_proposal(source: PortRef, target: PortRef, pointer: Point) -> Self {
+        Self {
+            source: Some(source),
+            hovered: Some(target.clone()),
+            target: Some(target),
+            pointer,
+            ..Self::default()
+        }
+    }
+
     pub fn with_snap_radius(mut self, pixels: f32) -> Self {
         if pixels.is_finite() && pixels > 0. {
             self.snap_radius = pixels;

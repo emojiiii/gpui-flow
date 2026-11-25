@@ -7,7 +7,7 @@ use gpui_flow_interaction::scene::{
 use std::{collections::BTreeMap, rc::Rc};
 
 /// Immutable callback context. Keep the original token in asynchronous callbacks;
-/// use a WeakEntity<SceneView> to avoid retaining a released view.
+/// use a `WeakEntity<SceneView>` to avoid retaining a released view.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ToolWidgetContext {
     pub tool_id: String,
@@ -423,7 +423,7 @@ impl SceneView {
             .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
             .on_mouse_move(|_, _, cx| cx.stop_propagation())
             .on_mouse_up(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
+            .on_scroll(|_, _, cx| cx.stop_propagation())
             .track_focus(&mount.focus)
             .absolute()
             .top_3()

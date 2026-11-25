@@ -3,13 +3,19 @@ use gpui::{prelude::*, *};
 use gpui_flow_core::{self as model, Clipboard, Editor, Graph, Node, NodeId, PortRef};
 use gpui_flow_runtime::{AgentRunner, MockRunner, Runtime};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+    time::Duration,
+};
 
 #[derive(Clone, Debug)]
 pub enum FlowEvent {
     DocumentChanged,
     SelectionChanged,
     ConnectionRejected(String),
+    /// A canvas interaction or command failed with a user-facing message.
+    InteractionRejected(String),
     RunChanged(String),
 }
 impl EventEmitter<FlowEvent> for FlowCanvas {}
@@ -20,6 +26,7 @@ pub type FlowDocumentValidator =
 /// Host-owned reusable view. Subscribe to `FlowEvent` for persistence/inspector integration.
 /// Canvas coordinates are independent of window origin and account for pan and zoom.
 pub struct FlowCanvas {
+    canvas_id: u64,
     pub editor: Editor,
     pub interactions: gpui_flow_interaction::PluginHost,
     pub registry: NodeRegistry,
@@ -27,11 +34,13 @@ pub struct FlowCanvas {
     pub edge_renderer: Arc<dyn EdgeRenderer>,
     pub runtime: Runtime,
     pub workflow: Option<gpui_flow_runtime::Workflow>,
+    workflow_nodes: BTreeSet<NodeId>,
     pub workflow_runners: gpui_flow_runtime::RunnerRegistry,
     media_backend: Option<Arc<dyn crate::media_backend::MediaBackend>>,
     media_players: BTreeMap<NodeId, (String, Result<Entity<MediaView>, String>)>,
     pub options: FlowOptions,
     pub runners: BTreeMap<String, Arc<dyn AgentRunner>>,
+    agent_asset_paths: BTreeMap<String, String>,
     pub run_label: SharedString,
     pub show_grid: bool,
     /// Optional host-owned path used by Save/Open instead of native dialogs.
@@ -50,10 +59,13 @@ pub struct FlowCanvas {
     snapshot: Option<String>,
     sequence: u64,
     input: Option<Entity<InputState>>,
-    input_node: Option<NodeId>,
+    input_binding: Option<(NodeId, &'static str)>,
     input_subscription: Option<Subscription>,
 }
 
+mod agent_assets;
+mod component;
+pub use component::FlowNodeHandle;
 mod inspector;
 mod interaction;
 mod media;
@@ -80,7 +92,10 @@ impl FlowCanvas {
     }
 
     pub fn new(graph: Graph, cx: &mut Context<Self>) -> Result<Self, model::GraphError> {
-        let editor = Editor::new(graph)?;
+        Ok(Self::from_editor(Editor::new(graph)?, cx))
+    }
+
+    fn from_editor(editor: Editor, cx: &mut Context<Self>) -> Self {
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor()
@@ -94,7 +109,10 @@ impl FlowCanvas {
                         {
                             let events = workflow.poll();
                             for event in events {
-                                cx.emit(FlowEvent::RunChanged(event.node_id));
+                                let id = NodeId::from(event.node_id);
+                                if this.workflow_nodes.contains(&id) {
+                                    cx.emit(FlowEvent::RunChanged(id.0));
+                                }
                             }
                             if workflow.is_finished() {
                                 this.message = if workflow.succeeded() {
@@ -120,7 +138,8 @@ impl FlowCanvas {
             }
         })
         .detach();
-        Ok(Self {
+        Self {
+            canvas_id: component::next_canvas_id(),
             editor,
             interactions: gpui_flow_interaction::PluginHost::with_defaults(),
             registry: NodeRegistry::default(),
@@ -128,6 +147,7 @@ impl FlowCanvas {
             edge_renderer: Arc::new(BezierEdge),
             runtime: Runtime::default(),
             workflow: None,
+            workflow_nodes: BTreeSet::new(),
             workflow_runners: BTreeMap::new(),
             media_backend: None,
             media_players: BTreeMap::new(),
@@ -138,6 +158,7 @@ impl FlowCanvas {
             document_path: None,
             file_busy: false,
             document_validator: None,
+            agent_asset_paths: BTreeMap::new(),
             focus: cx.focus_handle(),
             space_held: false,
             native_pointer: Default::default(),
@@ -150,9 +171,9 @@ impl FlowCanvas {
             snapshot: None,
             sequence: 0,
             input: None,
-            input_node: None,
+            input_binding: None,
             input_subscription: None,
-        })
+        }
     }
     pub fn demo(cx: &mut Context<Self>) -> Self {
         let mut canvas = Self::new(demo_graph(), cx).expect("valid demo graph");
@@ -173,6 +194,8 @@ impl FlowCanvas {
         self.runners.insert(kind.into(), Arc::new(runner));
     }
     fn changed(&mut self, cx: &mut Context<Self>) {
+        self.workflow_nodes
+            .retain(|id| self.editor.graph().nodes.contains_key(id));
         let removed: Vec<_> = self
             .runtime
             .records
@@ -202,7 +225,7 @@ impl FlowCanvas {
             cx,
         );
     }
-    fn add(&mut self, kind: &str, cx: &mut Context<Self>) {
+    fn add_builtin(&mut self, kind: &str, cx: &mut Context<Self>) {
         self.sequence += 1;
         let id = self
             .editor

@@ -5,7 +5,7 @@ use std::{collections::BTreeMap, fmt, sync::Arc};
 
 pub const MAX_CARDS: usize = 128;
 pub const MAX_LINKS: usize = 512;
-pub const MAX_JSON_BYTES: usize = 32 * 1024 * 1024;
+pub const MAX_JSON_BYTES: usize = MAX_DOCUMENT_BYTES as usize;
 const MAX_PAYLOAD_BYTES: usize = 64 * 1024;
 const MAX_TEXT_BYTES: usize = 16 * 1024;
 
@@ -161,9 +161,7 @@ impl CreativeRegistry {
     pub fn validate_document(&self, document: &FlowDocument) -> Result<(), CreativeError> {
         document.validate()?;
         self.validate_graph(&document.graph)?;
-        if serde_json::to_string_pretty(document)?.len() > MAX_JSON_BYTES {
-            return Err(CreativeError("creative document exceeds 32 MiB".into()));
-        }
+        document.validate_json_size(MAX_JSON_BYTES)?;
         Ok(())
     }
     pub fn parse_document(&self, json: &str) -> Result<FlowDocument, CreativeError> {
@@ -186,14 +184,7 @@ impl CreativeRegistry {
         document: FlowDocument,
     ) -> Result<(), CreativeError> {
         self.validate_document(&document)?;
-        if editor.transaction_active() {
-            return Err(GraphError::TransactionInProgress.into());
-        }
-        editor.transaction("Import creative board", |graph| {
-            *graph = document.graph;
-            Ok(())
-        })?;
-        editor.viewport = document.viewport;
+        editor.import_document(document, "Import creative board")?;
         Ok(())
     }
     pub fn map_records(

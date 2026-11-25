@@ -138,7 +138,7 @@ fn save_and_restore(editor: &mut Editor) -> Result<(), Box<dyn std::error::Error
 
 ## 渲染与事件
 
-`FlowCanvas` 绘制网格、所有边、组、可见节点和概览。节点 body 由 `NodeRegistry` 中的 `NodeRenderer` 渲染，标题栏、端口、选择外框、移动和缩放由画布管理。`EdgeRenderer` 只决定绘制，不提供点击命中或图编辑行为。
+`FlowCanvas` 绘制网格、所有边、组、可见节点和概览。节点 body 由 `NodeRegistry` 中的 `NodeRenderer` 渲染，标题栏、端口、选择外框、移动和缩放由画布管理。`EdgeRenderer` 提供连线绘制和可选的命中检测，画布通过已有选择和删除命令编辑连线。
 
 画布约每 40ms 非阻塞轮询一次 Runtime，收到已应用事件后发出 `RunChanged(node_id)` 并通知重绘。事件不等于 Graph 自动发生变化。宿主直接变更公共字段后需按 GPUI 实体更新流程调用 `cx.notify()`，必要时自行 `cx.emit(...)`。
 

@@ -135,6 +135,10 @@ pub enum SceneCommand {
         parent: Option<DisplayId>,
         index: Option<usize>,
     },
+    /// Remove one object and its subtree without changing unrelated selection.
+    RemoveObject {
+        id: DisplayId,
+    },
     ImportScene(Scene),
     LoadScene(Scene),
     PasteScene {

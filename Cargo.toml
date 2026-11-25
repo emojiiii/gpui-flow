@@ -12,10 +12,10 @@ publish = false
 gpui-flow-composite = { path = "crates/flow-composite" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-gpui = { git = "https://github.com/longbridge/gpui-fast", rev = "26b0dccc97ebd14bbf9715741b6688132ba69491" }
-gpui_platform = { git = "https://github.com/longbridge/gpui-fast", rev = "26b0dccc97ebd14bbf9715741b6688132ba69491", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
-gpui_wgpu = { git = "https://github.com/longbridge/gpui-fast", rev = "26b0dccc97ebd14bbf9715741b6688132ba69491" }
-gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "4c7f1350331562436df868c55ac33bebc4c6406c" }
+gpui = { package = "gpui-fast", version = "=0.1.19" }
+gpui_platform = { package = "gpui-fast-platform", version = "=0.1.19", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
+gpui_wgpu = { package = "gpui-fast-wgpu", version = "=0.1.19" }
+gpui-kit = { version = "=0.11.0", features = ["gpui-fast"] }
 gpui-flow-text = { path = "crates/flow-text" }
 gpui-flow-core = { path = "crates/flow-core" }
 gpui-flow-engine = { path = "crates/flow-engine" }
@@ -37,13 +37,5 @@ image = { version = "0.25", default-features = false }
 opt-level = 2
 
 # Controlled Apache-2.0 backend bridge; provenance and delta are in vendor/gpui_wgpu/SOURCE.md.
-[patch."https://github.com/longbridge/gpui-fast"]
-gpui_wgpu = { path = "vendor/gpui_wgpu" }
-
-# Official gpui-pre facades re-export the same locked gpui-fast core.
 [patch.crates-io]
-gpui-pre = { git = "https://github.com/longbridge/gpui-fast", rev = "26b0dccc97ebd14bbf9715741b6688132ba69491" }
-gpui-pre-platform = { git = "https://github.com/longbridge/gpui-fast", rev = "26b0dccc97ebd14bbf9715741b6688132ba69491" }
-gpui-pre-macros = { git = "https://github.com/longbridge/gpui-fast", rev = "26b0dccc97ebd14bbf9715741b6688132ba69491" }
-gpui-pre-sum-tree = { git = "https://github.com/longbridge/gpui-fast", rev = "26b0dccc97ebd14bbf9715741b6688132ba69491" }
-gpui-pre-web = { git = "https://github.com/longbridge/gpui-fast", rev = "26b0dccc97ebd14bbf9715741b6688132ba69491" }
+gpui-fast-wgpu = { path = "vendor/gpui_wgpu" }

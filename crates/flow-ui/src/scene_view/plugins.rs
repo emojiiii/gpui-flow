@@ -8,7 +8,18 @@ impl SceneView {
         command: SceneCommand,
         cx: &mut Context<Self>,
     ) -> Result<(), SceneInteractionError> {
-        match self.interactions.execute(&mut self.editor, command) {
+        self.execute_checked_command(command, |_| Ok(()), cx)
+    }
+    pub(super) fn execute_checked_command(
+        &mut self,
+        command: SceneCommand,
+        check: impl FnOnce(&SceneCommand) -> Result<(), SceneInteractionError>,
+        cx: &mut Context<Self>,
+    ) -> Result<(), SceneInteractionError> {
+        match self
+            .interactions
+            .execute_checked(&mut self.editor, command, check)
+        {
             Ok(report) => {
                 self.apply_input_report(report, cx);
                 Ok(())

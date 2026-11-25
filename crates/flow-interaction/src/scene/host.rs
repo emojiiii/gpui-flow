@@ -463,7 +463,7 @@ impl ScenePluginHost {
                     return report;
                 }
                 self.navigation_frame = true;
-                let result = self.process(editor, &id, command, &mut report);
+                let result = self.process(editor, &id, command, &mut report, |_| Ok(()));
                 self.navigation_frame = false;
                 if let Err(error) = result {
                     report.errors.push(error);
@@ -651,7 +651,7 @@ impl ScenePluginHost {
             report.propagation_stopped |= output.stop_propagation;
             let mut failed = false;
             for command in output.commands {
-                if let Err(error) = self.process(editor, &id, command, &mut report) {
+                if let Err(error) = self.process(editor, &id, command, &mut report, |_| Ok(())) {
                     report.errors.push(error);
                     self.cancel_active(editor, &mut report);
                     failed = true;
@@ -690,8 +690,17 @@ impl ScenePluginHost {
         editor: &mut SceneEditor,
         command: SceneCommand,
     ) -> Result<DispatchReport, InteractionError> {
+        self.execute_checked(editor, command, |_| Ok(()))
+    }
+    /// Check the normalized command after middleware and before any mutation.
+    pub fn execute_checked(
+        &mut self,
+        editor: &mut SceneEditor,
+        command: SceneCommand,
+        check: impl FnOnce(&SceneCommand) -> Result<(), InteractionError>,
+    ) -> Result<DispatchReport, InteractionError> {
         let mut report = DispatchReport::default();
-        self.process(editor, "host", command, &mut report)?;
+        self.process(editor, "host", command, &mut report, check)?;
         Ok(report)
     }
     fn process(
@@ -700,6 +709,7 @@ impl ScenePluginHost {
         owner: &str,
         mut command: SceneCommand,
         report: &mut DispatchReport,
+        check: impl FnOnce(&SceneCommand) -> Result<(), InteractionError>,
     ) -> Result<(), InteractionError> {
         if let Some(capability) = command.capability()
             && !self.allows(capability)
@@ -915,6 +925,7 @@ impl ScenePluginHost {
                 self.capture_owner().unwrap().into(),
             ));
         }
+        check(&command)?;
         let graph = editor.scene().clone();
         let selection = editor.selection.clone();
         let viewport = editor.viewport;
@@ -1551,6 +1562,10 @@ impl ScenePluginHost {
                     require_editable(parent)?;
                 }
                 editor.transaction(move |scene| scene.insert(object, parent, index))?;
+            }
+            SceneCommand::RemoveObject { id } => {
+                require_editable(&id)?;
+                editor.transaction(|scene| scene.remove(&id).map(drop))?;
             }
             SceneCommand::ImportScene(scene) => editor.transaction(move |target| {
                 *target = scene;

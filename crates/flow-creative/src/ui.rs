@@ -199,6 +199,7 @@ pub struct CreativeCanvas {
     canvas_size: WorldSize,
     next_id: u64,
     notice: Option<String>,
+    file_busy: bool,
     trace: bool,
     _subscriptions: Vec<Subscription>,
 }
@@ -216,6 +217,9 @@ impl CreativeCanvas {
         let canvas = cx.new(|cx| {
             let mut view = FlowCanvas::new(document.graph, cx).expect("document validated");
             view.editor.viewport = document.viewport;
+            view.editor
+                .set_document_byte_limit(MAX_JSON_BYTES)
+                .expect("initial document fits save limit");
             view.set_document_validator(Some(Arc::new(move |document| {
                 validator
                     .validate_document(document)
@@ -253,11 +257,19 @@ impl CreativeCanvas {
                 FlowEvent::ConnectionRejected(reason) => {
                     this.notice = Some(format!("连接被拒绝：{reason}"))
                 }
+                FlowEvent::InteractionRejected(message) => this.notice = Some(message.clone()),
                 _ => {}
             }
             cx.notify();
         });
-        let observer = cx.observe(&canvas, |_, _, cx| cx.notify());
+        let observer = cx.observe(&canvas, |this, canvas, cx| {
+            let file_busy = canvas.read(cx).is_file_busy();
+            if this.file_busy && !file_busy {
+                this.notice = None;
+            }
+            this.file_busy = file_busy;
+            cx.notify();
+        });
         Ok(Self {
             canvas,
             registry,
@@ -277,6 +289,7 @@ impl CreativeCanvas {
             canvas_size: WorldSize::new(780., 700.),
             next_id: 1,
             notice: Some("拖动端口连接：仅同类型 Output → Input；没有模型调用".into()),
+            file_busy: false,
             trace: std::env::args().any(|a| a == "--trace"),
             _subscriptions: vec![subscription, observer],
         })
@@ -430,11 +443,7 @@ impl CreativeCanvas {
                 };
                 match result {
                     Ok(document) => {
-                        if self.command(CanvasCommand::ImportGraph(document.graph), cx) {
-                            self.canvas.update(cx, |v, cx| {
-                                v.editor.viewport = document.viewport;
-                                cx.notify();
-                            });
+                        if self.command(CanvasCommand::ImportDocument(document), cx) {
                             self.form_source = None;
                             self.sync_form(window, cx);
                             self.notice =

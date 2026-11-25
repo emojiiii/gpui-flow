@@ -91,8 +91,9 @@ fn alpha(f: &CpuFrame, x: u32, y: u32) -> u8 {
 }
 #[test]
 fn automatic_text_clip_domains_preserve_real_glyph_pixels_and_padding() {
-    let (_app, bridge) =
-        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let (_app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
+        crate::display::native_text_test_platform(),
+    );
     let mut e = SceneEngine::new(scene()).unwrap();
     let clipped = render(&e, Some(&bridge)).unwrap().unwrap();
     assert_eq!(alpha(&clipped, 6, 6), 0);
@@ -151,8 +152,9 @@ fn automatic_text_clip_domains_preserve_real_glyph_pixels_and_padding() {
 }
 #[test]
 fn rounded_text_clips_keep_missing_bridge_explicit_and_accept_affine_glyphs() {
-    let (_app, bridge) =
-        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let (_app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
+        crate::display::native_text_test_platform(),
+    );
     let mut e = SceneEngine::new(scene()).unwrap();
     assert!(
         matches!(render(&e,None),Err(CompositeError::TextBackendRequired(id)) if id == "text".into())
@@ -163,8 +165,9 @@ fn rounded_text_clips_keep_missing_bridge_explicit_and_accept_affine_glyphs() {
 }
 #[test]
 fn ancestor_corner_edit_and_undo_discard_late_text_clip_jobs() {
-    let (_app, bridge) =
-        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let (_app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
+        crate::display::native_text_test_platform(),
+    );
     let mut editor = gpui_flow_editor::SceneEditor::new(scene()).unwrap();
     let before = editor.scene().clone();
     let first = request(&editor.engine, Some(&bridge));
@@ -203,8 +206,9 @@ fn ancestor_corner_edit_and_undo_discard_late_text_clip_jobs() {
 
 #[test]
 fn upright_glyphs_under_affine_ancestor_clips_keep_real_mask_geometry() {
-    let (_app, bridge) =
-        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let (_app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
+        crate::display::native_text_test_platform(),
+    );
     let mut s = scene();
     // Binary-exact shear cancellation keeps Text strictly axis aligned.
     let parent = Affine::new(1., 0.25, 0., 1., 0., 0.);
@@ -221,8 +225,9 @@ fn upright_glyphs_under_affine_ancestor_clips_keep_real_mask_geometry() {
 
 #[test]
 fn ellipsis_edit_invalidates_glyph_jobs_without_mutating_source_text() {
-    let (_app, bridge) =
-        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let (_app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
+        crate::display::native_text_test_platform(),
+    );
     let mut e = SceneEngine::new(scene()).unwrap();
     let first = request(&e, Some(&bridge));
     let mut c = CompositeController::default();
@@ -259,8 +264,9 @@ fn ellipsis_edit_invalidates_glyph_jobs_without_mutating_source_text() {
 
 #[test]
 fn italic_edit_rejects_late_glyph_domain_completion() {
-    let (_app, bridge) =
-        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let (_app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
+        crate::display::native_text_test_platform(),
+    );
     let mut e = SceneEngine::new(scene()).unwrap();
     let first = request(&e, Some(&bridge));
     let mut c = CompositeController::default();
@@ -288,8 +294,9 @@ fn italic_edit_rejects_late_glyph_domain_completion() {
 
 #[test]
 fn decorated_text_object_opacity_is_applied_once_after_glyph_line_overlap() {
-    let (_app, bridge) =
-        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let (_app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
+        crate::display::native_text_test_platform(),
+    );
     let mut s = Scene::new();
     let mut t = display::Text::new("█", Size::new(60., 40.));
     t.font_family = "DejaVu Sans".into();
@@ -323,8 +330,9 @@ fn decorated_text_object_opacity_is_applied_once_after_glyph_line_overlap() {
 }
 #[test]
 fn decoration_edits_invalidate_pending_text_pixels_and_undo_restores() {
-    let (_app, bridge) =
-        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let (_app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
+        crate::display::native_text_test_platform(),
+    );
     let mut e = gpui_flow_editor::SceneEditor::new(scene()).unwrap();
     let before = e.scene().clone();
     let first = request(&e.engine, Some(&bridge));

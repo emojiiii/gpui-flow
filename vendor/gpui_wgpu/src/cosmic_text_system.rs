@@ -1,3 +1,4 @@
+// Modified by Longbridge for gpui-fast.
 use anyhow::{Context as _, Ok, Result};
 use collections::HashMap;
 use cosmic_text::{
@@ -5,10 +6,10 @@ use cosmic_text::{
     FontFeatures as CosmicFontFeatures, FontSystem, ShapeBuffer, ShapeLine, Stretch, Style, Weight,
 };
 use gpui::{
-    Bounds, DevicePixels, Font, FontFallbacks, FontFeatures, FontId, FontMetrics, FontRun, GlyphId,
-    IsZero as _, LineLayout, Pixels, PlatformTextSystem, RenderGlyphParams, SUBPIXEL_VARIANTS_X,
-    SUBPIXEL_VARIANTS_Y, ShapedGlyph, ShapedRun, SharedString, Size, TextRenderingMode, point,
-    size,
+    Bounds, DevicePixels, FallbackFontClass, Font, FontFallbacks, FontFeatures, FontId,
+    FontMetrics, FontRun, GlyphId, IsZero as _, LineLayout, MissingGlyph, MissingGlyphSink, Pixels,
+    PlatformTextSystem, RenderGlyphParams, SUBPIXEL_VARIANTS_X, SUBPIXEL_VARIANTS_Y, ShapedGlyph,
+    ShapedRun, SharedString, Size, TextRenderingMode, point, size,
 };
 
 use itertools::Itertools;
@@ -21,7 +22,7 @@ use swash::{
 };
 use unicode_segmentation::UnicodeSegmentation;
 
-pub struct CosmicTextSystem(RwLock<CosmicTextSystemState>);
+pub struct CosmicTextSystem(pub(crate) RwLock<CosmicTextSystemState>); // crate::fast::synthetic_italic's tests read the state
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct FontKey {
@@ -40,23 +41,33 @@ impl FontKey {
     }
 }
 
-struct CosmicTextSystemState {
-    font_system: FontSystem,
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct LoadedFontKey {
+    database_id: cosmic_text::fontdb::ID,
+    font: FontKey,
+}
+
+pub(crate) struct CosmicTextSystemState {
+    pub(crate) font_system: FontSystem,
     scratch: ShapeBuffer,
     swash_scale_context: ScaleContext,
     pending_glyph_images: HashMap<RenderGlyphParams, swash::scale::image::Image>,
     /// Contains all already loaded fonts, including all faces. Indexed by `FontId`.
-    loaded_fonts: Vec<LoadedFont>,
+    pub(crate) loaded_fonts: Vec<LoadedFont>,
+    loaded_font_ids_by_key: HashMap<LoadedFontKey, FontId>,
+    pub(crate) synthetic_italic: crate::fast::synthetic_italic::Twins,
     /// Caches the `FontId`s associated with a specific family to avoid iterating the font database
     /// for every font face in a family.
     font_ids_by_family_cache: HashMap<FontKey, SmallVec<[FontId; 4]>>,
     system_font_fallback: String,
+    missing_glyph_sink: Option<Arc<dyn MissingGlyphSink>>,
 }
 
-struct LoadedFont {
-    font: Arc<CosmicTextFont>,
+#[derive(Clone)] // crate::fast::synthetic_italic clones a face for its italic twin
+pub(crate) struct LoadedFont {
+    pub(crate) font: Arc<CosmicTextFont>,
     features: CosmicFontFeatures,
-    is_known_emoji_font: bool,
+    pub(crate) is_known_emoji_font: bool,
     /// resolved at load time so `layout_line` shares one chain across faces.
     /// `Arc` keeps clone cheap on the per-run hot path.
     user_fallback_chain: Arc<[(FontId, SharedString)]>,
@@ -107,6 +118,19 @@ impl CosmicTextSystem {
         Ok((gpui::FontWeight(face.weight.0 as f32), style))
     }
 
+    /// Builds reports for unresolved source indices after an outer text system
+    /// has applied its own fallback.
+    pub fn missing_glyphs(
+        &self,
+        text: &str,
+        font_runs: &[FontRun],
+        missing_text_indices: impl IntoIterator<Item = usize>,
+    ) -> Vec<MissingGlyph> {
+        self.0
+            .read()
+            .missing_glyphs(text, font_runs, missing_text_indices)
+    }
+
     pub fn new(system_font_fallback: &str) -> Self {
         let font_system = FontSystem::new();
 
@@ -116,8 +140,11 @@ impl CosmicTextSystem {
             swash_scale_context: ScaleContext::new(),
             pending_glyph_images: HashMap::default(),
             loaded_fonts: Vec::new(),
+            loaded_font_ids_by_key: HashMap::default(),
+            synthetic_italic: crate::fast::synthetic_italic::Twins::default(),
             font_ids_by_family_cache: HashMap::default(),
             system_font_fallback: system_font_fallback.to_string(),
+            missing_glyph_sink: None,
         }))
     }
 
@@ -133,8 +160,11 @@ impl CosmicTextSystem {
             swash_scale_context: ScaleContext::new(),
             pending_glyph_images: HashMap::default(),
             loaded_fonts: Vec::new(),
+            loaded_font_ids_by_key: HashMap::default(),
+            synthetic_italic: crate::fast::synthetic_italic::Twins::default(),
             font_ids_by_family_cache: HashMap::default(),
             system_font_fallback: system_font_fallback.to_string(),
+            missing_glyph_sink: None,
         }))
     }
 }
@@ -142,6 +172,10 @@ impl CosmicTextSystem {
 impl PlatformTextSystem for CosmicTextSystem {
     fn add_fonts(&self, fonts: Vec<Cow<'static, [u8]>>) -> Result<()> {
         self.0.write().add_fonts(fonts)
+    }
+
+    fn set_missing_glyph_sink(&self, sink: Option<Arc<dyn MissingGlyphSink>>) {
+        self.0.write().missing_glyph_sink = sink;
     }
 
     fn all_font_names(&self) -> Vec<String> {
@@ -175,8 +209,10 @@ impl PlatformTextSystem for CosmicTextSystem {
         };
 
         let ix = find_best_match(font, candidates, &state)?;
-
-        Ok(candidates[ix])
+        let font_id = candidates[ix];
+        Ok(crate::fast::synthetic_italic::for_request(
+            &mut state, font_id, font.style,
+        ))
     }
 
     fn prewarm_fonts(&self, font_ids: &[FontId]) {
@@ -273,7 +309,11 @@ impl CosmicTextSystemState {
         Some(FontMatchProperties {
             primary_family_name: first_family.0.clone().into(),
             stretch: face.stretch,
-            style: face.style,
+            style: crate::fast::synthetic_italic::style(
+                &self.synthetic_italic,
+                font_id,
+                face.style,
+            ),
             weight: face.weight,
             features: loaded_font.features.clone(),
             fallback_chain: Arc::clone(&loaded_font.user_fallback_chain),
@@ -298,6 +338,7 @@ impl CosmicTextSystemState {
 
     #[profiling::function]
     fn add_fonts(&mut self, fonts: Vec<Cow<'static, [u8]>>) -> Result<()> {
+        self.font_ids_by_family_cache.clear();
         let db = self.font_system.db_mut();
         for bytes in fonts {
             db.load_font_source(cosmic_text::fontdb::Source::Binary(Arc::new(bytes)));
@@ -312,6 +353,12 @@ impl CosmicTextSystemState {
         features: &FontFeatures,
         fallbacks: Option<&FontFallbacks>,
     ) -> Result<SmallVec<[FontId; 4]>> {
+        let loaded_font_key = FontKey::new(
+            SharedString::from(name.to_owned()),
+            features.clone(),
+            fallbacks.cloned(),
+        );
+
         // recurse with `fallbacks = None` so a fallback family cannot pull in
         // another chain. missing fallback families are dropped so a typo in
         // settings still lets the primary family load.
@@ -328,8 +375,7 @@ impl CosmicTextSystemState {
                         cached.clone()
                     } else {
                         let loaded = self.load_family(fallback_name, features, None)?;
-                        self.font_ids_by_family_cache
-                            .insert(fb_key.clone(), loaded.clone());
+                        self.font_ids_by_family_cache.insert(fb_key, loaded.clone());
                         loaded
                     };
                     let Some(&fb_id) = fb_ids.first() else {
@@ -360,10 +406,20 @@ impl CosmicTextSystemState {
         let cosmic_features = cosmic_font_features(features)?;
 
         let mut loaded_font_ids = SmallVec::new();
-        for (font_id, postscript_name) in families {
+        for (database_id, postscript_name) in families {
+            let key = LoadedFontKey {
+                database_id,
+                font: loaded_font_key.clone(),
+            };
+            if let Some(&font_id) = self.loaded_font_ids_by_key.get(&key) {
+                self.loaded_fonts[font_id.0].user_fallback_chain = Arc::clone(&user_fallback_chain);
+                loaded_font_ids.push(font_id);
+                continue;
+            }
+
             let font = self
                 .font_system
-                .get_font(font_id, cosmic_text::Weight::NORMAL)
+                .get_font(database_id, cosmic_text::Weight::NORMAL)
                 .context("Could not load font")?;
 
             // HACK: To let the storybook run and render Windows caption icons. We should actually do better font fallback.
@@ -372,10 +428,18 @@ impl CosmicTextSystemState {
                 "Segoe Fluent Icons",
             ];
 
+            // This only decides whether a face can be a primary font. The
+            // editor measures layout with the width of 'm' and would panic
+            // without it.
+            //
+            // Don't remove the face from the font database. Arabic, Devanagari
+            // and emoji fonts often have no Latin glyphs, and they are exactly
+            // what cosmic-text falls back to when the primary font lacks a
+            // glyph.
             if font.as_swash().charmap().map('m') == 0
                 && !allowed_bad_font_names.contains(&postscript_name.as_str())
+                && !crate::fast::emoji_fonts::may_load_without_m(&postscript_name)
             {
-                self.font_system.db_mut().remove_face(font.id());
                 continue;
             };
 
@@ -387,6 +451,7 @@ impl CosmicTextSystemState {
                 is_known_emoji_font: check_is_known_emoji_font(&postscript_name),
                 user_fallback_chain: Arc::clone(&user_fallback_chain),
             });
+            self.loaded_font_ids_by_key.insert(key, font_id);
         }
 
         Ok(loaded_font_ids)
@@ -486,6 +551,8 @@ impl CosmicTextSystemState {
             &[Source::Bitmap(StrikeWith::ExactSize), Source::Outline]
         };
 
+        let sources =
+            crate::fast::synthetic_italic::sources(&self.synthetic_italic, params, sources);
         let mut renderer = Render::new(sources);
         if params.subpixel_rendering {
             // There seems to be a bug in Swash where the B and R values are swapped.
@@ -495,6 +562,7 @@ impl CosmicTextSystemState {
         } else {
             renderer.format(Format::Alpha).offset(subpixel_offset);
         }
+        crate::fast::synthetic_italic::slant(&self.synthetic_italic, params, &mut renderer);
 
         let glyph_id: u16 = params.glyph_id.0.try_into()?;
         renderer
@@ -722,6 +790,18 @@ impl CosmicTextSystemState {
             };
         };
 
+        let missing_glyphs = self.missing_glyph_sink.as_ref().map(|_| {
+            self.missing_glyphs(
+                text,
+                font_runs,
+                layout
+                    .glyphs
+                    .iter()
+                    .filter(|glyph| glyph.glyph_id == 0)
+                    .map(|glyph| glyph.start),
+            )
+        });
+
         let mut runs: Vec<ShapedRun> = Vec::new();
         for glyph in &layout.glyphs {
             let mut font_id = FontId(glyph.metadata);
@@ -729,7 +809,8 @@ impl CosmicTextSystemState {
             if loaded_font.font.id() != glyph.font_id {
                 match self.font_id_for_cosmic_id(glyph.font_id) {
                     std::result::Result::Ok(resolved_id) => {
-                        font_id = resolved_id;
+                        font_id =
+                            crate::fast::synthetic_italic::for_fallback(self, font_id, resolved_id);
                         loaded_font = self.loaded_font(font_id);
                     }
                     Err(error) => {
@@ -750,7 +831,10 @@ impl CosmicTextSystemState {
 
             let shaped_glyph = ShapedGlyph {
                 id: GlyphId(glyph.glyph_id as u32),
-                position: point(glyph.x.into(), glyph.y.into()),
+                position: point(
+                    (glyph.x + glyph.x_offset * f32::from(font_size)).into(),
+                    (glyph.y - glyph.y_offset * f32::from(font_size)).into(),
+                ),
                 index: glyph.start,
                 is_emoji,
             };
@@ -768,6 +852,10 @@ impl CosmicTextSystemState {
             }
         }
 
+        if let Some((sink, missing_glyphs)) = self.missing_glyph_sink.as_ref().zip(missing_glyphs) {
+            sink.report(missing_glyphs);
+        }
+
         LineLayout {
             font_size,
             width: layout.w.into(),
@@ -775,6 +863,80 @@ impl CosmicTextSystemState {
             descent: layout.max_descent.into(),
             runs,
             len: text.len(),
+        }
+    }
+
+    fn missing_glyphs(
+        &self,
+        text: &str,
+        font_runs: &[FontRun],
+        missing_text_indices: impl IntoIterator<Item = usize>,
+    ) -> Vec<MissingGlyph> {
+        let mut missing_text_indices = missing_text_indices.into_iter().peekable();
+        if missing_text_indices.peek().is_none() {
+            return Vec::new();
+        }
+        let mut missing_text_indices = missing_text_indices.collect::<Vec<_>>();
+        missing_text_indices.sort_unstable();
+        missing_text_indices.dedup();
+
+        let mut font_run_index = 0;
+        let mut font_run_end = font_runs.first().map_or(0, |font_run| font_run.len);
+        let mut missing_glyphs = Vec::new();
+        let mut missing_index = 0;
+        for (grapheme_start, grapheme) in text.grapheme_indices(true) {
+            let grapheme_end = grapheme_start + grapheme.len();
+            while missing_text_indices
+                .get(missing_index)
+                .is_some_and(|text_index| *text_index < grapheme_start)
+            {
+                missing_index += 1;
+            }
+            let Some(&text_index) = missing_text_indices.get(missing_index) else {
+                break;
+            };
+            if text_index >= grapheme_end {
+                continue;
+            }
+
+            while font_run_end <= text_index && font_run_index + 1 < font_runs.len() {
+                font_run_index += 1;
+                let Some(font_run) = font_runs.get(font_run_index) else {
+                    break;
+                };
+                font_run_end += font_run.len;
+            }
+            let font_class = self.fallback_font_class(
+                font_runs
+                    .get(font_run_index)
+                    .or_else(|| font_runs.last())
+                    .map(|font_run| font_run.font_id),
+            );
+            missing_glyphs.push(MissingGlyph::new(grapheme.into(), font_class));
+            while missing_text_indices
+                .get(missing_index)
+                .is_some_and(|text_index| *text_index < grapheme_end)
+            {
+                missing_index += 1;
+            }
+        }
+        missing_glyphs
+    }
+
+    fn fallback_font_class(&self, font_id: Option<FontId>) -> FallbackFontClass {
+        let Some(font_id) = font_id else {
+            return FallbackFontClass::Proportional;
+        };
+        let loaded_font = self.loaded_font(font_id);
+        let is_monospace = self
+            .font_system
+            .db()
+            .face(loaded_font.font.id())
+            .is_some_and(|face| face.monospaced);
+        if is_monospace {
+            FallbackFontClass::Monospace
+        } else {
+            FallbackFontClass::Proportional
         }
     }
 }
@@ -1055,7 +1217,7 @@ fn face_info_into_properties(
     }
 }
 
-fn check_is_known_emoji_font(postscript_name: &str) -> bool {
+pub(crate) fn check_is_known_emoji_font(postscript_name: &str) -> bool {
     // TODO: Include other common emoji fonts
     postscript_name == "NotoColorEmoji"
 }
@@ -1064,6 +1226,14 @@ fn check_is_known_emoji_font(postscript_name: &str) -> bool {
 #[cfg(all(test, feature = "upstream-font-tests"))]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "test-support")]
+    use std::{cell::RefCell, rc::Rc};
+    use std::{
+        sync::mpsc,
+        thread,
+        time::{Duration, Instant},
+    };
 
     #[test]
     fn all_font_names_tracks_available_families() -> Result<()> {
@@ -1106,6 +1276,7 @@ mod tests {
 
     const IBM_PLEX: &[u8] =
         include_bytes!("../../../assets/fonts/ibm-plex-sans/IBMPlexSans-Regular.ttf");
+    const LILEX: &[u8] = include_bytes!("../../../assets/fonts/lilex/Lilex-Regular.ttf");
 
     /// Every code point of `Bidi_Class=B`, each of which starts a new bidi
     /// paragraph and so can split one line into mixed-direction paragraphs.
@@ -1117,6 +1288,70 @@ mod tests {
         let text_system = CosmicTextSystem::new_without_system_fonts("IBM Plex Sans");
         text_system.add_fonts(vec![Cow::Borrowed(IBM_PLEX)])?;
         Ok(text_system)
+    }
+
+    #[test]
+    fn cached_font_resolution_does_not_wait_for_cold_lookups() -> Result<()> {
+        for family in [".ZedSans", "Missing Font"] {
+            let platform_text_system = Arc::new(text_system()?);
+            let text_system = gpui::TextSystem::new(platform_text_system.clone());
+            let cached = gpui::font(family);
+            let expected = platform_text_system.font_id(&gpui::font(".ZedSans"))?;
+            assert_eq!(text_system.resolve_font(&cached), expected);
+            let (sender, receiver) = mpsc::channel();
+
+            thread::scope(|scope| {
+                let backend = platform_text_system.0.read();
+                let deadline = Instant::now() + Duration::from_secs(5);
+                let cold = scope.spawn(|| text_system.resolve_font(&cached.clone().bold()));
+                while !platform_text_system.0.is_locked_exclusive() && Instant::now() < deadline {
+                    thread::yield_now();
+                }
+                let cold_waiting = platform_text_system.0.is_locked_exclusive();
+                let warm = scope.spawn(|| sender.send(text_system.resolve_font(&cached)));
+                let result =
+                    receiver.recv_timeout(deadline.saturating_duration_since(Instant::now()));
+                drop(backend);
+                let cold_result = cold.join();
+                let warm_result = warm.join();
+
+                assert!(cold_waiting);
+                assert_eq!(result.expect("cached lookup blocked"), expected);
+                assert_eq!(cold_result.expect("cold lookup panicked"), expected);
+                warm_result
+                    .expect("warm lookup panicked")
+                    .expect("receiver dropped");
+            });
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn adding_fonts_retries_cached_font_failures() -> Result<()> {
+        let platform_text_system = Arc::new(CosmicTextSystem::new_without_system_fonts("Lilex"));
+        let text_system = gpui::TextSystem::new(platform_text_system.clone());
+        text_system.add_fonts(vec![Cow::Borrowed(IBM_PLEX)])?;
+        let original_fallback = platform_text_system.font_id(&gpui::font(".ZedSans"))?;
+        let requests = [
+            gpui::Font::default(),
+            gpui::font("Lilex"),
+            gpui::font("Missing Font"),
+        ];
+        for requested in &requests {
+            assert_eq!(text_system.resolve_font(requested), original_fallback);
+        }
+        assert_eq!(
+            text_system.get_font_for_id(original_fallback),
+            Some(gpui::font(".ZedSans"))
+        );
+
+        text_system.add_fonts(vec![Cow::Borrowed(LILEX)])?;
+        for (requested, resolved) in requests.iter().zip([".SystemUIFont", "Lilex", ".ZedMono"]) {
+            let installed = platform_text_system.font_id(&gpui::font(resolved))?;
+            assert_ne!(installed, original_fallback);
+            assert_eq!(text_system.resolve_font(requested), installed);
+        }
+        Ok(())
     }
 
     #[test]
@@ -1135,7 +1370,10 @@ mod tests {
                 ..regular.clone()
             };
             let font_id = text_system.font_id(&requested)?;
-            assert_eq!(font_id, regular_id);
+            // An italic request gets crate::fast::synthetic_italic's slanted twin.
+            let twins = &text_system.0.read().synthetic_italic;
+            assert_eq!(twins.is_twin(font_id), style != gpui::FontStyle::Normal);
+            assert_eq!(twins.base(font_id), regular_id);
             assert_eq!(
                 text_system.font_weight_and_style(font_id)?,
                 (gpui::FontWeight::NORMAL, gpui::FontStyle::Normal)
@@ -1151,6 +1389,29 @@ mod tests {
             font_id,
         }];
         Ok(text_system.layout_line(text, gpui::px(14.0), &runs))
+    }
+
+    #[test]
+    fn combining_marks_are_positioned_over_their_base() -> Result<()> {
+        let text_system = text_system()?;
+        let layout = layout_text(&text_system, "v\u{0304}v")?;
+        let glyphs = layout
+            .runs
+            .iter()
+            .flat_map(|run| run.glyphs.iter())
+            .collect::<Vec<_>>();
+        assert_eq!(glyphs.len(), 3);
+        let base = glyphs[0].position;
+        let mark = glyphs[1].position;
+        let next = glyphs[2].position;
+        assert!(mark.x > base.x);
+        assert!(
+            mark.x < next.x,
+            "combining mark positioned after its base: mark.x={:?}, next.x={:?}",
+            mark.x,
+            next.x
+        );
+        Ok(())
     }
 
     /// Mirrors the original crash: mixed-direction text reaching the shaper
@@ -1173,6 +1434,98 @@ mod tests {
         assert_eq!(lines.len(), 2);
         assert_eq!(lines[1].len(), "\u{05d0}\u{001c}A".len());
         assert!(lines[1].width() > Pixels::ZERO);
+        Ok(())
+    }
+
+    #[cfg(feature = "test-support")]
+    #[test]
+    fn reports_graphemes_that_exhaust_font_fallback() -> Result<()> {
+        let platform_text_system = Arc::new(text_system()?);
+        let dispatcher = gpui::TestDispatcher::new(0);
+        let cx =
+            gpui::TestAppContext::build_with_text_system(dispatcher, None, platform_text_system);
+        let observed = Rc::new(RefCell::new(Vec::new()));
+        let _subscription = cx.update(|cx| {
+            let observed = observed.clone();
+            cx.on_missing_glyphs(move |missing_glyphs, _| {
+                observed.borrow_mut().extend_from_slice(missing_glyphs);
+            })
+        });
+        let text: SharedString = "界".into();
+
+        cx.update(|cx| {
+            let text_system = gpui::WindowTextSystem::new(cx.text_system().clone());
+            let runs = [gpui::TextRun {
+                len: text.len(),
+                font: gpui::font("IBM Plex Sans"),
+                ..Default::default()
+            }];
+            text_system.shape_line(text, gpui::px(14.0), &runs, None);
+        });
+        cx.run_until_parked();
+
+        let observed = observed.borrow();
+        assert_eq!(observed.len(), 1);
+        assert_eq!(observed[0].grapheme(), "界");
+        assert_eq!(
+            observed[0].font_class(),
+            gpui::FallbackFontClass::Proportional
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn combines_missing_glyphs_from_one_grapheme() -> Result<()> {
+        let text_system = text_system()?;
+        let font_id = text_system.font_id(&gpui::font("IBM Plex Sans"))?;
+        let text = "x\u{0301}";
+        let runs = [FontRun {
+            len: text.len(),
+            font_id,
+        }];
+
+        let missing_glyphs = text_system
+            .0
+            .read()
+            .missing_glyphs(text, &runs, [0, "x".len()]);
+
+        assert_eq!(missing_glyphs.len(), 1);
+        assert_eq!(missing_glyphs[0].grapheme(), text);
+        Ok(())
+    }
+
+    #[test]
+    fn adding_fonts_invalidates_cached_line_layouts() -> Result<()> {
+        let platform_text_system = Arc::new(text_system()?);
+        let text_system = Arc::new(gpui::TextSystem::new(platform_text_system.clone()));
+        let window_text_system = gpui::WindowTextSystem::new(text_system.clone());
+        let text: SharedString = "cached text".into();
+        let runs = [gpui::TextRun {
+            len: text.len(),
+            font: gpui::font("IBM Plex Sans"),
+            ..Default::default()
+        }];
+
+        let first_layout = window_text_system.shape_line(text.clone(), gpui::px(14.0), &runs, None);
+        let cached_layout =
+            window_text_system.shape_line(text.clone(), gpui::px(14.0), &runs, None);
+        assert!(std::ptr::eq::<LineLayout>(
+            &**first_layout,
+            &**cached_layout
+        ));
+        let loaded_font_count = platform_text_system.0.read().loaded_fonts.len();
+
+        text_system.add_fonts(vec![Cow::Borrowed(LILEX)])?;
+
+        let refreshed_layout = window_text_system.shape_line(text, gpui::px(14.0), &runs, None);
+        assert!(!std::ptr::eq::<LineLayout>(
+            &**first_layout,
+            &**refreshed_layout
+        ));
+        assert_eq!(
+            platform_text_system.0.read().loaded_fonts.len(),
+            loaded_font_count
+        );
         Ok(())
     }
 
@@ -1288,6 +1641,50 @@ mod tests {
             assert!(layout.width > Pixels::ZERO, "{text:?}");
         }
 
+        Ok(())
+    }
+
+    /// cosmic-text sums word widths to get a line's width but accumulates glyph
+    /// advances to position glyphs, so a trailing zero-advance glyph (here a
+    /// zero-width space) can land a few ulps past the width. When that glyph is a
+    /// wrap boundary, the row before it extends past the line's width, and hit
+    /// testing in that sliver used to panic (ZED-BW8, ZED-75K, ZED-81Z).
+    #[test]
+    fn index_for_position_past_line_width() -> Result<()> {
+        let text_system = Arc::new(gpui::TextSystem::new(Arc::new(text_system()?)));
+        let window_text_system = gpui::WindowTextSystem::new(text_system);
+        let text: SharedString = "Warning: this will delete files\u{200b}".into();
+        let runs = [gpui::TextRun {
+            len: text.len(),
+            font: gpui::font("IBM Plex Sans"),
+            ..Default::default()
+        }];
+        let lines =
+            window_text_system.shape_text(text, gpui::px(14.), &runs, Some(gpui::px(4.)), None)?;
+        let line = &lines[0];
+        let width = line.unwrapped_layout.width;
+        let boundary_glyph = |row: usize| {
+            let boundary = line.wrap_boundaries()[row];
+            &line.runs()[boundary.run_ix].glyphs[boundary.glyph_ix]
+        };
+        let row = (1..line.wrap_boundaries().len())
+            .find(|row| boundary_glyph(*row).position.x > width)
+            .expect("trailing zero-width space should be a wrap boundary past the line width");
+        let row_start_x = f32::from(boundary_glyph(row - 1).position.x);
+        let row_end = boundary_glyph(row);
+
+        let mut x = f32::from(width) - row_start_x;
+        while x + row_start_x < f32::from(width) {
+            x = x.next_up();
+        }
+        assert!(gpui::px(x + row_start_x) < row_end.position.x);
+
+        let line_height = gpui::px(20.);
+        let position = gpui::point(gpui::px(x), line_height * row as f32 + gpui::px(1.));
+        assert_eq!(
+            line.index_for_position(position, line_height),
+            Err(row_end.index)
+        );
         Ok(())
     }
 

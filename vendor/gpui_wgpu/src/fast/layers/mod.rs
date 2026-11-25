@@ -1,3 +1,4 @@
+// Modified by Longbridge for gpui-fast.
 //! Scroll layer tiles on wgpu: the textures a layer's content is rasterized
 //! into, and the passes that draw them where the scene composites them.
 //! The core side is `gpui::fast::layers`; see

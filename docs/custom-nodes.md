@@ -174,4 +174,4 @@ canvas.edge_renderer = Arc::new(StraightEdge);
 
 默认使用 `BezierEdge`。自定义 `EdgeRenderer::paint` 接收转换后的屏幕像素端点、颜色和 `Window`，可以画正交线或其他路径。不要再转换 viewport；当前调用方已经转换为窗口坐标。
 
-这个接口只负责绘制所有连线共用的几何风格；不接收 Edge ID、标签、data 或选择状态。边的命中测试、重连手柄、节点自定义端口锚点、每条边独立样式和自动绕障尚未提供完整 UI 扩展接口。
+`BezierEdge` 和 `StraightEdge` 都可以点击选中。自定义 `EdgeRenderer` 可以实现 `hit_test` 启用选择。它收到的是画布局部逻辑像素中的两个端点和指针位置，应该使用与绘制相同的几何。画布通过传给 `paint` 的颜色区分选中连线。

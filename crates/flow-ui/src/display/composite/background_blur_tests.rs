@@ -419,7 +419,7 @@ mod background_blur_tests {
     #[test]
     fn background_blur_prepares_real_full_source_offscreen_prior_and_later_text() {
         let (_app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
-            gpui_kit::platform::current_platform(true),
+            crate::display::native_text_test_platform(),
         );
         let backend = TextBackendSnapshot::new(&bridge);
         let mut engine = text_engine();
@@ -470,7 +470,7 @@ mod background_blur_tests {
     #[test]
     fn background_blur_font_epoch_and_backend_withdrawal_reject_whole_frame_success() {
         let (_app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
-            gpui_kit::platform::current_platform(true),
+            crate::display::native_text_test_platform(),
         );
         let engine = text_engine();
         let make_key = || {

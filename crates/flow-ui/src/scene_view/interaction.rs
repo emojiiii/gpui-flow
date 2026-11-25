@@ -376,7 +376,7 @@ impl SceneView {
         self.plugin_event(input::CanvasEvent::FocusLost, cx);
         self.pending_native_focus = false;
     }
-    pub(super) fn scroll(&mut self, event: &ScrollWheelEvent, cx: &mut Context<Self>) {
+    pub(super) fn scroll(&mut self, event: &ScrollEvent, cx: &mut Context<Self>) {
         let delta = match event.delta {
             ScrollDelta::Pixels(p) => WorldPoint::new(p.x.into(), p.y.into()),
             ScrollDelta::Lines(p) => WorldPoint::new(p.x * 24., p.y * 24.),

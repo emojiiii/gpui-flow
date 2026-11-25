@@ -1,5 +1,8 @@
 use crate::{Point, Rect, Size};
-use petgraph::{algo::has_path_connecting, graph::DiGraph};
+use petgraph::{
+    algo::{has_path_connecting, kosaraju_scc},
+    graph::DiGraph,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -297,6 +300,7 @@ pub enum GraphError {
     InvalidClipboard(String),
     Validation(Vec<ValidationIssue>),
     Serialization(String),
+    DocumentTooLarge { max_bytes: usize },
     TransactionInProgress,
     NoActiveTransaction,
     Locked(String),
@@ -320,6 +324,9 @@ impl fmt::Display for GraphError {
                 Ok(())
             }
             Self::Serialization(s) => write!(f, "serialization error: {s}"),
+            Self::DocumentTooLarge { max_bytes } => {
+                write!(f, "document exceeds its {max_bytes}-byte save limit")
+            }
             Self::TransactionInProgress => write!(f, "a transaction is already in progress"),
             Self::NoActiveTransaction => write!(f, "there is no active transaction"),
             Self::Locked(s) => write!(f, "locked item: {s}"),
@@ -355,6 +362,100 @@ pub struct Graph {
     #[serde(default)]
     pub data: Value,
 }
+
+struct EdgeValidationIndex<'a> {
+    pairs: BTreeMap<(&'a PortRef, &'a PortRef), usize>,
+    counts: BTreeMap<&'a PortRef, usize>,
+    components: BTreeMap<&'a NodeId, usize>,
+    displaced_ids: BTreeSet<&'a EdgeId>,
+}
+
+impl<'a> EdgeValidationIndex<'a> {
+    fn new(graph: &'a Graph) -> Self {
+        let mut pairs = BTreeMap::new();
+        let mut counts = BTreeMap::new();
+        let mut displaced_ids = BTreeSet::new();
+        let mut nodes = BTreeMap::new();
+        let mut topology = (!graph.options.allow_cycles)
+            .then(|| DiGraph::<(), (), usize>::with_capacity(graph.nodes.len(), graph.edges.len()));
+
+        for (key, edge) in &graph.edges {
+            let (source, target) = (&edge.source, &edge.target);
+            *pairs.entry((source, target)).or_insert(0) += 1;
+            *counts.entry(source).or_insert(0) += 1;
+            if source != target {
+                *counts.entry(target).or_insert(0) += 1;
+            }
+            if key != &edge.id {
+                displaced_ids.insert(&edge.id);
+            }
+            if let Some(topology) = &mut topology {
+                // Keep dangling endpoints so malformed imports retain their path diagnostics.
+                let source = *nodes
+                    .entry(&source.node)
+                    .or_insert_with(|| topology.add_node(()));
+                let target = *nodes
+                    .entry(&target.node)
+                    .or_insert_with(|| topology.add_node(()));
+                topology.add_edge(source, target, ());
+            }
+        }
+
+        let mut components = BTreeMap::new();
+        if let Some(topology) = topology {
+            let mut component_ids = vec![0; topology.node_count()];
+            for (id, component) in kosaraju_scc(&topology).into_iter().enumerate() {
+                for node in component {
+                    component_ids[node.index()] = id;
+                }
+            }
+            components.extend(
+                nodes
+                    .into_iter()
+                    .map(|(id, node)| (id, component_ids[node.index()])),
+            );
+        }
+        Self {
+            pairs,
+            counts,
+            components,
+            displaced_ids,
+        }
+    }
+
+    fn check(&self, graph: &Graph, key: &EdgeId, edge: &Edge) -> Result<(), GraphError> {
+        if key != &edge.id || self.displaced_ids.contains(key) {
+            // The ordinary indexed path excludes exactly this edge. A malformed
+            // map may exclude a different set because queries compare stored IDs.
+            return graph.check_connection(&edge.source, &edge.target, Some(key));
+        }
+        let (output, input) = graph.connection_ports(&edge.source, &edge.target)?;
+        if self.pairs[&(&edge.source, &edge.target)] > 1 {
+            return Err(GraphError::InvalidConnection("duplicate connection".into()));
+        }
+        for (port, reference) in [(output, &edge.source), (input, &edge.target)] {
+            if port
+                .max_connections
+                .is_some_and(|max| self.counts[reference] > max)
+            {
+                return Err(GraphError::InvalidConnection(
+                    "port connection capacity reached".into(),
+                ));
+            }
+        }
+        // The edge is on a cycle exactly when there is a return path. A return
+        // path cannot need the edge itself, so one SCC pass covers all edges.
+        if !graph.options.allow_cycles
+            && self.components[&edge.source.node] == self.components[&edge.target.node]
+        {
+            return Err(GraphError::InvalidConnection(
+                "connection would create a cycle".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 impl Default for Graph {
     fn default() -> Self {
         Self {
@@ -468,12 +569,11 @@ impl Graph {
     ) -> Result<(), GraphError> {
         self.check_connection(source, target, None)
     }
-    fn check_connection(
+    fn connection_ports(
         &self,
         source: &PortRef,
         target: &PortRef,
-        ignore: Option<&EdgeId>,
-    ) -> Result<(), GraphError> {
+    ) -> Result<(&Port, &Port), GraphError> {
         let out = self
             .port(source)
             .ok_or_else(|| GraphError::MissingPort(source.clone()))?;
@@ -490,6 +590,16 @@ impl Graph {
         if !out.data_type.compatible_with(&input.data_type) {
             return Err(invalid("port types are incompatible"));
         }
+        Ok((out, input))
+    }
+    fn check_connection(
+        &self,
+        source: &PortRef,
+        target: &PortRef,
+        ignore: Option<&EdgeId>,
+    ) -> Result<(), GraphError> {
+        let (out, input) = self.connection_ports(source, target)?;
+        let invalid = |s: &str| GraphError::InvalidConnection(s.into());
         let edges: Vec<_> = self
             .edges
             .values()
@@ -540,6 +650,9 @@ impl Graph {
     }
     /// All validation issues, with stable paths suitable for an import UI.
     pub fn validation_issues(&self) -> Vec<ValidationIssue> {
+        self.validation_issues_with_edge_checks(true)
+    }
+    fn validation_issues_with_edge_checks(&self, check_edges: bool) -> Vec<ValidationIssue> {
         let mut issues = Vec::new();
         let mut push =
             |path: String, message: String| issues.push(ValidationIssue { path, message });
@@ -560,18 +673,21 @@ impl Graph {
                 );
             }
         }
-        for (id, edge) in &self.edges {
-            if id != &edge.id {
-                push(
-                    format!("edges.{id}.id"),
-                    "map key and edge id differ".into(),
-                );
-            }
-            if edge.id.as_str().trim().is_empty() {
-                push(format!("edges.{id}.id"), "id cannot be empty".into());
-            }
-            if let Err(error) = self.check_connection(&edge.source, &edge.target, Some(id)) {
-                push(format!("edges.{id}"), error.to_string());
+        if check_edges {
+            let index = EdgeValidationIndex::new(self);
+            for (id, edge) in &self.edges {
+                if id != &edge.id {
+                    push(
+                        format!("edges.{id}.id"),
+                        "map key and edge id differ".into(),
+                    );
+                }
+                if edge.id.as_str().trim().is_empty() {
+                    push(format!("edges.{id}.id"), "id cannot be empty".into());
+                }
+                if let Err(error) = index.check(self, id, edge) {
+                    push(format!("edges.{id}"), error.to_string());
+                }
             }
         }
         let mut memberships = BTreeSet::new();
@@ -618,7 +734,23 @@ impl Graph {
         issues
     }
     pub fn validate(&self) -> Result<(), GraphError> {
-        let issues = self.validation_issues();
+        self.validate_with_edge_checks(true)
+    }
+    /// Reuse the edge validation of an already validated editor state only when
+    /// every input to the edge rules is unchanged.
+    pub(crate) fn validate_change_from(&self, previous: &Self) -> Result<(), GraphError> {
+        let same_connections = self.options == previous.options
+            && self.edges == previous.edges
+            && self.nodes.len() == previous.nodes.len()
+            && self.nodes.iter().zip(&previous.nodes).all(
+                |((id, node), (previous_id, previous_node))| {
+                    id == previous_id && node.ports == previous_node.ports
+                },
+            );
+        self.validate_with_edge_checks(!same_connections)
+    }
+    fn validate_with_edge_checks(&self, check_edges: bool) -> Result<(), GraphError> {
+        let issues = self.validation_issues_with_edge_checks(check_edges);
         if issues.is_empty() {
             Ok(())
         } else {

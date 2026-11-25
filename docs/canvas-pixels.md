@@ -40,7 +40,7 @@ occurs in the core API. The PNG contains raw surface content at physical extent,
 not the retained Canvas fill/stroke/corners, world pose, ancestor clips/effects,
 or an entire SceneView screenshot. The host decides where to deliver the bytes.
 
-The implementation reuses the already locked png 0.17.16 codec and streams one
+The implementation uses the locked png codec and streams one
 demultiplied RGBA row at a time, with a 16KiB output chunk, rather than allocating
 a second complete straight-RGBA image. Source dimensions/pixels and work are
 admitted before encoding. A conservative 8MiB codec/scratch allowance is reserved

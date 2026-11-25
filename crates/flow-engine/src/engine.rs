@@ -71,7 +71,7 @@ impl SceneEngine {
     pub fn with_registry(mut scene: Scene, registry: ElementRegistry) -> Result<Self, EngineError> {
         registry.prepare_scene(&mut scene)?;
         let id = NEXT_ENGINE
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| v.checked_add(1))
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |v| v.checked_add(1))
             .map_err(|_| EngineError::Exhausted)?;
         let dirty = scene
             .nodes()
@@ -229,7 +229,8 @@ impl SceneEngine {
             Ok(i)
         }
     }
-    pub(crate) fn attached_id(&self, h: ElementHandle) -> Result<DisplayId, EngineError> {
+    /// Resolve a live, attached element owned by this engine.
+    pub fn attached_id(&self, h: ElementHandle) -> Result<DisplayId, EngineError> {
         let i = self.live(h)?;
         if i.state != InstanceState::Attached {
             Err(EngineError::DetachedHandle)

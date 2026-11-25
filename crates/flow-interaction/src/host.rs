@@ -287,7 +287,9 @@ impl PluginHost {
             editor.selection = capture.selection;
             let graph = editor.graph().clone();
             editor.selection.retain_existing(&graph);
-            editor.viewport = capture.viewport;
+            if let Err(error) = editor.set_viewport(capture.viewport) {
+                report.errors.push(error.into());
+            }
         }
         self.connection.cancel();
         self.connection_owner = None;
@@ -429,7 +431,7 @@ impl PluginHost {
             report.propagation_stopped |= output.stop_propagation;
             let mut failed = false;
             for command in output.commands {
-                if let Err(error) = self.process(editor, &id, command, &mut report) {
+                if let Err(error) = self.process(editor, &id, command, &mut report, |_| Ok(())) {
                     report.errors.push(error);
                     self.cancel_active(editor, &mut report);
                     failed = true;
@@ -468,17 +470,199 @@ impl PluginHost {
         editor: &mut Editor,
         command: CanvasCommand,
     ) -> Result<DispatchReport, InteractionError> {
-        let mut report = DispatchReport::default();
-        self.process(editor, "host", command, &mut report)?;
-        Ok(report)
+        self.execute_checked(editor, command, |_| Ok(()))
+            .map(|((), report)| report)
     }
-    fn process(
+    /// Inspect the filtered command before applying it. An error leaves the
+    /// editor unchanged and discards the filter effects for this command.
+    pub fn execute_checked<T>(
+        &mut self,
+        editor: &mut Editor,
+        command: CanvasCommand,
+        inspect: impl FnOnce(&CanvasCommand) -> Result<T, InteractionError>,
+    ) -> Result<(T, DispatchReport), InteractionError> {
+        let mut report = DispatchReport::default();
+        let result = self.process(editor, "host", command, &mut report, inspect)?;
+        Ok((result, report))
+    }
+
+    /// Apply a workflow batch under the canvas policy and installed middleware.
+    pub fn apply_agent_edit(
+        &mut self,
+        editor: &mut Editor,
+        request: AgentEditRequest,
+        validate: impl FnOnce(&Graph, &Graph) -> Result<(), String>,
+    ) -> Result<AgentEditReceipt, AgentEditError> {
+        if !self.allows(Capability::Edit) {
+            return Err(AgentEditError::policy_denied("canvas editing is disabled"));
+        }
+        if self.has_capture() || self.connection.active() || self.gesture_owner.is_some() {
+            return Err(AgentEditError::busy());
+        }
+        editor.apply_agent_edit_guarded(
+            request,
+            |staged, operation| {
+                self.authorize_agent_operation(staged, operation)
+                    .map_err(|error| error.to_string())
+            },
+            validate,
+        )
+    }
+
+    fn authorize_agent_operation(
+        &mut self,
+        editor: &Editor,
+        operation: &AgentOperation,
+    ) -> Result<(), InteractionError> {
+        let context = PluginContext {
+            editor,
+            policy: self.policy,
+            transforms: TransformCapabilities::default(),
+            connection: &self.connection,
+            capture_owner: None,
+        };
+        for entry in self.plugins.iter_mut().filter(|entry| entry.enabled) {
+            entry
+                .plugin
+                .authorize_agent_operation(operation, &context)
+                .map_err(|reason| InteractionError::PluginRejected {
+                    plugin: entry.id.clone(),
+                    reason,
+                })?;
+        }
+        match operation {
+            AgentOperation::AddNode { .. } => self.check_agent_command(
+                editor,
+                CanvasCommand::AddNode(
+                    operation
+                        .clone()
+                        .into_added_node()
+                        .expect("add-node operation"),
+                ),
+                None,
+            )?,
+            AgentOperation::UpdateNode {
+                id, position, size, ..
+            } => {
+                if let Some(position) = position {
+                    self.check_agent_command(
+                        editor,
+                        CanvasCommand::SetPositions {
+                            nodes: [(id.clone(), *position)].into(),
+                            groups: Default::default(),
+                        },
+                        None,
+                    )?;
+                }
+                if let Some(size) = size {
+                    self.check_agent_command(
+                        editor,
+                        CanvasCommand::ResizeNode {
+                            node: id.clone(),
+                            size: *size,
+                        },
+                        None,
+                    )?;
+                }
+            }
+            AgentOperation::SetNodeData { id, data } => self.check_agent_command(
+                editor,
+                CanvasCommand::SetNodeData {
+                    node: id.clone(),
+                    data: data.clone(),
+                },
+                None,
+            )?,
+            AgentOperation::RemoveNode { id } => self.check_agent_command(
+                editor,
+                CanvasCommand::RemoveNode { node: id.clone() },
+                None,
+            )?,
+            AgentOperation::Connect { source, target, .. } => {
+                let position = editor
+                    .graph()
+                    .port_position(target)
+                    .map_or(Point::ZERO, |p| editor.viewport.world_to_screen(p));
+                self.check_agent_command(
+                    editor,
+                    CanvasCommand::PreviewConnection {
+                        from: source.clone(),
+                        position,
+                        hovered: Some(target.clone()),
+                    },
+                    None,
+                )?;
+                let proposal =
+                    ConnectionDrag::for_proposal(source.clone(), target.clone(), position);
+                self.check_agent_command(
+                    editor,
+                    CanvasCommand::CompleteConnection {
+                        from: source.clone(),
+                    },
+                    Some(&proposal),
+                )?;
+            }
+            AgentOperation::Disconnect { .. } => {}
+        }
+        Ok(())
+    }
+
+    fn check_agent_command(
+        &mut self,
+        editor: &Editor,
+        mut command: CanvasCommand,
+        connection: Option<&ConnectionDrag>,
+    ) -> Result<(), InteractionError> {
+        let expected = command.clone();
+        self.filter_command(editor, "host", &mut command, connection)?;
+        if command != expected {
+            return Err(InteractionError::InvalidInput(
+                "a plugin changed an explicit agent edit".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn process<T>(
         &mut self,
         editor: &mut Editor,
         owner: &str,
         mut command: CanvasCommand,
         report: &mut DispatchReport,
-    ) -> Result<(), InteractionError> {
+        inspect: impl FnOnce(&CanvasCommand) -> Result<T, InteractionError>,
+    ) -> Result<T, InteractionError> {
+        let (effects, participants) = self.filter_command(editor, owner, &mut command, None)?;
+        let result = inspect(&command)?;
+        let graph = editor.graph().clone();
+        let selection = editor.selection.clone();
+        let viewport = editor.viewport;
+        self.apply(editor, owner, command, report)?;
+        if self.capture.is_some() || self.gesture_owner.is_some() {
+            self.participants.extend(participants);
+        }
+        for effect in effects {
+            self.effect(effect, report);
+        }
+        if &graph != editor.graph() {
+            self.effect(CanvasEffect::DocumentChanged, report);
+        }
+        if selection != editor.selection {
+            self.effect(CanvasEffect::SelectionChanged, report);
+        }
+        if viewport != editor.viewport {
+            self.effect(CanvasEffect::ViewportChanged, report);
+        }
+        report.handled = true;
+        Ok(result)
+    }
+
+    fn filter_command(
+        &mut self,
+        editor: &Editor,
+        owner: &str,
+        command: &mut CanvasCommand,
+        connection: Option<&ConnectionDrag>,
+    ) -> Result<(Vec<CanvasEffect>, Vec<String>), InteractionError> {
         if let Some(capability) = command.capability()
             && !self.allows(capability)
         {
@@ -501,17 +685,17 @@ impl PluginHost {
                 editor,
                 policy: self.policy,
                 transforms: TransformCapabilities::default(),
-                connection: &self.connection,
+                connection: connection.unwrap_or(&self.connection),
                 capture_owner: self.capture.as_ref().map(|c| c.owner.as_str()),
             };
             entry
                 .plugin
-                .filter_command(&mut command, &context, &mut effects)
+                .filter_command(command, &context, &mut effects)
                 .map_err(|reason| InteractionError::PluginRejected {
                     plugin: entry.id.clone(),
                     reason,
                 })?;
-            if command != before {
+            if *command != before {
                 participants.push(entry.id.clone());
             }
         }
@@ -537,27 +721,7 @@ impl PluginHost {
                 self.capture_owner().unwrap().into(),
             ));
         }
-        let graph = editor.graph().clone();
-        let selection = editor.selection.clone();
-        let viewport = editor.viewport;
-        self.apply(editor, owner, command, report)?;
-        if self.capture.is_some() || self.gesture_owner.is_some() {
-            self.participants.extend(participants);
-        }
-        for effect in effects {
-            self.effect(effect, report);
-        }
-        if &graph != editor.graph() {
-            self.effect(CanvasEffect::DocumentChanged, report);
-        }
-        if selection != editor.selection {
-            self.effect(CanvasEffect::SelectionChanged, report);
-        }
-        if viewport != editor.viewport {
-            self.effect(CanvasEffect::ViewportChanged, report);
-        }
-        report.handled = true;
-        Ok(())
+        Ok((effects, participants))
     }
     fn apply(
         &mut self,
@@ -680,17 +844,21 @@ impl PluginHost {
             }
             CanvasCommand::ResizeNode { node, size } => editor.resize_node(&node, size)?,
             CanvasCommand::Pan { delta } => {
-                if !editor.viewport.pan_by(delta) {
+                let mut viewport = editor.viewport;
+                if !viewport.pan_by(delta) {
                     return Err(InteractionError::InvalidInput("invalid pan delta".into()));
                 }
+                editor.set_viewport(viewport)?;
             }
             CanvasCommand::Zoom { position, zoom } => {
-                if !editor.viewport.zoom_at(position, zoom) {
+                let mut viewport = editor.viewport;
+                if !viewport.zoom_at(position, zoom) {
                     return Err(InteractionError::InvalidInput("invalid zoom".into()));
                 }
+                editor.set_viewport(viewport)?;
             }
             CanvasCommand::Fit { canvas, padding } => {
-                editor.fit_to_content(canvas, padding);
+                editor.try_fit_to_content(canvas, padding)?;
             }
             CanvasCommand::PreviewConnection {
                 from,
@@ -743,6 +911,15 @@ impl PluginHost {
             CanvasCommand::AddNode(node) => {
                 editor.transaction("Add node", move |graph| graph.add_node(node))?
             }
+            CanvasCommand::RemoveNode { node } => {
+                editor.transaction("Remove node", move |graph| {
+                    if graph.node(&node).is_some_and(|node| node.locked) {
+                        return Err(GraphError::Locked(node.to_string()));
+                    }
+                    graph.remove_node(&node)?;
+                    Ok(())
+                })?
+            }
             CanvasCommand::DeleteSelection => editor.delete_selection()?,
             CanvasCommand::GroupSelection { title, padding } => {
                 editor.group_selection(title, padding)?;
@@ -758,10 +935,10 @@ impl PluginHost {
                 editor.duplicate_selection(offset)?;
             }
             CanvasCommand::Undo => {
-                editor.undo();
+                editor.try_undo()?;
             }
             CanvasCommand::Redo => {
-                editor.redo();
+                editor.try_redo()?;
             }
             CanvasCommand::SetNodeData { node, data } => {
                 editor.transaction("Edit node", move |graph| {
@@ -777,6 +954,9 @@ impl PluginHost {
                 })?
             }
             CanvasCommand::LoadDocument(document) => editor.load_document(document)?,
+            CanvasCommand::ImportDocument(document) => {
+                editor.import_document(document, "Import graph")?;
+            }
             CanvasCommand::ImportGraph(graph) => {
                 editor.transaction("Import graph", move |target| {
                     *target = graph;

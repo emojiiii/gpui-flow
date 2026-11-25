@@ -23,18 +23,22 @@ macro_rules! forward {
 }
 impl Platform for GpuPlatform {
     forward! {
+        fn platform_info(&self) -> PlatformInfo;
         fn background_executor(&self) -> BackgroundExecutor;
         fn foreground_executor(&self) -> ForegroundExecutor;
         fn text_system(&self) -> Arc<dyn PlatformTextSystem>;
         fn run(&self, on_finish_launching: Box<dyn 'static + FnOnce()>) -> ();
         fn quit(&self) -> ();
         fn restart(&self, binary_path: Option<PathBuf>, arguments: Vec<OsString>) -> ();
+        fn set_initial_windowing(&self, request: WindowingRequest) -> ();
+        fn request_windowing(&self, request: WindowingRequest) -> Task<Result<()>>;
         fn activate(&self, ignoring_other_apps: bool) -> ();
         fn hide(&self) -> ();
         fn hide_other_apps(&self) -> ();
         fn unhide_other_apps(&self) -> ();
         fn displays(&self) -> Vec<Rc<dyn PlatformDisplay>>;
         fn primary_display(&self) -> Option<Rc<dyn PlatformDisplay>>;
+        fn on_displays_changed(&self, callback: Box<dyn FnMut()>) -> ();
         fn active_window(&self) -> Option<AnyWindowHandle>;
         fn window_stack(&self) -> Option<Vec<AnyWindowHandle>>;
         fn is_screen_capture_supported(&self) -> bool;
@@ -68,12 +72,15 @@ impl Platform for GpuPlatform {
         fn on_validate_app_menu_command(&self, callback: Box<dyn FnMut(&dyn Action) -> bool>) -> ();
         fn thermal_state(&self) -> ThermalState;
         fn on_thermal_state_change(&self, callback: Box<dyn FnMut()>) -> ();
+        fn power_mode(&self) -> PowerMode;
+        fn on_power_mode_change(&self, callback: Box<dyn FnMut()>) -> ();
         fn prevent_idle_sleep(&self, reason: &str) -> Task<Result<ActivityGuard>>;
         fn set_app_identity(&self, identifier: &str, name: &str) -> ();
         fn show_system_notification(&self, notification: SystemNotification) -> ();
-        fn dismiss_system_notification(&self, tag: &str) -> ();
+        fn dismiss_system_notification(&self, tag: &str) -> Task<()>;
         fn on_system_notification_response( &self, callback: Box<dyn FnMut(SystemNotificationResponse)>, ) -> ();
         fn compositor_name(&self) -> &'static str;
+        fn graphical_environment(&self) -> Option<GraphicalEnvironment>;
         fn app_path(&self) -> Result<PathBuf>;
         fn path_for_auxiliary_executable(&self, name: &str) -> Result<PathBuf>;
         fn set_cursor_style(&self, style: CursorStyle) -> ();
@@ -141,6 +148,7 @@ impl PlatformWindow for GpuWindow {
         fn on_hover_status_change(&self, callback: Box<dyn FnMut(bool)>) -> ();
         fn on_resize(&self, callback: Box<dyn FnMut(Size<Pixels>, f32)>) -> ();
         fn on_moved(&self, callback: Box<dyn FnMut()>) -> ();
+        fn on_display_changed(&self, callback: Box<dyn FnMut()>) -> ();
         fn on_should_close(&self, callback: Box<dyn FnMut() -> bool>) -> ();
         fn on_hit_test_window_control(&self, callback: Box<dyn FnMut() -> Option<WindowControlArea>>) -> ();
         fn on_close(&self, callback: Box<dyn FnOnce()>) -> ();
@@ -184,6 +192,7 @@ impl PlatformWindow for GpuWindow {
         fn map_window(&mut self) -> anyhow::Result<()>;
         fn window_controls(&self) -> WindowControls;
         fn set_client_inset(&self, _inset: Pixels) -> ();
+        fn set_client_corner_radii(&self, radii: Corners<Pixels>) -> ();
         fn gpu_specs(&self) -> Option<GpuSpecs>;
         fn update_ime_position(&self, _bounds: Bounds<Pixels>) -> ();
         fn insets(&self) -> WindowInsets;

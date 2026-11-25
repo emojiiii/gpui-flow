@@ -21,7 +21,7 @@ fn request(text: &str, wrap: Option<f32>) -> TextMeasureRequest {
     }
 }
 fn shaped(r: &TextMeasureRequest, w: f32, h: f32) -> TextBoxShape {
-    let app = gpui_kit::platform::headless();
+    let app = gpui::Application::with_platform(crate::display::native_text_test_platform());
     shape_text_in_box(
         &WindowTextSystem::new(app.text_system()),
         r,
@@ -71,7 +71,7 @@ fn ellipsis_fitting_text_empty_rows_and_trailing_newline_preserve_native_layout(
     for text in ["Fits", "", "A\n", "A\n\nB"] {
         let r = request(text, None);
         let s = shaped(&r, 300., 200.);
-        let app = gpui_kit::platform::headless();
+        let app = gpui::Application::with_platform(crate::display::native_text_test_platform());
         let raw = shape_text(
             &WindowTextSystem::new(app.text_system()),
             &r,
@@ -106,7 +106,7 @@ fn ellipsis_never_cuts_combining_or_zwj_graphemes() {
 }
 #[test]
 fn ellipsis_rejects_source_and_geometry_budgets_explicitly() {
-    let app = gpui_kit::platform::headless();
+    let app = gpui::Application::with_platform(crate::display::native_text_test_platform());
     let system = WindowTextSystem::new(app.text_system());
     for (r, w, h) in [
         (request(&"x".repeat(65537), None), 100., 24.),
@@ -123,8 +123,9 @@ fn ellipsis_rejects_source_and_geometry_budgets_explicitly() {
 #[test]
 fn ellipsis_cpu_raster_uses_real_marker_glyphs_and_shared_box_rows() {
     use std::sync::atomic::AtomicBool;
-    let (app, bridge) =
-        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let (app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
+        crate::display::native_text_test_platform(),
+    );
     let system = WindowTextSystem::new(app.text_system());
     let text = request("One two three four five six seven", Some(110.));
     let shaped = shape_text_in_box(
@@ -186,10 +187,17 @@ fn ellipsis_cpu_raster_uses_real_marker_glyphs_and_shared_box_rows() {
 fn real_italic_faces_feed_native_shaping_measurement_and_cpu_raster() {
     use gpui_flow_text::TextMeasurer;
     use std::sync::atomic::AtomicBool;
-    let (app, bridge) =
-        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let (app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
+        crate::display::native_text_test_platform(),
+    );
     let system = WindowTextSystem::new(app.text_system());
-    let regular = request("ffi / actual italic face café", None);
+    let mut regular = request("ffi / actual italic face café", None);
+    regular.font_family = match std::env::consts::OS {
+        "windows" => "Segoe UI",
+        "macos" => "Times",
+        _ => "DejaVu Sans",
+    }
+    .into();
     let mut italic = regular.clone();
     italic.italic = true;
     let upright = shape_text(&system, &regular, Hsla::default()).unwrap();

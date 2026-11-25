@@ -1,26 +1,20 @@
 # Controlled gpui_wgpu vendor
 
-Source: https://github.com/longbridge/gpui-fast/tree/26b0dccc97ebd14bbf9715741b6688132ba69491/crates/gpui_wgpu
+The vendored backend is based on the official
+[gpui-fast-wgpu 0.1.19 crate](https://crates.io/crates/gpui-fast-wgpu/0.1.19).
+Its upstream source is [gpui-fast v0.1.19](https://github.com/longbridge/gpui-fast/tree/fd15f82cd04839f1fd5e00111dd0cd9c9fe6468a/crates/gpui_wgpu)
+at commit `fd15f82cd04839f1fd5e00111dd0cd9c9fe6468a`. The published source includes
+the wgpu 30.0.1 compatibility adjustments. The retained benchmark comes from
+the tagged source.
 
-Commit: `26b0dccc97ebd14bbf9715741b6688132ba69491`
+`LICENSE-APACHE` matches the published crate's license byte for byte. The
+local bridge uses the same Apache-2.0 license.
 
-Only the original 23 files under `crates/gpui_wgpu` were extracted. No other
-upstream crate, workspace, Cargo cache, or Kit source is vendored. Original
-`LICENSE-APACHE` contains the byte-for-byte original license text, materialized
-from the upstream symlink chain `crates/gpui_wgpu/LICENSE-APACHE` →
-`../../LICENSE-APACHE` → `LICENSE` so it remains valid in this standalone vendor. The upstream crate declares
-Apache-2.0; this local bridge is supplied under the same license.
+The local manifest uses the published dependency versions, including
+`gpui-fast` 0.1.19, `gpui-pre-collections` and `gpui-pre-util` 0.3.14, and
+`wgpu` 30.0.1. The workspace patches the backend package to this directory so
+native platform crates and Flow use one renderer and a shared GPUI core.
 
-The local Cargo.toml expands inherited upstream workspace package/dependency
-settings to the same explicit versions. gpui, collections and gpui_util retain
-the same official git URL and explicit revision as Flow's single dependency graph.
-The official gpui-pre facade crates re-export that same core; Kit is independently
-pinned to its compatible official revision. Do not update those
-packages independently or switch to a different revision for this vendor.
-
-The headless host is adapted from the original
-`src/fast/layers/tests.rs::Harness`. The production frame recorder, shader
-sources, pipeline construction, atlas and tile cache are the implementation
-used for all resulting pixels. The original upstream test harness is untouched.
-
-See PATCH.md for the complete changed-file and API contract inventory.
+The Flow headless adapter uses upstream's production `WgpuRendererCore`,
+including its frame recorder, shaders, pipelines, atlas and retained tile cache.
+See [PATCH.md](PATCH.md) for the local changes and API contracts.

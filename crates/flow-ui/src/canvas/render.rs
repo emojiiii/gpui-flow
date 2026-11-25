@@ -20,6 +20,7 @@ impl Render for FlowCanvas {
                 Some((
                     self.editor.graph().port_position(&e.source)?,
                     self.editor.graph().port_position(&e.target)?,
+                    self.editor.selection.edges.contains(&e.id),
                 ))
             })
             .collect();
@@ -69,11 +70,11 @@ impl Render for FlowCanvas {
                         x += gap;
                     }
                 }
-                for (from, to) in edges {
+                for (from, to, selected) in edges {
                     edge_renderer.paint(
                         screen(from),
                         screen(to),
-                        rgb(theme.accent).alpha(0.55),
+                        rgb(theme.accent).alpha(if selected { 1. } else { 0.55 }),
                         window,
                     );
                 }
@@ -166,7 +167,7 @@ impl Render for FlowCanvas {
                 MouseButton::Right,
                 cx.listener(|this, _, _, cx| this.cancel_interaction(cx)),
             )
-            .on_scroll_wheel(cx.listener(|this, event, _, cx| this.scroll(event, cx)));
+            .on_scroll(cx.listener(|this, event, _, cx| this.scroll(event, cx)));
         for group in self.editor.graph().groups.values() {
             let r = viewport.world_rect_to_screen(group.bounds);
             let group_id = group.id.clone();
@@ -263,7 +264,7 @@ impl Render for FlowCanvas {
         }
         let palette = Palette::new("node-palette").disabled(!self.is_editable()).title("COMPONENTS / 组件").theme(theme)
             .entries(BUILTIN_KINDS.iter().map(|kind| PaletteEntry::new(*kind,format!("+  {kind}"),kind_color(kind))))
-            .on_select(cx.listener(|this,kind: &str,_,cx| this.add(kind,cx)))
+            .on_select(cx.listener(|this,kind: &str,_,cx| this.add_builtin(kind,cx)))
             .footer(div().mt_4().text_xs().text_color(rgb(theme.muted)).child("Middle / Space+drag: pan\nCtrl + wheel: zoom\nDrag background: select\nDrag port: connect / release: cancel\nCtrl + Z: undo\nCtrl + C/V: duplicate\nCtrl + S: copy JSON"));
         let mut inspector = crate::Inspector::new("node-inspector")
             .title("INSPECTOR / 属性")
@@ -288,11 +289,7 @@ impl Render for FlowCanvas {
                     node.size.height,
                     node.ports.len()
                 )));
-            if let Some(record) = self
-                .workflow
-                .as_ref()
-                .and_then(|w| w.records().get(&node.id))
-            {
+            if let Some(record) = self.workflow_record(&node.id) {
                 inspector = inspector
                     .child(panel_title("WORKFLOW", theme))
                     .child(format!("{:?} · {}", record.status, record.message));
@@ -355,17 +352,19 @@ impl Render for FlowCanvas {
             }))
             .child(self.button("retry", "Retry selected", cx, |this, cx| {
                 if let Some(workflow) = this.workflow.as_mut() {
-                    let selected = this
-                        .editor
-                        .selection
-                        .nodes
-                        .iter()
-                        .cloned()
-                        .collect::<Vec<_>>();
-                    let result = if selected.is_empty() {
+                    let selection = &this.editor.selection.nodes;
+                    let result = if selection.is_empty() {
                         workflow.retry_failed()
                     } else {
-                        workflow.retry_many(&selected)
+                        let selected: Vec<_> = selection
+                            .intersection(&this.workflow_nodes)
+                            .cloned()
+                            .collect();
+                        if selected.is_empty() {
+                            Err("Selected nodes are outside the current workflow run".into())
+                        } else {
+                            workflow.retry_many(&selected)
+                        }
                     };
                     if let Err(error) = result {
                         this.message = error;

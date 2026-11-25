@@ -40,9 +40,9 @@ jobs:
           cargo fmt --all -- --check
           cargo fmt --manifest-path docs/examples/Cargo.toml --package gpui-flow-doc-examples -- --check
       - name: Test model and runtime without a display
-        run: cargo test --locked -p gpui-flow-core -p gpui-flow-interaction -p gpui-flow-runtime -p gpui-flow-scene -p gpui-flow-editor -p gpui-flow-engine -p gpui-flow-layout -p gpui-flow-animation -p gpui-flow-media
+        run: cargo test --locked -p gpui-flow-core -p gpui-flow-interaction -p gpui-flow-runtime -p gpui-flow-scene -p gpui-flow-editor -p gpui-flow-engine -p gpui-flow-layout -p gpui-flow-animation -p gpui-flow-media -p gpui-flow-creative -p gpui-flow-composite -p gpui-flow-text
       - name: Lint model and runtime
-        run: cargo clippy --locked -p gpui-flow-core -p gpui-flow-interaction -p gpui-flow-runtime -p gpui-flow-scene -p gpui-flow-editor -p gpui-flow-engine -p gpui-flow-layout -p gpui-flow-animation -p gpui-flow-media --all-targets -- -D warnings
+        run: cargo clippy --locked -p gpui-flow-core -p gpui-flow-interaction -p gpui-flow-runtime -p gpui-flow-scene -p gpui-flow-editor -p gpui-flow-engine -p gpui-flow-layout -p gpui-flow-animation -p gpui-flow-media -p gpui-flow-creative -p gpui-flow-composite -p gpui-flow-text --all-targets -- -D warnings
       - name: Install FFmpeg for real decode tests
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Test actual media decode and playback lifecycle
@@ -80,10 +80,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             build-essential pkg-config clang libclang-dev \
-            libasound2-dev libfontconfig-dev libfreetype-dev libssl-dev \
+            fonts-dejavu-core libasound2-dev libfontconfig-dev libfreetype-dev libssl-dev \
             libvulkan1 mesa-vulkan-drivers libwayland-dev \
             libx11-xcb-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev \
-            libzstd-dev
+            libzstd-dev xauth xvfb
       - name: Verify macOS SDK
         if: runner.os == 'macOS'
         run: |
@@ -97,12 +97,22 @@ jobs:
         with:
           key: native-${{ matrix.os }}
       - name: Check all workspace targets
-        run: cargo check --locked --workspace --all-targets
+        run: cargo check --locked --workspace --all-targets --features gpui-flow-creative/desktop
       - name: Lint full workspace
-        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets --features gpui-flow-creative/desktop -- -D warnings
       - name: Test reusable UI components
+        if: runner.os != 'Linux'
         run: cargo test --locked -p gpui-flow --lib
-      - name: Link native Studio
-        run: cargo build --locked -p flow-studio --bins
-      # This job proves compilation and linking, not graphical interaction.
+      - name: Test Linux UI and software GPU rendering
+        if: runner.os == 'Linux'
+        run: |
+          driver=(/usr/share/vulkan/icd.d/lvp_icd*.json)
+          test -f "${driver[0]}"
+          export VK_DRIVER_FILES="${driver[0]}"
+          export XDG_RUNTIME_DIR="$RUNNER_TEMP/gpui-flow-xdg"
+          install -d -m 700 "$XDG_RUNTIME_DIR"
+          cargo test --locked -p gpui-flow -p gpui-fast-wgpu --features gpui-flow/gpu-damage-oracle --lib
+          env -u WAYLAND_DISPLAY xvfb-run -a -s '-screen 0 1600x900x24' cargo test --locked -p gpui-flow --features gpu-damage-oracle --lib gpu_damage::native_tests::native_flow_paint_persistent_gpu_rgba_and_work -- --exact --ignored --test-threads=1
+      - name: Link native Studio and Creative
+        run: cargo build --locked -p flow-studio -p gpui-flow-creative --features gpui-flow-creative/desktop --bins
       # Never run provider calls, upload graphs, or require production secrets in CI.

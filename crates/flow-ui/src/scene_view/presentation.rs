@@ -386,12 +386,6 @@ impl PresentationElement {
             .unwrap_or(false)
     }
 }
-impl IntoElement for PresentationElement {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
-}
 impl Element for PresentationElement {
     type RequestLayoutState = ();
     type PrepaintState = bool;

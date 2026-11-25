@@ -2,7 +2,7 @@
 //!
 //! Pinned leafer-in 3eb445bf, flow/layout/{x,y}/grow.ts, resizeWidth/Height:
 //! allocate/clamp the requested axis, then scaleResize(scale, scale) if locked.
-//! Taffy 0.13.0's generate_anonymous_flex_items resolves definite size before
+//! Taffy's generate_anonymous_flex_items resolves definite size before
 //! flex growth; determine_used_cross_size can stretch without changing main.
 //! Neither is a lock on two existing dimensions. Reuse Taffy for main allocation
 //! and use this bounded coupling rather than adding a second flex solver.

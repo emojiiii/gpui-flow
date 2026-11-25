@@ -1,3 +1,4 @@
+// Modified by Longbridge for gpui-fast.
 //! Bind groups kept from frame to frame instead of created for every batch.
 //!
 //! Upstream creates a texture bind group for every sprite batch and an

@@ -4,7 +4,7 @@
 //! samples arbitrary linear/radial stops with the same transformed/clipped
 //! tessellation as solid vectors, rather than substituting a solid paint.
 use super::{RenderObject, vector::PaintLayer};
-use gpui::{App, Bounds, Corners, Path, Pixels, Point, RenderImage, Window, point, px, size};
+use gpui::{App, Bounds, Corners, Pixels, Point, RenderImage, Window, point, px, size};
 use gpui_flow_scene::{self as scene, Paint};
 use std::{cell::RefCell, collections::VecDeque, sync::Arc};
 
@@ -162,7 +162,7 @@ fn gpui_bounds(bounds: scene::Bounds) -> Bounds<Pixels> {
 pub(super) fn paint_gradient(
     object: &RenderObject,
     origin: Point<Pixels>,
-    path: Path<Pixels>,
+    triangles: &[[scene::Point; 3]],
     paint: &Paint,
     layer: PaintLayer,
     window: &mut Window,
@@ -212,20 +212,8 @@ pub(super) fn paint_gradient(
             );
             return;
         }
-        let triangles: Vec<_> = path
-            .vertices
-            .as_chunks::<3>()
-            .0
-            .iter()
-            .map(|triangle| {
-                std::array::from_fn(|i| {
-                    let v = &triangle[i];
-                    scene::Point::new(v.xy_position.x.into(), v.xy_position.y.into())
-                })
-            })
-            .collect();
         let transform = scene::Affine::translation(origin.x, origin.y) * object.screen_transform;
-        let raster = match scene::rasterize_paint(paint, &triangles, transform, options) {
+        let raster = match scene::rasterize_paint(paint, triangles, transform, options) {
             Ok(Some(raster)) => raster,
             Ok(None) => return,
             Err(error) => {

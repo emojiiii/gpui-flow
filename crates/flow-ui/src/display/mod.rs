@@ -23,6 +23,13 @@ use gpui::{prelude::*, *};
 use gpui_flow_core::Viewport;
 use gpui_flow_scene::{self as scene, ClipRegion, DisplayObject, Paint, Shape};
 
+#[cfg(test)]
+pub(crate) fn native_text_test_platform() -> std::rc::Rc<dyn gpui::Platform> {
+    // Windows only initializes DirectWrite for the window-capable platform.
+    // Font tests construct the application and run no window event loop.
+    gpui_kit::platform::current_platform(!cfg!(target_os = "windows"))
+}
+
 #[derive(Clone, PartialEq)]
 pub struct RenderObject {
     pub object: DisplayObject,

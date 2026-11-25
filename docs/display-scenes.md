@@ -41,7 +41,7 @@ let scene = Scene::from_json(&json)?;
 ## SVG 路径数据导入
 
 `display::Path::from_svg(d)` 接受 SVG `path` 的 `d` 字符串，复用已锁定的
-`svgtypes 0.15.3` 解析语法、`kurbo 0.11.3` 转换椭圆弧，不另写字符串词法器。
+`svgtypes` 解析语法、`kurbo` 转换椭圆弧。
 支持 M/L/H/V/C/S/Q/T/A/Z 及对应相对命令、隐式重复、子路径、紧凑数值和指数。
 结果是现有绝对 Move/Line/Quadratic/Cubic/Close 命令，可直接传入 DisplayObject，
 复用场景序列化、拾取、描边、CPU 合成和编辑器 Undo/Redo。

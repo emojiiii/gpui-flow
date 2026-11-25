@@ -74,8 +74,7 @@ this sub-scope recorded as `user_deferred`, not implemented or verified. Existin
 mouse/keyboard and typed host input support remains in the current scope.
 
 
-The Cargo lock pins GPUI to
-[`26b0dccc97ebd14bbf9715741b6688132ba69491`](https://github.com/longbridge/gpui-fast/tree/26b0dccc97ebd14bbf9715741b6688132ba69491).
+The Cargo lock pins [GPUI Fast 0.1.19](https://github.com/longbridge/gpui-fast/tree/v0.1.19).
 Its mouse down/move/up structs have no native timestamp or full held-button mask.
 All three Flow adapters share one normalizer: monotonic `Instant` receipt time,
 buttons tracked from observed transitions, and a reset on cancellation/focus loss.

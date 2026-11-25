@@ -26,10 +26,12 @@
 //! # Ok::<(), gpui_flow_core::GraphError>(())
 //! ```
 
+mod agent;
 mod editor;
 mod geometry;
 mod model;
 
+pub use agent::*;
 pub use editor::*;
 pub use geometry::*;
 pub use model::*;

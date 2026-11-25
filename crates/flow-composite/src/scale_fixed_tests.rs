@@ -113,7 +113,7 @@ fn scale_fixed_export_separates_logical_scale_and_pixel_ratio_and_rejects_svg_ca
     let mut reader = png::Decoder::new(Cursor::new(encoded.bytes))
         .read_info()
         .unwrap();
-    let mut bytes = vec![0; reader.output_buffer_size()];
+    let mut bytes = vec![0; reader.output_buffer_size().unwrap()];
     let info = reader.next_frame(&mut bytes).unwrap();
     let mass: f64 = (0..info.width)
         .map(|x| bytes[((160 * info.width + x) * 4 + 3) as usize] as f64 / 255.)

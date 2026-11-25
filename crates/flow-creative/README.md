@@ -26,7 +26,7 @@ cargo test --locked -p gpui-flow-creative --lib
 - 选卡片后在右侧编辑内容，应用才写文档；放弃修改不写历史
 - Frame 使用真实 Graph Group：显式边界、成员、移动、解组与持久化；不提供嵌套裁切
 - 图形编辑/连接/删除使用原有事务与 Undo/Redo；删除卡片同步删除相关连线
-- 保存/打开沿用 Flow 的原子文件写入。打开替换文档、清空历史；取消对话框不改文档
+- 保存沿用 Flow 的原子文件写入。打开成功会替换文档并清空历史，读取期间有修改时会保留当前画布并提示冲突
 - 「数据 / JSON」可导出文档，或加载 records 模板再导入。非法导入整体失败，原画布保留
 - 数据导入的图内容可一步撤销；视口属于导航状态，不进入图 Undo。文件不存选择/历史
 - 连线表示结构/类型关系，不自动运行模型或重生成图像
@@ -46,7 +46,9 @@ records v1 是另一条显式映射入口，`CanvasRecords` 包含 cards、links
 `CreativeRegistry` 校验标准/自定义 payload 和完整端口定义；拒绝 `DataType::Any`、
 未注册 kind、错误方向/类型/引用/容量。`CreativeGuard` 在实际命令路径校验 Add、Data、
 Paste、Import 和 Load，预览/最终连线仍共用原 Graph 规则。宿主文档验证钩子在取消现有手势前校验文件/JSON导入，保存也验证实际捕获的快照。旧 core 的 Any 通配行为未变。
-默认容量为 128 卡片、512 连线；单卡 payload 64 KiB、输入/输出文档 32 MiB。
+默认容量为 128 卡片、512 连线，单卡 payload 上限为 64 KiB。CreativeCanvas 在提交图和视口变更前
+按实际保存的 JSON 格式检查 32 MiB 文档上限。独立组合 `CreativeGuard` 和 `Editor` 的宿主可调用
+`Editor::set_document_byte_limit(MAX_JSON_BYTES)` 启用同一上限。
 
 这是可信宿主扩展 API，不是安全沙箱：直接改公开 Editor 或安装恶意命令 middleware
 不受本层保护。注册回调与 renderer 不写入 JSON，接收文档的宿主必须注册相同类型契约。

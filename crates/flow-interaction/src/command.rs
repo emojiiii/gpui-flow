@@ -128,6 +128,9 @@ pub enum CanvasCommand {
     },
     ClearConnection,
     AddNode(Node),
+    RemoveNode {
+        node: NodeId,
+    },
     DeleteSelection,
     GroupSelection {
         title: String,
@@ -149,6 +152,7 @@ pub enum CanvasCommand {
         data: Value,
     },
     LoadDocument(FlowDocument),
+    ImportDocument(FlowDocument),
     ImportGraph(Graph),
 }
 impl CanvasCommand {

@@ -20,7 +20,7 @@ let style = Style {
 
 ## Shared geometry
 
-The adapter reuses Kurbo 0.11.3 dash splitting and Lyon 1.0.22 expansion of a
+The adapter uses Kurbo dash splitting and Lyon expansion of a
 centered stroke of width `2 * width`. It canonicalizes the shape's filled region
 under `Style::fill_rule`, independently of the presence, visibility or color of
 fill paints. Inside intersects the doubled stroke with that region; Outside
@@ -34,7 +34,7 @@ a compound path that line is still clipped against the other contours’ combine
 fill region. Both rules apply across all open and closed contours together;
 winding reversal does not exchange Inside and Outside.
 
-Polygon intersection/difference uses pinned **i_overlay 9.0.0** (MIT OR
+Polygon intersection/difference uses pinned **i_overlay 9.2.0** (MIT OR
 Apache-2.0, Rust 1.88 minimum), with its checked i_float coordinate adapter.
 Lyon triangulates the canonical result. The same final `StrokeMesh` feeds native
 vector triangles, CPU compositing, painted hit tests and paint bounds. CPU
@@ -129,8 +129,7 @@ performance or cross-platform claim is made.
 - [Pinned Leafer doubled-stroke paint stages](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/partner/paint/src/Stroke.ts)
 - [Pinned Leafer Canvas clip adapter](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/canvas/canvas/src/LeaferCanvasBase.ts)
 - [Canvas implicit subpath closure for clipping](https://html.spec.whatwg.org/multipage/canvas.html#dom-context-2d-clip)
-- [i_overlay 9.0.0](https://docs.rs/i_overlay/9.0.0/i_overlay/)
-- [i_overlay integer coordinate contract](https://docs.rs/i_overlay/9.0.0/i_overlay/core/integer/index.html)
+- [i_overlay package and integer coordinate limits](https://docs.rs/crate/i_overlay/latest#integer-coordinate-limits)
 
 Run `cargo run --locked -p flow-studio --bin stroke_alignment`. The top native
 and bottom CPU rows contain equivalent Center/Inside/Outside geometry,

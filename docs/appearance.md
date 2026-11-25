@@ -106,7 +106,7 @@ positive on/off local lengths; odd patterns repeat twice. Signed offsets reset
 at each subpath. Zero/nonfinite/negative dash entries are rejected rather than
 silently normalized; miter limits must be finite and in 1..=10,000.
 
-The headless adapter uses existing Kurbo 0.11.3 dashing and Lyon 1.0.22 stroke
+The headless adapter uses Kurbo dashing and Lyon stroke
 tessellation. It owns shape conversion, finite checks and bounded mesh output,
 not another stroke expansion engine. Advanced render and hit share a fixed
 0.1-local-unit approximation; zoom/DPI do not rebuild a different picking mesh.

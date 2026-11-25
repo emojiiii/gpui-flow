@@ -25,7 +25,7 @@ fn request(content: &str) -> TextMeasureRequest {
 }
 #[test]
 fn unicode_presentation_matches_native_shaping_and_measurement_without_source_mutation() {
-    let app = gpui_kit::platform::headless();
+    let app = gpui::Application::with_platform(crate::display::native_text_test_platform());
     let system = WindowTextSystem::new(app.text_system());
     let measure = GpuiTextMeasurer::new(app.text_system());
     for case in [TextCase::Upper, TextCase::Lower] {
@@ -51,7 +51,7 @@ fn unicode_presentation_matches_native_shaping_and_measurement_without_source_mu
 }
 #[test]
 fn hard_breaks_empty_paragraphs_and_trailing_newline_have_exact_offsets() {
-    let app = gpui_kit::platform::headless();
+    let app = gpui::Application::with_platform(crate::display::native_text_test_platform());
     let system = WindowTextSystem::new(app.text_system());
     for (content, offsets) in [
         ("", vec![0.]),
@@ -77,7 +77,7 @@ fn hard_breaks_empty_paragraphs_and_trailing_newline_have_exact_offsets() {
 }
 #[test]
 fn wrapping_adds_no_paragraph_gap_and_ellipsis_preserves_original_row_positions() {
-    let app = gpui_kit::platform::headless();
+    let app = gpui::Application::with_platform(crate::display::native_text_test_platform());
     let system = WindowTextSystem::new(app.text_system());
     let mut r = request("one two three four five six seven eight nine\nfinal paragraph");
     r.wrap_width = Some(95.);
@@ -104,7 +104,7 @@ fn wrapping_adds_no_paragraph_gap_and_ellipsis_preserves_original_row_positions(
 }
 #[test]
 fn ellipsis_gap_visibility_and_decorations_share_the_same_line_offsets() {
-    let app = gpui_kit::platform::headless();
+    let app = gpui::Application::with_platform(crate::display::native_text_test_platform());
     let system = WindowTextSystem::new(app.text_system());
     let mut r = request("A\nB\nC");
     r.para_spacing = 20.;
@@ -143,7 +143,7 @@ fn ellipsis_gap_visibility_and_decorations_share_the_same_line_offsets() {
 #[test]
 fn cpu_glyph_pixels_match_explicit_transformed_text_at_dpr_and_alignment_variants() {
     let (_app, bridge) =
-        GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+        GpuiTextRasterizer::application(crate::display::native_text_test_platform());
     for case in [TextCase::Upper, TextCase::Lower] {
         for (scale, align, vertical) in [
             (1., TextAlign::Left, VerticalAlign::Top),
@@ -185,7 +185,8 @@ fn cpu_glyph_pixels_match_explicit_transformed_text_at_dpr_and_alignment_variant
 }
 #[test]
 fn paragraph_and_case_errors_preserve_raster_budgets_cancellation_and_input() {
-    let (app, bridge) = GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let (app, bridge) =
+        GpuiTextRasterizer::application(crate::display::native_text_test_platform());
     let mut r = TextRasterRequest {
         text: request("a\nb"),
         align: TextAlign::Left,
@@ -258,7 +259,7 @@ fn paragraph_and_case_errors_preserve_raster_budgets_cancellation_and_input() {
 #[test]
 fn paragraph_offset_storage_is_charged_to_the_raster_working_set() {
     let (_app, bridge) =
-        GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+        GpuiTextRasterizer::application(crate::display::native_text_test_platform());
     let r = TextRasterRequest {
         text: request("\n\n"),
         align: TextAlign::Left,
@@ -300,7 +301,7 @@ fn paragraph_offset_storage_is_charged_to_the_raster_working_set() {
 #[test]
 fn cpu_paragraph_gap_moves_glyph_ink_by_exact_hard_break_offset() {
     let (_app, bridge) =
-        GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+        GpuiTextRasterizer::application(crate::display::native_text_test_platform());
     let mut r = TextRasterRequest {
         text: request("A"),
         align: TextAlign::Left,

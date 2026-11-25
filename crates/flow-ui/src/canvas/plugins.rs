@@ -67,13 +67,24 @@ impl FlowCanvas {
         command: CanvasCommand,
         cx: &mut Context<Self>,
     ) -> Result<(), InteractionError> {
-        match self.interactions.execute(&mut self.editor, command) {
-            Ok(report) => {
+        self.execute_checked_command(command, |_| Ok(()), cx)
+    }
+    pub(super) fn execute_checked_command<T>(
+        &mut self,
+        command: CanvasCommand,
+        inspect: impl FnOnce(&CanvasCommand) -> Result<T, InteractionError>,
+        cx: &mut Context<Self>,
+    ) -> Result<T, InteractionError> {
+        match self
+            .interactions
+            .execute_checked(&mut self.editor, command, inspect)
+        {
+            Ok((result, report)) => {
                 self.apply_interaction_report(report, cx);
-                Ok(())
+                Ok(result)
             }
             Err(error) => {
-                self.message = error.to_string();
+                self.report_interaction_rejection(&error, cx);
                 cx.notify();
                 Err(error)
             }

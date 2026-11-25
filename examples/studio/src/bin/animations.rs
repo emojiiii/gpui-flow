@@ -1,5 +1,6 @@
 //! Host-clock adapter for deterministic engine animations; no provider calls.
 use gpui::{prelude::*, *};
+use gpui_flow::animation::Easing;
 use gpui_flow::{
     ControlButton, FlowTheme, SceneView,
     animation::*,

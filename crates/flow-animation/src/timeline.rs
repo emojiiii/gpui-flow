@@ -179,7 +179,7 @@ pub struct TimelineController {
 impl TimelineController {
     pub fn new(engine: &SceneEngine) -> Self {
         let id = crate::NEXT_CONTROLLER
-            .fetch_update(
+            .try_update(
                 std::sync::atomic::Ordering::Relaxed,
                 std::sync::atomic::Ordering::Relaxed,
                 |value| value.checked_add(1),

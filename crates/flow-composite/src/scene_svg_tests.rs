@@ -93,7 +93,7 @@ fn image(width: u32, height: u32, bgra: &[u8]) -> Arc<StaticImage> {
 }
 fn decode_png(bytes: &[u8]) -> (u32, u32, Vec<u8>) {
     let mut decoder = png::Decoder::new(Cursor::new(bytes)).read_info().unwrap();
-    let mut rgba = vec![0; decoder.output_buffer_size()];
+    let mut rgba = vec![0; decoder.output_buffer_size().unwrap()];
     let info = decoder.next_frame(&mut rgba).unwrap();
     rgba.truncate(info.buffer_size());
     (info.width, info.height, rgba)

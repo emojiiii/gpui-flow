@@ -1,10 +1,9 @@
 # Startup-only static font registration
 
-Status: an opt-in registration/binding checkpoint with state-machine tests,
-Linux backend compilation and [bounded X11 native acceptance](static-font-binding-native.md):
-28 physical actions, 21/21 trace checks and independent font-byte audits passed. This does **not** enable Canvas `strokeText`, stroke rasterization,
-new shaping, or cross-platform outline support. The CPU parser/outline foundation
-is documented separately in [static-font-outlines.md](static-font-outlines.md).
+The opt-in registration API binds prepared outlines at Linux application startup.
+The earlier GPUI revision completed 28 physical actions, 21/21 trace checks and
+independent font-byte audits in [the X11 native fixture](static-font-binding-native.md).
+The CPU parser and outline foundation are covered in [static-font-outlines.md](static-font-outlines.md).
 
 ## API and boundaries
 
@@ -57,13 +56,11 @@ so `add_fonts` success is never the binding proof. `TextSystem::resolve_font`
 silently falls back on error and is never used for the absence probe or initial
 live resolution.
 
-Cosmic caches an empty family lookup. Its key contains family, features and the
-fallback **option**, but excludes weight and style. The `None` probe is deliberately
-sacrificial; changing weight after poisoning a key cannot repair it. A failed live
-`Some(empty)` resolution ends the entire construction. Nothing retries that alias
-inside the same native system. No partial App/bridge or registration record is
-returned on failure. This is disposal of the private system, not transactional
-removal of fonts from a shared font database.
+Cosmic caches family candidates by family, features, and the fallback option.
+GPUI Fast 0.1.19 clears those entries when adding fonts. The factory gives the
+collision probe a distinct `None` key and verifies `Some(empty)` directly after
+registration. A failed live resolution drops the private system and all pending
+bindings.
 
 ## Immutable bindings and the next integration gate
 
@@ -94,25 +91,23 @@ gates.
 
 ## Audited source assumptions
 
-This implementation depends on the exact GPUI source in Cargo.lock:
-`26b0dccc97ebd14bbf9715741b6688132ba69491`. The optional `gpui_platform`
-dependency uses the same exact Git `rev` selector as workspace GPUI to avoid
-duplicate incompatible GPUI types; Cargo.lock pins the transitive graph. Never
-mix a floating branch selector with that revision. Re-audit these invariants
-before updating the pins:
+The workspace uses published `gpui-fast` and `gpui-fast-platform` 0.1.19. The
+optional platform dependency resolves to the same GPUI core, and the Linux
+platform uses the workspace's patched `gpui-fast-wgpu` backend. The following
+source paths describe the current invariants:
 
-- `crates/gpui_platform/src/gpui_platform.rs:57–74` and
-  `crates/gpui_linux/src/linux.rs:30–59`: fresh platform/client construction
-- `crates/gpui_linux/src/linux/platform.rs:159–184,272–274`: a fresh Cosmic Arc
-  when x11 or wayland is enabled, and clones of that exact Arc. Linux alone can
-  choose Noop, which is why explicit backend features are mandatory
-- `crates/gpui/src/app.rs:785–800`: App captures this platform's text system
-- `crates/gpui_wgpu/src/cosmic_text_system.rs:27–30,161–179`: native family cache
-  key and sticky query behavior
-- Same file `:299–305,345–389`: buffer registration, all family aliases, real `m`
-  admission, and append-only loaded-font IDs
-- Same file `:531–537,655,725–767`: native shaping can change run FontIds
-- Same file `:822–892`: exact empty-match error for both matching implementations
+- `gpui-fast-platform/src/gpui_platform.rs::current_platform` delegates to
+  `gpui-fast-linux/src/linux.rs::linux_platform` for fresh Linux construction.
+- `gpui-fast-linux/src/linux/platform.rs::LinuxCommon::new` creates a fresh
+  Cosmic text-system Arc with either `x11` or `wayland` enabled. The Linux
+  platform returns clones of that Arc. Without either feature it uses the
+  Noop system.
+- `gpui-fast/src/app.rs::App::new_app` captures the platform text-system Arc.
+- `vendor/gpui_wgpu/src/cosmic_text_system.rs` defines the family cache key,
+  clears family candidates on registration, checks all family aliases, and
+  allocates append-only loaded FontIds. Its `find_best_match` branches return
+  the same empty-match error. Native shaping can choose a different FontId for
+  fallback glyph runs.
 
 ## Verification scope
 
@@ -120,7 +115,7 @@ Focused tests exercise real prepared fixture bytes through a deterministic model
 of the pinned native cache and registration protocol, plus real GPUI TextSystem
 Arc identity with a Noop system. They cover single/multiple fonts, byte identity,
 exact styles, duplicate aliases, primary/secondary alias collisions, the exact
-absence error, `None` versus `Some(empty)` poisoning, ignored loads, errors/panics
+absence error, cache refresh after registration, ignored loads, errors/panics
 at each phase, partial-batch disposal, duplicate IDs, App resolution mismatch,
 wrong-App numerical IDs, unbound IDs, immutable bindings after unrelated
 registration, generic/no-backend rejection, epochs and cancellation.
@@ -132,6 +127,8 @@ still requires its own placement, geometry and publication acceptance.
 Cross-platform builds are untested.
 
 ### Local receipt (2026-10-03)
+
+These results used GPUI Fast Git revision `26b0dccc97ebd14bbf9715741b6688132ba69491`.
 
 - Registration-only full crate test: 53 unit tests (13 binding/registration tests)
   and one existing doctest passed, zero failures/ignored tests

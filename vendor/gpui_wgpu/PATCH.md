@@ -2,36 +2,35 @@
 
 ## Files
 
-- `LICENSE-APACHE`: materialize the original upstream license symlink target
-- `Cargo.toml`: expand inherited settings; add opt-in `flow-headless` feature;
-  leave the original Criterion-only font benchmark source unmodified but disable
-  its auto-discovery and dependency in this controlled application workspace
-- `src/cosmic_text_system.rs`: keep the original font-fixture tests behind the
-  separate `upstream-font-tests` feature; production font code is unchanged
-- `src/gpui_wgpu.rs`, `src/fast/mod.rs`: module/export hooks and narrow style-lint
-  allowances on unchanged upstream modules (constant chunk loops/cache tuple type);
-  Flow bridge code remains under the workspace strict check
-- `src/wgpu_renderer.rs`: one draw-entry namespace/receipt reset hook
-- `src/fast/frame.rs`: Flow state, upload/pass hooks, scoped error checking and
-  receipt publication after queue submission; explicit window-space Path
-  projection and original vertex selection for Flow tiles
-- `src/fast/layers/raster.rs`: original Path identity mapping and translated
-  full-window viewport for the explicit window-space mode
-- `src/fast/layers/tests.rs`: supply viewport size in the existing test host;
-  original test cases and generic tile-local behavior remain unchanged
-- `src/fast/flow_namespace.rs`: opaque namespace, panic-safe scope, cache reset,
-  execution receipt, failure stages and unit tests
-- `src/fast/flow_headless.rs`: feature-gated production FrameHost, persistent
-  render target, checked RGBA readback and real-adapter test
-- `src/shaders.wgsl`: evaluate Path clipping at the fragment pixel position,
-  avoiding an interpolated zero-sign flip at half-pixel bounds when the target
-  changes from a full window to a tile; retains the same inclusive clip rule
-- `SOURCE.md`, `PATCH.md`: provenance and contracts
+- `LICENSE-APACHE` contains the original published license text.
+- `Cargo.toml` uses the published package configuration and adds the
+  `flow-headless` and `upstream-font-tests` features. The Criterion font
+  benchmark source is retained with auto-discovery disabled.
+- `src/cosmic_text_system.rs` and `src/fast/synthetic_italic.rs` gate tests
+  requiring upstream font fixtures behind `upstream-font-tests`.
+- `src/gpui_wgpu.rs` and `src/fast/mod.rs` export the bridge and retain scoped
+  Clippy allowances for upstream loops and cache types.
+- `src/fast/dynamic_textures.rs` retains a scoped Clippy allowance for the
+  upstream texture-upload signature.
+- `src/wgpu_renderer.rs` resets the namespace and receipt at draw entry.
+- `src/fast/frame.rs` adds Flow state, upload/pass accounting, scoped error checks and
+  receipt publication after queue submission. It restores Path winding and
+  paint coordinates to window space for single-scene Flow tiles.
+- `src/fast/flow_namespace.rs` defines namespace identity, panic-safe scope, cache reset,
+  execution receipts and failure stages.
+- `src/fast/flow_headless.rs` uses the production renderer with a persistent
+  render target, checked RGBA readback and real-adapter tests.
+- `src/wgpu_context.rs` and `src/fast/rounded_clip.rs` enable production
+  headless device construction with the Flow feature.
+- `src/shaders.wgsl` evaluates Flow tile Path coverage at the original
+  window-space sample coordinates. It maps the hard clip to integer pixel
+  bounds so coverage includes a sample whose center lies exactly on either edge.
+- Formatting skips the external core fixtures referenced by upstream's
+  optional `test-support` rounded clip tests.
 
-All other original files, including the tile cache policy, remain
-byte-for-byte the official source. The Path clipping correction also applies to
-ordinary direct rendering; no bit-identical claim is made against the old shader
-at its unstable half-pixel boundary.
+The analytic Path renderer is shared by direct and tiled rendering. It uses
+upstream's path grid. Flow tile geometry and hard masks stay in tile space.
+Pixel output can differ from the previous gpui-fast release's MSAA renderer.
 
 ## Public contracts
 
@@ -55,12 +54,11 @@ keeps upstream cache/transport behavior and does not enable counters/error waits
 Flow must fall back to an unscoped whole host frame when host/Flow layer keys
 cannot be separated safely; namespace isolation is per-frame, not per-layer.
 
-`FlowLayerNamespace::new_window_space()` additionally opts into single-scene
-layer content in window-device coordinates. Original Path vertices are retained
-bit-for-bit and use the full-window projection with a translated tile viewport,
-preventing a different MSAA coverage decision at a tile boundary. Generic scroll
-content uses `new()` and its existing tile-local projection. A window-space layer
-with unsupported multipart content or inconsistent Path identity is rejected.
+`FlowLayerNamespace::new_window_space()` opts into single-scene layer content
+in window-device coordinates. It uses the upstream analytic Path renderer
+with window-space winding and shading to preserve direct-rendered Path pixels.
+Generic scrolling layers use `new()` and tile-space Path winding. The
+window-space mode rejects multipart content.
 
 The native opt-in frame path captures Validation, Internal and OutOfMemory
 errors separately before submit and around submit. Only an error-free queue
@@ -70,7 +68,7 @@ failure therefore cannot reuse the last successful Flow receipt. The receipt
 means accepted submission, not GPU completion or presentation success.
 
 - `tile_raster_passes`: actual begin_render_pass operations targeting layer
-  tiles, including continued passes; excludes path-intermediate passes
+  tiles
 - `instance_upload_calls/bytes`: actual successful write_buffer_with staging
   operations and allocated bytes, including alignment/minimum binding padding;
   excludes atlas, uniform and readback traffic
@@ -108,7 +106,9 @@ rejection after input-buffer destruction, and invalid-copy readback errors.
 Original upstream tests keep their upstream skip behavior; they
 must not be substituted for this mandatory-adapter Flow test.
 
-The original font-fixture test module is not run in this workspace: its three
-TTFs live in upstream `assets/fonts` outside the extracted crate. Enabling
-`upstream-font-tests` requires supplying those original fixtures; this is not a
-default/all-features test claim. No production font functionality is disabled.
+Tests behind `upstream-font-tests` require the original TTF fixtures from
+upstream `assets/fonts`. These fixtures are outside the extracted crate.
+The upstream rounded clip integration tests enabled by `test-support` require
+`crates/gpui/src/fast/rounded_clip_fixtures.rs` in the upstream workspace.
+The upstream image-returning headless renderer has its own optional
+`bench-support` and `test-support` features.

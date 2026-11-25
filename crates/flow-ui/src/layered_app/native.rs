@@ -232,7 +232,7 @@ impl Render for LayeredApp {
                     this.dispatch_input(CanvasEvent::PointerLeave, cx);
                 }
             }))
-            .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, _, cx| {
+            .on_scroll(cx.listener(|this, event: &ScrollEvent, _, cx| {
                 let delta = match event.delta {
                     ScrollDelta::Pixels(p) => ScenePoint::new(p.x.into(), p.y.into()),
                     ScrollDelta::Lines(p) => ScenePoint::new(p.x * 24., p.y * 24.),

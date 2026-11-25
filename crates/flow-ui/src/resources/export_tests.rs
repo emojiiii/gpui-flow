@@ -317,8 +317,9 @@ fn export_text_requires_real_font_bridge_and_does_not_fabricate_bounds_pixels() 
 fn scene_export_native_glyphs_preserve_case_paragraph_affine_and_font_epochs() {
     use crate::display::composite_text::TextBackendSnapshot;
     use gpui_flow_scene::Affine;
-    let (_app, bridge) =
-        gpui_flow_text::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let (_app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
+        crate::display::native_text_test_platform(),
+    );
     let backend = TextBackendSnapshot::new(&bridge);
     let mut s = Scene::new();
     let mut text = display::Text::new("Straße\nnext", Size::new(140., 80.));

@@ -1,3 +1,4 @@
+// Modified by Longbridge for gpui-fast.
 //! Render pass state set only when it changes.
 //!
 //! Upstream sets the pipeline and every bind group before each batch's draw.
@@ -14,15 +15,10 @@
 #[derive(Default)]
 pub(crate) struct PassState {
     pipeline: Option<wgpu::RenderPipeline>,
-    bind_groups: [Option<wgpu::BindGroup>; 3],
+    bind_groups: [Option<wgpu::BindGroup>; 4],
 }
 
 impl PassState {
-    /// Forgets what is bound, for a pass that starts with nothing bound.
-    pub(crate) fn forget(&mut self) {
-        *self = Self::default();
-    }
-
     pub(crate) fn set_pipeline(
         &mut self,
         pass: &mut wgpu::RenderPass<'_>,

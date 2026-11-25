@@ -11,14 +11,14 @@ gpui-flow-scene.workspace = true
 image = { version = "=0.25.10", default-features = false, features = ["jpeg", "webp"] }
 tiny-skia = { version = "=0.11.4", default-features = false, features = ["std", "simd"] }
 
-# Streaming PNG export reuses the version already present in Cargo.lock.
-png = "=0.17.16"
-# Already-locked encoder, used only for self-contained SVG image data.
-base64 = "=0.22.1"
+# Streaming PNG export shares the version used by image and resvg.
+png = "=0.18.1"
+# Scalar encoder for self-contained SVG image data.
+base64 = { version = "=0.23.1", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 serde_json.workspace = true
 
 # Independent XML/readback validation; no system font lookup.
-roxmltree = "=0.21.1"
+roxmltree = "=0.21.2"
 resvg = { version = "=0.46.0", default-features = false, features = ["raster-images"] }

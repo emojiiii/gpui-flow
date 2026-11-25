@@ -73,12 +73,13 @@ cargo run --locked -p flow-studio
 | 点击缩放百分比 | 回到 100% |
 | `F` / Fit | 适配全部图内容 |
 | 点击节点标题栏 | 选中并可拖动节点 |
-| Shift + 点击标题栏 | 切换多选 |
+| 点击连线 | 选中连线 |
+| Shift + 点击标题栏或连线 | 切换选中状态 |
 | 左键拖动空白背景；Shift 追加 | 按相交范围框选节点 |
 | Ctrl/Cmd + A | 全选节点 |
 | `G` | 切换点网格 |
 
-节点标题栏是默认选择/移动的命中区域。内置节点主体不是文本编辑器；选中节点后可在 Inspector 的 EDIT CONTENT 编辑内容。当前框选完成后会替换节点选择，而不是累加旧选择。
+选中节点后，可在 Inspector 的 EDIT CONTENT 编辑内容。
 
 ### 编辑和连线
 
@@ -148,9 +149,11 @@ let canvas = cx.new(|cx| {
 
 启动宿主时需与 Studio 一样设置 `gpui_kit::assets::Assets`，并在构造画布前执行 `gpui_kit::init(cx)`，为内容输入等组件初始化状态。
 
-`FlowCanvas` 是 GPUI Entity 的 view，不是一个运行服务器的全局单例。一个实例拥有自己的编辑器、选择、剪贴片段、内存快照和任务 Runtime。宿主可通过公共 `editor`、`registry`、`theme`、`edge_renderer`、`runtime`、`options` 字段组合应用能力。
+`FlowCanvas` 是可以通过 `.child(canvas)` 嵌入 GPUI 布局的 Entity。每次 `cx.new` 创建一个拥有独立文档、选择、历史、视口、焦点和 Runtime 的画布。要并排放置两块画布，可以分别构造 Entity，再把两者放入同一个 GPUI 容器。
 
-`FlowEvent` 提供 `DocumentChanged`、`SelectionChanged`、`ConnectionRejected(String)` 和 `RunChanged(String)`。目前事件不是覆盖全部行为的完整审计流：例如视口变化、部分快捷键选择、宿主直接编辑 `editor` 时需要宿主自行通知、保存或发事件。
+画布内的节点归各自的 `Graph`。在该画布的 `NodeRegistry` 注册 `NodeRenderer` 后，画布会将节点内容嵌入自己的节点外框，并处理坐标、拖拽、端口和选择。两块画布可以使用相同的节点 ID。图形场景使用 `SceneView`，其 `Group`、`Box` 和 `Frame` 管理各自的子元素。见[自定义节点](custom-nodes.md)和[图形场景](display-scenes.md)。
+
+宿主可以订阅 `FlowEvent`，处理文档、选择和运行状态变化，以及连线拒绝和 `InteractionRejected(String)`。宿主直接编辑 `editor` 时，由宿主通知订阅方或触发保存。
 
 ### 只嵌入画布
 

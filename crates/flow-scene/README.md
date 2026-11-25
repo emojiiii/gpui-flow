@@ -154,7 +154,7 @@ This matches the pinned Leafer descendant preference; it is not pixel picking.
 Rectangles and ellipses have analytical fill tests. Polygon/path fills use
 winding tests, with adaptive path flattening at 0.1 local-unit precision. Default
 solid-round stroke picking retains distance-to-segment tests. Advanced strokes
-reuse Kurbo 0.11.3 dashing and Lyon 1.0.22 tessellation; the bounded local
+reuse Kurbo dashing and Lyon tessellation; the bounded local
 `StrokeMesh` triangle union is shared with the native renderer. Its fixed
 0.1-local-unit approximation and actual dash gaps/cap/join shapes also define
 advanced picking. Nonzero world-space hit tolerance is converted conservatively

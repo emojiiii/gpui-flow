@@ -242,8 +242,8 @@ mod transaction {
             let mut pending = Vec::with_capacity(fonts.len());
             for request in fonts {
                 let mut descriptor = descriptor(&request);
-                // Sacrifice only None. Cosmic caches even failed family queries,
-                // and its family key does not contain weight/style.
+                // Keep the collision probe separate from the live descriptor.
+                // Cosmic's family cache key includes the fallback option.
                 match backend.font_id(&descriptor) {
                     Ok(_) => return Err(OutlineBindingError::AliasCollision),
                     Err(error) if error == ABSENT => {}

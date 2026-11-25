@@ -896,7 +896,7 @@ fn decode_export(result: &SceneExport) -> Vec<u8> {
             let mut reader = png::Decoder::new(std::io::Cursor::new(&result.bytes))
                 .read_info()
                 .unwrap();
-            let mut bytes = vec![0; reader.output_buffer_size()];
+            let mut bytes = vec![0; reader.output_buffer_size().unwrap()];
             reader.next_frame(&mut bytes).unwrap();
             bytes
         }

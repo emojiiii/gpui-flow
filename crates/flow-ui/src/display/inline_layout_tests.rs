@@ -22,7 +22,7 @@ fn request(content: &str) -> TextMeasureRequest {
 }
 #[test]
 fn inline_layout_uses_native_clusters_and_never_mutates_cached_layouts() {
-    let app = gpui_kit::platform::headless();
+    let app = gpui::Application::with_platform(crate::display::native_text_test_platform());
     let system = WindowTextSystem::new(app.text_system());
     let plain = request("office a e\u{301}");
     let original = shape_text(&system, &plain, Hsla::default()).unwrap();
@@ -70,7 +70,7 @@ fn inline_layout_uses_native_clusters_and_never_mutates_cached_layouts() {
 }
 #[test]
 fn inline_layout_indent_changes_wrap_and_ellipsis_keeps_only_paragraph_starts_indented() {
-    let app = gpui_kit::platform::headless();
+    let app = gpui::Application::with_platform(crate::display::native_text_test_platform());
     let system = WindowTextSystem::new(app.text_system());
     let mut r = request("alpha beta gamma delta epsilon\nsecond paragraph");
     r.wrap_width = Some(100.);
@@ -134,7 +134,7 @@ fn raster_request(content: &str) -> TextRasterRequest {
 #[test]
 fn inline_layout_cpu_indent_matches_exact_glyph_translation_and_budget_admission() {
     let (_app, bridge) =
-        GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+        GpuiTextRasterizer::application(crate::display::native_text_test_platform());
     let mut r = raster_request("AB");
     let render = |r: &TextRasterRequest| {
         bridge
@@ -201,7 +201,7 @@ fn inline_layout_cpu_indent_matches_exact_glyph_translation_and_budget_admission
 }
 #[test]
 fn inline_layout_rejects_invalid_style_dimensions() {
-    let app = gpui_kit::platform::headless();
+    let app = gpui::Application::with_platform(crate::display::native_text_test_platform());
     let system = WindowTextSystem::new(app.text_system());
     let mut r = request("A");
     for bad in [-1., f32::NAN, f32::INFINITY, 1_000_001.] {
@@ -217,7 +217,7 @@ fn inline_layout_rejects_invalid_style_dimensions() {
 #[test]
 fn inline_layout_ellipsis_reports_transient_owned_shape_peak() {
     let (_app, bridge) =
-        GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+        GpuiTextRasterizer::application(crate::display::native_text_test_platform());
     let mut r = raster_request(&"a ".repeat(200));
     r.text.letter_spacing = 1.;
     r.text.para_indent = 10.;
@@ -248,7 +248,7 @@ fn inline_layout_decoration_excludes_indent_and_empty_paragraphs() {
         TextDecoration,
         gpui_decoration::{DecorationRequest, layout_decorations},
     };
-    let app = gpui_kit::platform::headless();
+    let app = gpui::Application::with_platform(crate::display::native_text_test_platform());
     let system = WindowTextSystem::new(app.text_system());
     let mut r = request("A\n\nB");
     r.para_indent = 20.;

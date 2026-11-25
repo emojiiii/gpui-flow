@@ -38,7 +38,7 @@ fn raster_request(content: &str) -> TextRasterRequest {
 }
 #[test]
 fn writing_mode_measurement_uses_real_native_clusters_and_physical_axes() {
-    let app = gpui_kit::platform::headless();
+    let app = gpui::Application::with_platform(crate::display::native_text_test_platform());
     let system = WindowTextSystem::new(app.text_system());
     let backend = GpuiTextMeasurer::new(app.text_system());
     let r = request("office e\u{301}");
@@ -87,7 +87,7 @@ fn writing_mode_measurement_uses_real_native_clusters_and_physical_axes() {
 #[test]
 fn writing_mode_raster_paints_real_upright_glyphs_and_keeps_cancellation_and_limits() {
     let (_app, bridge) =
-        GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+        GpuiTextRasterizer::application(crate::display::native_text_test_platform());
     let r = raster_request("AB");
     let mut outputs = vec![];
     for mode in [
@@ -163,7 +163,7 @@ fn writing_mode_routes_scene_and_standalone_consumers_without_horizontal_fallbac
     };
     use std::sync::Arc;
     let (_app, bridge) =
-        GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+        GpuiTextRasterizer::application(crate::display::native_text_test_platform());
     for mode in [
         display::TextWritingMode::X,
         display::TextWritingMode::Y,
@@ -247,7 +247,8 @@ fn writing_mode_routes_scene_and_standalone_consumers_without_horizontal_fallbac
 
 #[test]
 fn writing_mode_ellipsis_keeps_native_ligature_and_combining_clusters_with_real_decorated_ink() {
-    let (app, bridge) = GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let (app, bridge) =
+        GpuiTextRasterizer::application(crate::display::native_text_test_platform());
     let system = WindowTextSystem::new(app.text_system());
     let content = "office e\u{301} ABCDEFGHIJKLMN";
     let native = shape_text(&system, &request(content), Hsla::default()).unwrap();
@@ -394,7 +395,7 @@ fn writing_mode_ellipsis_keeps_native_ligature_and_combining_clusters_with_real_
 #[test]
 fn writing_mode_narrow_ellipsis_preserves_native_marker_then_clips_and_marks_last_visible_column() {
     let (_app, bridge) =
-        GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+        GpuiTextRasterizer::application(crate::display::native_text_test_platform());
     let paint = |r: &TextRasterRequest, mode| {
         bridge
             .rasterize_writing_mode(
@@ -451,7 +452,8 @@ fn writing_mode_narrow_ellipsis_preserves_native_marker_then_clips_and_marks_las
 
 #[test]
 fn writing_mode_fractional_exact_fit_ellipsis_matches_clip_layout_and_pixels() {
-    let (app, bridge) = GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let (app, bridge) =
+        GpuiTextRasterizer::application(crate::display::native_text_test_platform());
     let system = WindowTextSystem::new(app.text_system());
     for mode in [WritingMode::XReverse, WritingMode::Y, WritingMode::YReverse] {
         for (paragraphs, line_height, para_spacing, wrap_width) in [
@@ -508,7 +510,7 @@ fn vertical_autoheight_uses_native_unwrapped_height_and_preserves_physical_width
     use gpui_flow_layout::{FlowLayout, TextSizing};
     use gpui_flow_scene::{DisplayObject, Point, Scene, Shape, Size, display};
     use std::sync::Arc;
-    let app = gpui_kit::platform::headless();
+    let app = gpui::Application::with_platform(crate::display::native_text_test_platform());
     let backend = Arc::new(GpuiTextMeasurer::new(app.text_system()));
     for (scene_mode, mode) in [
         (display::TextWritingMode::Y, WritingMode::Y),
@@ -560,7 +562,7 @@ fn vertical_autowidth_uses_native_wrapped_columns_and_keeps_physical_height() {
     use gpui_flow_layout::{FlowLayout, TextSizing};
     use gpui_flow_scene::{DisplayObject, Point, Scene, Shape, Size, display};
     use std::sync::Arc;
-    let app = gpui_kit::platform::headless();
+    let app = gpui::Application::with_platform(crate::display::native_text_test_platform());
     let backend = Arc::new(GpuiTextMeasurer::new(app.text_system()));
     for (scene_mode, mode) in [
         (display::TextWritingMode::Y, WritingMode::Y),
@@ -623,7 +625,7 @@ fn vertical_baseline_matches_same_app_native_metrics_and_arranged_world_baseline
     use gpui_flow_scene::{DisplayObject, Scene, Shape, Size, display};
     use gpui_flow_text::InlineAlign;
     use std::sync::Arc;
-    let app = gpui_kit::platform::headless();
+    let app = gpui::Application::with_platform(crate::display::native_text_test_platform());
     let system = WindowTextSystem::new(app.text_system());
     let backend = Arc::new(GpuiTextMeasurer::new(app.text_system()));
     for (scene_mode, mode) in [
@@ -784,7 +786,8 @@ fn vertical_baseline_matches_same_app_native_metrics_and_arranged_world_baseline
 #[test]
 fn vertical_first_baseline_places_real_first_cluster_at_horizontal_reference_pixels() {
     use gpui_flow_text::InlineAlign;
-    let (app, bridge) = GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+    let (app, bridge) =
+        GpuiTextRasterizer::application(crate::display::native_text_test_platform());
     let system = WindowTextSystem::new(app.text_system());
     let backend = GpuiTextMeasurer::new(app.text_system());
     let native = shape_text(&system, &request("AB"), Hsla::default()).unwrap();
@@ -865,7 +868,7 @@ fn vertical_empty_first_paragraph_indent_rejection_is_atomic_with_real_fonts() {
     use gpui_flow_layout::{AlignItems, FlowLayout, FlowStyle, TextSizing};
     use gpui_flow_scene::{DisplayObject, Scene, Shape, Size, display};
     use std::sync::Arc;
-    let app = gpui_kit::platform::headless();
+    let app = gpui::Application::with_platform(crate::display::native_text_test_platform());
     let backend = Arc::new(GpuiTextMeasurer::new(app.text_system()));
     for mode in [
         display::TextWritingMode::Y,

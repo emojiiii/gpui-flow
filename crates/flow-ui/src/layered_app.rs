@@ -110,7 +110,7 @@ impl LayeredApp {
     pub fn new(cx: &mut Context<Self>) -> Self {
         static NEXT_APP: AtomicU64 = AtomicU64::new(1);
         let owner = NEXT_APP
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_add(1))
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_add(1))
             .expect("app identity space exhausted");
         cx.on_release(|this: &mut Self, cx| {
             for layer in this.layers.values() {

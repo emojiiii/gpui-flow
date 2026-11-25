@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "gpui-flow agent edit request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "expected_revision", "operations"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "expected_revision": {
+      "type": "string",
+      "description": "Opaque revision from a snapshot of the target canvas. Copy it verbatim."
+    },
+    "operations": {
+      "type": "array",
+      "description": "Apply edits in order as one undoable transaction.",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/addNode" },
+          { "$ref": "#/$defs/updateNode" },
+          { "$ref": "#/$defs/setNodeData" },
+          { "$ref": "#/$defs/removeNode" },
+          { "$ref": "#/$defs/connect" },
+          { "$ref": "#/$defs/disconnect" }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Position in canvas world coordinates.",
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      }
+    },
+    "size": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height"],
+      "properties": {
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "height": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "portRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node", "port"],
+      "properties": {
+        "node": { "type": "string" },
+        "port": { "type": "string" }
+      }
+    },
+    "dataType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["any", "bool", "number", "string", "object", "named"] },
+        "name": { "type": ["string", "null"] }
+      },
+      "if": { "properties": { "kind": { "const": "named" } } },
+      "then": {
+        "required": ["name"],
+        "properties": { "name": { "type": "string" } }
+      },
+      "else": { "properties": { "name": { "type": "null" } } }
+    },
+    "port": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "direction", "data_type"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "direction": { "enum": ["input", "output"] },
+        "data_type": { "$ref": "#/$defs/dataType" },
+        "max_connections": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "default": null,
+          "description": "Null or omitted allows unlimited connections."
+        },
+        "data": { "default": null }
+      }
+    },
+    "addNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "id", "title", "position"],
+      "properties": {
+        "op": { "const": "add_node" },
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "position": { "$ref": "#/$defs/point" },
+        "kind": { "type": ["string", "null"], "default": "default" },
+        "size": {
+          "anyOf": [{ "$ref": "#/$defs/size" }, { "type": "null" }],
+          "default": { "width": 224, "height": 144 }
+        },
+        "ports": { "type": "array", "items": { "$ref": "#/$defs/port" }, "default": [] },
+        "data": { "default": null }
+      }
+    },
+    "updateNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "id"],
+      "properties": {
+        "op": { "const": "update_node" },
+        "id": { "type": "string" },
+        "title": { "type": ["string", "null"] },
+        "kind": { "type": ["string", "null"] },
+        "position": { "anyOf": [{ "$ref": "#/$defs/point" }, { "type": "null" }] },
+        "size": { "anyOf": [{ "$ref": "#/$defs/size" }, { "type": "null" }] },
+        "ports": { "type": ["array", "null"], "items": { "$ref": "#/$defs/port" } }
+      }
+    },
+    "setNodeData": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "id", "data"],
+      "properties": {
+        "op": { "const": "set_node_data" },
+        "id": { "type": "string" },
+        "data": { "description": "Replacement node data. Use null to clear data." }
+      }
+    },
+    "removeNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "id"],
+      "properties": {
+        "op": { "const": "remove_node" },
+        "id": { "type": "string" }
+      }
+    },
+    "connect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "id", "source", "target"],
+      "properties": {
+        "op": { "const": "connect" },
+        "id": { "type": "string", "description": "ID of the new edge." },
+        "source": { "$ref": "#/$defs/portRef", "description": "Output port." },
+        "target": { "$ref": "#/$defs/portRef", "description": "Input port." }
+      }
+    },
+    "disconnect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "id"],
+      "properties": {
+        "op": { "const": "disconnect" },
+        "id": { "type": "string", "description": "ID of the edge to remove." }
+      }
+    }
+  }
+}

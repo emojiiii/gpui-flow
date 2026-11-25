@@ -1,6 +1,6 @@
 //! Shared stroke geometry for alignment and non-default cap/join/dash styles.
 //!
-//! Kurbo 0.11.3 supplies dash splitting; Lyon 1.0.22 supplies all stroke
+//! Kurbo supplies dash splitting; Lyon supplies all stroke
 //! expansion/tessellation. Both are MIT OR Apache-2.0. This adapter only owns
 //! shape conversion, limits, finite checks, and picking of the resulting mesh.
 use crate::{

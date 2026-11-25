@@ -2517,7 +2517,7 @@ mod tests {
     fn same_backend_text_font_epoch_and_capability_withdrawal_reject_real_stale_work() {
         use gpui_flow_scene::{Color, DisplayObject, Size, Style, display};
         let (app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
-            gpui_kit::platform::current_platform(true),
+            crate::display::native_text_test_platform(),
         );
         assert!(bridge.matches_text_system(&app.text_system()));
         let other = gpui_kit::platform::headless();
@@ -2567,7 +2567,7 @@ mod tests {
             Affine, BlendMode, Color, DisplayObject, Scene, Size, Style, display,
         };
         let (_app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
-            gpui_kit::platform::current_platform(true),
+            crate::display::native_text_test_platform(),
         );
         let mut scene = Scene::new();
         scene
@@ -2824,7 +2824,7 @@ mod tests {
         use display::TextVerticalAlign;
         use gpui_flow_scene::{BlendMode, Color, DisplayObject, Scene, Size, Style, display};
         let (_app, bridge) = gpui_flow_text::GpuiTextRasterizer::application(
-            gpui_kit::platform::current_platform(true),
+            crate::display::native_text_test_platform(),
         );
         let render = |align, content: &str, height| {
             let mut scene = Scene::new();

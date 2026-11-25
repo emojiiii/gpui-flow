@@ -1,5 +1,5 @@
 use crate::*;
-use gpui_flow_core::{ConnectionDrag, Editor};
+use gpui_flow_core::{AgentOperation, ConnectionDrag, Editor};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PluginLifecycle {
     Installed,
@@ -112,6 +112,14 @@ pub trait CanvasPlugin<D = Editor, C = CanvasCommand> {
         _command: &mut C,
         _context: &PluginContext<'_, D>,
         _effects: &mut Vec<CanvasEffect>,
+    ) -> Result<(), String> {
+        Ok(())
+    }
+    /// Permit an explicit Agent operation against the staged workflow.
+    fn authorize_agent_operation(
+        &mut self,
+        _operation: &AgentOperation,
+        _context: &PluginContext<'_, D>,
     ) -> Result<(), String> {
         Ok(())
     }

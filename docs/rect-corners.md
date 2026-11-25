@@ -15,8 +15,8 @@ Rect's `to_path()` output.
 The pinned [UI cornerRadius declaration](https://github.com/leaferjs/leafer-ui/blob/1e11641d3ea6b0211c83447268a90b8d58feec25/packages/display/src/UI.ts)
 accepts scalar/four-number input; its
 [RectHelper fallback](https://github.com/leaferjs/leafer/blob/1d703303ff0759ce4973d54c87eeb8192dddc570/packages/path/src/RectHelper.ts)
-normalizes four clockwise radii with a half-short-side ceiling. Locked Kurbo
-0.11.3 `RoundedRect` already supplies that normalization, curve construction and
+normalizes four clockwise radii with a half-short-side ceiling. Kurbo's
+`RoundedRect` supplies that normalization, curve construction and
 analytic winding test, so this component reuses it instead of implementing new
 corner-arc or tessellation algorithms. No upstream code was copied.
 

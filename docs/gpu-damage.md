@@ -49,11 +49,11 @@ tool overlays remain outside the retained slice.
 
 The actual submitted scene must have the expected opaque borderless backdrop,
 matching bounds/clip, no atlas sprites/effect primitives, at most 4,096 paint
-operations and 262,144 Path vertices. The window admits at most 32 visible tiles,
-each 512×512 device pixels, across at most 32 live views. Bounds must fit the
+operations and 262,144 packed Path curve and tile records. The window admits up
+to 32 visible tiles, each 512×512 device pixels, across at most 32 live views. Bounds must fit the
 backend's tile-coordinate range. A shared 48 MiB conservative upload estimate
-charges each source's vertices and operations to every visible tile, including
-padding; a large Path's tile fanout cannot spend the source budget repeatedly.
+charges each source's packed Path bytes and operation estimates to every visible
+tile, including padding.
 This admission estimate is separate from actual receipt byte counts.
 These limits bound Flow's admitted work; they
 are not a hard total VRAM bound. The upstream 64 MiB tile-cache budget remains
@@ -85,8 +85,8 @@ old styled snapshot is relabelled with a newer engine revision.
 - Each view has a checked non-reused layer key. Each window has an opaque backend
   namespace. Switching producer or returning to unscoped host drawing clears
   retained tile textures and bindings, preventing historical host-key aliasing
-- Flow explicitly selects window-space Path rendering: original vertex bits and
-  full-window projection are preserved while the viewport moves onto each tile.
+- Flow evaluates Path winding and paint at the original window pixel centers
+  while keeping raster bounds and clip masks local to each retained tile.
   Ordinary upstream scroll layers retain their independent content-space mode
 - A prepared frame is not committed. Only exactly one successful scoped backend
   submission acknowledges its engine revision. Zero/multiple submissions,
@@ -103,8 +103,7 @@ speedup or universal memory saving follows from fewer tile passes.
 
 `GpuDamageStatus.receipt` records actual backend operations after queue submission:
 
-- `tile_raster_passes`: real tile-target render-pass begins, including resumed
-  passes; excludes Path-intermediate passes
+- `tile_raster_passes`: real render-pass begins that target retained layer tiles
 - `instance_upload_calls/bytes`: actual successful instance staging writes,
   including alignment/padding; excludes atlas, uniform and readback traffic
 - `encoded/submitted`: accepted recording/submission, not display presentation
@@ -135,8 +134,8 @@ presentation state, rather than simulating device loss.
 
 ```bash
 cargo test --locked -p gpui-flow --features gpu-damage-oracle --lib gpu_damage::tests
-cargo test --locked -p gpui_wgpu --features flow-headless --lib flow_namespace
-cargo test --locked -p gpui_wgpu --features flow-headless --lib fast::flow_headless::tests::flow_gpu_readback_receipt_and_namespace_isolation -- --exact
+cargo test --locked -p gpui-fast-wgpu --features flow-headless --lib flow_namespace
+cargo test --locked -p gpui-fast-wgpu --features flow-headless --lib fast::flow_headless::tests::flow_gpu_readback_receipt_and_namespace_isolation -- --exact
 # On a Linux desktop, run the ignored native regression alone:
 cargo test --locked -p gpui-flow --features gpu-damage-oracle --lib gpu_damage::native_tests::native_flow_paint_persistent_gpu_rgba_and_work -- --exact --ignored --test-threads=1 --nocapture
 ```
@@ -153,20 +152,16 @@ unverified. The fixed ledger records only this bounded accepted scope.
 
 ## One dependency graph and source provenance
 
-The workspace pins official gpui-fast `26b0dccc97ebd14bbf9715741b6688132ba69491`
-and GPUI Kit `4c7f1350331562436df868c55ac33bebc4c6406c`. Official gpui-pre facade
-packages re-export that same GPUI core. The newer gpui-fast upstream sync changes
-LineWrapper incompatibly; it is not mixed into this graph.
+The workspace pins GPUI Fast `0.1.19` and GPUI Kit `0.11.0`. Kit's `gpui-fast`
+feature selects the same published Fast core and platform packages as Flow.
 
 Only gpui_wgpu is locally controlled, with original Apache-2.0 licensing and a
 small, documented bridge. See [source](../vendor/gpui_wgpu/SOURCE.md) and
 [patch inventory](../vendor/gpui_wgpu/PATCH.md). No upstream repository or Cargo
 cache source is modified.
 
-Cargo patches are root-workspace settings, not transitive library settings.
-An embedding workspace must carry this repository's `[patch.crates-io]` facade
-entries and `[patch."https://github.com/longbridge/gpui-fast"]` backend entry,
-with the backend path adjusted to this checkout. All direct GPUI/platform
-references must use the same explicit revision. Keep its own Cargo.lock and
-verify one core/platform/backend graph; do not silently combine crates.io GPUI,
-another Git source selector, or an unpatched native renderer.
+An embedding workspace using `gpu-damage` must carry the `[patch.crates-io]` entry for
+`gpui-fast-wgpu` in its root manifest, with the backend path adjusted to this
+checkout. Use the same published GPUI Fast core and platform versions for any
+direct dependencies and enable Kit's `gpui-fast` feature. Keep an embedding
+workspace lockfile and verify the renderer resolves to this path.

@@ -135,8 +135,8 @@ All candidate validation remains global. Cloning/scanning/validation costs are
 not eliminated, and this is not a general observer graph, Taffy tree cache, or
 large-document performance guarantee. `FlowReport.containers`, `items` and
 `passes` report actual selected arrangement work. Both dirty and full layout use
-the existing private Taffy 0.13.0 numeric line adapter and f64 fallback; no solver
-version or default shrink behavior is changed.
+the private Taffy numeric line adapter and f64 fallback. Flow retains its
+default shrink behavior.
 
 ## Explicit frame staging and host contract
 

@@ -23,13 +23,11 @@ pub struct EditSessionToken {
 }
 struct OwnedEdit {
     token: EditSessionToken,
-    document_epoch: u64,
     baseline: Snapshot,
     last_owned: Snapshot,
 }
 struct Playback {
     token: PlaybackToken,
-    document_epoch: u64,
     baseline: Snapshot,
     last_frame: Snapshot,
 }
@@ -46,6 +44,8 @@ pub struct SceneEditor {
     playback: Option<Playback>,
     playback_sequence: u64,
     history_limit: usize,
+    observed_engine_id: u64,
+    observed_document_epoch: u64,
     observed_revision: u64,
 }
 impl SceneEditor {
@@ -53,10 +53,11 @@ impl SceneEditor {
         Ok(Self::from_engine(SceneEngine::new(scene)?))
     }
     pub fn from_engine(engine: SceneEngine) -> Self {
-        let observed_revision = engine.revision();
         Self {
+            observed_engine_id: engine.engine_id(),
+            observed_document_epoch: engine.document_epoch(),
+            observed_revision: engine.revision(),
             engine,
-            observed_revision,
             selection: SceneSelection::default(),
             viewport: Viewport::default(),
             undo: vec![],
@@ -77,15 +78,20 @@ impl SceneEditor {
         scene.validate_view(Viewport::default().zoom)?;
         self.engine.set_stroke_view_scale(Viewport::default().zoom);
         self.engine.reset_scene(scene)?;
+        self.observed_engine_id = self.engine.engine_id();
+        self.observed_document_epoch = self.engine.document_epoch();
         self.observed_revision = self.engine.revision();
         self.selection.clear();
         self.viewport = Viewport::default();
+        self.clear_history();
+        Ok(())
+    }
+    fn clear_history(&mut self) {
         self.undo.clear();
         self.redo.clear();
         self.pending = None;
         self.edit_session = None;
         self.playback = None;
-        Ok(())
     }
     pub fn set_history_limit(&mut self, limit: usize) {
         self.history_limit = limit;
@@ -93,6 +99,21 @@ impl SceneEditor {
         self.undo.drain(..excess);
         let excess = self.redo.len().saturating_sub(limit);
         self.redo.drain(..excess);
+    }
+    /// Whether a committed undo step is available for the current document.
+    pub fn can_undo(&self) -> bool {
+        self.history_is_current() && !self.undo.is_empty()
+    }
+    /// Whether a committed redo step is available for the current document.
+    pub fn can_redo(&self) -> bool {
+        self.history_is_current() && !self.redo.is_empty()
+    }
+    fn history_is_current(&self) -> bool {
+        !self.editing()
+            && self.playback.is_none()
+            && self.observed_engine_id == self.engine.engine_id()
+            && self.observed_document_epoch == self.engine.document_epoch()
+            && self.observed_revision == self.engine.revision()
     }
     fn locked(scene: &Scene, id: &gpui_flow_scene::DisplayId) -> bool {
         let mut current = Some(id);
@@ -170,7 +191,6 @@ impl SceneEditor {
         let baseline = self.snapshot();
         self.playback = Some(Playback {
             token,
-            document_epoch: self.engine.document_epoch(),
             last_frame: baseline.clone(),
             baseline,
         });
@@ -304,7 +324,6 @@ impl SceneEditor {
         let baseline = self.snapshot();
         self.edit_session = Some(OwnedEdit {
             token,
-            document_epoch: self.engine.document_epoch(),
             last_owned: baseline.clone(),
             baseline,
         });
@@ -468,23 +487,18 @@ impl SceneEditor {
         }
         Ok(())
     }
-    /// Direct engine writes outside an owned session/playback remain a history
-    /// boundary. During ownership, preserve the last owned snapshot and external
-    /// edit separately; cancellation can never overwrite the external write.
+    /// An engine replacement or document reset discards old history and ownership.
+    /// A direct write to the same document preserves the last owned snapshot and
+    /// the external edit separately when a session or playback was active.
     pub fn reconcile_external(&mut self) -> bool {
         self.engine.set_stroke_view_scale(self.viewport.zoom);
-        // Engine replacement can reuse a revision number; identity is stronger
-        // than revision equality. A document reset always drops old history.
-        if self.edit_session.as_ref().is_some_and(|edit| {
-            edit.token.engine != self.engine.engine_id()
-                || edit.document_epoch != self.engine.document_epoch()
-        }) {
-            self.edit_session = None;
-            self.pending = None;
-            self.playback = None;
-            self.undo.clear();
-            self.redo.clear();
+        let engine_id = self.engine.engine_id();
+        let document_epoch = self.engine.document_epoch();
+        if self.observed_engine_id != engine_id || self.observed_document_epoch != document_epoch {
+            self.clear_history();
             self.selection.retain_existing(self.engine.scene());
+            self.observed_engine_id = engine_id;
+            self.observed_document_epoch = document_epoch;
             self.observed_revision = self.engine.revision();
             return true;
         }
@@ -500,19 +514,11 @@ impl SceneEditor {
                 self.push_undo(edit.last_owned);
             }
         } else if let Some(playback) = self.playback.take() {
-            if self.engine.document_epoch() != playback.document_epoch {
-                // An explicit new-document load remains a history boundary.
-                self.undo.clear();
-                self.redo.clear();
-            } else {
-                // Preserve the last owned animation frame and the subsequent
-                // external edit as distinct undo steps, never restore over it.
-                if playback.baseline.scene != playback.last_frame.scene {
-                    self.push_undo(playback.baseline);
-                }
-                if playback.last_frame.scene != *self.scene() {
-                    self.push_undo(playback.last_frame);
-                }
+            if playback.baseline.scene != playback.last_frame.scene {
+                self.push_undo(playback.baseline);
+            }
+            if playback.last_frame.scene != *self.scene() {
+                self.push_undo(playback.last_frame);
             }
         } else {
             self.undo.clear();

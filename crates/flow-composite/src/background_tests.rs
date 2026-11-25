@@ -823,7 +823,7 @@ fn background_alpha_png_webp_exports_and_canvas_failure_are_transactional() {
             let mut decoder = png::Decoder::new(std::io::Cursor::new(&encoded.bytes))
                 .read_info()
                 .unwrap();
-            let mut rgba = vec![0; decoder.output_buffer_size()];
+            let mut rgba = vec![0; decoder.output_buffer_size().unwrap()];
             let info = decoder.next_frame(&mut rgba).unwrap();
             rgba.truncate(info.buffer_size());
             rgba

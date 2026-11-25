@@ -55,6 +55,15 @@ pub fn builtin_node(kind: &str, id: impl Into<NodeId>, position: Point) -> Node 
         _ => output::model(id, position).with_kind(kind),
     }
 }
+
+/// Creation defaults for the standard workflow palette, including typed ports.
+pub fn builtin_agent_node_templates() -> Vec<AgentNodeTemplate> {
+    BUILTIN_KINDS
+        .iter()
+        .map(|&kind| builtin_node(kind, kind, Point::ZERO).into())
+        .collect()
+}
+
 /// Reusable fallback dispatcher; custom registries can replace any body independently.
 pub fn builtin_node_body(node: &Node, context: crate::NodeRenderContext) -> gpui::AnyElement {
     match node.kind.as_str() {
@@ -102,9 +111,12 @@ mod tests {
 
     #[test]
     fn builtin_payloads_and_demo_remain_valid() {
-        for kind in BUILTIN_KINDS {
+        for (kind, template) in BUILTIN_KINDS.iter().zip(builtin_agent_node_templates()) {
             let node = builtin_node(kind, *kind, Point::ZERO);
             assert_eq!(&node.kind, kind);
+            let json = serde_json::to_value(&template).unwrap();
+            assert_eq!(json["kind"], *kind);
+            assert_eq!(json["ports"], serde_json::to_value(&node.ports).unwrap());
             let mut graph = Graph::new();
             graph.add_node(node).unwrap();
         }

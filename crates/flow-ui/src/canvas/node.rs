@@ -48,11 +48,7 @@ impl FlowCanvas {
                     )),
             );
         }
-        if let Some(record) = self
-            .workflow
-            .as_ref()
-            .and_then(|w| w.records().get(&node.id))
-        {
+        if let Some(record) = self.workflow_record(&node.id) {
             body = body.child(
                 div()
                     .px(px(10. * context.zoom))

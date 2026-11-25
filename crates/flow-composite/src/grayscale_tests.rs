@@ -783,7 +783,7 @@ fn grayscale_png_webp_jpeg_exports_keep_background_and_snapshot_semantics() {
                 let mut decoder = png::Decoder::new(std::io::Cursor::new(&result.bytes))
                     .read_info()
                     .unwrap();
-                let mut rgba = vec![0; decoder.output_buffer_size()];
+                let mut rgba = vec![0; decoder.output_buffer_size().unwrap()];
                 decoder.next_frame(&mut rgba).unwrap();
                 rgba
             }
