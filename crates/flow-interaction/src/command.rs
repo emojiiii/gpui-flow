@@ -149,6 +149,7 @@ pub enum CanvasCommand {
         data: Value,
     },
     LoadDocument(FlowDocument),
+    ImportDocument(FlowDocument),
     ImportGraph(Graph),
 }
 impl CanvasCommand {

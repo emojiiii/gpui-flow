@@ -1,3 +1,4 @@
+use super::interaction::visible_edge_endpoints;
 use super::*;
 use gpui_flow_interaction::{CanvasCommand, HitTarget};
 
@@ -18,27 +19,19 @@ impl Render for FlowCanvas {
             .map(|g| g.bounds)
             .collect();
         let edge_renderer = self.edge_renderer.clone();
-        let hidden = model::hidden_node_ids(self.editor.graph());
+        let graph = self.editor.graph();
+        let hidden = model::hidden_node_ids(graph);
         let entity = cx.entity().downgrade();
-        let edges: Vec<_> = self
-            .editor
-            .graph()
+        let edges: Vec<_> = graph
             .edges
             .values()
-            .filter(|e| !hidden.contains(&e.source.node) && !hidden.contains(&e.target.node))
             .filter_map(|e| {
+                let (source, target) = visible_edge_endpoints(graph, e, viewport, &hidden)?;
                 Some((
-                    self.editor.graph().port_position(&e.source)?,
-                    self.editor.graph().port_position(&e.target)?,
-                    graph_port_color(
-                        self.editor.graph(),
-                        &self
-                            .editor
-                            .graph()
-                            .node(&e.source.node)?
-                            .port(&e.source.port)?
-                            .data_type,
-                    ),
+                    source,
+                    target,
+                    graph_port_color(graph, &graph.port(&e.source)?.data_type),
+                    self.editor.selection.edges.contains(&e.id),
                 ))
             })
             .collect();
@@ -69,10 +62,8 @@ impl Render for FlowCanvas {
                 });
             },
             move |bounds, _, window, _| {
-                let screen = |p: model::Point| {
-                    let p = viewport.world_to_screen(p);
-                    bounds.origin + point(px(p.x), px(p.y))
-                };
+                let window_point = |p: model::Point| bounds.origin + point(px(p.x), px(p.y));
+                let screen = |p| window_point(viewport.world_to_screen(p));
                 if grid {
                     let gap = (24. * viewport.zoom).max(12.);
                     let width: f32 = bounds.size.width.into();
@@ -104,8 +95,13 @@ impl Render for FlowCanvas {
                         rgb(0xffffff),
                     ));
                 }
-                for (from, to, color) in edges {
-                    edge_renderer.paint(screen(from), screen(to), rgb(color).alpha(0.65), window);
+                for (from, to, color, selected) in edges {
+                    edge_renderer.paint(
+                        window_point(from),
+                        window_point(to),
+                        rgb(color).alpha(if selected { 1. } else { 0.65 }),
+                        window,
+                    );
                 }
                 if let Some((from, to)) = pending {
                     edge_renderer.paint(screen(from), screen(to), rgb(pending_color), window);

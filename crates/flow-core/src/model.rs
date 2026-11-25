@@ -297,6 +297,7 @@ pub enum GraphError {
     InvalidClipboard(String),
     Validation(Vec<ValidationIssue>),
     Serialization(String),
+    DocumentTooLarge { max_bytes: usize },
     TransactionInProgress,
     NoActiveTransaction,
     Locked(String),
@@ -320,6 +321,9 @@ impl fmt::Display for GraphError {
                 Ok(())
             }
             Self::Serialization(s) => write!(f, "serialization error: {s}"),
+            Self::DocumentTooLarge { max_bytes } => {
+                write!(f, "document exceeds its {max_bytes}-byte save limit")
+            }
             Self::TransactionInProgress => write!(f, "a transaction is already in progress"),
             Self::NoActiveTransaction => write!(f, "there is no active transaction"),
             Self::Locked(s) => write!(f, "locked item: {s}"),

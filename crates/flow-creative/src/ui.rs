@@ -628,6 +628,9 @@ impl CreativeCanvas {
         let canvas = cx.new(|cx| {
             let mut view = FlowCanvas::new(document.graph, cx).expect("document validated");
             view.editor.viewport = document.viewport;
+            view.editor
+                .set_document_byte_limit(crate::MAX_JSON_BYTES)
+                .expect("initial document save limit validated");
             view.set_document_validator(Some(Arc::new(move |document| {
                 validator
                     .validate_document(document)
@@ -1711,11 +1714,7 @@ impl CreativeCanvas {
                 });
                 match result {
                     Ok(document) => {
-                        if self.command(CanvasCommand::ImportGraph(document.graph), cx) {
-                            self.canvas.update(cx, |v, cx| {
-                                v.editor.viewport = document.viewport;
-                                cx.notify();
-                            });
+                        if self.command(CanvasCommand::ImportDocument(document), cx) {
                             self.form_source = None;
                             self.sync_form(window, cx);
                             self.notice =

@@ -12,10 +12,12 @@ use crate::model_preview::{MAX_GLB_BYTES, PreviewError, parse_glb};
 use crate::{CreativeError, CreativeRegistry, MAX_CARDS, MAX_JSON_BYTES, MAX_LINKS};
 use gpui_flow_core::FlowDocument;
 use serde::{Deserialize, Serialize};
+#[cfg(any(unix, test))]
+use std::fs::File;
 use std::{
     collections::BTreeSet,
     fmt,
-    fs::{self, File, OpenOptions},
+    fs::{self, OpenOptions},
     io::{self, Read, Write},
     path::{Component, Path, PathBuf},
     sync::{
@@ -1049,13 +1051,21 @@ fn absolute_path(path: &Path) -> Result<PathBuf, ProjectError> {
 
 fn checked_directory(path: &Path, create: bool) -> Result<(), ProjectError> {
     let mut current = PathBuf::new();
-    for component in path.components() {
+    let mut components = path.components().peekable();
+    while let Some(component) = components.next() {
         if matches!(component, Component::ParentDir) {
             return Err(ProjectError::Invalid(
                 "parent traversal is not allowed".into(),
             ));
         }
         current.push(component.as_os_str());
+        // A volume prefix on its own is not a directory. Check it once the
+        // root separator is present, which is required for Windows verbatim paths.
+        if matches!(component, Component::Prefix(_))
+            && matches!(components.peek(), Some(Component::RootDir))
+        {
+            continue;
+        }
         let metadata = match fs::symlink_metadata(&current) {
             Ok(metadata) => metadata,
             Err(error) if create && error.kind() == io::ErrorKind::NotFound => {
@@ -1419,6 +1429,23 @@ mod tests {
             let _ = fs::remove_dir_all(&self.0);
         }
     }
+
+    #[cfg(windows)]
+    #[test]
+    fn canonical_windows_project_home_checks_root_and_directory_components() {
+        let home = TestHome::new();
+        let store = home.store();
+        assert_eq!(store.root(), home.0.join("projects"));
+        assert!(store.root().is_dir());
+
+        let file = home.0.join("file");
+        fs::write(&file, b"not a directory").unwrap();
+        assert!(matches!(
+            ProjectStore::new(file.join("projects")),
+            Err(ProjectError::Invalid(_))
+        ));
+    }
+
     fn png() -> Vec<u8> {
         // Complete 1x1 PNG fixture, not just a filename with an image extension.
         vec![

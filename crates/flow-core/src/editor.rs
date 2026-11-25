@@ -1,6 +1,19 @@
 use crate::*;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    io::{self, Write},
+    sync::atomic::{AtomicU64, Ordering},
+};
+
+fn next_document_revision() -> u64 {
+    static NEXT_REVISION: AtomicU64 = AtomicU64::new(1);
+    NEXT_REVISION
+        .try_update(Ordering::Relaxed, Ordering::Relaxed, |revision| {
+            revision.checked_add(1)
+        })
+        .expect("editor document revisions exhausted")
+}
 
 /// Selection is transient; it is not stored in exported documents.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -136,6 +149,89 @@ impl FlowDocument {
         document.validate()?;
         Ok(document)
     }
+
+    /// Check the exact byte length of the saved pretty JSON without allocating it.
+    pub fn validate_json_size(&self, max_bytes: usize) -> Result<(), GraphError> {
+        pretty_json_len(self, max_bytes).map(|_| ())
+    }
+}
+
+#[derive(Serialize)]
+struct DocumentJson<G> {
+    graph: G,
+    viewport: Viewport,
+}
+
+struct JsonBudget {
+    remaining: usize,
+    overflow: bool,
+}
+
+impl Write for JsonBudget {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let Some(remaining) = self.remaining.checked_sub(bytes.len()) else {
+            self.overflow = true;
+            return Err(io::Error::other("document byte limit exceeded"));
+        };
+        self.remaining = remaining;
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+fn pretty_json_len(value: &impl Serialize, max_bytes: usize) -> Result<usize, GraphError> {
+    let mut output = JsonBudget {
+        remaining: max_bytes,
+        overflow: false,
+    };
+    serde_json::to_writer_pretty(&mut output, value).map_err(|error| {
+        if output.overflow {
+            GraphError::DocumentTooLarge { max_bytes }
+        } else {
+            error.into()
+        }
+    })?;
+    Ok(max_bytes - output.remaining)
+}
+
+#[derive(Debug, Clone, Copy)]
+struct DocumentBudget {
+    max_bytes: usize,
+    // Size above the same envelope with a null graph, independent of the camera.
+    graph_bytes: usize,
+}
+
+impl DocumentBudget {
+    fn measure(graph: &Graph, viewport: Viewport, max_bytes: usize) -> Result<Self, GraphError> {
+        let bytes = pretty_json_len(&DocumentJson { graph, viewport }, max_bytes)?;
+        Ok(Self {
+            max_bytes,
+            graph_bytes: bytes - Self::viewport_bytes(viewport),
+        })
+    }
+
+    fn viewport_bytes(viewport: Viewport) -> usize {
+        pretty_json_len(
+            &DocumentJson {
+                graph: (),
+                viewport,
+            },
+            usize::MAX,
+        )
+        .expect("a viewport and null serialize without a byte limit")
+    }
+
+    fn check_viewport(self, viewport: Viewport) -> Result<(), GraphError> {
+        if Self::viewport_bytes(viewport) > self.max_bytes - self.graph_bytes {
+            return Err(GraphError::DocumentTooLarge {
+                max_bytes: self.max_bytes,
+            });
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -153,6 +249,7 @@ struct HistoryEntry {
 struct PendingTransaction {
     label: String,
     before: Snapshot,
+    budget: Option<DocumentBudget>,
 }
 
 /// Graph controller with atomic validated edits and bounded snapshot history.
@@ -161,15 +258,32 @@ struct PendingTransaction {
 /// `commit_transaction` to coalesce a pointer gesture into a single undo step.
 /// Escape can call `cancel_transaction`. Failed updates leave the current
 /// transaction intact and do not partially mutate the graph.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Editor {
     graph: Graph,
+    document_revision: u64,
     pub selection: Selection,
     pub viewport: Viewport,
     undo: Vec<HistoryEntry>,
     redo: Vec<HistoryEntry>,
     pending: Option<PendingTransaction>,
     history_limit: usize,
+    document_budget: Option<DocumentBudget>,
+}
+impl Clone for Editor {
+    fn clone(&self) -> Self {
+        Self {
+            graph: self.graph.clone(),
+            document_revision: next_document_revision(),
+            selection: self.selection.clone(),
+            viewport: self.viewport,
+            undo: self.undo.clone(),
+            redo: self.redo.clone(),
+            pending: self.pending.clone(),
+            history_limit: self.history_limit,
+            document_budget: self.document_budget,
+        }
+    }
 }
 impl Default for Editor {
     fn default() -> Self {
@@ -181,16 +295,24 @@ impl Editor {
         graph.validate()?;
         Ok(Self {
             graph,
+            document_revision: next_document_revision(),
             selection: Selection::default(),
             viewport: Viewport::default(),
             undo: Vec::new(),
             redo: Vec::new(),
             pending: None,
             history_limit: 100,
+            document_budget: None,
         })
     }
     pub fn graph(&self) -> &Graph {
         &self.graph
+    }
+    /// A process-local stamp for asynchronous work that depends on this graph.
+    /// Edits, restores, replacement and cloning receive a new stamp. Compare
+    /// the viewport separately when the operation also depends on the camera.
+    pub fn document_revision(&self) -> u64 {
+        self.document_revision
     }
     pub fn document(&self) -> FlowDocument {
         FlowDocument {
@@ -215,10 +337,68 @@ impl Editor {
         if self.pending.is_some() {
             return Err(GraphError::TransactionInProgress);
         }
-        let limit = self.history_limit;
-        *self = Self::from_document(document)?;
-        self.history_limit = limit;
+        let mut replacement = Self::from_document(document)?;
+        replacement.document_budget =
+            self.measure_budget(&replacement.graph, replacement.viewport)?;
+        replacement.history_limit = self.history_limit;
+        *self = replacement;
         Ok(())
+    }
+
+    /// Import a document as one graph edit. The imported camera remains navigation state.
+    pub fn import_document(
+        &mut self,
+        document: FlowDocument,
+        label: impl Into<String>,
+    ) -> Result<(), GraphError> {
+        if self.pending.is_some() {
+            return Err(GraphError::TransactionInProgress);
+        }
+        document.validate()?;
+        self.document_budget = self.measure_budget(&document.graph, document.viewport)?;
+        let before = self.snapshot();
+        self.graph = document.graph;
+        self.viewport = document.viewport;
+        self.selection.retain_existing(&self.graph);
+        self.record(label, before);
+        Ok(())
+    }
+
+    /// Keep committed graph and checked camera changes within a save format limit.
+    pub fn set_document_byte_limit(&mut self, max_bytes: usize) -> Result<(), GraphError> {
+        if self.pending.is_some() {
+            return Err(GraphError::TransactionInProgress);
+        }
+        self.document_budget = Some(DocumentBudget::measure(
+            &self.graph,
+            self.viewport,
+            max_bytes,
+        )?);
+        Ok(())
+    }
+
+    pub fn set_viewport(&mut self, viewport: Viewport) -> Result<(), GraphError> {
+        if !viewport.is_valid() {
+            return Err(GraphError::InvalidGeometry("invalid viewport".into()));
+        }
+        if let Some(budget) = self.document_budget {
+            budget.check_viewport(viewport)?;
+        }
+        if let Some(budget) = self.pending.as_ref().and_then(|pending| pending.budget) {
+            budget.check_viewport(viewport)?;
+        }
+        self.viewport = viewport;
+        Ok(())
+    }
+
+    fn measure_budget(
+        &self,
+        graph: &Graph,
+        viewport: Viewport,
+    ) -> Result<Option<DocumentBudget>, GraphError> {
+        self.document_budget
+            .map(|budget| DocumentBudget::measure(graph, viewport, budget.max_bytes))
+            .transpose()
     }
     fn snapshot(&self) -> Snapshot {
         Snapshot {
@@ -227,17 +407,24 @@ impl Editor {
         }
     }
     fn restore(&mut self, snapshot: Snapshot) {
+        if self.graph != snapshot.graph {
+            self.document_revision = next_document_revision();
+        }
         self.graph = snapshot.graph;
         self.selection = snapshot.selection;
     }
-    fn record(&mut self, label: String, before: Snapshot) -> bool {
+    fn record(&mut self, label: impl Into<String>, before: Snapshot) -> bool {
         if before.graph == self.graph {
             return false;
+        }
+        self.document_revision = next_document_revision();
+        if self.pending.is_some() {
+            return true;
         }
         self.redo.clear();
         if self.history_limit > 0 {
             self.undo.push(HistoryEntry {
-                label,
+                label: label.into(),
                 before,
                 after: self.snapshot(),
             });
@@ -259,11 +446,10 @@ impl Editor {
         let mut candidate = self.graph.clone();
         let result = edit(&mut candidate)?;
         candidate.validate()?;
+        self.document_budget = self.measure_budget(&candidate, self.viewport)?;
         self.graph = candidate;
         self.selection.retain_existing(&self.graph);
-        if self.pending.is_none() {
-            self.record(label.into(), before);
-        }
+        self.record(label, before);
         Ok(result)
     }
     pub fn begin_transaction(&mut self, label: impl Into<String>) -> Result<(), GraphError> {
@@ -273,6 +459,7 @@ impl Editor {
         self.pending = Some(PendingTransaction {
             label: label.into(),
             before: self.snapshot(),
+            budget: self.document_budget,
         });
         Ok(())
     }
@@ -280,6 +467,7 @@ impl Editor {
     pub fn commit_transaction(&mut self) -> Result<bool, GraphError> {
         let pending = self.pending.take().ok_or(GraphError::NoActiveTransaction)?;
         if let Err(error) = self.graph.validate() {
+            self.document_budget = pending.budget;
             self.restore(pending.before);
             return Err(error);
         }
@@ -288,6 +476,7 @@ impl Editor {
     }
     pub fn cancel_transaction(&mut self) -> Result<(), GraphError> {
         let pending = self.pending.take().ok_or(GraphError::NoActiveTransaction)?;
+        self.document_budget = pending.budget;
         self.restore(pending.before);
         Ok(())
     }
@@ -336,30 +525,40 @@ impl Editor {
     }
     /// Undo is disabled during an active gesture; cancel or commit it first.
     pub fn undo(&mut self) -> bool {
+        self.try_undo().unwrap_or(false)
+    }
+    pub fn try_undo(&mut self) -> Result<bool, GraphError> {
         if self.pending.is_some() {
-            return false;
+            return Ok(false);
         }
-        let Some(entry) = self.undo.pop() else {
-            return false;
+        let Some(entry) = self.undo.last() else {
+            return Ok(false);
         };
+        self.document_budget = self.measure_budget(&entry.before.graph, self.viewport)?;
+        let entry = self.undo.pop().expect("undo entry was checked");
         self.restore(entry.before.clone());
         self.redo.push(entry);
-        true
+        Ok(true)
     }
     pub fn redo(&mut self) -> bool {
+        self.try_redo().unwrap_or(false)
+    }
+    pub fn try_redo(&mut self) -> Result<bool, GraphError> {
         if self.pending.is_some() {
-            return false;
+            return Ok(false);
         }
-        let Some(entry) = self.redo.pop() else {
-            return false;
+        let Some(entry) = self.redo.last() else {
+            return Ok(false);
         };
+        self.document_budget = self.measure_budget(&entry.after.graph, self.viewport)?;
+        let entry = self.redo.pop().expect("redo entry was checked");
         self.restore(entry.after.clone());
         self.undo.push(entry);
         let excess = self.undo.len().saturating_sub(self.history_limit);
         if excess > 0 {
             self.undo.drain(..excess);
         }
-        true
+        Ok(true)
     }
     pub fn select_all(&mut self) {
         let hidden = hidden_node_ids(&self.graph);
@@ -603,11 +802,10 @@ impl Editor {
             graph.add_group(group)?;
         }
         graph.validate()?;
+        self.document_budget = self.measure_budget(&graph, self.viewport)?;
         self.graph = graph;
         self.selection = selection.clone();
-        if self.pending.is_none() {
-            self.record("Paste".into(), before);
-        }
+        self.record("Paste", before);
         Ok(selection)
     }
     /// Duplicate selected items in a single undo step.
@@ -644,12 +842,11 @@ impl Editor {
             old.node_ids.retain(|n| !nodes.contains(n));
         }
         candidate.add_group(group)?;
+        self.document_budget = self.measure_budget(&candidate, self.viewport)?;
         self.graph = candidate;
         self.selection.clear();
         self.selection.groups.insert(id.clone());
-        if self.pending.is_none() {
-            self.record("Group selection".into(), before);
-        }
+        self.record("Group selection", before);
         Ok(id)
     }
     pub fn ungroup_selection(&mut self) -> Result<(), GraphError> {
@@ -665,12 +862,24 @@ impl Editor {
         })
     }
     pub fn fit_to_content(&mut self, canvas: Size, padding: f32) -> bool {
-        visible_graph_bounds(&self.graph)
-            .is_some_and(|bounds| self.viewport.fit(bounds, canvas, padding))
+        self.try_fit_to_content(canvas, padding).unwrap_or(false)
+    }
+    pub fn try_fit_to_content(&mut self, canvas: Size, padding: f32) -> Result<bool, GraphError> {
+        let Some(bounds) = visible_graph_bounds(&self.graph) else {
+            return Ok(false);
+        };
+        let mut viewport = self.viewport;
+        if !viewport.fit(bounds, canvas, padding) {
+            return Ok(false);
+        }
+        self.set_viewport(viewport)?;
+        Ok(true)
     }
     pub fn fit_to_selection(&mut self, canvas: Size, padding: f32) -> bool {
+        let mut viewport = self.viewport;
         self.selection_bounds()
-            .is_some_and(|bounds| self.viewport.fit(bounds, canvas, padding))
+            .is_some_and(|bounds| viewport.fit(bounds, canvas, padding))
+            && self.set_viewport(viewport).is_ok()
     }
     /// Build renderer-independent minimap geometry, including the visible camera.
     pub fn minimap(&self, canvas: Size, map_bounds: Rect, padding: f32) -> Option<MinimapData> {

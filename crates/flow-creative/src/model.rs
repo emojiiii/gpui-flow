@@ -173,10 +173,14 @@ impl CreativeRegistry {
     pub fn validate_document(&self, document: &FlowDocument) -> Result<(), CreativeError> {
         document.validate()?;
         self.validate_graph(&document.graph)?;
-        if serde_json::to_string_pretty(document)?.len() > MAX_JSON_BYTES {
-            return Err(CreativeError("creative document exceeds 32 MiB".into()));
-        }
-        Ok(())
+        document
+            .validate_json_size(MAX_JSON_BYTES)
+            .map_err(|error| match error {
+                GraphError::DocumentTooLarge { .. } => {
+                    CreativeError("creative document exceeds 32 MiB".into())
+                }
+                error => error.into(),
+            })
     }
     pub fn parse_document(&self, json: &str) -> Result<FlowDocument, CreativeError> {
         if json.len() > MAX_JSON_BYTES {
@@ -198,14 +202,7 @@ impl CreativeRegistry {
         document: FlowDocument,
     ) -> Result<(), CreativeError> {
         self.validate_document(&document)?;
-        if editor.transaction_active() {
-            return Err(GraphError::TransactionInProgress.into());
-        }
-        editor.transaction("Import creative board", |graph| {
-            *graph = document.graph;
-            Ok(())
-        })?;
-        editor.viewport = document.viewport;
+        editor.import_document(document, "Import creative board")?;
         Ok(())
     }
     pub fn map_records(

@@ -1,6 +1,7 @@
 //! GPUI-to-plugin adapter. Gesture state and edit commands belong to PluginHost.
 use super::*;
 use gpui_flow_interaction as input;
+use std::collections::BTreeSet;
 
 fn modifiers(value: gpui::Modifiers) -> input::Modifiers {
     input::Modifiers {
@@ -262,7 +263,7 @@ impl FlowCanvas {
             input::CanvasCursor::NotAllowed => CursorStyle::OperationNotAllowed,
         }
     }
-    /// Exact visible hit areas only. Proximity snapping is owned by SnappingPlugin.
+    /// Pick the topmost visible target. Port proximity snapping belongs to SnappingPlugin.
     pub(super) fn hit_at(&self, screen: model::Point) -> input::HitTarget {
         hit_at_editor_with_body(
             &self.editor,
@@ -274,11 +275,27 @@ impl FlowCanvas {
                     .get(&node.kind)
                     .and_then(|r| r.body_hit_test(node, local, zoom))
             },
+            self.edge_renderer.as_ref(),
+            self.origin,
         )
     }
     pub(super) fn local(&self, p: gpui::Point<Pixels>) -> model::Point {
         model::Point::new(p.x.into(), p.y.into()) - self.origin
     }
+}
+
+pub(super) fn visible_edge_endpoints(
+    graph: &Graph,
+    edge: &model::Edge,
+    viewport: model::Viewport,
+    hidden: &BTreeSet<NodeId>,
+) -> Option<(model::Point, model::Point)> {
+    if hidden.contains(&edge.source.node) || hidden.contains(&edge.target.node) {
+        return None;
+    }
+    let source = viewport.world_to_screen(graph.port_position(&edge.source)?);
+    let target = viewport.world_to_screen(graph.port_position(&edge.target)?);
+    (source.is_finite() && target.is_finite()).then_some((source, target))
 }
 
 #[cfg(test)]
@@ -298,6 +315,8 @@ fn hit_at_editor_ordered(
         resize_enabled,
         selection_on_top,
         |_, _, _| None,
+        &BezierEdge,
+        model::Point::ZERO,
     )
 }
 fn hit_at_editor_with_body(
@@ -306,6 +325,8 @@ fn hit_at_editor_with_body(
     resize_enabled: bool,
     selection_on_top: bool,
     body_hit: impl Fn(&Node, model::Point, f32) -> Option<bool>,
+    edge_renderer: &dyn EdgeRenderer,
+    origin: model::Point,
 ) -> input::HitTarget {
     let viewport = editor.viewport;
     let world = viewport.screen_to_world(screen);
@@ -365,12 +386,24 @@ fn hit_at_editor_with_body(
             return input::HitTarget::Group(group.id.clone());
         }
     }
+    let window_point = |p: model::Point| point(px(origin.x + p.x), px(origin.y + p.y));
+    let at = window_point(screen);
+    let graph = editor.graph();
+    for edge in graph.edges.values().rev() {
+        if let Some((source, target)) = visible_edge_endpoints(graph, edge, viewport, &hidden)
+            && edge_renderer.hit_test(window_point(source), window_point(target), at)
+        {
+            return input::HitTarget::Edge(edge.id.clone());
+        }
+    }
     input::HitTarget::Background
 }
 
 #[cfg(test)]
 mod tests {
-    use super::hit_at_editor;
+    use super::{hit_at_editor, hit_at_editor_with_body};
+    use crate::{BezierEdge, EdgeRenderer, StraightEdge};
+    use gpui::{Pixels, Point, Rgba, Window, point, px};
     use gpui_flow_core as model;
     use gpui_flow_core::{Editor, Graph, Node, PortRef};
     use gpui_flow_interaction as input;
@@ -408,11 +441,27 @@ mod tests {
             .viewport
             .world_to_screen(model::Point::new(150., 150.));
         assert_eq!(
-            super::hit_at_editor_with_body(&editor, corner, false, false, hit),
+            hit_at_editor_with_body(
+                &editor,
+                corner,
+                false,
+                false,
+                hit,
+                &BezierEdge,
+                model::Point::ZERO
+            ),
             input::HitTarget::Node("background".into())
         );
         assert_eq!(
-            super::hit_at_editor_with_body(&editor, center, false, false, hit),
+            hit_at_editor_with_body(
+                &editor,
+                center,
+                false,
+                false,
+                hit,
+                &BezierEdge,
+                model::Point::ZERO
+            ),
             input::HitTarget::Node("circle".into())
         );
         assert_eq!(
@@ -433,11 +482,27 @@ mod tests {
             Some((0. ..=200.).contains(&p.x) && (p.y - 0.5).abs() <= 5.)
         };
         assert_eq!(
-            super::hit_at_editor_with_body(&editor, model::Point::new(100., 4.), false, false, hit),
+            hit_at_editor_with_body(
+                &editor,
+                model::Point::new(100., 4.),
+                false,
+                false,
+                hit,
+                &BezierEdge,
+                model::Point::ZERO
+            ),
             input::HitTarget::Node("line".into())
         );
         assert_eq!(
-            super::hit_at_editor_with_body(&editor, model::Point::new(100., 8.), false, false, hit),
+            hit_at_editor_with_body(
+                &editor,
+                model::Point::new(100., 8.),
+                false,
+                false,
+                hit,
+                &BezierEdge,
+                model::Point::ZERO
+            ),
             input::HitTarget::Background
         );
     }
@@ -570,6 +635,155 @@ mod tests {
         assert_ne!(
             hit_at_editor(&editor, center + model::Point::new(12., 0.), true),
             input::HitTarget::Port(port)
+        );
+    }
+
+    fn graph_with_wire() -> (Graph, model::Point) {
+        let mut graph = Graph::new();
+        graph
+            .add_node(Node::new("source", "Source", model::Point::ZERO).with_port(
+                model::Port::output("out", "Output", model::DataType::Number),
+            ))
+            .unwrap();
+        graph
+            .add_node(
+                Node::new("target", "Target", model::Point::new(500., 0.))
+                    .with_port(model::Port::input("in", "Input", model::DataType::Number)),
+            )
+            .unwrap();
+        let source = PortRef::new("source", "out");
+        let target = PortRef::new("target", "in");
+        let middle =
+            (graph.port_position(&source).unwrap() + graph.port_position(&target).unwrap()) * 0.5;
+        graph.connect("wire", source, target).unwrap();
+        (graph, middle)
+    }
+
+    #[test]
+    fn straight_and_cubic_edge_picking_follow_their_painted_geometry() {
+        let source = point(px(0.), px(0.));
+        let target = point(px(200.), px(200.));
+        let on_curve = point(px(59.375), px(31.25));
+        let on_straight = point(px(50.), px(50.));
+        assert!(BezierEdge.hit_test(source, target, on_curve));
+        assert!(!StraightEdge.hit_test(source, target, on_curve));
+        assert!(StraightEdge.hit_test(source, target, on_straight));
+        assert!(!BezierEdge.hit_test(source, target, on_straight));
+    }
+
+    #[test]
+    fn reopened_visible_edge_can_be_selected_deleted_and_undone() {
+        let (graph, middle) = graph_with_wire();
+        let mut editor = Editor::new(graph).unwrap();
+        editor.viewport.zoom = 1.7;
+        editor.viewport.pan = model::Point::new(31., 55.);
+        let document = model::FlowDocument::from_json(&editor.to_json().unwrap()).unwrap();
+        let mut editor = Editor::from_document(document.clone()).unwrap();
+        let other = Editor::from_document(document).unwrap();
+        let middle = editor.viewport.world_to_screen(middle);
+        let at = middle + model::Point::new(0., 5.);
+        let hit = hit_at_editor(&editor, at, true);
+        assert_eq!(hit, input::HitTarget::Edge("wire".into()));
+        assert_eq!(
+            hit_at_editor(&editor, middle + model::Point::new(0., 8.), true),
+            input::HitTarget::Background
+        );
+
+        let mut host = input::PluginHost::with_defaults();
+        host.dispatch(
+            &mut editor,
+            input::CanvasEvent::PointerDown(input::PointerInput::left(at, hit.clone())),
+        );
+        host.dispatch(
+            &mut editor,
+            input::CanvasEvent::PointerUp(input::PointerInput::left(at, hit)),
+        );
+        assert!(editor.selection.edges.contains(&"wire".into()));
+        let report = host.dispatch(
+            &mut editor,
+            input::CanvasEvent::KeyDown {
+                key: input::KeyCode::Delete,
+                modifiers: input::Modifiers::default(),
+            },
+        );
+        assert!(report.document_changed);
+        assert!(editor.graph().edges.is_empty());
+        assert_eq!(editor.graph().nodes.len(), 2);
+        assert!(other.graph().edges.contains_key(&"wire".into()));
+        assert!(other.selection.is_empty());
+        assert!(!other.can_undo());
+        assert!(editor.undo());
+        assert!(editor.graph().edges.contains_key(&"wire".into()));
+    }
+
+    #[test]
+    fn edge_picking_preserves_node_precedence_and_hides_wires_with_hidden_endpoints() {
+        let (mut graph, middle) = graph_with_wire();
+        graph
+            .add_node(Node::new(
+                "cover",
+                "Cover",
+                middle - model::Point::new(15., 15.),
+            ))
+            .unwrap();
+        let mut editor = Editor::new(graph).unwrap();
+        assert_eq!(
+            hit_at_editor(&editor, middle, false),
+            input::HitTarget::Node("cover".into())
+        );
+        editor
+            .transaction("Hide cover", |graph| {
+                model::set_node_visible(graph, &"cover".into(), false)?;
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(
+            hit_at_editor(&editor, middle, false),
+            input::HitTarget::Edge("wire".into())
+        );
+        editor
+            .transaction("Hide endpoint", |graph| {
+                model::set_node_visible(graph, &"target".into(), false)?;
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(
+            hit_at_editor(&editor, middle, false),
+            input::HitTarget::Background
+        );
+        assert!(editor.graph().edges.contains_key(&"wire".into()));
+    }
+
+    #[test]
+    fn canvas_uses_the_custom_edge_picker_in_window_coordinates() {
+        struct OffsetEdge;
+        impl EdgeRenderer for OffsetEdge {
+            fn paint(&self, _: Point<Pixels>, _: Point<Pixels>, _: Rgba, _: &mut Window) {}
+
+            fn hit_test(
+                &self,
+                source: Point<Pixels>,
+                target: Point<Pixels>,
+                at: Point<Pixels>,
+            ) -> bool {
+                source.x > px(800.)
+                    && at.x == (source.x + target.x) * 0.5
+                    && at.y == source.y + px(30.)
+            }
+        }
+        let (graph, middle) = graph_with_wire();
+        let editor = Editor::new(graph).unwrap();
+        assert_eq!(
+            hit_at_editor_with_body(
+                &editor,
+                middle + model::Point::new(0., 30.),
+                false,
+                false,
+                |_, _, _| None,
+                &OffsetEdge,
+                model::Point::new(850., 190.),
+            ),
+            input::HitTarget::Edge("wire".into())
         );
     }
     #[test]
