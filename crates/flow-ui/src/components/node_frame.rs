@@ -22,6 +22,7 @@ pub struct NodeFrame {
     pub header_height: f32,
     full_bleed: bool,
     unframed_body: bool,
+    draws_selection_outline: bool,
     transparent_background: bool,
     caption: Option<SharedString>,
     body: Option<AnyElement>,
@@ -46,6 +47,7 @@ impl NodeFrame {
             header_height: 36.,
             full_bleed: false,
             unframed_body: false,
+            draws_selection_outline: false,
             transparent_background: false,
             caption: None,
             body: None,
@@ -98,6 +100,11 @@ impl NodeFrame {
     /// Use the body's exact bounds; the host supplies its own resize controls.
     pub fn unframed_body(mut self, value: bool) -> Self {
         self.unframed_body = value;
+        self
+    }
+    /// Keep selection state while leaving the unframed body's outline to its renderer.
+    pub(crate) fn body_draws_selection_outline(mut self, value: bool) -> Self {
+        self.draws_selection_outline = value;
         self
     }
     pub fn caption(mut self, value: Option<SharedString>) -> Self {
@@ -226,7 +233,7 @@ impl RenderOnce for NodeFrame {
                         * z))
                     .children(self.body),
             );
-        if self.unframed_body && self.selected {
+        if self.unframed_body && self.selected && !self.draws_selection_outline {
             frame = frame.child(
                 div()
                     .absolute()

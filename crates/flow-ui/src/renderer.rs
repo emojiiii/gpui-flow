@@ -32,6 +32,10 @@ pub trait NodeRenderer: Send + Sync {
     fn unframed_body(&self, _node: &Node) -> bool {
         false
     }
+    /// Let an unframed renderer draw selection around its own body.
+    fn draws_selection_outline(&self, _node: &Node) -> bool {
+        false
+    }
     /// Optional body picking in node-local world units. None preserves the
     /// default rectangular hit area; ports and resize controls stay separate.
     fn body_hit_test(

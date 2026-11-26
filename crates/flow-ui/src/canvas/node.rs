@@ -101,6 +101,11 @@ impl FlowCanvas {
                 .get(&node.kind)
                 .is_some_and(|r| r.unframed_body(node)),
         )
+        .body_draws_selection_outline(
+            self.registry
+                .get(&node.kind)
+                .is_some_and(|r| r.draws_selection_outline(node)),
+        )
         .caption(
             self.registry
                 .get(&node.kind)
