@@ -1080,8 +1080,10 @@ mod tests {
     fn creative_native_text_keeps_ink_outside_its_layout_box_and_font_epoch() {
         let home = TestHome::new();
         let project = home.project();
-        let (_app, bridge) =
-            gpui_flow::GpuiTextRasterizer::application(gpui_kit::platform::current_platform(true));
+        // GPUI's headless Windows platform does not rasterize glyphs.
+        let (_app, bridge) = gpui_flow::GpuiTextRasterizer::application(
+            gpui_kit::platform::current_platform(!cfg!(target_os = "windows")),
+        );
         let backend = FrameTextBackend::new(&bridge, "sans-serif".into(), Arc::default()).unwrap();
         let node = Node::new("label", "Label", Point::new(20., 20.))
             .with_kind("text")

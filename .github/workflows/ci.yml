@@ -111,7 +111,7 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets --features gpui-flow-creative/desktop -- -D warnings
       - name: Test Creative project workflows on Windows
         if: runner.os == 'Windows'
-        run: cargo test --locked -p gpui-flow-creative --lib
+        run: cargo test --locked -p gpui-flow-creative --features desktop --lib
       # GPUI's Windows headless text system is a no-op and macOS needs the main
       # thread for its platform. Linux runs the full UI suite with real fonts.
       - name: Test portable UI components

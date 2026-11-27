@@ -22,12 +22,36 @@ const translatedRoutes = [
   ['/overview/', '/overview/zh/'],
   ['/docs/getting-started/', '/docs/getting-started.zh-CN/'],
   ['/docs/flow-creative/', '/docs/flow-creative.zh-CN/'],
+  ['/docs/creative-reference.en/', '/crates/flow-creative/'],
+  ['/docs/architecture.en/', '/docs/architecture/'],
+  ['/docs/custom-nodes.en/', '/docs/custom-nodes/'],
+  ['/docs/workflows.en/', '/docs/workflows/'],
+  ['/docs/display-scenes.en/', '/docs/display-scenes/'],
+  ['/docs/components.en/', '/docs/components/'],
+  ['/docs/testing.en/', '/docs/testing/'],
+  ['/docs/limitations.en/', '/docs/limitations/'],
 ] as const
+const chineseOnlyRoutes = [
+  '/docs/animation/',
+  '/docs/engine-contract-plan/',
+  '/docs/engine/',
+  '/docs/gradients/',
+  '/docs/interaction-qa/',
+  '/docs/keyboard-routing/',
+  '/docs/leafer-task-ledger/',
+  '/docs/media/',
+  '/docs/plugins/',
+  '/docs/query-indexes/',
+  '/docs/runtime/',
+  '/docs/source-only-status/',
+  '/docs/studio-retirement/',
+]
 const creativeRoutes = new Set([
   '/docs/getting-started/',
   '/docs/getting-started.zh-CN/',
   '/docs/flow-creative/',
   '/docs/flow-creative.zh-CN/',
+  '/docs/creative-reference.en/',
   '/crates/flow-creative/',
 ])
 
@@ -67,9 +91,8 @@ export default defineConfig({
       const [en, zh] = translation
       page.frontmatter.uiLanguage = route === zh ? 'zh-CN' : 'en'
       page.frontmatter.languageLinks = { en, zh }
-    } else if (route === '/crates/flow-creative/') {
+    } else if (chineseOnlyRoutes.includes(route)) {
       page.frontmatter.uiLanguage = 'zh-CN'
-      page.frontmatter.languageLinks = { en: '/docs/flow-creative/', zh: route }
     }
   },
   transformHtml(html, _id, { pageData }) {
@@ -79,6 +102,10 @@ export default defineConfig({
   },
   themeConfig: {
     socialLinks: [{ icon: 'github', link: repository }],
+    searchRoutes: {
+      en: translatedRoutes.map(([en]) => en),
+      zh: [...translatedRoutes.map(([, zh]) => zh), ...chineseOnlyRoutes],
+    },
     search: {
       provider: 'local',
       options: {

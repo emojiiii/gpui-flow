@@ -2,14 +2,14 @@
 layout: page
 sidebar: false
 title: gpui-flow
-description: The gpui-flow canvas SDK and its Flow Creative desktop workbench.
+description: gpui-flow canvas libraries and the Flow Creative desktop workbench.
 landing:
   platform: Rust + GPUI
   heading: Native canvases
   accent: for Rust and GPUI.
-  intro: Build a canvas app with the gpui-flow SDK, or work with media on the canvas in Flow Creative, the desktop app built on it.
+  intro: Build a canvas app with gpui-flow, or arrange and process media in Flow Creative, the desktop app built on it.
   primary:
-    text: Explore gpui-flow SDK
+    text: Explore gpui-flow
     link: /docs/library/
   secondary:
     text: Use Flow Creative

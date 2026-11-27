@@ -1,6 +1,6 @@
 # Synchronous reactive layout
 
-> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+> Studio examples and test results on this page refer to a retired application. See [Getting started](getting-started.md) for the current desktop workbench.
 
 `FlowLayout::install_reactive(&mut engine)` binds an already arranged flow
 configuration to live instances. Ordinary engine/editor property and tree edits
@@ -135,14 +135,11 @@ this module does not add a general input/computed property store.
 
 ## Examples and remaining work
 
-历史命令（当前分支不可运行；仅供对应历史版本复现）：
-
-```text
-cargo run --locked -p flow-studio --bin reactive_layout
+```sh
 cargo run --locked --manifest-path docs/examples/Cargo.toml --bin reactive_layout
 ```
 
-The native example installs once and then uses ordinary `SceneEditor::transaction`
+The retired native example installs once and then uses ordinary `SceneEditor::transaction`
 for width changes and adding/removing cards. Its controls never call reflow after
 an edit. The executable headless example asserts resulting wrap heights and exact
 Undo boundaries. Compilation/linking is separate from manual GUI verification.

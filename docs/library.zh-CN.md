@@ -1,8 +1,10 @@
-# gpui-flow SDK
+# gpui-flow
+
+<a id="gpui-flow-sdk"></a>
 
 [English](library.md) · [文档目录](README.zh-CN.md) · [Flow Creative](flow-creative.zh-CN.md)
 
-在自己的 Rust / GPUI 应用中构建原生节点编辑器或保留式场景编辑器。SDK 也可用于
+在自己的 Rust / GPUI 应用中构建原生节点编辑器或保留式场景编辑器。gpui-flow 也可用于
 命令行和服务中的图编辑与工作流执行。Flow Creative 桌面工作台基于这些库构建。
 
 ## 创建类型化节点图
@@ -87,7 +89,9 @@ flowchart LR
 `FlowCanvas::new(graph, cx)` 或 `SceneView::new(scene, cx)` 创建视图。参见
 [平台依赖](getting-started.zh-CN.md)和[桌面入口源码](../crates/flow-creative/src/main.rs)中的初始化。
 
-## SDK 参考
+<a id="sdk-参考"></a>
+
+## 参考
 
 | 目标 | 参考文档 | 示例程序 |
 | --- | --- | --- |

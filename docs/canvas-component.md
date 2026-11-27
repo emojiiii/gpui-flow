@@ -1,6 +1,6 @@
 # Canvas component and owned runtime pixels
 
-> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+> Studio examples and test results on this page refer to a retired application. See [Getting started](getting-started.md) for the current desktop workbench.
 
 This slice implements a distinct retained `display::Canvas`, not an
 Image alias or the existing whole-SceneView `OwnedCanvas` compositing mode.

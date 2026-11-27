@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { dataSymbol, useData, type DefaultTheme } from 'vitepress'
+import { dataSymbol, useData, withBase, type DefaultTheme } from 'vitepress'
 import VitePressTheme from 'vitepress/theme'
 import { computed, onMounted, provide, ref, watchEffect } from 'vue'
 
 const navigation = {
   en: {
     nav: [
-      { text: 'gpui-flow SDK', link: '/docs/library/' },
+      { text: 'gpui-flow', link: '/docs/library/' },
       { text: 'Flow Creative', link: '/docs/flow-creative/' },
     ],
     creative: [
@@ -15,15 +15,15 @@ const navigation = {
         items: [
           { text: 'Quickstart', link: '/docs/getting-started/' },
           { text: 'Workbench guide', link: '/docs/flow-creative/' },
-          { text: 'Detailed app reference (Chinese)', link: '/crates/flow-creative/' },
+          { text: 'Workbench reference', link: '/docs/creative-reference.en/' },
         ],
       },
     ],
     library: [
       {
-        text: 'gpui-flow SDK',
+        text: 'gpui-flow',
         items: [
-          { text: 'SDK guide', link: '/docs/library/' },
+          { text: 'Guide', link: '/docs/library/' },
           { text: 'Runnable examples', link: '/docs/library/#run-examples-without-a-desktop-session' },
           { text: 'Documentation index', link: '/docs/' },
         ],
@@ -31,19 +31,19 @@ const navigation = {
       {
         text: 'Reference',
         items: [
-          { text: 'Graph architecture (Chinese)', link: '/docs/architecture/' },
-          { text: 'Custom nodes (Chinese)', link: '/docs/custom-nodes/' },
-          { text: 'Workflows and runners (Chinese)', link: '/docs/workflows/' },
-          { text: 'Display scenes (Chinese)', link: '/docs/display-scenes/' },
-          { text: 'Components (Chinese)', link: '/docs/components/' },
+          { text: 'Graph architecture', link: '/docs/architecture.en/' },
+          { text: 'Custom nodes', link: '/docs/custom-nodes.en/' },
+          { text: 'Workflows and runners', link: '/docs/workflows.en/' },
+          { text: 'Display scenes', link: '/docs/display-scenes.en/' },
+          { text: 'Components', link: '/docs/components.en/' },
           { text: 'Compatibility', link: '/docs/leafer-compatibility-profile/' },
         ],
       },
       {
         text: 'Development',
         items: [
-          { text: 'Testing (Chinese)', link: '/docs/testing/' },
-          { text: 'Known limitations (Chinese)', link: '/docs/limitations/' },
+          { text: 'Testing', link: '/docs/testing.en/' },
+          { text: 'Known limitations', link: '/docs/limitations.en/' },
           { text: 'Publishing the documentation', link: '/docs/publishing/' },
         ],
       },
@@ -51,7 +51,7 @@ const navigation = {
   },
   zh: {
     nav: [
-      { text: 'gpui-flow 开发库', link: '/docs/library.zh-CN/' },
+      { text: 'gpui-flow', link: '/docs/library.zh-CN/' },
       { text: 'Flow Creative', link: '/docs/flow-creative.zh-CN/' },
     ],
     creative: [
@@ -66,7 +66,7 @@ const navigation = {
     ],
     library: [
       {
-        text: 'gpui-flow 开发库',
+        text: 'gpui-flow',
         items: [
           { text: '开发指南', link: '/docs/library.zh-CN/' },
           { text: '可运行示例', link: '/docs/library.zh-CN/#在无桌面环境运行示例' },
@@ -126,7 +126,8 @@ const chineseSearchTranslations = {
   },
 }
 
-const data = useData<DefaultTheme.Config>()
+type DocumentationTheme = DefaultTheme.Config & { searchRoutes: { en: string[], zh: string[] } }
+const data = useData<DocumentationTheme>()
 const storageKey = 'gpui-flow:docs-language'
 const rememberedLanguage = ref<'en' | 'zh-CN'>('en')
 const language = computed(() => data.frontmatter.value.uiLanguage ?? rememberedLanguage.value)
@@ -136,6 +137,8 @@ const theme = computed<DefaultTheme.Config>(() => {
   const { docsSection, languageLinks = { en: '/docs/library/', zh: '/docs/library.zh-CN/' } } = data.frontmatter.value
   const localized = isChinese ? { ...data.theme.value, ...chineseTheme } : data.theme.value
   const { search } = localized
+  const otherLanguage = isChinese ? localized.searchRoutes.en : localized.searchRoutes.zh
+  const excludedSearchRoutes = new Set(otherLanguage.map(withBase))
   return {
     ...localized,
     sidebar: docsSection === 'creative' ? menu.creative : menu.library,
@@ -149,13 +152,26 @@ const theme = computed<DefaultTheme.Config>(() => {
         ],
       },
     ],
-    search: isChinese && search?.provider === 'local'
-      ? { ...search, options: { ...search.options, translations: chineseSearchTranslations } }
+    search: search?.provider === 'local'
+      ? {
+          ...search,
+          options: {
+            ...search.options,
+            ...(isChinese ? { translations: chineseSearchTranslations } : {}),
+            miniSearch: {
+              ...search.options?.miniSearch,
+              searchOptions: {
+                ...search.options?.miniSearch?.searchOptions,
+                filter: ({ id }) => !excludedSearchRoutes.has(id.split('#', 1)[0]),
+              },
+            },
+          },
+        }
       : search,
   }
 })
 
-// Keep VitePress's single local search index across both interface languages.
+// Both languages use the same VitePress index and filter results by route.
 provide(dataSymbol, { ...data, lang: language, theme })
 
 onMounted(() => {

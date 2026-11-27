@@ -1,11 +1,11 @@
 # Host-defined editor tools
 
-> 旧示例说明：本文涉及 Studio 的示例名称、源码路径、操作和验证结果均为历史内容，相关演示已移除；库 API 契约继续保留。当前工作台入口见[入门](getting-started.md)，迁移范围见[说明](studio-retirement.md)。
+> Studio examples and test results on this page refer to a retired application. See [Getting started](getting-started.md) for the current desktop workbench.
 
 `SceneToolController` owns a registry, one active inner session, and an outer
 tool identity. `SceneView` now mounts host-defined GPUI widgets through
 `SceneToolWidget`; a widget may return any `AnyElement`, including a retained
-`Entity` view. See the complete `custom_tools example`（历史源码已移除）.
+`Entity` view.
 
 ## Registration and lifecycle
 
@@ -56,8 +56,7 @@ The six custom regressions cover registry/policy rejection, single-step history,
 Cancel, stale tokens and external edits, lifecycle release, and accepted self-lock.
 The existing Text session regressions remain part of the same command.
 
-Run `cargo run --locked -p flow-studio --bin custom_tools` for the native example.
-The Linux check exercised Rect edits/history/Cancel, an independently retained
+The retired native Studio example was checked on Linux. It exercised Rect edits/history/Cancel, an independently retained
 Ellipse Entity, outer/Text switching, policy/disable/unregister, and view
 release/recreation. A post-release read reported zero live widgets and Entities,
 with ten loads, unloads and destroys. The window exited normally. Immediate

@@ -10,7 +10,7 @@ landing:
   accent: 构建原生画布
   intro: 使用 gpui-flow 开发自己的画布应用，或在基于它构建的 Flow Creative 桌面应用中编辑素材。
   primary:
-    text: 探索 gpui-flow 开发库
+    text: 探索 gpui-flow
     link: /docs/library.zh-CN/
   secondary:
     text: 使用 Flow Creative

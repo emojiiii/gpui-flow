@@ -343,6 +343,11 @@ fn checked_components(path: &Path) -> Result<(), ProcessingError> {
     let mut current = PathBuf::new();
     for component in path.components() {
         current.push(component.as_os_str());
+        // A Windows prefix such as `\\?\C:` only names a filesystem path
+        // once the following root separator has been appended.
+        if matches!(component, Component::Prefix(_)) {
+            continue;
+        }
         let metadata = fs::symlink_metadata(&current)?;
         if metadata.file_type().is_symlink() {
             return Err(ProcessingError::InvalidSource(

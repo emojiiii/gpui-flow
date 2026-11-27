@@ -1,11 +1,12 @@
-# gpui-flow SDK
+# gpui-flow
+
+<a id="gpui-flow-sdk"></a>
 
 [简体中文](library.zh-CN.md) · [Documentation](README.md) · [Flow Creative](flow-creative.md)
 
 Build a native node editor or retained scene editor inside your own Rust / GPUI
-application. The SDK also provides graph editing and workflow execution for
-command-line and service use. The Flow Creative desktop workbench uses the
-same libraries.
+application. Use the same libraries for headless graph editing and workflow
+execution. The Flow Creative desktop workbench is built on gpui-flow.
 
 ## Build a typed graph
 
@@ -92,7 +93,7 @@ flowchart LR
 - Use `gpui-flow-creative` with its `desktop` feature when the host needs
   `CreativeCanvas` and the workbench's object definitions. `ProjectStore`
   provides local project storage in that crate. The
-  [workbench extension reference (Chinese)](../crates/flow-creative/README.md#可复用-api-与验证)
+  [workbench reference](creative-reference.en.md#embed-flow-creative)
   describes host integration.
 
 Use the same GPUI and gpui-kit sources and revisions as the workspace. After
@@ -100,16 +101,18 @@ initializing the host, construct `FlowCanvas::new(graph, cx)` or
 `SceneView::new(scene, cx)` in a GPUI entity. See [platform dependencies](getting-started.md)
 and the [desktop entry point](../crates/flow-creative/src/main.rs) for initialization.
 
-## SDK reference
+<a id="sdk-reference"></a>
+
+## Reference
 
 | Goal | Reference | Example binary |
 | --- | --- | --- |
-| Model, validate, and edit a node graph | [Core crate](../crates/flow-core/README.md) · [Graph architecture (Chinese)](architecture.md) | `core` |
-| Render custom nodes and compose GPUI components | [Custom nodes (Chinese)](custom-nodes.md) · [GPUI components (Chinese)](components.md) | |
-| Execute independent tasks or a connected graph | [Runtime and runners (Chinese)](runtime.md) · [Workflow scheduling (Chinese)](workflows.md) | `runner`, `workflow` |
-| Build and edit a retained scene | [Display scenes (Chinese)](display-scenes.md) · [Element engine (Chinese)](engine.md) · [Scene crate](../crates/flow-scene/README.md) | `layout`, `animation` |
-| Add input, tools, and editor behavior | [Interaction plugins (Chinese)](plugins.md) · [Custom scene tools](custom-tools.md) | `plugins` |
+| Model, validate, and edit a node graph | [Graph architecture](architecture.en.md) · [Core crate](../crates/flow-core/README.md) | `core` |
+| Render custom nodes and compose GPUI components | [Custom nodes](custom-nodes.en.md) · [GPUI components](components.en.md) | |
+| Execute independent tasks or a connected graph | [Workflows and runners](workflows.en.md) | `runner`, `workflow` |
+| Build and edit a retained scene | [Display scenes](display-scenes.en.md) · [Scene crate](../crates/flow-scene/README.md) | `layout`, `animation` |
+| Add input, tools, and editor behavior | [Custom scene tools](custom-tools.md) | `plugins` |
 
 Use the [scene reference index](README.md#scene-reference) for rendering,
-export, text, layout, and accessibility. See [local validation (Chinese)](testing.md)
+export, text, layout, and accessibility. See [local validation](testing.en.md)
 for checks by crate.

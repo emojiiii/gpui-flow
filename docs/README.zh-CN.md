@@ -2,14 +2,16 @@
 
 [English](README.md) · [项目说明](../README.zh-CN.md)
 
-使用 gpui-flow SDK 构建自己的画布应用，或在 Flow Creative 中编辑本地画布项目。
+使用 gpui-flow 构建自己的画布应用，或在 Flow Creative 中编辑本地画布项目。
 
 ## 入门与工作台
 
-### 使用 gpui-flow SDK 开发
+<a id="使用-gpui-flow-sdk-开发"></a>
 
-- [SDK 入门](library.zh-CN.md)介绍如何构建类型化节点图，以及在 GPUI 宿主中使用 `FlowCanvas` 和 `SceneView`。
-- [可运行的 SDK 示例](library.zh-CN.md#在无桌面环境运行示例)涵盖图编辑、后台任务和工作流，无需桌面会话。
+### 使用 gpui-flow 开发
+
+- [开发指南](library.zh-CN.md)介绍如何构建类型化节点图，以及在 GPUI 宿主中使用 `FlowCanvas` 和 `SceneView`。
+- [可运行示例](library.zh-CN.md#在无桌面环境运行示例)涵盖图编辑、后台任务和工作流，无需桌面会话。
 
 ### 使用 Flow Creative
 

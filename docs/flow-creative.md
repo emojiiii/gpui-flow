@@ -40,7 +40,7 @@ Drop files onto the canvas to place them at the pointer. Use the folder icon on 
 | WAV, MP3, FLAC, OGG, M4A | Play, pause, or seek with waveform and timeline controls. |
 | Supported static GLB | Preview the embedded mesh and orbit the viewpoint. |
 
-Install [FFmpeg tools](getting-started.md#optional-media-tools) for audio and video. See the [full media and model reference (Chinese)](../crates/flow-creative/README.md#按任务查阅).
+Install [FFmpeg tools](getting-started.md#optional-media-tools) for audio and video. See [local media and models](creative-reference.en.md#local-media-and-models) for format and size limits.
 
 ## Connect nodes and process an image
 
@@ -70,7 +70,7 @@ Press **F** and drag around the visible, unlocked, ungrouped objects you want to
 | Standalone SVG | One or more selected shapes or strokes on a transparent background. |
 | Original asset | A file from the project asset panel or a node with a valid media output. |
 
-For format and size limits, see the [export reference (Chinese)](../crates/flow-creative/README.md#素材导出).
+For format and size limits, see the [export reference](creative-reference.en.md#export-files).
 
 <a id="embed-and-extend-the-workbench"></a>
 
