@@ -51,11 +51,11 @@ Put `ffmpeg`, `ffprobe`, and `ffplay` on `PATH` for local audio and video.
 cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative
 ```
 
-The desktop app currently displays its controls in Chinese.
+On the project home, use the language menu in the upper-right corner to choose **English**. Flow Creative remembers your choice when you reopen it.
 
-![Flow Creative project home with the project name field above a dark create button.](images/flow-creative-projects.png)
+![Flow Creative project home in English with the language menu in the upper-right corner and the create button below the project name field.](images/flow-creative-projects.en.png)
 
-1. Enter a project name and click the **+** button below the name field.
+1. Enter a project name and click **New project**.
 2. Drag a local PNG or JPEG from your file manager onto the blank canvas.
 3. Press **T** with the canvas focused, click the canvas, then type a caption. Press **Esc** when done.
 4. Use the back arrow in the upper-left corner and reopen the project to see the saved canvas.

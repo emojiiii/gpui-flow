@@ -63,7 +63,8 @@ impl CreativeCanvas {
                     .values()
                     .any(|g| g.locked && g.node_ids.contains(&id))
                 {
-                    self.notice = Some("对象所在 Frame 已锁定".into());
+                    self.notice =
+                        Some(tr("对象所在 Frame 已锁定", "The object's frame is locked").into());
                     cx.notify();
                     return;
                 }
@@ -120,25 +121,25 @@ impl CreativeCanvas {
             (
                 "layer-front",
                 "arrow-up-to-line",
-                "置于最前",
+                tr("置于最前", "Bring to front"),
                 NodeOrderAction::BringToFront,
             ),
             (
                 "layer-forward",
                 "arrow-up",
-                "上移一层",
+                tr("上移一层", "Bring forward"),
                 NodeOrderAction::BringForward,
             ),
             (
                 "layer-backward",
                 "arrow-down",
-                "下移一层",
+                tr("下移一层", "Send backward"),
                 NodeOrderAction::SendBackward,
             ),
             (
                 "layer-back",
                 "arrow-down-to-line",
-                "置于最后",
+                tr("置于最后", "Send to back"),
                 NodeOrderAction::SendToBack,
             ),
         ] {
@@ -154,7 +155,7 @@ impl CreativeCanvas {
         actions = actions.child(self.icon_button(
             "layer-focus-selection",
             "focus",
-            "定位选中对象",
+            tr("定位选中对象", "Locate selected objects"),
             Action::FocusSelection,
             !can_focus,
             cx,
@@ -170,11 +171,16 @@ impl CreativeCanvas {
             rows = rows.child(
                 self.button(
                     SharedString::from(format!("frame-layer-{}", group.id)),
-                    format!(
+                    tr_format!(
                         "▣ {} · {} 对象{}",
+                        "▣ {} · {} objects{}",
                         group.title,
                         group.node_ids.len(),
-                        if group.locked { " · 锁定" } else { "" }
+                        if group.locked {
+                            tr(" · 锁定", " · Locked")
+                        } else {
+                            ""
+                        }
                     ),
                     Action::FrameEdit(frame_tools::FrameAction::Select(group.id.clone())),
                     false,
@@ -198,9 +204,9 @@ impl CreativeCanvas {
                 "lock-open"
             };
             let title = if node.locked {
-                "解锁对象"
+                tr("解锁对象", "Unlock object")
             } else {
-                "锁定对象"
+                tr("锁定对象", "Lock object")
             };
             let kind_icon = match node.kind.as_str() {
                 "image" => "image",
@@ -254,7 +260,10 @@ impl CreativeCanvas {
                                                 .truncate()
                                                 .text_size(px(10.))
                                                 .text_color(rgb(0x9297a0))
-                                                .child(format!("画框：{frames}")),
+                                                .child(tr_format!(
+                                                    "画框：{frames}",
+                                                    "Frames: {frames}"
+                                                )),
                                         )
                                     }),
                             )
@@ -295,9 +304,9 @@ impl CreativeCanvas {
                             SharedString::from(format!("layer-visible-{}", node.id)),
                             if visible { "eye" } else { "eye-off" },
                             if visible {
-                                "隐藏对象"
+                                tr("隐藏对象", "Hide object")
                             } else {
-                                "显示对象"
+                                tr("显示对象", "Show object")
                             },
                             Action::Layer(LayerAction::ToggleVisibility(node.id.clone())),
                             !editable,
@@ -324,7 +333,7 @@ impl CreativeCanvas {
                     .p_3()
                     .text_size(px(12.))
                     .text_color(rgb(0x9297a0))
-                    .child("没有匹配的对象或画框"),
+                    .child(tr("没有匹配的对象或画框", "No matching objects or frames")),
             );
         }
         div()
@@ -345,11 +354,11 @@ impl CreativeCanvas {
                     .items_center()
                     .justify_between()
                     .pb_2()
-                    .child(div().text_sm().child("图层"))
+                    .child(div().text_sm().child(tr("图层", "Layers")))
                     .child(self.icon_button(
                         "close-layers",
                         "x",
-                        "关闭图层",
+                        tr("关闭图层", "Close layers"),
                         Action::Layers,
                         false,
                         cx,
@@ -365,7 +374,7 @@ impl CreativeCanvas {
                         Input::new(&self.layer_query)
                             .w(px(218.))
                             .h(px(30.))
-                            .aria_label("搜索图层名称"),
+                            .aria_label(tr("搜索图层名称", "Search layer names")),
                     )
                     .child(
                         Button::new("clear-layer-query")
@@ -386,13 +395,17 @@ impl CreativeCanvas {
                     .pt_2()
                     .text_size(px(10.))
                     .text_color(rgb(0x9297a0))
-                    .child(format!(
+                    .child(tr_format!(
                         "显示 {shown}/{} · 上方在前 · Shift 多选",
+                        "Showing {shown}/{} · Front layers at top · Shift to select multiple",
                         graph.nodes.len() + graph.groups.len()
                     )),
             )
             .when(!query.trim().is_empty(), |v| {
-                v.child(label("仅过滤列表，保留选择；画框仍选择整框"))
+                v.child(label(tr(
+                    "仅过滤列表，保留选择；画框仍选择整框",
+                    "Filtering keeps the selection. Selecting a frame selects the entire frame.",
+                )))
             })
     }
 }

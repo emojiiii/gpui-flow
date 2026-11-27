@@ -30,13 +30,26 @@ impl CreativeCanvas {
         cx: &mut Context<Self>,
     ) -> Div {
         let Some(kind) = ProcessingKind::from_node_kind(&node.kind) else {
-            return div().child(label("此对象不支持本地处理"));
+            return div().child(label(tr(
+                "此对象不支持本地处理",
+                "This object does not support local processing",
+            )));
         };
         let settings = serde_json::from_value::<ProcessingSettings>(node.data["settings"].clone())
-            .map_err(|_| "处理参数无效，请恢复默认参数".to_string())
+            .map_err(|_| {
+                tr(
+                    "处理参数无效，请恢复默认参数",
+                    "Invalid processing parameters. Restore defaults.",
+                )
+                .to_string()
+            })
             .and_then(|settings| {
                 if settings.kind() != kind || settings.validate().is_err() {
-                    Err("处理参数与节点不匹配，请恢复默认参数".to_string())
+                    Err(tr(
+                        "处理参数与节点不匹配，请恢复默认参数",
+                        "Processing parameters do not match this node. Restore defaults.",
+                    )
+                    .to_string())
                 } else {
                     Ok(settings)
                 }
@@ -56,9 +69,16 @@ impl CreativeCanvas {
                 .text_size(px(12.))
                 .text_color(rgb(0x42464f))
                 .child(chrome::icon(symbol, 15.).text_color(rgb(0x8298b8)))
-                .child(kind.title())
+                .child(tr(
+                    kind.title(),
+                    match kind {
+                        ProcessingKind::Image => "Image Processing",
+                        ProcessingKind::Video => "Video Processing",
+                        ProcessingKind::Audio => "Audio Processing",
+                    },
+                ))
                 .child(div().flex_1())
-                .child(label("本地处理")),
+                .child(label(tr("本地处理", "Local Processing"))),
         );
         let mut input = div()
             .px_2()
@@ -76,7 +96,7 @@ impl CreativeCanvas {
                         .truncate()
                         .text_size(px(11.))
                         .text_color(rgb(0x626b78))
-                        .child(format!("输入 · {}", asset.name)),
+                        .child(tr_format!("输入 · {}", "Input · {}", asset.name)),
                 )
                 .child(
                     div()
@@ -90,12 +110,21 @@ impl CreativeCanvas {
                     div()
                         .text_size(px(11.))
                         .text_color(rgb(0x9398a2))
-                        .child("输入尚未就绪"),
+                        .child(tr("输入尚未就绪", "Input not ready")),
                 )
                 .child(label(match kind {
-                    ProcessingKind::Image => "连接包含本地图片的输出端口",
-                    ProcessingKind::Video => "连接包含本地视频的输出端口",
-                    ProcessingKind::Audio => "连接包含本地音频的输出端口",
+                    ProcessingKind::Image => tr(
+                        "连接包含本地图片的输出端口",
+                        "Connect an output containing a local image",
+                    ),
+                    ProcessingKind::Video => tr(
+                        "连接包含本地视频的输出端口",
+                        "Connect an output containing a local video",
+                    ),
+                    ProcessingKind::Audio => tr(
+                        "连接包含本地音频的输出端口",
+                        "Connect an output containing local audio",
+                    ),
                 })),
         };
         body = body.child(input);
@@ -105,7 +134,7 @@ impl CreativeCanvas {
         } else {
             body = body.child(self.button(
                 "processing-reset-settings",
-                "恢复默认参数",
+                tr("恢复默认参数", "Restore Defaults"),
                 Action::Processing(ProcessingAction::SetSettings(kind.default_settings())),
                 disabled,
                 cx,
@@ -118,11 +147,21 @@ impl CreativeCanvas {
             .or(state.error.as_ref())
             .or(state.input.as_ref().err());
         let (status, color) = if state.running {
-            ("正在本地处理…".to_string(), 0x6683ae)
+            (
+                tr("正在本地处理…", "Processing locally…").to_string(),
+                0x6683ae,
+            )
         } else if let Some(error) = problem {
             (error.clone(), 0xb07150)
         } else if state.busy {
-            ("等待当前任务结束后可运行".to_string(), 0x969ca5)
+            (
+                tr(
+                    "等待当前任务结束后可运行",
+                    "Run when the current task finishes",
+                )
+                .to_string(),
+                0x969ca5,
+            )
         } else {
             (
                 settings.as_ref().map(settings_summary).unwrap_or_default(),
@@ -141,7 +180,7 @@ impl CreativeCanvas {
         let action = if state.running {
             self.button(
                 "processing-cancel",
-                "取消处理",
+                tr("取消处理", "Cancel processing"),
                 Action::Processing(ProcessingAction::Cancel),
                 false,
                 cx,
@@ -151,9 +190,9 @@ impl CreativeCanvas {
             self.button(
                 "processing-run",
                 if state.error.is_some() {
-                    "重试处理"
+                    tr("重试处理", "Retry Processing")
                 } else {
-                    "运行处理"
+                    tr("运行处理", "Run Processing")
                 },
                 Action::Processing(ProcessingAction::Run),
                 run_disabled,
@@ -167,7 +206,7 @@ impl CreativeCanvas {
                 .flex()
                 .items_center()
                 .justify_between()
-                .child(label("输出保存为新素材"))
+                .child(label(tr("输出保存为新素材", "Save output as a new asset")))
                 .child(action),
         )
     }
@@ -185,7 +224,7 @@ impl CreativeCanvas {
                 quality,
                 max_edge,
             } => {
-                let mut formats = setting_row("格式");
+                let mut formats = setting_row(tr("格式", "Format"));
                 for (title, selected) in [
                     ("PNG", ImageOutputFormat::Png),
                     ("JPEG", ImageOutputFormat::Jpeg),
@@ -203,9 +242,10 @@ impl CreativeCanvas {
                         cx,
                     ));
                 }
-                let mut quality_row = setting_row("质量");
+                let mut quality_row = setting_row(tr("质量", "Quality"));
                 if format == ImageOutputFormat::Png {
-                    quality_row = quality_row.child(label("PNG 无损编码"));
+                    quality_row =
+                        quality_row.child(label(tr("PNG 无损编码", "Lossless PNG encoding")));
                 } else {
                     for next in [70, 85, 95] {
                         quality_row = quality_row.child(self.processing_option(
@@ -222,7 +262,7 @@ impl CreativeCanvas {
                         ));
                     }
                 }
-                let mut size_row = setting_row("最长边");
+                let mut size_row = setting_row(tr("最长边", "Longest Side"));
                 for next in [1024, 2048, 4096] {
                     size_row = size_row.child(self.processing_option(
                         format!("processing-image-edge-{next}"),
@@ -241,8 +281,11 @@ impl CreativeCanvas {
             }
             ProcessingSettings::Video { crf, max_edge } => {
                 let mut quality_row = setting_row("CRF");
-                for (title, next) in [("18 · 清晰", 18), ("23 · 均衡", 23), ("28 · 小巧", 28)]
-                {
+                for (title, next) in [
+                    (tr("18 · 清晰", "18 · High quality"), 18),
+                    (tr("23 · 均衡", "23 · Balanced"), 23),
+                    (tr("28 · 小巧", "28 · Compact"), 28),
+                ] {
                     quality_row = quality_row.child(self.processing_option(
                         format!("processing-crf-{next}"),
                         title,
@@ -255,7 +298,7 @@ impl CreativeCanvas {
                         cx,
                     ));
                 }
-                let mut size_row = setting_row("最长边");
+                let mut size_row = setting_row(tr("最长边", "Longest Side"));
                 for next in [1280, 1920, 3840] {
                     size_row = size_row.child(self.processing_option(
                         format!("processing-video-edge-{next}"),
@@ -276,7 +319,7 @@ impl CreativeCanvas {
                 bitrate_kbps,
                 sample_rate,
             } => {
-                let mut formats = setting_row("格式");
+                let mut formats = setting_row(tr("格式", "Format"));
                 for (title, selected) in [
                     ("WAV", AudioOutputFormat::Wav),
                     ("MP3", AudioOutputFormat::Mp3),
@@ -294,9 +337,12 @@ impl CreativeCanvas {
                         cx,
                     ));
                 }
-                let mut bitrate_row = setting_row("码率");
+                let mut bitrate_row = setting_row(tr("码率", "Bitrate"));
                 if format == AudioOutputFormat::Wav {
-                    bitrate_row = bitrate_row.child(label("PCM 16-bit · 无压缩"));
+                    bitrate_row = bitrate_row.child(label(tr(
+                        "PCM 16-bit · 无压缩",
+                        "16-bit PCM · Uncompressed",
+                    )));
                 } else {
                     for next in [128, 192, 320] {
                         bitrate_row = bitrate_row.child(self.processing_option(
@@ -313,7 +359,7 @@ impl CreativeCanvas {
                         ));
                     }
                 }
-                let mut sample_row = setting_row("采样率");
+                let mut sample_row = setting_row(tr("采样率", "Sample Rate"));
                 for (title, next) in [("44.1 kHz", 44100), ("48 kHz", 48000)] {
                     sample_row = sample_row.child(self.processing_option(
                         format!("processing-sample-rate-{next}"),
@@ -361,12 +407,16 @@ impl CreativeCanvas {
 }
 
 fn setting_row(title: &'static str) -> Div {
+    let label_width = match crate::localization::language() {
+        crate::localization::CreativeLanguage::SimplifiedChinese => 44.,
+        crate::localization::CreativeLanguage::English => 72.,
+    };
     div()
         .h(px(28.))
         .flex()
         .items_center()
         .gap_1()
-        .child(label(title).w(px(44.)).flex_shrink_0())
+        .child(label(title).w(px(label_width)).flex_shrink_0())
 }
 
 fn input_details(asset: &ProjectAsset) -> String {
@@ -394,22 +444,37 @@ fn settings_summary(settings: &ProcessingSettings) -> String {
             format: ImageOutputFormat::Jpeg,
             quality,
             max_edge,
-        } => format!("JPEG · 质量 {quality} · 最长边 {max_edge}px · 透明填白"),
+        } => tr_format!(
+            "JPEG · 质量 {quality} · 最长边 {max_edge}px · 透明填白",
+            "JPEG · Quality {quality} · Longest side {max_edge}px · White background"
+        ),
         ProcessingSettings::Image { max_edge, .. } => {
-            format!("PNG 无损 · 最长边 {max_edge}px · 保留透明度")
+            tr_format!(
+                "PNG 无损 · 最长边 {max_edge}px · 保留透明度",
+                "Lossless PNG · Longest side {max_edge}px · Preserves transparency"
+            )
         }
         ProcessingSettings::Video { crf, max_edge } => {
-            format!("MP4 / H.264 · CRF {crf} · 最长边 {max_edge}px")
+            tr_format!(
+                "MP4 / H.264 · CRF {crf} · 最长边 {max_edge}px",
+                "MP4 / H.264 · CRF {crf} · Longest side {max_edge}px"
+            )
         }
         ProcessingSettings::Audio {
             format: AudioOutputFormat::Wav,
             sample_rate,
             ..
-        } => format!("WAV / PCM16 · {sample_rate} Hz · 首条音轨"),
+        } => tr_format!(
+            "WAV / PCM16 · {sample_rate} Hz · 首条音轨",
+            "WAV / PCM16 · {sample_rate} Hz · First audio track"
+        ),
         ProcessingSettings::Audio {
             format: AudioOutputFormat::Mp3,
             bitrate_kbps,
             sample_rate,
-        } => format!("MP3 · {bitrate_kbps} kbps · {sample_rate} Hz · 首条音轨"),
+        } => tr_format!(
+            "MP3 · {bitrate_kbps} kbps · {sample_rate} Hz · 首条音轨",
+            "MP3 · {bitrate_kbps} kbps · {sample_rate} Hz · First audio track"
+        ),
     }
 }

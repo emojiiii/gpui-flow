@@ -1,3 +1,4 @@
+use crate::tr;
 use gpui_flow_core::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -39,6 +40,7 @@ pub struct NodeDefinition {
     pub ports: Vec<Port>,
     pub default_data: Value,
     validator: PayloadValidator,
+    localized_port_labels: bool,
 }
 impl NodeDefinition {
     pub fn new(
@@ -56,6 +58,7 @@ impl NodeDefinition {
             ports,
             default_data,
             validator: Arc::new(validator),
+            localized_port_labels: false,
         }
     }
 }
@@ -64,7 +67,8 @@ pub struct CreativeRegistry {
     definitions: BTreeMap<String, NodeDefinition>,
 }
 impl CreativeRegistry {
-    pub fn register(&mut self, definition: NodeDefinition) -> Result<(), CreativeError> {
+    pub fn register(&mut self, mut definition: NodeDefinition) -> Result<(), CreativeError> {
+        definition.localized_port_labels = false;
         if definition.kind.trim().is_empty() || definition.kind.len() > 128 {
             return Err(CreativeError("invalid card kind".into()));
         }
@@ -134,7 +138,20 @@ impl CreativeRegistry {
             .definitions
             .get(&node.kind)
             .ok_or_else(|| CreativeError(format!("unregistered card kind: {}", node.kind)))?;
-        if node.ports != def.ports {
+        // Localized built-in labels are saved for display. Their locale does
+        // not change the port contract when opening an existing document.
+        if node.ports != def.ports
+            && (!def.localized_port_labels
+                || node.ports.len() != def.ports.len()
+                || node.ports.iter().zip(&def.ports).any(|(actual, expected)| {
+                    actual.label.len() > 256
+                        || actual.id != expected.id
+                        || actual.direction != expected.direction
+                        || actual.data_type != expected.data_type
+                        || actual.max_connections != expected.max_connections
+                        || actual.data != expected.data
+                }))
+        {
             return Err(CreativeError(format!(
                 "{}: ports do not match the registered exact-type contract",
                 node.id
@@ -390,10 +407,10 @@ pub fn standard_registry() -> CreativeRegistry {
     for definition in [
         NodeDefinition::new(
             "text",
-            "文字",
+            tr("文字", "Text"),
             Size::new(360., 120.),
-            vec![Port::output("text", "文字", DataType::String)],
-            json!({"text":"让创意从一句话开始"}),
+            vec![Port::output("text", tr("文字", "Text"), DataType::String)],
+            json!({"text":tr("让创意从一句话开始", "Start with an idea")}),
             |v| {
                 text_field(v, "text")?;
                 crate::text_weight::read_weight(v)?;
@@ -402,10 +419,10 @@ pub fn standard_registry() -> CreativeRegistry {
         ),
         NodeDefinition::new(
             "image",
-            "图片 / Reference",
+            tr("图片 / Reference", "Reference image"),
             Size::new(260., 270.),
-            vec![Port::output("image", "图像", image.clone())],
-            json!({"asset":"botanical","caption":"注册的本地图像资源"}),
+            vec![Port::output("image", tr("图像", "Image"), image.clone())],
+            json!({"asset":"botanical","caption":tr("注册的本地图像资源", "Registered local image")}),
             |v| {
                 text_field(v, "asset")?;
                 text_field(v, "caption")
@@ -413,11 +430,11 @@ pub fn standard_registry() -> CreativeRegistry {
         ),
         NodeDefinition::new(
             "video",
-            "本地视频",
+            tr("本地视频", "Local video"),
             Size::new(480., 270.),
             vec![Port::output(
                 "video",
-                "视频",
+                tr("视频", "Video"),
                 DataType::Named("video".into()),
             )],
             json!({"asset":"","caption":""}),
@@ -428,11 +445,11 @@ pub fn standard_registry() -> CreativeRegistry {
         ),
         NodeDefinition::new(
             "audio",
-            "本地音频",
+            tr("本地音频", "Local audio"),
             Size::new(400., 144.),
             vec![Port::output(
                 "audio",
-                "音频",
+                tr("音频", "Audio"),
                 DataType::Named("audio".into()),
             )],
             json!({"asset":"","caption":""}),
@@ -443,10 +460,10 @@ pub fn standard_registry() -> CreativeRegistry {
         ),
         NodeDefinition::new(
             "model",
-            "本地 3D 模型",
+            tr("本地 3D 模型", "Local 3D model"),
             Size::new(420., 315.),
             vec![Port::output("model", "3D", DataType::Named("model".into()))],
-            json!({"asset":"","caption":"本地 GLB · CPU 静态预览"}),
+            json!({"asset":"","caption":tr("本地 GLB · CPU 静态预览", "Local GLB · CPU preview")}),
             |v| {
                 text_field(v, "asset")?;
                 text_field(v, "caption")?;
@@ -467,15 +484,15 @@ pub fn standard_registry() -> CreativeRegistry {
         ),
         NodeDefinition::new(
             "compose",
-            "创作卡片 / Compose",
+            tr("创作卡片 / Compose", "Compose"),
             Size::new(275., 270.),
             vec![
-                Port::input("prompt", "文字", DataType::String),
-                Port::input("reference", "图像", image.clone()),
-                Port::input("palette", "色板", palette.clone()),
-                Port::output("image", "图像", image),
+                Port::input("prompt", tr("文字", "Text"), DataType::String),
+                Port::input("reference", tr("图像", "Image"), image.clone()),
+                Port::input("palette", tr("色板", "Palette"), palette.clone()),
+                Port::output("image", tr("图像", "Image"), image),
             ],
-            json!({"text":"静态创作方案，不调用模型","asset":"sunset"}),
+            json!({"text":tr("静态创作方案，不调用模型", "Static composition preview"),"asset":"sunset"}),
             |v| {
                 text_field(v, "text")?;
                 text_field(v, "asset")
@@ -483,10 +500,10 @@ pub fn standard_registry() -> CreativeRegistry {
         ),
         NodeDefinition::new(
             "palette",
-            "自定义节点 / Palette",
+            tr("自定义节点 / Palette", "Palette"),
             Size::new(235., 165.),
-            vec![Port::output("palette", "色板", palette)],
-            json!({"colors":["#719d8b","#ead8be","#dc927b"],"note":"自定义数据与渲染器"}),
+            vec![Port::output("palette", tr("色板", "Palette"), palette)],
+            json!({"colors":["#719d8b","#ead8be","#dc927b"],"note":tr("自定义数据与渲染器", "Custom data and renderer")}),
             |v| {
                 text_field(v, "note")?;
                 let colors = v
@@ -516,7 +533,7 @@ pub fn standard_registry() -> CreativeRegistry {
     registry
         .register(NodeDefinition::new(
             crate::shapes::SHAPE_NODE_KIND,
-            "矩形",
+            tr("矩形", "Rectangle"),
             crate::shapes::DEFAULT_SHAPE_SIZE,
             vec![],
             crate::shapes::ShapeData::new(crate::shapes::ShapeKind::Rectangle)
@@ -528,7 +545,7 @@ pub fn standard_registry() -> CreativeRegistry {
     registry
         .register(NodeDefinition::new(
             crate::pencil::PENCIL_NODE_KIND,
-            "笔迹",
+            tr("笔迹", "Stroke"),
             Size::new(1., 1.),
             vec![],
             crate::pencil::PencilData::new(vec![Point::new(0.5, 0.5)])
@@ -540,6 +557,9 @@ pub fn standard_registry() -> CreativeRegistry {
     crate::generation::register_generation_nodes(&mut registry);
     crate::mask_node::register_mask_nodes(&mut registry);
     crate::processing_node::register_processing_nodes(&mut registry);
+    for definition in registry.definitions.values_mut() {
+        definition.localized_port_labels = true;
+    }
     registry
 }
 pub fn sample_records() -> CanvasRecords {
@@ -563,15 +583,15 @@ pub fn sample_records() -> CanvasRecords {
             id: "brief-design".into(),
             source: PortRef::new("brief", "text"),
             target: PortRef::new("design", "prompt"),
-            label: "文案".into(),
+            label: tr("文案", "Copy").into(),
             data: Value::Null,
         }],
         frames: vec![FrameRecord {
             id: "references".into(),
-            title: "01 / 灵感与素材".into(),
+            title: tr("01 / 灵感与素材", "01 / Inspiration and assets").into(),
             cards: vec!["brief".into(), "reference".into()],
         }],
-        metadata: json!({"project":"Flow Creative · 本地示例"}),
+        metadata: json!({"project":tr("Flow Creative · 本地示例", "Flow Creative · Local demo")}),
     }
 }
 
@@ -584,6 +604,19 @@ mod tests {
         standard_registry()
             .map_records(sample_records(), LayoutPolicy::RequirePositions)
             .unwrap()
+    }
+    #[test]
+    fn built_in_port_labels_roundtrip_across_languages() {
+        let registry = standard_registry();
+        let mut document = document();
+        let brief = document.graph.nodes.get_mut(&"brief".into()).unwrap();
+        brief.ports[0].label = tr("Text", "文字").into();
+        let json = registry.encode_document(&document).unwrap();
+        assert_eq!(registry.parse_document(&json).unwrap(), document);
+
+        let brief = document.graph.nodes.get_mut(&"brief".into()).unwrap();
+        brief.ports[0].max_connections = Some(1);
+        assert!(registry.validate_node(brief).is_err());
     }
     #[test]
     fn stable_document_roundtrip_preserves_geometry_ports_links_frames_custom_data() {

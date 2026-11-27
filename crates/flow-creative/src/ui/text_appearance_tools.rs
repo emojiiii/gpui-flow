@@ -77,7 +77,7 @@ impl CreativeCanvas {
             self.clear_text_edit();
             let filter = cx.new(|cx| {
                 TextareaState::new(window, cx)
-                    .placeholder("搜索本机字体…")
+                    .placeholder(tr("搜索本机字体…", "Search installed fonts…"))
                     .context_menu(false)
             });
             let color = cx.new(|cx| {
@@ -112,7 +112,13 @@ impl CreativeCanvas {
                     .as_ref()
                     .is_some_and(|name| !self.font_families.contains(name))
                 {
-                    self.notice = Some("本机没有此字体，请重新选择".into());
+                    self.notice = Some(
+                        tr(
+                            "本机没有此字体，请重新选择",
+                            "Choose a font installed on this device",
+                        )
+                        .into(),
+                    );
                     cx.notify();
                     return;
                 }
@@ -187,7 +193,7 @@ impl CreativeCanvas {
             .child(
                 self.button(
                     "default-text-family",
-                    "默认字体",
+                    tr("默认字体", "Default font"),
                     Action::TextAppearance(TypographyAction::Font(None)),
                     !editable,
                     cx,
@@ -228,7 +234,10 @@ impl CreativeCanvas {
                     !editable,
                     cx,
                 )
-                .accessibility_label(format!("文字颜色 #{rgb_value:06X}"))
+                .accessibility_label(tr_format!(
+                    "文字颜色 #{rgb_value:06X}",
+                    "Text color #{rgb_value:06X}"
+                ))
                 .w(px(28.))
                 .px_0()
                 .border_1()
@@ -252,7 +261,7 @@ impl CreativeCanvas {
                 )
                 .w(px(48.))
                 .flex_shrink_0()
-                .accessibility_label(format!("字重 {value}"))
+                .accessibility_label(tr_format!("字重 {value}", "Font weight {value}"))
                 .when(value == weight, |v| {
                     v.bg(rgb(0xeff4ff)).text_color(rgb(0x467bc6))
                 }),
@@ -263,15 +272,25 @@ impl CreativeCanvas {
             .flex_col()
             .gap_2()
             .child(label(if missing {
-                "所存字体本机不可用，当前使用默认字体"
+                tr(
+                    "所存字体本机不可用，当前使用默认字体",
+                    "The saved font is unavailable. Using the default font.",
+                )
             } else {
-                "本机字体 · 字重 · 颜色"
+                tr("本机字体 · 字重 · 颜色", "Font · Weight · Color")
             }))
-            .child(Textarea::new(&filter).h(px(30.)).aria_label("搜索本机字体"))
+            .child(
+                Textarea::new(&filter)
+                    .h(px(30.))
+                    .aria_label(tr("搜索本机字体", "Search installed fonts")),
+            )
             .child(list)
-            .child(label(format!("字重 {weight} · 字体按本机可用款式匹配")))
+            .child(label(tr_format!(
+                "字重 {weight} · 字体按本机可用款式匹配",
+                "Font weight {weight} · Matches installed variants"
+            )))
             .child(weights)
-            .child(label("文字颜色"))
+            .child(label(tr("文字颜色", "Text color")))
             .child(swatches)
             .child(
                 div()
@@ -294,22 +313,20 @@ impl CreativeCanvas {
                             .child(
                                 Textarea::new(&color)
                                     .h(px(30.))
-                                    .aria_label("文字十六进制颜色"),
+                                    .aria_label(tr("文字十六进制颜色", "Hex text color")),
                             ),
                     )
                     .child(self.button(
                         "apply-text-color",
-                        "应用颜色",
+                        tr("应用颜色", "Apply color"),
                         Action::TextAppearance(TypographyAction::ApplyColor),
                         !editable,
                         cx,
                     )),
             )
-            .child(
-                div()
-                    .text_size(px(10.))
-                    .text_color(rgb(0x90939d))
-                    .child("搜索筛选本机字体；每次修改可撤销 · Esc 关闭"),
-            )
+            .child(div().text_size(px(10.)).text_color(rgb(0x90939d)).child(tr(
+                "搜索筛选本机字体；每次修改可撤销 · Esc 关闭",
+                "Search installed fonts · Changes can be undone · Esc to close",
+            )))
     }
 }

@@ -54,7 +54,8 @@ impl CreativeCanvas {
             ProcessingAction::Cancel => {
                 if let Some(job) = &self.processing_job {
                     job.cancel.store(true, Ordering::Release);
-                    self.notice = Some("正在取消本地处理…".into());
+                    self.notice =
+                        Some(tr("正在取消本地处理…", "Canceling local processing…").into());
                     cx.notify();
                 }
             }
@@ -176,10 +177,9 @@ impl CreativeCanvas {
             return;
         };
         let result = (|| {
-            let mut project = self
-                .project
-                .clone()
-                .ok_or_else(|| CreativeError("请先打开本地项目".into()))?;
+            let mut project = self.project.clone().ok_or_else(|| {
+                CreativeError(tr("请先打开本地项目", "Open a local project first").into())
+            })?;
             let source =
                 processing_source(self.canvas.read(cx).editor.graph(), &node, project.assets())?;
             let path = project
@@ -200,7 +200,7 @@ impl CreativeCanvas {
             });
             self.importing = true;
             self.canvas.update(cx, |v, cx| v.set_editable(false, cx));
-            self.notice = Some("正在本地处理媒体…".into());
+            self.notice = Some(tr("正在本地处理媒体…", "Processing media locally…").into());
             let settings = data.settings.clone();
             let result_cancel = cancel.clone();
             cx.notify();
@@ -216,7 +216,7 @@ impl CreativeCanvas {
                             execute_processing(&settings, &path, &source, &scratch.output, &cancel)
                                 .map_err(|e| e.to_string())?;
                             if cancel.load(Ordering::Acquire) {
-                                return Err("本地处理已取消".into());
+                                return Err(tr("本地处理已取消", "Local processing canceled").into());
                             }
                             let asset = match settings.kind() {
                                 ProcessingKind::Image => project.import_image(&scratch.output),
@@ -264,13 +264,14 @@ impl CreativeCanvas {
                                             output_data.output_settings =
                                                 Some(output_data.settings.clone());
                                             output_data.error = None;
-                                            this.notice = Some(format!(
+                                            this.notice = Some(tr_format!(
                                                 "本地处理完成 · {} 字节 · 原素材保留",
+                                                "Local processing complete · {} bytes · Original asset retained",
                                                 asset.byte_len
                                             ));
                                         }
                                         Ok(_) => {
-                                            this.notice = Some("处理已取消，未覆盖节点输出".into());
+                                            this.notice = Some(tr("处理已取消，未覆盖节点输出", "Processing canceled. The node output was preserved.").into());
                                         }
                                         Err(error) => {
                                             output_data.error =
@@ -285,7 +286,7 @@ impl CreativeCanvas {
                                         );
                                     }
                                 } else {
-                                    this.notice = Some("输入或节点已改变，未覆盖当前内容".into());
+                                    this.notice = Some(tr("输入或节点已改变，未覆盖当前内容", "The input or node changed. The current content was preserved.").into());
                                 }
                             }
                         }

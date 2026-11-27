@@ -39,6 +39,7 @@ fn main() {
         .with_assets(gpui_kit::assets::AllAssets)
         .run(move |cx| {
             gpui_kit::init(cx);
+            initialize_creative_language(cx);
             install_creative_text_export_backend(text_backend.clone(), cx)
                 .expect("text exporter must share the application font backend");
             gpui_kit::open_window(
@@ -52,7 +53,7 @@ fn main() {
                 },
                 cx,
                 move |window, cx| {
-                    window.set_window_title("Flow Creative · 本地创作工作台");
+                    window.set_window_title("Flow Creative");
                     gpui_kit::component::Theme::change(
                         gpui_kit::component::ThemeMode::Light,
                         Some(window),

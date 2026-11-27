@@ -18,7 +18,10 @@ impl CreativeCanvas {
             let dimensions = spec
                 .output_dimensions(source.width, source.height)
                 .map_err(|e| e.to_string())?;
-            let mut project = self.project.clone().ok_or("请先打开本地项目")?;
+            let mut project = self
+                .project
+                .clone()
+                .ok_or(tr("请先打开本地项目", "Open a local project first"))?;
             let project_id = project.metadata().id.clone();
             let document = self.canvas.read(cx).editor.document();
             let registry = self.registry.clone();
@@ -29,7 +32,10 @@ impl CreativeCanvas {
                     n.data == expected
                         && !crate::layer_guard::node_is_locked(&document.graph, &n.id)
                 })
-                .ok_or("图片已改变，请重新打开旋转")?;
+                .ok_or(tr(
+                    "图片已改变，请重新打开旋转",
+                    "The image changed. Reopen Rotation.",
+                ))?;
             let bounds = rotated_bounds(node.bounds(), (source.width, source.height), dimensions)?;
             let size = bounds.size;
             let position = bounds.origin;
@@ -57,7 +63,7 @@ impl CreativeCanvas {
                             )
                             .map_err(|e| e.to_string())?;
                             if task_cancel.load(Ordering::Acquire) {
-                                return Err("旋转已取消".into());
+                                return Err(tr("旋转已取消", "Rotation canceled").into());
                             }
                             project
                                 .import_image(&scratch.output)
@@ -97,13 +103,13 @@ impl CreativeCanvas {
                                             cx,
                                         ) {
                                             this.notice =
-                                                Some("旋转已应用；可从版本面板恢复原图".into());
+                                                Some(tr("旋转已应用；可从版本面板恢复原图", "Rotation applied. Restore the original from Version History.").into());
                                         }
                                     }
                                     Ok(_) => {
                                         this.clear_image_rotation();
                                         this.notice =
-                                            Some("图片已改变或处理已取消，未覆盖当前对象".into());
+                                            Some(tr("图片已改变或处理已取消，未覆盖当前对象", "The image changed or processing was canceled. The current object was preserved.").into());
                                     }
                                     Err(error) => {
                                         this.notice = Some(error);
@@ -140,7 +146,7 @@ fn rotated_bounds(
     output: (u32, u32),
 ) -> Result<gpui_flow_core::Rect, String> {
     if source.0 == 0 || source.1 == 0 {
-        return Err("源图尺寸无效".into());
+        return Err(tr("源图尺寸无效", "Invalid source image dimensions").into());
     }
     let scale = (bounds.size.width / source.0 as f32).min(bounds.size.height / source.1 as f32);
     let size = WorldSize::new(output.0 as f32 * scale, output.1 as f32 * scale);
@@ -150,7 +156,7 @@ fn rotated_bounds(
         size,
     );
     if !size.is_positive() || !result.is_valid() {
-        return Err("旋转后的画布尺寸无效".into());
+        return Err(tr("旋转后的画布尺寸无效", "Invalid rotated canvas dimensions").into());
     }
     Ok(result)
 }

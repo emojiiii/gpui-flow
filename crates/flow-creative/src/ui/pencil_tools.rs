@@ -95,28 +95,32 @@ impl CreativeCanvas {
         }
     }
     fn pencil_style_from_fields(&self, cx: &App) -> Result<PencilStyle, String> {
-        let f = self.pencil_fields.as_ref().ok_or("请重新选择笔迹")?;
+        let f = self
+            .pencil_fields
+            .as_ref()
+            .ok_or(tr("请重新选择笔迹", "Reselect the stroke"))?;
         let color = f.color.read(cx).value();
         let hex = color.trim().trim_start_matches('#');
         if hex.len() != 6 {
-            return Err("颜色应为6位十六进制".into());
+            return Err(tr("颜色应为6位十六进制", "Use a six-digit hex color").into());
         }
         let style = PencilStyle {
-            color: u32::from_str_radix(hex, 16).map_err(|_| "请输入有效颜色")?,
+            color: u32::from_str_radix(hex, 16)
+                .map_err(|_| tr("请输入有效颜色", "Enter a valid color"))?,
             stroke_width: f
                 .width
                 .read(cx)
                 .value()
                 .trim()
                 .parse()
-                .map_err(|_| "请输入有效线宽")?,
+                .map_err(|_| tr("请输入有效线宽", "Enter a valid width"))?,
             opacity: f
                 .opacity
                 .read(cx)
                 .value()
                 .trim()
                 .parse::<f32>()
-                .map_err(|_| "请输入有效不透明度")?
+                .map_err(|_| tr("请输入有效不透明度", "Enter a valid opacity"))?
                 / 100.,
         };
         style.validate()?;
@@ -183,7 +187,13 @@ impl CreativeCanvas {
                     return;
                 }
                 if self.pencil_fields.as_ref().and_then(|f| f.source.as_ref()) != Some(&node) {
-                    self.notice = Some("笔迹已改变，请重新输入".into());
+                    self.notice = Some(
+                        tr(
+                            "笔迹已改变，请重新输入",
+                            "The stroke changed. Re-enter the settings.",
+                        )
+                        .into(),
+                    );
                 } else {
                     let result = PencilData::from_node(&node).and_then(|mut data| {
                         data.style = style;
@@ -228,10 +238,21 @@ impl CreativeCanvas {
             return;
         }
         if draft.limited {
-            self.notice = Some("单条笔迹最多8192点，本次笔迹未添加；请分段绘制".into());
+            self.notice = Some(
+                tr(
+                    "单条笔迹最多8192点，本次笔迹未添加；请分段绘制",
+                    "A stroke can contain up to 8,192 points. Draw it in shorter segments.",
+                )
+                .into(),
+            );
         } else {
             let id = self.canvas.read(cx).editor.graph().fresh_id("pencil");
-            match pencil::create_pencil_node_from_points(id, "笔迹", &draft.points, draft.style) {
+            match pencil::create_pencil_node_from_points(
+                id,
+                tr("笔迹", "Stroke"),
+                &draft.points,
+                draft.style,
+            ) {
                 Ok(node) => {
                     let id = node.id.clone();
                     if self.add_drawn_object(node, cx) {
@@ -396,18 +417,21 @@ impl CreativeCanvas {
             .flex_col()
             .gap_2()
             .child(label(if self.pencil_active {
-                "自由绘制 · 半透明草稿渐进预览 · Esc 完成"
+                tr(
+                    "自由绘制 · 半透明草稿渐进预览 · Esc 完成",
+                    "Draw freehand · Live preview · Esc to finish",
+                )
             } else {
-                "笔迹"
+                tr("笔迹", "Stroke")
             }))
             .child(
                 div()
                     .flex()
                     .items_center()
                     .gap_2()
-                    .child(field("颜色", &f.color, 92.))
-                    .child(field("线宽", &f.width, 56.))
-                    .child(field("不透明%", &f.opacity, 50.)),
+                    .child(field(tr("颜色", "Color"), &f.color, 92.))
+                    .child(field(tr("线宽", "Width"), &f.width, 56.))
+                    .child(field(tr("不透明%", "Opacity %"), &f.opacity, 50.)),
             )
             .child(
                 div()
@@ -417,7 +441,7 @@ impl CreativeCanvas {
                     .child(colors)
                     .child(self.button(
                         "apply-pencil",
-                        "应用",
+                        tr("应用", "Apply"),
                         Action::Pencil(PencilAction::Apply),
                         disabled,
                         cx,
@@ -425,7 +449,7 @@ impl CreativeCanvas {
                     .when(self.pencil_active, |row| {
                         row.child(self.button(
                             "finish-pencil",
-                            "完成",
+                            tr("完成", "Done"),
                             Action::Pencil(PencilAction::Done),
                             false,
                             cx,

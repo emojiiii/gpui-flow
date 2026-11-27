@@ -155,7 +155,7 @@ impl ProjectPreviews {
                         PreviewResult {
                             image: None,
                             thumbnail,
-                            label: "文字预览已失效",
+                            label: tr("文字预览已失效", "Text preview is out of date"),
                         }
                     } else {
                         match result {
@@ -169,7 +169,7 @@ impl ProjectPreviews {
                             Err(_) => PreviewResult {
                                 image: None,
                                 thumbnail,
-                                label: "作品预览不可用",
+                                label: tr("作品预览不可用", "Project preview unavailable"),
                             },
                         }
                     };

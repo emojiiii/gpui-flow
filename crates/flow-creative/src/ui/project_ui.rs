@@ -17,7 +17,13 @@ impl CreativeCanvas {
         self.apply_form_edit(cx);
         if self.saving || self.importing || !self.deferred_edits.is_empty() {
             self.pending_window_close = Some(window.window_handle());
-            self.notice = Some("正在完成本地保存，完成后关闭…".into());
+            self.notice = Some(
+                tr(
+                    "正在完成本地保存，完成后关闭…",
+                    "Saving the project before closing…",
+                )
+                .into(),
+            );
             return false;
         }
         let Some(mut project) = self.project.clone() else {
@@ -43,7 +49,10 @@ impl CreativeCanvas {
                 true
             }
             Err(error) => {
-                self.notice = Some(format!("保存失败，窗口已保留：{error}"));
+                self.notice = Some(tr_format!(
+                    "保存失败，窗口已保留：{error}",
+                    "Save failed. The window is still open: {error}"
+                ));
                 cx.notify();
                 false
             }
@@ -111,7 +120,10 @@ impl CreativeCanvas {
             };
             node.data = data;
             if let Err(error) = self.registry.validate_node(&node) {
-                self.notice = Some(format!("内容暂未保存：{error}"));
+                self.notice = Some(tr_format!(
+                    "内容暂未保存：{error}",
+                    "Changes have not been saved: {error}"
+                ));
                 continue;
             }
             let identity = form_identity(&node);
@@ -138,10 +150,11 @@ impl CreativeCanvas {
         self.refresh_assets(cx);
         self.canvas.update(cx, |v, _| v.set_host_persistence(true));
         self.notice = (migrated > 0)
-            .then(|| format!("已将 {migrated} 个旧参考附件转换为画布图片输入，原素材已保留"));
+            .then(|| tr_format!("已将 {migrated} 个旧参考附件转换为画布图片输入，原素材已保留", "Converted {migrated} legacy reference attachments to image inputs. The original assets are still available."));
         if oriented > 0 {
-            self.notice = Some(format!(
-                "已统一 {oriented} 张图片的 EXIF 方向；原图与画布尺寸保留，旧遮罩需明确重置，处理节点需重跑"
+            self.notice = Some(tr_format!(
+                "已统一 {oriented} 张图片的 EXIF 方向；原图与画布尺寸保留，旧遮罩需明确重置，处理节点需重跑",
+                "Corrected EXIF orientation for {oriented} images. Original files and canvas dimensions are unchanged. Reset affected masks and rerun processing nodes."
             ));
         }
         cx.notify();
@@ -166,9 +179,13 @@ impl CreativeCanvas {
             .graph()
             .node(&node)
             .cloned()
-            .ok_or_else(|| CreativeError("生成节点已被删除".into()))?;
+            .ok_or_else(|| {
+                CreativeError(tr("生成节点已被删除", "The generation node was deleted").into())
+            })?;
         if GenerationKind::from_node_kind(&current.kind).is_none() {
-            return Err(CreativeError("目标不是生成节点".into()));
+            return Err(CreativeError(
+                tr("目标不是生成节点", "The target is not a generation node").into(),
+            ));
         }
         current.data["status"] = Value::String(status.into());
         if let Some(key) = asset {
@@ -342,7 +359,10 @@ impl CreativeCanvas {
                     Err(error) => {
                         this.return_after_save = false;
                         this.pending_window_close = None;
-                        this.notice = Some(format!("保存失败，修改仍在画布中：{error}"));
+                        this.notice = Some(tr_format!(
+                            "保存失败，修改仍在画布中：{error}",
+                            "Save failed. Your edits are still on the canvas: {error}"
+                        ));
                     }
                 }
                 cx.notify();
@@ -363,7 +383,13 @@ impl CreativeCanvas {
             return;
         }
         if at.is_some_and(|at| !at.is_finite()) {
-            self.notice = Some("导入位置无效，请重新选择画布位置".into());
+            self.notice = Some(
+                tr(
+                    "导入位置无效，请重新选择画布位置",
+                    "Invalid import position. Choose another point on the canvas.",
+                )
+                .into(),
+            );
             cx.notify();
             return;
         }
@@ -381,9 +407,15 @@ impl CreativeCanvas {
             multiple: !replace_selection,
             prompt: Some(
                 if self.import_model {
-                    "选择本地 GLB · 复制到项目素材目录"
+                    tr(
+                        "选择本地 GLB · 复制到项目素材目录",
+                        "Choose local GLB files to copy into the project",
+                    )
                 } else {
-                    "选择本地图片、视频或音频 · 复制到项目素材目录"
+                    tr(
+                        "选择本地图片、视频或音频 · 复制到项目素材目录",
+                        "Choose local images, video, or audio to copy into the project",
+                    )
                 }
                 .into(),
             ),
@@ -405,7 +437,13 @@ impl CreativeCanvas {
         let value = self.local_path.read(cx).value();
         let path = PathBuf::from(value.trim());
         if !path.is_absolute() {
-            self.notice = Some("请输入已选择文件的完整绝对路径".into());
+            self.notice = Some(
+                tr(
+                    "请输入已选择文件的完整绝对路径",
+                    "Enter the full absolute path to the file",
+                )
+                .into(),
+            );
             cx.notify();
             return;
         }
@@ -426,7 +464,13 @@ impl CreativeCanvas {
             return;
         }
         if paths.len() > MAX_CARDS.saturating_sub(self.canvas.read(cx).editor.graph().nodes.len()) {
-            self.notice = Some("画布对象数量已达上限，请减少本次导入数量".into());
+            self.notice = Some(
+                tr(
+                    "画布对象数量已达上限，请减少本次导入数量",
+                    "The canvas is at its object limit. Import fewer files.",
+                )
+                .into(),
+            );
             cx.notify();
             return;
         }
@@ -447,12 +491,24 @@ impl CreativeCanvas {
             return;
         }
         if drop_at.is_some_and(|at| !at.is_finite()) {
-            self.notice = Some("导入位置无效，请重新选择画布位置".into());
+            self.notice = Some(
+                tr(
+                    "导入位置无效，请重新选择画布位置",
+                    "Invalid import position. Choose another point on the canvas.",
+                )
+                .into(),
+            );
             cx.notify();
             return;
         }
         let Some(mut project) = self.project.clone() else {
-            self.notice = Some("请先新建本地项目，再导入图片".into());
+            self.notice = Some(
+                tr(
+                    "请先新建本地项目，再导入图片",
+                    "Create a local project before importing assets",
+                )
+                .into(),
+            );
             cx.notify();
             return;
         };
@@ -464,7 +520,13 @@ impl CreativeCanvas {
                 .node(id)
                 .is_none_or(|n| n.kind != "image")
         }) {
-            self.notice = Some("要替换的图片节点已不存在，请重新选择图片".into());
+            self.notice = Some(
+                tr(
+                    "要替换的图片节点已不存在，请重新选择图片",
+                    "The image to replace no longer exists. Select another image.",
+                )
+                .into(),
+            );
             self.import_replacement = None;
             self.show_import_path = false;
             cx.notify();
@@ -480,7 +542,7 @@ impl CreativeCanvas {
         cx.spawn(async move |this, cx| {
             let result = match paths.await {
                 Ok(Some(paths)) if replace_selection && paths.len() > 1 => {
-                    Some(Err("替换图片时请选择一个文件".into()))
+                    Some(Err(tr("替换图片时请选择一个文件", "Choose one file to replace the image").into()))
                 }
                 Ok(Some(paths)) if !paths.is_empty() => Some(
                     cx.background_executor()
@@ -550,7 +612,7 @@ impl CreativeCanvas {
                                     data["caption"] = Value::String(asset.name);
                                     this.command(CanvasCommand::SetNodeData { node: id.clone(), data }, cx)
                                 } else {
-                                    this.notice = Some("要替换的节点已不存在".into());
+                                    this.notice = Some(tr("要替换的节点已不存在", "The node to replace no longer exists").into());
                                     false
                                 }
                             } else {
@@ -585,17 +647,17 @@ impl CreativeCanvas {
                                 placed_count += 1;
                             } else {
                                 placement_errors.push(format!("{}：{}", asset_name,
-                                    this.notice.take().unwrap_or_else(|| "无法放置到画布".into())));
+                                    this.notice.take().unwrap_or_else(|| tr("无法放置到画布", "Could not place on the canvas").into())));
                             }
                         }
-                        let mut notice = format!("已复制 {imported_count} 个素材到本地项目，已放入/更新画布 {placed_count} 个");
+                        let mut notice = tr_format!("已复制 {imported_count} 个素材到本地项目，已放入/更新画布 {placed_count} 个", "Copied {imported_count} assets into the project and placed or updated {placed_count} on the canvas");
                         if !placement_errors.is_empty() {
-                            notice.push_str("；未放置的素材保留在“本项目素材”中：");
-                            notice.push_str(&placement_errors.join("；"));
+                            notice.push_str(tr("；未放置的素材保留在“本项目素材”中：", ". Unplaced files are still available in Project Assets: "));
+                            notice.push_str(&placement_errors.join(tr("；", " · ")));
                         }
                         if !errors.is_empty() {
                             notice.push('；');
-                            notice.push_str(&errors.join("；"));
+                            notice.push_str(&errors.join(tr("；", " · ")));
                         } else {
                             this.import_at = None;
                         }
@@ -615,8 +677,8 @@ impl CreativeCanvas {
                     Some(Err(error)) => {
                         this.show_import_path = true;
                         this.pending_window_close = None;
-                        this.notice = Some(format!(
-                            "文件选择/导入失败，可使用右侧本地路径入口：{error}"
+                        this.notice = Some(tr_format!(
+                            "文件选择/导入失败，可使用右侧本地路径入口：{error}", "Could not select or import the file. Enter a local path to try again: {error}"
                         ));
                     }
                     None => {
@@ -689,7 +751,13 @@ pub(super) fn imported_asset_node(
         media if media.starts_with("image/") => {
             ("image", imported_image_size(asset.width, asset.height))
         }
-        _ => return Err("该素材类型不能直接作为媒体对象导入".into()),
+        _ => {
+            return Err(tr(
+                "该素材类型不能直接作为媒体对象导入",
+                "This asset type cannot be placed directly as a media object",
+            )
+            .into());
+        }
     };
     let mut node = registry
         .make_node(

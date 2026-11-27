@@ -137,7 +137,7 @@ impl ModelViews {
             if let Some(view) = view {
                 view.update(cx, |view, cx| view.clear(cx));
             }
-            return message("模型没有本地素材");
+            return message(tr("模型没有本地素材", "The model has no local asset"));
         };
         let camera = match camera {
             Ok(camera) => camera,
@@ -147,7 +147,10 @@ impl ModelViews {
                 if let Some(view) = view {
                     view.update(cx, |view, cx| view.clear(cx));
                 }
-                return message("模型相机数据无效，请重置视角");
+                return message(tr(
+                    "模型相机数据无效，请重置视角",
+                    "Invalid model camera data. Reset the view.",
+                ));
             }
         };
         let request = Request {
@@ -159,7 +162,10 @@ impl ModelViews {
         };
         if !cache.views.contains_key(&node.id) {
             if cache.views.len() >= MAX_CACHED_VIEWS {
-                return message("最多同时预览 12 个模型；删除其他模型可释放预览");
+                return message(tr(
+                    "最多同时预览 12 个模型；删除其他模型可释放预览",
+                    "Preview up to 12 models at once. Remove another model to free a slot.",
+                ));
             }
             cache.views.insert(node.id.clone(), cx.new(ModelView::new));
         }
@@ -212,7 +218,7 @@ impl ModelView {
             running: None,
             mesh: None,
             image: None,
-            status: "正在读取本地 GLB…".into(),
+            status: tr("正在读取本地 GLB…", "Reading local GLB…").into(),
             error: None,
         }
     }
@@ -230,7 +236,7 @@ impl ModelView {
             cx.drop_image(image, None);
         }
         self.error = None;
-        self.status = "正在读取本地 GLB…".into();
+        self.status = tr("正在读取本地 GLB…", "Reading local GLB…").into();
     }
 
     fn request(&mut self, request: Request, cx: &mut Context<Self>) {
@@ -270,11 +276,13 @@ impl ModelView {
                 .spawn(async move {
                     let cancelled = worker_cancelled;
                     if cancelled.load(Ordering::Acquire) {
-                        return Err("预览已取消".into());
+                        return Err(tr("预览已取消", "Preview canceled").into());
                     }
-                    let _gate = RASTER_GATE.lock().map_err(|_| "预览任务异常".to_string())?;
+                    let _gate = RASTER_GATE
+                        .lock()
+                        .map_err(|_| tr("预览任务异常", "Preview task failed").to_string())?;
                     if cancelled.load(Ordering::Acquire) {
-                        return Err("预览已取消".into());
+                        return Err(tr("预览已取消", "Preview canceled").into());
                     }
                     let mesh = match mesh {
                         Some(mesh) => mesh,
@@ -284,7 +292,11 @@ impl ModelView {
                             if !metadata.is_file()
                                 || metadata.len() > model_preview::MAX_GLB_BYTES as u64
                             {
-                                return Err("模型不是普通文件或超过 32 MiB".into());
+                                return Err(tr(
+                                    "模型不是普通文件或超过 32 MiB",
+                                    "The model is not a regular file or exceeds 32 MiB",
+                                )
+                                .into());
                             }
                             let mut bytes = Vec::new();
                             File::open(&work.source.path)
@@ -296,7 +308,7 @@ impl ModelView {
                         }
                     };
                     if cancelled.load(Ordering::Acquire) {
-                        return Err("预览已取消".into());
+                        return Err(tr("预览已取消", "Preview canceled").into());
                     }
                     let camera = match work.camera {
                         Some(state) => {
@@ -335,13 +347,14 @@ impl ModelView {
                                 .expect("bounded raster dimensions");
                             this.image =
                                 Some(Arc::new(RenderImage::new(vec![image::Frame::new(buffer)])));
-                            this.status = format!(
+                            this.status = tr_format!(
                                 "CPU · {} 顶点 · {} 三角面 · {} 贴图{}",
+                                "CPU · {} vertices · {} triangles · {} textures{}",
                                 mesh.vertex_count(),
                                 mesh.triangle_count(),
                                 mesh.texture_count(),
                                 if mesh.uses_mip_filter_fallback() {
-                                    " · 基础级采样"
+                                    tr(" · 基础级采样", " · Base-level sampling")
                                 } else {
                                     ""
                                 }
@@ -362,7 +375,10 @@ impl Render for ModelView {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         let mut body = div().size_full().relative().bg(rgb(0x171b23));
         if let Some(error) = &self.error {
-            body = body.child(message(format!("模型预览失败：{error}")));
+            body = body.child(message(tr_format!(
+                "模型预览失败：{error}",
+                "Model preview failed: {error}"
+            )));
         } else if let Some(image) = &self.image {
             body = body.child(
                 img(image.clone())
@@ -372,7 +388,7 @@ impl Render for ModelView {
                     .object_fit(ObjectFit::Contain),
             );
         } else {
-            body = body.child(message("正在读取本地 GLB…"));
+            body = body.child(message(tr("正在读取本地 GLB…", "Reading local GLB…")));
         }
         body.child(
             div()
@@ -386,7 +402,7 @@ impl Render for ModelView {
                 .text_size(px(10.))
                 .text_color(rgb(0xb4bdca))
                 .child(if self.running.is_some() {
-                    "正在更新视角…".into()
+                    tr("正在更新视角…", "Updating view…").into()
                 } else {
                     self.status.clone()
                 }),

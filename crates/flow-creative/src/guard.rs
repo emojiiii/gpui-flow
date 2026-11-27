@@ -1,4 +1,4 @@
-use crate::{CreativeRegistry, MAX_CARDS, MAX_LINKS};
+use crate::{CreativeRegistry, MAX_CARDS, MAX_LINKS, tr};
 use gpui_flow_interaction::{CanvasCommand, CanvasEffect, CanvasPlugin, PluginContext};
 use std::sync::Arc;
 
@@ -25,7 +25,9 @@ impl CanvasPlugin for CreativeGuard {
         match command {
             CanvasCommand::AddNode(node) => {
                 if graph.nodes.len() >= MAX_CARDS {
-                    return Err("最多 128 张卡片".into());
+                    return Err(
+                        tr("最多 128 张卡片", "A canvas can contain up to 128 cards").into(),
+                    );
                 }
                 registry.validate_node(node).map_err(|e| e.to_string())?;
                 crate::pencil::validate_pencil_collection(
@@ -44,7 +46,10 @@ impl CanvasPlugin for CreativeGuard {
                 }
             }
             CanvasCommand::SetNodeData { node, data } => {
-                let mut candidate = graph.node(node).ok_or("card no longer exists")?.clone();
+                let mut candidate = graph
+                    .node(node)
+                    .ok_or(tr("卡片已不存在", "The card no longer exists"))?
+                    .clone();
                 candidate.data = data.clone();
                 registry
                     .validate_node(&candidate)
@@ -70,7 +75,11 @@ impl CanvasPlugin for CreativeGuard {
                     || graph.edges.len() + clipboard.edges.len() > MAX_LINKS
                     || graph.groups.len() + clipboard.groups.len() > MAX_CARDS
                 {
-                    return Err("粘贴超出画布容量".into());
+                    return Err(tr(
+                        "粘贴超出画布容量",
+                        "Pasting would exceed the canvas capacity",
+                    )
+                    .into());
                 }
                 for node in &clipboard.nodes {
                     registry.validate_node(node).map_err(|e| e.to_string())?;
@@ -85,7 +94,11 @@ impl CanvasPlugin for CreativeGuard {
                     || graph.edges.len() + clipboard.edges.len() > MAX_LINKS
                     || graph.groups.len() + clipboard.groups.len() > MAX_CARDS
                 {
-                    return Err("复制超出画布容量".into());
+                    return Err(tr(
+                        "复制超出画布容量",
+                        "Duplicating would exceed the canvas capacity",
+                    )
+                    .into());
                 }
                 for node in &clipboard.nodes {
                     registry.validate_node(node).map_err(|e| e.to_string())?;
@@ -95,10 +108,18 @@ impl CanvasPlugin for CreativeGuard {
                 )?;
             }
             CanvasCommand::CompleteConnection { .. } if graph.edges.len() >= MAX_LINKS => {
-                return Err("最多 512 条连接".into());
+                return Err(tr(
+                    "最多 512 条连接",
+                    "A canvas can contain up to 512 connections",
+                )
+                .into());
             }
             CanvasCommand::GroupSelection { .. } if graph.groups.len() >= MAX_CARDS => {
-                return Err("Frame 数量达到上限".into());
+                return Err(tr(
+                    "Frame 数量达到上限",
+                    "The canvas has reached its frame limit",
+                )
+                .into());
             }
             _ => {}
         }

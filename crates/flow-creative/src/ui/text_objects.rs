@@ -168,7 +168,10 @@ impl CreativeCanvas {
                         appearance.installed_family(&self.font_families),
                         |v, family| v.font_family(SharedString::from(family.to_string())),
                     )
-                    .aria_label("画布文字，按 Escape 完成编辑"),
+                    .aria_label(tr(
+                        "画布文字，按 Escape 完成编辑",
+                        "Canvas text. Press Escape to finish editing.",
+                    )),
             )
     }
     pub(super) fn text_style_toolbar(
@@ -185,7 +188,7 @@ impl CreativeCanvas {
             .child(
                 self.button(
                     "text-appearance",
-                    "字体",
+                    tr("字体", "Font"),
                     Action::TextAppearance(text_appearance_tools::TypographyAction::Toggle),
                     !editable,
                     cx,
@@ -195,7 +198,7 @@ impl CreativeCanvas {
             .child(self.icon_button(
                 "text-smaller",
                 "minus",
-                "减小字号",
+                tr("减小字号", "Decrease font size"),
                 Action::TextSize(-2.),
                 !editable || style.font_size <= 12.,
                 cx,
@@ -210,36 +213,43 @@ impl CreativeCanvas {
             .child(self.icon_button(
                 "text-larger",
                 "plus",
-                "增大字号",
+                tr("增大字号", "Increase font size"),
                 Action::TextSize(2.),
                 !editable || style.font_size >= 144.,
                 cx,
             ))
             .child(chrome::separator())
             .child(
-                self.icon_button("text-bold", "bold", "粗体", Action::TextBold, !editable, cx)
-                    .when(
-                        crate::text_weight::read_weight(&node.data).unwrap_or(400) >= 600,
-                        |button| button.bg(rgb(0xeaf0fd)).text_color(rgb(0x467bc6)),
-                    ),
+                self.icon_button(
+                    "text-bold",
+                    "bold",
+                    tr("粗体", "Bold"),
+                    Action::TextBold,
+                    !editable,
+                    cx,
+                )
+                .when(
+                    crate::text_weight::read_weight(&node.data).unwrap_or(400) >= 600,
+                    |button| button.bg(rgb(0xeaf0fd)).text_color(rgb(0x467bc6)),
+                ),
             );
         for (id, icon, title, align) in [
             (
                 "text-left",
                 "text-align-start",
-                "左对齐",
+                tr("左对齐", "Align left"),
                 TextAlignment::Left,
             ),
             (
                 "text-center",
                 "text-align-center",
-                "居中",
+                tr("居中", "Center"),
                 TextAlignment::Center,
             ),
             (
                 "text-right",
                 "text-align-end",
-                "右对齐",
+                tr("右对齐", "Align right"),
                 TextAlignment::Right,
             ),
         ] {

@@ -7,7 +7,7 @@ includes **Flow Creative**, a local desktop workbench for arranging media and
 connecting typed nodes on an infinite canvas, and reusable Rust crates for
 building your own canvases.
 
-![Flow Creative's built-in demo showing a reference image, palette node, and typed connection](docs/images/flow-creative-canvas.png)
+![Flow Creative's English demo showing a reference image, palette node, and typed connection](docs/images/flow-creative-canvas.en.png)
 
 ## Run Flow Creative
 

@@ -2,6 +2,7 @@
 //! Missing styles retain the legacy appearance; present styles use an explicit
 //! contract. Editing copies the payload so host-owned fields survive unchanged.
 
+use crate::tr;
 use serde_json::{Value, json};
 
 pub const MIN_TEXT_FONT_SIZE: f32 = 12.0;
@@ -85,7 +86,11 @@ impl TextStyle {
         if !self.font_size.is_finite()
             || !(MIN_TEXT_FONT_SIZE..=MAX_TEXT_FONT_SIZE).contains(&self.font_size)
         {
-            return Err("style.font_size must be finite and between 12 and 144".into());
+            return Err(tr(
+                "字号必须在 12 到 144 之间",
+                "Font size must be between 12 and 144",
+            )
+            .into());
         }
         Ok(())
     }

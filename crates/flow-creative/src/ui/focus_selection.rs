@@ -22,7 +22,13 @@ impl CreativeCanvas {
         let Some(target) =
             fitted_selection(&self.canvas.read(cx).editor, self.canvas_size, panel_height)
         else {
-            self.notice = Some("请先选择可见对象或画框".into());
+            self.notice = Some(
+                tr(
+                    "请先选择可见对象或画框",
+                    "Select a visible object or frame first",
+                )
+                .into(),
+            );
             cx.notify();
             return;
         };

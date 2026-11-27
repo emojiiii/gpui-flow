@@ -155,10 +155,10 @@ impl Render for AdjustmentPreview {
         .left_0()
         .size_full()
         .object_fit(ObjectFit::Cover);
-        let status = self
-            .error
-            .clone()
-            .or_else(|| (!self.ready_for(self.desired)).then(|| "正在更新预览…".to_string()));
+        let status = self.error.clone().or_else(|| {
+            (!self.ready_for(self.desired))
+                .then(|| tr("正在更新预览…", "Updating preview…").to_string())
+        });
         div()
             .relative()
             .w(px(self.view_size.width))

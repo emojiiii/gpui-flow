@@ -7,6 +7,7 @@
 
 use crate::pencil::{PENCIL_NODE_KIND, PencilData};
 use crate::shapes::{SHAPE_NODE_KIND, ShapeData, ShapeKind};
+use crate::tr;
 use gpui_flow_core::{
     Graph, GroupId, NodeId, Point, Rect, Selection, Size, hidden_node_ids, ordered_node_ids,
 };
@@ -155,7 +156,7 @@ impl VectorExport {
 /// Locks protect editing, so locked Frames and visible members remain exportable.
 pub fn prepare_vector_export(graph: &Graph, selection: &Selection) -> Result<VectorExport, String> {
     if !selection.edges.is_empty() {
-        return Err("仅支持形状和笔迹或单个纯矢量画框，请取消选择连接".into());
+        return Err(tr("仅支持形状和笔迹或单个纯矢量画框，请取消选择连接", "Select shapes, strokes, or a single vector-only frame. Deselect the connections before exporting.").into());
     }
     if selection.groups.len() > 1 || (!selection.groups.is_empty() && !selection.nodes.is_empty()) {
         return Err("Export one Frame by itself, without other Frames or direct objects".into());
@@ -199,7 +200,11 @@ pub fn prepare_vector_export(graph: &Graph, selection: &Selection) -> Result<Vec
         }
         if hidden.contains(id) {
             if selected_frame.is_none() {
-                return Err("所选对象包含隐藏图层，请先显示该图层或取消选择".into());
+                return Err(tr(
+                    "所选对象包含隐藏图层，请先显示该图层或取消选择",
+                    "The selection contains a hidden layer. Show or deselect it before exporting.",
+                )
+                .into());
             }
         } else {
             visible_count += 1;
@@ -236,7 +241,7 @@ pub fn prepare_vector_export(graph: &Graph, selection: &Selection) -> Result<Vec
             }
             _ => {
                 return Err(
-                    "仅支持形状和笔迹，所选对象或画框含有不支持的可见文字、媒体或生成节点".into(),
+                    tr("仅支持形状和笔迹，所选对象或画框含有不支持的可见文字、媒体或生成节点", "Export supports shapes and strokes. Remove visible text, media, or generation nodes from the selection or frame.").into(),
                 );
             }
         };

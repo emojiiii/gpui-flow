@@ -1,4 +1,5 @@
 //! Host-facing generation requests. This crate never embeds credentials or calls a service.
+use crate::tr;
 use crate::{CreativeError, CreativeRegistry, NodeDefinition};
 use gpui_flow_core::{DataType, Graph, Node, NodeId, Port, Size};
 use serde::{Deserialize, Serialize};
@@ -23,10 +24,10 @@ impl GenerationKind {
     }
     pub fn title(self) -> &'static str {
         match self {
-            Self::Image => "图片生成",
-            Self::Video => "视频生成",
-            Self::Audio => "音频生成",
-            Self::Model => "模型生成",
+            Self::Image => tr("图片生成", "Image generation"),
+            Self::Video => tr("视频生成", "Video generation"),
+            Self::Audio => tr("音频生成", "Audio generation"),
+            Self::Model => tr("模型生成", "Model generation"),
         }
     }
     pub fn output_type(self) -> &'static str {
@@ -67,8 +68,9 @@ pub struct GenerationInput {
 }
 impl GenerationRequest {
     pub fn from_node(node: &Node, graph: &Graph) -> Result<Self, CreativeError> {
-        let kind = GenerationKind::from_node_kind(&node.kind)
-            .ok_or_else(|| CreativeError("此节点不是生成节点".into()))?;
+        let kind = GenerationKind::from_node_kind(&node.kind).ok_or_else(|| {
+            CreativeError(tr("此节点不是生成节点", "This node is not a generation node").into())
+        })?;
         crate::references::reject_legacy_reference(node)?;
         graph.validate()?;
         crate::mask_node::validate_edit_inputs(node, graph)?;
@@ -93,9 +95,9 @@ impl GenerationRequest {
             .values()
             .filter(|e| e.target.node == node.id)
             .map(|e| {
-                let source = graph
-                    .node(&e.source.node)
-                    .ok_or_else(|| CreativeError("输入节点不存在".into()))?;
+                let source = graph.node(&e.source.node).ok_or_else(|| {
+                    CreativeError(tr("输入节点不存在", "Input node not found").into())
+                })?;
                 let value = if source.kind.starts_with("custom.")
                     || crate::processing::ProcessingKind::from_node_kind(&source.kind).is_some()
                 {
@@ -127,7 +129,13 @@ impl GenerationRequest {
                 .iter()
                 .any(|i| i.text.as_ref().is_some_and(|t| !t.trim().is_empty()))
         {
-            return Err(CreativeError("请先填写提示词或连接文字节点".into()));
+            return Err(CreativeError(
+                tr(
+                    "请先填写提示词或连接文字节点",
+                    "Enter a prompt or connect a text node",
+                )
+                .into(),
+            ));
         }
         Ok(Self {
             node_id: node.id.clone(),
@@ -151,11 +159,15 @@ pub(crate) fn register_generation_nodes(registry: &mut CreativeRegistry) {
         GenerationKind::Audio,
         GenerationKind::Model,
     ] {
-        let mut ports = vec![Port::input("prompt", "提示词", DataType::String)];
+        let mut ports = vec![Port::input(
+            "prompt",
+            tr("提示词", "Prompt"),
+            DataType::String,
+        )];
         if kind != GenerationKind::Audio {
             ports.push(Port::input(
                 "reference",
-                "参考图",
+                tr("参考图", "Reference image"),
                 DataType::Named("image".into()),
             ));
         }
@@ -213,12 +225,16 @@ pub(crate) fn register_generation_nodes(registry: &mut CreativeRegistry) {
         .expect("registered image generator")
         .clone();
     edit.kind = "edit_image".into();
-    edit.title = "图片编辑".into();
+    edit.title = tr("图片编辑", "Image editing").into();
     edit.ports = vec![
-        Port::input("prompt", "提示词", DataType::String),
+        Port::input("prompt", tr("提示词", "Prompt"), DataType::String),
         Port::input("image", "Image", DataType::Named("image".into())),
         Port::input("mask", "Mask", DataType::Named("mask".into())),
-        Port::output("output", "图片", DataType::Named("image".into())),
+        Port::output(
+            "output",
+            tr("图片", "Image"),
+            DataType::Named("image".into()),
+        ),
     ];
     registry
         .register(edit)

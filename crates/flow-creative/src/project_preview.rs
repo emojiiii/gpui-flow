@@ -1,6 +1,6 @@
 //! Read-only artwork framing for recent-project covers, through the same Scene
 //! compositor as Frame PNG. No document mutation, URI reads or preview files.
-use crate::{ProjectAsset, frame_png::FramePngExport};
+use crate::{ProjectAsset, frame_png::FramePngExport, tr};
 use gpui_flow_core::{Graph, Group, Point, Rect, Selection, Size, hidden_node_ids};
 
 pub const PROJECT_PREVIEW_SIZE: [u32; 2] = [267, 156];
@@ -34,7 +34,7 @@ pub fn prepare_project_preview(
                 assets,
                 PROJECT_PREVIEW_SIZE,
             )?,
-            label: "画框预览",
+            label: tr("画框预览", "Frame preview"),
         });
     }
     let visible = graph
@@ -75,7 +75,7 @@ pub fn prepare_project_preview(
             assets,
             PROJECT_PREVIEW_SIZE,
         )?,
-        label: "画布概览",
+        label: tr("画布概览", "Canvas overview"),
     })
 }
 

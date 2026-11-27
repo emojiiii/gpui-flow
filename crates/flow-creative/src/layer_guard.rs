@@ -1,3 +1,4 @@
+use crate::tr;
 use gpui_flow_core::{Graph, NodeId};
 use gpui_flow_interaction::{CanvasCommand, PluginContext};
 
@@ -11,7 +12,10 @@ pub(crate) fn node_is_locked(graph: &Graph, id: &NodeId) -> bool {
 
 fn reject_locked(graph: &Graph, id: &NodeId) -> Result<(), String> {
     if node_is_locked(graph, id) {
-        Err(format!("对象 {id} 已锁定，请先解锁"))
+        Err(tr_format!(
+            "对象 {id} 已锁定，请先解锁",
+            "Unlock object {id} before editing it"
+        ))
     } else {
         Ok(())
     }
@@ -35,7 +39,7 @@ pub(crate) fn filter_layer_command(
             for id in groups.keys() {
                 if let Some(group) = graph.groups.get(id) {
                     if group.locked {
-                        return Err("Frame 已锁定".into());
+                        return Err(tr("Frame 已锁定", "The frame is locked").into());
                     }
                     for node in &group.node_ids {
                         reject_locked(graph, node)?;
@@ -91,7 +95,11 @@ fn validate_locked_graph_changes(before: &Graph, after: &Graph) -> Result<(), St
         .filter(|n| node_is_locked(before, &n.id))
     {
         let Some(candidate) = after.node(&node.id) else {
-            return Err(format!("对象 {} 已锁定，不能删除", node.id));
+            return Err(tr_format!(
+                "对象 {} 已锁定，不能删除",
+                "Unlock object {} before deleting it",
+                node.id
+            ));
         };
         let mut candidate = candidate.clone();
         // Unlocking is allowed, but it cannot smuggle another edit into the
@@ -104,7 +112,11 @@ fn validate_locked_graph_changes(before: &Graph, after: &Graph) -> Result<(), St
             candidate.locked = node.locked;
         }
         if candidate != *node {
-            return Err(format!("对象 {} 已锁定，不能编辑", node.id));
+            return Err(tr_format!(
+                "对象 {} 已锁定，不能编辑",
+                "Unlock object {} before editing it",
+                node.id
+            ));
         }
         let old_links: Vec<_> = before
             .edges
@@ -129,17 +141,29 @@ fn validate_locked_graph_changes(before: &Graph, after: &Graph) -> Result<(), St
             .map(|g| &g.id)
             .collect();
         if old_links != new_links || old_groups != new_groups {
-            return Err(format!("对象 {} 已锁定，不能修改连接或分组", node.id));
+            return Err(tr_format!(
+                "对象 {} 已锁定，不能修改连接或分组",
+                "Unlock object {} before changing its connections or groups",
+                node.id
+            ));
         }
     }
     for group in before.groups.values().filter(|g| g.locked) {
         let Some(candidate) = after.groups.get(&group.id) else {
-            return Err("Frame 已锁定，不能删除".into());
+            return Err(tr(
+                "Frame 已锁定，不能删除",
+                "Unlock the frame before deleting it",
+            )
+            .into());
         };
         let mut candidate = candidate.clone();
         candidate.locked = group.locked;
         if candidate != *group {
-            return Err("Frame 已锁定，不能编辑".into());
+            return Err(tr(
+                "Frame 已锁定，不能编辑",
+                "Unlock the frame before editing it",
+            )
+            .into());
         }
     }
     Ok(())

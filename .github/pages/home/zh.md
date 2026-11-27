@@ -15,6 +15,7 @@ landing:
   secondary:
     text: 使用 Flow Creative
     link: /docs/flow-creative.zh-CN/
+  image: /docs/images/flow-creative-canvas.png
   imageAlt: Flow Creative 的内置示例，展示参考图、调色板节点，以及连接到创作卡片的类型化端口。
   imageCaption: Flow Creative · 内置示例
   guidesTitle: 快速上手与示例

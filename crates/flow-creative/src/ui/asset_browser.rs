@@ -48,9 +48,9 @@ fn asset_kind(asset: &ProjectAsset) -> &'static str {
 fn asset_description(asset: &ProjectAsset) -> String {
     match asset_kind(asset) {
         "image" | "video" => format!("{} × {}", asset.width, asset.height),
-        "audio" => "音频".into(),
-        "mask" => "Mask · 灰度遮罩".into(),
-        _ => "GLB 模型".into(),
+        "audio" => tr("音频", "Audio").into(),
+        "mask" => tr("Mask · 灰度遮罩", "Mask · grayscale").into(),
+        _ => tr("GLB 模型", "GLB model").into(),
     }
 }
 impl CreativeCanvas {
@@ -65,7 +65,7 @@ impl CreativeCanvas {
     ) {
         let query = cx.new(|cx| {
             let mut input = InputState::new(window, cx)
-                .placeholder("搜索素材名称…")
+                .placeholder(tr("搜索素材名称…", "Search assets…"))
                 .context_menu(false);
             input.set_value(state.query.clone(), window, cx);
             input
@@ -104,12 +104,21 @@ impl CreativeCanvas {
             .find(|asset| asset.key == key)
             .cloned()
         else {
-            self.notice = Some("这个素材已不在当前项目中".into());
+            self.notice = Some(
+                tr(
+                    "这个素材已不在当前项目中",
+                    "This asset is no longer in the current project",
+                )
+                .into(),
+            );
             cx.notify();
             return;
         };
         if let Err(error) = project.resolve_asset_path(key) {
-            self.notice = Some(format!("素材无法读取：{error}"));
+            self.notice = Some(tr_format!(
+                "素材无法读取：{error}",
+                "Cannot read asset: {error}"
+            ));
             cx.notify();
             return;
         }
@@ -135,7 +144,13 @@ impl CreativeCanvas {
                 );
                 self.focus_mask_object(&node, cx);
             } else {
-                self.notice = Some("该Mask输出已无编辑节点，请从原图建立新遮罩".into());
+                self.notice = Some(
+                    tr(
+                        "该Mask输出已无编辑节点，请从原图建立新遮罩",
+                        "This mask has no editing node. Create a mask from the original image.",
+                    )
+                    .into(),
+                );
                 cx.notify();
             }
             return;
@@ -218,9 +233,9 @@ impl CreativeCanvas {
             let thumbnail = self.asset_thumbnails.read(cx).image(&asset.key);
             let preview_status = (asset_kind(asset) == "image" && thumbnail.is_none()).then(|| {
                 if self.asset_thumbnails.read(cx).is_loading(&asset.key) {
-                    "正在加载预览…"
+                    tr("正在加载预览…", "Loading preview…")
                 } else {
-                    "预览不可用"
+                    tr("预览不可用", "Preview unavailable")
                 }
             });
             let name = asset.name.clone();
@@ -246,7 +261,11 @@ impl CreativeCanvas {
                 .flex()
                 .flex_col()
                 .gap_1()
-                .accessibility_label(SharedString::from(format!("选择素材 {}", asset.name)))
+                .accessibility_label(SharedString::from(tr_format!(
+                    "选择素材 {}",
+                    "Select asset {}",
+                    asset.name
+                )))
                 .child(
                     div()
                         .w_full()
@@ -300,7 +319,7 @@ impl CreativeCanvas {
                     .child(
                         self.button(
                             SharedString::from(format!("export-stored-{}", asset.key)),
-                            "导出…",
+                            tr("导出…", "Export…"),
                             Action::ExportAsset(asset_export_ui::ExportAction::OpenStored(
                                 asset.key.clone(),
                             )),
@@ -310,8 +329,9 @@ impl CreativeCanvas {
                         .w_full()
                         .h(px(26.))
                         .text_size(px(11.))
-                        .accessibility_label(SharedString::from(format!(
+                        .accessibility_label(SharedString::from(tr_format!(
                             "导出项目素材 {}",
+                            "Export project asset {}",
                             asset.name
                         ))),
                     ),
@@ -324,9 +344,15 @@ impl CreativeCanvas {
                     .text_size(px(12.))
                     .text_color(rgb(0x929aa8))
                     .child(if total == 0 {
-                        "导入的素材会保留在这里，随时放回画布。"
+                        tr(
+                            "导入的素材会保留在这里，随时放回画布。",
+                            "Imported assets stay here for reuse on the canvas.",
+                        )
                     } else {
-                        "没有匹配的素材，试试其他名称或类型。"
+                        tr(
+                            "没有匹配的素材，试试其他名称或类型。",
+                            "No matching assets. Try another name or type.",
+                        )
                     }),
             );
         }
@@ -358,100 +384,103 @@ impl CreativeCanvas {
                 .text_color(rgb(if filter == kind { 0x355fc7 } else { 0x616775 })),
             );
         }
-        let mut panel = div()
-            .id("project-asset-picker")
-            .track_focus(&self.asset_picker_focus)
-            .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
-                if event.keystroke.key == "escape" {
-                    this.action(Action::CloseAssets, window, cx);
-                    cx.stop_propagation();
-                }
-            }))
-            .occlude()
-            .absolute()
-            .left(px(78.))
-            .top(px(74.))
-            .w(px(316.))
-            .p_3()
-            .rounded(px(14.))
-            .bg(rgb(0xffffff))
-            .shadow_md()
-            .border_1()
-            .border_color(rgb(0xe9eaed))
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(div().text_size(px(13.)).child("本项目素材"))
-                    .child(self.icon_button(
-                        "close-assets",
-                        "x",
-                        "关闭素材",
-                        Action::CloseAssets,
-                        false,
-                        cx,
-                    )),
-            )
-            .child(
-                Input::new(&query)
-                    .w_full()
-                    .h(px(32.))
-                    .aria_label("搜索本项目素材名称"),
-            )
-            .child(filters)
-            .child(
-                div()
-                    .id("project-asset-grid")
-                    .max_h(px((self.canvas_size.height - 318.).max(96.)))
-                    .overflow_y_scroll()
-                    .child(grid),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(
-                        div()
-                            .text_size(px(10.))
-                            .text_color(rgb(0x959ca8))
-                            .child(format!(
+        let mut panel =
+            div()
+                .id("project-asset-picker")
+                .track_focus(&self.asset_picker_focus)
+                .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                    if event.keystroke.key == "escape" {
+                        this.action(Action::CloseAssets, window, cx);
+                        cx.stop_propagation();
+                    }
+                }))
+                .occlude()
+                .absolute()
+                .left(px(78.))
+                .top(px(74.))
+                .w(px(316.))
+                .p_3()
+                .rounded(px(14.))
+                .bg(rgb(0xffffff))
+                .shadow_md()
+                .border_1()
+                .border_color(rgb(0xe9eaed))
+                .flex()
+                .flex_col()
+                .gap_2()
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(
+                            div()
+                                .text_size(px(13.))
+                                .child(tr("本项目素材", "Project Assets")),
+                        )
+                        .child(self.icon_button(
+                            "close-assets",
+                            "x",
+                            tr("关闭素材", "Close assets"),
+                            Action::CloseAssets,
+                            false,
+                            cx,
+                        )),
+                )
+                .child(
+                    Input::new(&query)
+                        .w_full()
+                        .h(px(32.))
+                        .aria_label(tr("搜索本项目素材名称", "Search project assets")),
+                )
+                .child(filters)
+                .child(
+                    div()
+                        .id("project-asset-grid")
+                        .max_h(px((self.canvas_size.height - 318.).max(96.)))
+                        .overflow_y_scroll()
+                        .child(grid),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(div().text_size(px(10.)).text_color(rgb(0x959ca8)).child(
+                            tr_format!(
                                 "{} / {} 个素材 · {} / {}",
+                                "{} / {} assets · {} / {}",
                                 assets.len(),
                                 total,
                                 page + 1,
                                 assets.len().div_ceil(PAGE_SIZE).max(1)
-                            )),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .child(self.icon_button(
-                                "asset-prev",
-                                "chevron-left",
-                                "上一页",
-                                Action::AssetsPage(false),
-                                page == 0,
-                                cx,
-                            ))
-                            .child(self.icon_button(
-                                "asset-next",
-                                "chevron-right",
-                                "下一页",
-                                Action::AssetsPage(true),
-                                (page + 1) * PAGE_SIZE >= assets.len(),
-                                cx,
-                            )),
-                    ),
-            );
+                            ),
+                        ))
+                        .child(
+                            div()
+                                .flex()
+                                .child(self.icon_button(
+                                    "asset-prev",
+                                    "chevron-left",
+                                    tr("上一页", "Previous page"),
+                                    Action::AssetsPage(false),
+                                    page == 0,
+                                    cx,
+                                ))
+                                .child(self.icon_button(
+                                    "asset-next",
+                                    "chevron-right",
+                                    tr("下一页", "Next page"),
+                                    Action::AssetsPage(true),
+                                    (page + 1) * PAGE_SIZE >= assets.len(),
+                                    cx,
+                                )),
+                        ),
+                );
         panel = panel.child(
             self.button(
                 "asset-import",
-                "＋ 导入本地素材",
+                tr("＋ 导入本地素材", "＋ Import local assets"),
                 Action::ImportImage,
                 !editable || self.saving,
                 cx,

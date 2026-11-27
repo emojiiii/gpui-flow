@@ -111,7 +111,7 @@ impl CreativeCanvas {
                 .child(self.icon_button(
                     "image-crop",
                     "crop",
-                    "裁剪、旋转和翻转",
+                    tr("裁剪、旋转和翻转", "Crop, rotate, and flip"),
                     Action::ImageEdit(image_edit_controls::ImageEditAction::Begin),
                     !editable || self.project.is_none() || self.saving,
                     cx,
@@ -120,7 +120,7 @@ impl CreativeCanvas {
                     self.icon_button(
                         "image-custom-rotate",
                         "rotate-cw",
-                        "自定义角度旋转",
+                        tr("自定义角度旋转", "Rotate by a custom angle"),
                         Action::ImageRotation(image_rotation_controls::RotationAction::Begin),
                         !editable || self.project.is_none() || self.saving,
                         cx,
@@ -131,7 +131,7 @@ impl CreativeCanvas {
                     self.icon_button(
                         "image-adjust",
                         "sliders-horizontal",
-                        "调整明暗和颜色",
+                        tr("调整明暗和颜色", "Adjust light and color"),
                         Action::ImageAdjust(image_adjust_controls::AdjustAction::Begin),
                         !editable || self.project.is_none() || self.saving,
                         cx,
@@ -141,7 +141,7 @@ impl CreativeCanvas {
                 .child(self.icon_button(
                     "image-mask",
                     "paintbrush",
-                    "从图片绘制遮罩",
+                    tr("从图片绘制遮罩", "Draw a mask from the image"),
                     Action::Mask(mask_editor::MaskAction::FromImage),
                     !editable || self.project.is_none(),
                     cx,
@@ -149,14 +149,14 @@ impl CreativeCanvas {
                 .child(self.icon_button(
                     "replace-image",
                     "upload",
-                    "替换本地图片",
+                    tr("替换本地图片", "Replace local image"),
                     Action::ReplaceImage,
                     !editable || self.project.is_none() || self.saving,
                     cx,
                 ))
                 .child(self.button(
                     "reference-image",
-                    "图生图",
+                    tr("图生图", "Image to image"),
                     Action::UseReference,
                     !editable,
                     cx,
@@ -164,7 +164,7 @@ impl CreativeCanvas {
                 .child(self.icon_button(
                     "original-ratio",
                     "maximize",
-                    "图片显示尺寸与比例锁",
+                    tr("图片显示尺寸与比例锁", "Display size and aspect ratio lock"),
                     Action::ImageSizing(image_sizing_controls::ImageSizingAction::Toggle),
                     !editable || self.project.is_none(),
                     cx,
@@ -173,7 +173,7 @@ impl CreativeCanvas {
                     self.icon_button(
                         "image-versions",
                         "clock",
-                        "本地图片编辑版本",
+                        tr("本地图片编辑版本", "Local image edit history"),
                         Action::ImageVersions(image_version_panel::VersionAction::Toggle),
                         self.project.is_none() || self.importing,
                         cx,
@@ -198,7 +198,7 @@ impl CreativeCanvas {
             bar = bar.child(self.icon_button(
                 "process-media",
                 "sliders-horizontal",
-                "创建本地处理节点",
+                tr("创建本地处理节点", "Create local processing node"),
                 Action::ProcessSelection(kind),
                 !editable || self.project.is_none(),
                 cx,
@@ -210,7 +210,7 @@ impl CreativeCanvas {
             bar = bar.child(self.icon_button(
                 "object-export",
                 "download",
-                "导出素材或矢量对象",
+                tr("导出素材或矢量对象", "Export asset or vector object"),
                 Action::ExportAsset(asset_export_ui::ExportAction::Open),
                 self.project.is_none() || self.importing || self.saving,
                 cx,
@@ -219,7 +219,7 @@ impl CreativeCanvas {
         bar.child(self.icon_button(
             "object-copy",
             "copy",
-            "复制对象",
+            tr("复制对象", "Duplicate object"),
             Action::Duplicate,
             !editable,
             cx,
@@ -227,7 +227,7 @@ impl CreativeCanvas {
         .child(self.icon_button(
             "object-frame",
             "grid-2x2",
-            "编组",
+            tr("编组", "Group"),
             Action::Frame,
             !editable,
             cx,
@@ -236,7 +236,7 @@ impl CreativeCanvas {
             bar.child(self.icon_button(
                 "object-colors",
                 "sliders-horizontal",
-                "端口颜色",
+                tr("端口颜色", "Port colors"),
                 Action::Colors,
                 !editable,
                 cx,
@@ -246,7 +246,7 @@ impl CreativeCanvas {
         .child(self.icon_button(
             "object-delete",
             "trash",
-            "删除对象",
+            tr("删除对象", "Delete object"),
             Action::Delete,
             !editable,
             cx,
@@ -431,7 +431,7 @@ impl CreativeCanvas {
             let input = self
                 .project
                 .as_ref()
-                .ok_or_else(|| "请先打开本地项目".to_string())
+                .ok_or_else(|| tr("请先打开本地项目", "Open a local project first").to_string())
                 .and_then(|p| {
                     crate::processing_node::processing_source(
                         self.canvas.read(cx).editor.graph(),
@@ -514,9 +514,9 @@ impl CreativeCanvas {
                 .child(self.button(
                     "edit-canvas-text",
                     if editing {
-                        "完成编辑"
+                        tr("完成编辑", "Finish editing")
                     } else {
-                        "编辑文字"
+                        tr("编辑文字", "Edit text")
                     },
                     if editing {
                         Action::FinishText
@@ -536,7 +536,13 @@ impl CreativeCanvas {
                 .rounded_lg()
                 .bg(rgb(0xffffff))
                 .shadow_sm()
-                .child(self.button("quick-edit", "添加描述", Action::QuickEdit, !editable, cx));
+                .child(self.button(
+                    "quick-edit",
+                    tr("添加描述", "Add description"),
+                    Action::QuickEdit,
+                    !editable,
+                    cx,
+                ));
         }
         let has_reference_input =
             generation.is_some() && crate::references::accepts_image_reference(node);
@@ -574,14 +580,14 @@ impl CreativeCanvas {
                     .appearance(false)
                     .text_size(px(13.))
                     .disabled(!editable)
-                    .aria_label("对象描述"),
+                    .aria_label(tr("对象描述", "Object description")),
             );
         }
         if let Some(kind) = generation {
             let model_name = node.data["model"]
                 .as_str()
                 .filter(|s| !s.is_empty())
-                .unwrap_or("未配置模型");
+                .unwrap_or(tr("未配置模型", "No model configured"));
             let mut row = div().flex().items_center().gap_1().child(
                 div()
                     .flex_1()
@@ -596,7 +602,7 @@ impl CreativeCanvas {
             if kind == GenerationKind::Model && !model {
                 row = row.child(self.button(
                     "import-model",
-                    "导入GLB",
+                    tr("导入GLB", "Import GLB"),
                     Action::ImportModel,
                     !editable || self.project.is_none() || self.saving,
                     cx,
@@ -641,9 +647,9 @@ impl CreativeCanvas {
                     "generate-selected",
                     "arrow-up",
                     if self.generation_available {
-                        "生成"
+                        tr("生成", "Generate")
                     } else {
-                        "未连接生成服务"
+                        tr("未连接生成服务", "No generation service connected")
                     },
                     Action::Generate,
                     !editable || !self.generation_available,
@@ -674,21 +680,19 @@ impl CreativeCanvas {
                                     .as_ref()
                                     .is_some_and(|mode| mode.node == node.id)
                                 {
-                                    "退出旋转"
+                                    tr("退出旋转", "Exit orbit mode")
                                 } else {
-                                    "旋转模型"
+                                    tr("旋转模型", "Orbit model")
                                 },
                                 Action::ModelInteraction,
                                 !editable,
                                 cx,
                             ),
                         )
-                        .child(
-                            div()
-                                .text_size(px(10.))
-                                .text_color(rgb(0x969ca5))
-                                .child("拖动旋转 · Space平移 · Esc退出"),
-                        ),
+                        .child(div().text_size(px(10.)).text_color(rgb(0x969ca5)).child(tr(
+                            "拖动旋转 · Space平移 · Esc退出",
+                            "Drag to orbit · Space to pan · Esc to exit",
+                        ))),
                 )
                 .child(
                     div()
@@ -731,7 +735,13 @@ impl CreativeCanvas {
                             !editable,
                             cx,
                         ))
-                        .child(self.button("model-fit", "复位", Action::ModelFit, !editable, cx)),
+                        .child(self.button(
+                            "model-fit",
+                            tr("复位", "Reset"),
+                            Action::ModelFit,
+                            !editable,
+                            cx,
+                        )),
                 )
                 .child(
                     div()
@@ -739,7 +749,10 @@ impl CreativeCanvas {
                         .py_1()
                         .text_size(px(10.))
                         .text_color(rgb(0x969ca5))
-                        .child("CPU 静态基色/嵌入贴图 · 无PBR/动画/骨骼"),
+                        .child(tr(
+                            "CPU 静态基色/嵌入贴图 · 无PBR/动画/骨骼",
+                            "Static CPU preview · Base color and embedded textures",
+                        )),
                 );
         } else {
             panel = panel.child(
@@ -752,13 +765,13 @@ impl CreativeCanvas {
                             .px_2()
                             .text_size(px(10.))
                             .text_color(rgb(0xb0b4bb))
-                            .child("自动保存"),
+                            .child(tr("自动保存", "Autosaved")),
                     )
                     .when(node.kind == "image", |p| {
                         p.child(self.icon_button(
                             "close-quick-edit",
                             "x",
-                            "收起描述",
+                            tr("收起描述", "Hide description"),
                             Action::QuickEdit,
                             false,
                             cx,

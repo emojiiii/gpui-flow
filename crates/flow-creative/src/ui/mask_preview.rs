@@ -24,7 +24,13 @@ impl MaskViews {
         contexts.clear();
         for node in graph.nodes.values().filter(|n| n.kind == "mask") {
             let context = project
-                .ok_or_else(|| "请在本地项目中编辑遮罩".to_string())
+                .ok_or_else(|| {
+                    tr(
+                        "请在本地项目中编辑遮罩",
+                        "Edit masks inside a local project",
+                    )
+                    .to_string()
+                })
                 .and_then(|project| {
                     let source = crate::mask_source(graph, node, project.assets())
                         .map_err(|e| e.to_string())?;
@@ -53,7 +59,7 @@ impl MaskViews {
             .unwrap()
             .get(id)
             .cloned()
-            .unwrap_or_else(|| Err("请连接原图".into()))
+            .unwrap_or_else(|| Err(tr("请连接原图", "Connect the source image").into()))
     }
     pub(super) fn set_draft(&self, draft: Option<(NodeId, MaskState)>) {
         *self.draft.lock().unwrap() = draft;
@@ -95,9 +101,12 @@ impl MaskViews {
                         .bg(rgb(0xffe8b5))
                         .text_xs()
                         .child(if orientation_changed {
-                            crate::mask_node::ORIENTATION_REVIEW_NOTICE
+                            crate::mask_node::orientation_review_notice()
                         } else {
-                            "原图已变更，请重置遮罩"
+                            tr(
+                                "原图已变更，请重置遮罩",
+                                "The source image changed. Reset the mask.",
+                            )
                         }),
                 )
                 .into_any_element();
@@ -125,7 +134,7 @@ impl MaskViews {
                             .bottom_0()
                             .p_2()
                             .text_xs()
-                            .child("最多同时预览 8 个遮罩"),
+                            .child(tr("最多同时预览 8 个遮罩", "Preview up to 8 masks at once")),
                     )
                     .into_any_element();
             }
@@ -225,9 +234,9 @@ impl MaskPreview {
             let pixels = cx
                 .background_executor()
                 .spawn(async move {
-                    let _gate = PREVIEW_GATE
-                        .lock()
-                        .map_err(|_| "遮罩预览任务异常".to_string())?;
+                    let _gate = PREVIEW_GATE.lock().map_err(|_| {
+                        tr("遮罩预览任务异常", "Mask preview task failed").to_string()
+                    })?;
                     let raster = crate::mask::rasterize(
                         &work.state,
                         &work.source,
@@ -244,8 +253,9 @@ impl MaskPreview {
                             (u16::from(pixel) * 110 / 255) as u8,
                         ]);
                     }
-                    image::RgbaImage::from_raw(raster.width, raster.height, rgba)
-                        .ok_or_else(|| "遮罩预览尺寸无效".to_string())
+                    image::RgbaImage::from_raw(raster.width, raster.height, rgba).ok_or_else(|| {
+                        tr("遮罩预览尺寸无效", "Invalid mask preview dimensions").to_string()
+                    })
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {

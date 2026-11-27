@@ -71,14 +71,14 @@ impl CreativeCanvas {
                             format!(
                                 "{} · {}",
                                 if image_generation {
-                                    "图生图"
+                                    tr("图生图", "Image to Image")
                                 } else {
-                                    "图片输入"
+                                    tr("图片输入", "Image Input")
                                 },
                                 source.title.chars().take(24).collect::<String>(),
                             )
                         } else {
-                            "已连接图片输入，等待源节点提供图片".into()
+                            tr("已连接图片输入，等待源节点提供图片", "Image input connected. Waiting for the source node to provide an image.").into()
                         }),
                 );
         } else {
@@ -88,9 +88,15 @@ impl CreativeCanvas {
                     .text_size(px(11.))
                     .text_color(rgb(0x9a9fa9))
                     .child(if image_generation {
-                        "文生图 · 连接图片节点可使用图生图"
+                        tr(
+                            "文生图 · 连接图片节点可使用图生图",
+                            "Text to Image · Connect an image node for Image to Image",
+                        )
                     } else {
-                        "可连接图片节点作为输入"
+                        tr(
+                            "可连接图片节点作为输入",
+                            "Connect an image node to provide input",
+                        )
                     }),
             );
         }
@@ -106,7 +112,7 @@ impl CreativeCanvas {
             .id(SharedString::from(format!("generation-prompt-{}", node.id)))
             .on_drop(cx.listener(|this, _: &ExternalPaths, _, cx| {
                 cx.stop_propagation();
-                this.notice = Some("请将图片导入画布，再把图片节点连接到生成器的图片输入".into());
+                this.notice = Some(tr("请将图片导入画布，再把图片节点连接到生成器的图片输入", "Import an image onto the canvas, then connect its node to the generator's image input").into());
                 cx.notify();
             }))
             .child(
@@ -116,7 +122,7 @@ impl CreativeCanvas {
                     .appearance(false)
                     .text_size(px(13.))
                     .disabled(!editable)
-                    .aria_label("生成提示词"),
+                    .aria_label(tr("生成提示词", "Generation prompt")),
             )
     }
 }

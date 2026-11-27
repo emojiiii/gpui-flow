@@ -171,13 +171,16 @@ impl CreativeCanvas {
                     .flex_1()
                     .text_size(px(12.))
                     .text_color(rgb(0x5b606a))
-                    .child(format!("{count} 个对象")),
+                    .child(tr_format!("{count} 个对象", "{count} objects")),
             )
             .child(chrome::separator())
             .child(self.icon_button(
                 "selection-export",
                 "download",
-                "导出所选形状与笔迹为 SVG",
+                tr(
+                    "导出所选形状与笔迹为 SVG",
+                    "Export selected shapes and strokes as SVG",
+                ),
                 Action::ExportAsset(asset_export_ui::ExportAction::Open),
                 self.project.is_none() || self.importing || self.saving,
                 cx,
@@ -185,7 +188,7 @@ impl CreativeCanvas {
             .child(
                 self.button(
                     "selection-arrange",
-                    "排列",
+                    tr("排列", "Arrange"),
                     Action::Arrange(None),
                     false,
                     cx,
@@ -195,7 +198,7 @@ impl CreativeCanvas {
             .child(self.icon_button(
                 "selection-copy",
                 "copy",
-                "复制所选对象",
+                tr("复制所选对象", "Duplicate selected objects"),
                 Action::Duplicate,
                 !editable,
                 cx,
@@ -203,7 +206,7 @@ impl CreativeCanvas {
             .child(self.icon_button(
                 "selection-frame",
                 "grid-2x2",
-                "编组所选对象",
+                tr("编组所选对象", "Group selected objects"),
                 Action::Frame,
                 !editable,
                 cx,
@@ -211,7 +214,7 @@ impl CreativeCanvas {
             .child(self.icon_button(
                 "selection-delete",
                 "trash",
-                "删除所选对象",
+                tr("删除所选对象", "Delete selected objects"),
                 Action::Delete,
                 !editable,
                 cx,

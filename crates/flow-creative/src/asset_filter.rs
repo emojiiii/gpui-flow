@@ -1,4 +1,4 @@
-use crate::{MASK_MEDIA_TYPE, ProjectAsset};
+use crate::{MASK_MEDIA_TYPE, ProjectAsset, tr};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum AssetFilter {
@@ -14,11 +14,11 @@ pub enum AssetFilter {
 impl AssetFilter {
     pub fn label(self) -> &'static str {
         match self {
-            Self::All => "全部",
-            Self::Image => "图片",
-            Self::Video => "视频",
-            Self::Audio => "音频",
-            Self::Model => "模型",
+            Self::All => tr("全部", "All"),
+            Self::Image => tr("图片", "Images"),
+            Self::Video => tr("视频", "Video"),
+            Self::Audio => tr("音频", "Audio"),
+            Self::Model => tr("模型", "Models"),
             Self::Mask => "Mask",
         }
     }

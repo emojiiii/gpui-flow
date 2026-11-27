@@ -3,6 +3,7 @@
 //! version, style and ordered normalized points. A single point draws a dot.
 //! The caller owns editor transactions, Undo and containing-frame locks.
 
+use crate::tr;
 use gpui_flow_core::{Node, NodeId, Point, Size};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, ser::SerializeStruct};
 use serde_json::{Map, Value, json};
@@ -36,7 +37,11 @@ pub fn validate_pencil_collection<'a>(
                 .len(),
         );
         if points > MAX_PENCIL_GRAPH_POINTS || bytes > MAX_PENCIL_GRAPH_BYTES {
-            return Err("画布笔迹超过65536点或2 MiB，请先移除部分笔迹".into());
+            return Err(tr(
+                "画布笔迹超过65536点或2 MiB，请先移除部分笔迹",
+                "Remove some strokes to stay within the canvas limit of 65,536 points or 2 MiB",
+            )
+            .into());
         }
     }
     Ok(())
@@ -65,7 +70,11 @@ impl Default for PencilStyle {
 impl PencilStyle {
     pub fn validate(&self) -> Result<(), String> {
         if self.color > 0xFFFFFF {
-            return Err("pencil color must be an RGB integer in 0..=16777215".into());
+            return Err(tr(
+                "笔迹颜色必须是 24 位 RGB 值",
+                "Stroke color must be a 24-bit RGB value",
+            )
+            .into());
         }
         finite_range(
             self.stroke_width,
@@ -396,7 +405,10 @@ fn validate_point_count(count: usize) -> Result<(), String> {
 
 fn finite_range(value: f32, min: f32, max: f32, name: &str) -> Result<(), String> {
     if !value.is_finite() || !(min..=max).contains(&value) {
-        return Err(format!("pencil {name} must be finite and in {min}..={max}"));
+        return Err(tr_format!(
+            "笔迹参数 {name} 必须在 {min} 到 {max} 之间",
+            "Stroke {name} must be finite and between {min} and {max}"
+        ));
     }
     Ok(())
 }

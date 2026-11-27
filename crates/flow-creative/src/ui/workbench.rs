@@ -1,7 +1,21 @@
 use super::*;
+use crate::localization::{CreativeLanguage, LanguagePreference, language, select_language};
+use gpui_kit::component::button::Button as MenuButton;
 use gpui_kit::component::input::{Input, InputState};
+use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
 
 mod browser;
+
+fn project_name_placeholder() -> &'static str {
+    tr(
+        "项目名称，例如：秋日品牌提案",
+        "Project name, e.g. Autumn campaign",
+    )
+}
+
+fn project_search_placeholder() -> &'static str {
+    tr("搜索本地项目名称", "Search local projects")
+}
 
 /// The native local-first application. Projects are created on disk before a canvas opens.
 pub struct CreativeWorkbench {
@@ -25,7 +39,13 @@ impl CreativeWorkbench {
     pub fn new(root: PathBuf, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let (store, notice) = match ProjectStore::new(root) {
             Ok(store) => (Some(store), None),
-            Err(error) => (None, Some(format!("无法打开本地项目目录：{error}"))),
+            Err(error) => (
+                None,
+                Some(tr_format!(
+                    "无法打开本地项目目录：{error}",
+                    "Cannot open the local project folder: {error}"
+                )),
+            ),
         };
         let previews = cx.new(project_previews::ProjectPreviews::new);
         let preview_observer = cx.observe(&previews, |_, _, cx| cx.notify());
@@ -44,7 +64,7 @@ impl CreativeWorkbench {
             home_generation: 0,
             query: cx.new(|cx| {
                 InputState::new(window, cx)
-                    .placeholder("搜索本地项目名称")
+                    .placeholder(project_search_placeholder())
                     .context_menu(false)
             }),
             _query_subscription: None,
@@ -52,7 +72,7 @@ impl CreativeWorkbench {
             listing,
             name: cx.new(|cx| {
                 TextareaState::new(window, cx)
-                    .placeholder("项目名称，例如：秋日品牌提案")
+                    .placeholder(project_name_placeholder())
                     .context_menu(false)
             }),
             current: None,
@@ -80,6 +100,35 @@ impl CreativeWorkbench {
         });
         this
     }
+
+    fn change_language(
+        &mut self,
+        selected: CreativeLanguage,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if selected == language() {
+            return;
+        }
+        if let Err(error) = select_language(selected, cx) {
+            self.notice = Some(tr_format!(
+                "无法保存语言设置：{error}",
+                "Could not save the language preference: {error}"
+            ));
+            cx.notify();
+            return;
+        }
+        self.name.update(cx, |field, cx| {
+            field.set_placeholder(project_name_placeholder(), window, cx);
+        });
+        self.query.update(cx, |field, cx| {
+            field.set_placeholder(project_search_placeholder(), window, cx);
+        });
+        self.request_covers(cx);
+        cx.refresh_windows();
+        cx.notify();
+    }
+
     fn refresh(&mut self, cx: &mut Context<Self>) {
         let Some(store) = self.store.clone() else {
             return;
@@ -103,8 +152,9 @@ impl CreativeWorkbench {
                         this.projects = listing.projects;
                         this.request_covers(cx);
                         if !listing.skipped.is_empty() {
-                            this.notice = Some(format!(
+                            this.notice = Some(tr_format!(
                                 "有 {} 个项目无法读取，已保留原文件",
+                                "Could not read {} projects. The original files are intact.",
                                 listing.skipped.len()
                             ));
                         }
@@ -180,7 +230,7 @@ impl CreativeWorkbench {
         };
         let value = self.name.read(cx).value();
         let name = if value.trim().is_empty() {
-            "未命名项目"
+            tr("未命名项目", "Untitled project")
         } else {
             value.trim()
         };
@@ -205,7 +255,7 @@ impl CreativeWorkbench {
             return;
         };
         self.opening = true;
-        self.notice = Some("正在打开本地项目…".into());
+        self.notice = Some(tr("正在打开本地项目…", "Opening local project…").into());
         let id = id.to_string();
         cx.notify();
         cx.spawn_in(window, async move |this, cx| {
@@ -218,7 +268,10 @@ impl CreativeWorkbench {
                 match result {
                     Ok(project) => this.activate(project, window, cx),
                     Err(error) => {
-                        this.notice = Some(format!("打开失败，项目文件未修改：{error}"));
+                        this.notice = Some(tr_format!(
+                            "打开失败，项目文件未修改：{error}",
+                            "Could not open the project: {error}"
+                        ));
                         cx.notify();
                     }
                 }
@@ -255,13 +308,13 @@ impl Render for CreativeWorkbench {
                 .unwrap_or((
                     None,
                     if project.card_count == 0 {
-                        "空白画布"
+                        tr("空白画布", "Blank canvas")
                     } else {
-                        "正在绘制作品预览…"
+                        tr("正在绘制作品预览…", "Rendering project preview…")
                     },
                 ));
             let cover_label = if preview.is_none() && thumbnail.is_some() {
-                "素材预览"
+                tr("素材预览", "Asset preview")
             } else {
                 preview_label
             };
@@ -341,22 +394,55 @@ impl Render for CreativeWorkbench {
                             .flex_col()
                             .gap_1()
                             .child(div().text_sm().truncate().child(name))
-                            .child(label(format!(
+                            .child(label(tr_format!(
                                 "{} 个对象 · {} 个素材",
-                                project.card_count, project.asset_count
+                                "{} objects · {} assets",
+                                project.card_count,
+                                project.asset_count
                             ))),
                     ),
             );
         }
         if match_count == 0 {
             projects = projects.child(div().py_6().child(label(if self.listing {
-                "正在读取本地项目…"
+                tr("正在读取本地项目…", "Loading local projects…")
             } else if self.projects.is_empty() {
-                "还没有项目。新建后，画布与导入的素材会自动保存在本机。"
+                tr(
+                    "还没有项目。新建后，画布与导入的素材会自动保存在本机。",
+                    "No projects yet. New projects and their imported assets are saved locally.",
+                )
             } else {
-                "没有匹配的项目，试试其他名称或清除搜索。"
+                tr(
+                    "没有匹配的项目，试试其他名称或清除搜索。",
+                    "No matching projects. Try another name or clear the search.",
+                )
             })));
         }
+        let language_menu = cx.has_global::<LanguagePreference>().then(|| {
+            let active = language();
+            let workbench = cx.entity().downgrade();
+            MenuButton::new("language-menu")
+                .label(active.label())
+                .icon(gpui_kit::component::IconName::ChevronDown)
+                .dropdown_menu_with_anchor(Anchor::TopRight, move |mut menu, _, _| {
+                    for selected in [
+                        CreativeLanguage::English,
+                        CreativeLanguage::SimplifiedChinese,
+                    ] {
+                        let workbench = workbench.clone();
+                        menu = menu.item(
+                            PopupMenuItem::new(selected.label())
+                                .checked(active == selected)
+                                .on_click(move |_, window, cx| {
+                                    let _ = workbench.update(cx, |this, cx| {
+                                        this.change_language(selected, window, cx);
+                                    });
+                                }),
+                        );
+                    }
+                    menu
+                })
+        });
         let mut root = div()
             .size_full()
             .bg(rgb(t.background))
@@ -375,13 +461,20 @@ impl Render for CreativeWorkbench {
                     .child(div().text_size(px(20.)).child("Flow Creative"))
                     .child(
                         div()
-                            .px_3()
-                            .py_1()
-                            .rounded_full()
-                            .bg(rgb(0xeaf0eb))
-                            .text_size(px(11.))
-                            .text_color(rgb(0x538668))
-                            .child("● 本地工作空间"),
+                            .flex()
+                            .items_center()
+                            .gap_3()
+                            .children(language_menu)
+                            .child(
+                                div()
+                                    .px_3()
+                                    .py_1()
+                                    .rounded_full()
+                                    .bg(rgb(0xeaf0eb))
+                                    .text_size(px(11.))
+                                    .text_color(rgb(0x538668))
+                                    .child(tr("● 本地工作空间", "● Local workspace")),
+                            ),
                     ),
             )
             .child(
@@ -402,8 +495,12 @@ impl Render for CreativeWorkbench {
                             .flex_col()
                             .items_center()
                             .gap_4()
-                            .child(div().text_size(px(32.)).child("今天想创作什么？"))
-                            .child(label("把灵感带到画布上"))
+                            .child(
+                                div()
+                                    .text_size(px(32.))
+                                    .child(tr("今天想创作什么？", "What will you create today?")),
+                            )
+                            .child(label(tr("把灵感带到画布上", "Bring an idea to the canvas")))
                             .child(
                                 div()
                                     .w(px(480.))
@@ -421,20 +518,25 @@ impl Render for CreativeWorkbench {
                                             .bordered(false)
                                             .appearance(false)
                                             .h(px(40.))
-                                            .aria_label("新项目名称"),
+                                            .aria_label(tr("新项目名称", "New project name")),
                                     )
                                     .child(
-                                        ControlButton::new("new-project", "＋ 新建项目")
-                                            .theme(FlowTheme {
-                                                card: 0x24252a,
-                                                foreground: 0xffffff,
-                                                border: 0x24252a,
-                                                ..t
-                                            })
-                                            .disabled(self.store.is_none() || self.opening)
-                                            .on_click(cx.listener(|this, _, window, cx| {
+                                        ControlButton::new(
+                                            "new-project",
+                                            tr("＋ 新建项目", "+ New project"),
+                                        )
+                                        .theme(FlowTheme {
+                                            card: 0x24252a,
+                                            foreground: 0xffffff,
+                                            border: 0x24252a,
+                                            ..t
+                                        })
+                                        .disabled(self.store.is_none() || self.opening)
+                                        .on_click(
+                                            cx.listener(|this, _, window, cx| {
                                                 this.create(window, cx)
-                                            })),
+                                            }),
+                                        ),
                                     ),
                             ),
                     )
@@ -443,9 +545,10 @@ impl Render for CreativeWorkbench {
                             .flex()
                             .items_center()
                             .justify_between()
-                            .child(div().text_lg().child("最近项目"))
-                            .child(label(format!(
+                            .child(div().text_lg().child(tr("最近项目", "Recent projects")))
+                            .child(label(tr_format!(
                                 "{} / {} 个项目",
+                                "{} / {} projects",
                                 match_count,
                                 self.projects.len()
                             ))),
@@ -460,11 +563,11 @@ impl Render for CreativeWorkbench {
                                 div().w(px(300.)).child(
                                     Input::new(&self.query)
                                         .h(px(36.))
-                                        .aria_label("搜索本地项目名称"),
+                                        .aria_label(project_search_placeholder()),
                                 ),
                             )
                             .child(
-                                ControlButton::new("clear-project-query", "清除")
+                                ControlButton::new("clear-project-query", tr("清除", "Clear"))
                                     .theme(t)
                                     .disabled(query.is_empty())
                                     .on_click(cx.listener(|this, _, window, cx| {
@@ -475,16 +578,26 @@ impl Render for CreativeWorkbench {
                             )
                             .child(div().flex_1())
                             .child(
-                                ControlButton::new("previous-project-page", "上一页")
-                                    .theme(t)
-                                    .disabled(page_index == 0 || self.listing)
-                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                ControlButton::new(
+                                    "previous-project-page",
+                                    tr("上一页", "Previous"),
+                                )
+                                .theme(t)
+                                .disabled(page_index == 0 || self.listing)
+                                .on_click(cx.listener(
+                                    move |this, _, _, cx| {
                                         this.change_page(page_index.saturating_sub(1), cx);
-                                    })),
+                                    },
+                                )),
                             )
-                            .child(label(format!("{} / {} 页", page_index + 1, page_count)))
+                            .child(label(tr_format!(
+                                "{} / {} 页",
+                                "Page {} of {}",
+                                page_index + 1,
+                                page_count
+                            )))
                             .child(
-                                ControlButton::new("next-project-page", "下一页")
+                                ControlButton::new("next-project-page", tr("下一页", "Next"))
                                     .theme(t)
                                     .disabled(page_index + 1 >= page_count || self.listing)
                                     .on_click(cx.listener(move |this, _, _, cx| {
@@ -493,7 +606,10 @@ impl Render for CreativeWorkbench {
                             ),
                     )
                     .child(projects)
-                    .child(label("项目自动保存在本机，随时回来继续。")),
+                    .child(label(tr(
+                        "项目自动保存在本机，随时回来继续。",
+                        "Projects save automatically on this device.",
+                    ))),
             );
         if let Some(notice) = &self.notice {
             root = root.child(

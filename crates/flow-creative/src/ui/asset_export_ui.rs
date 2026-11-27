@@ -68,13 +68,22 @@ impl ExportChoice {
     fn label(&self) -> String {
         match self {
             Self::Media(asset) => asset.label.clone(),
-            Self::Stored(_) => "项目素材文件".into(),
-            Self::Vector(vector) => format!(
+            Self::Stored(_) => tr("项目素材文件", "Project asset file").into(),
+            Self::Vector(vector) => tr_format!(
                 "{}{} 个矢量对象",
-                if vector.is_frame() { "画框 · " } else { "" },
+                "{}{} vector objects",
+                if vector.is_frame() {
+                    tr("画框 · ", "Frame · ")
+                } else {
+                    ""
+                },
                 vector.object_count()
             ),
-            Self::FramePng(frame) => format!("画框 PNG · {} 个对象", frame.object_count()),
+            Self::FramePng(frame) => tr_format!(
+                "画框 PNG · {} 个对象",
+                "Frame PNG · {} objects",
+                frame.object_count()
+            ),
         }
     }
     fn details(&self) -> String {
@@ -103,9 +112,9 @@ impl ExportChoice {
                     size.width,
                     size.height,
                     if vector.has_white_background() {
-                        "画框白底"
+                        tr("画框白底", "White frame background")
                     } else {
-                        "透明背景"
+                        tr("透明背景", "Transparent background")
                     }
                 )
             }
@@ -114,9 +123,9 @@ impl ExportChoice {
                 format!(
                     "PNG · {width} × {height} · {}",
                     if frame.has_white_background() {
-                        "画框白底"
+                        tr("画框白底", "White frame background")
                     } else {
-                        "透明背景"
+                        tr("透明背景", "Transparent background")
                     }
                 )
             }
@@ -343,7 +352,12 @@ impl CreativeCanvas {
                     self.asset_picker = None;
                     self.export_focus.focus(window, cx);
                 }
-                Err(error) => self.notice = Some(format!("暂时不能导出：{error}")),
+                Err(error) => {
+                    self.notice = Some(tr_format!(
+                        "暂时不能导出：{error}",
+                        "Cannot export yet: {error}"
+                    ))
+                }
             }
             cx.notify();
             return;
@@ -404,7 +418,7 @@ impl CreativeCanvas {
                         Ok(Ok(None)) => {}
                         _ => {
                             dialog.error =
-                                Some("无法打开系统保存窗口，请填写完整文件路径后导出".into());
+                                Some(tr("无法打开系统保存窗口，请填写完整文件路径后导出", "The system save dialog could not open. Enter the full file path to export.").into());
                             dialog.path.read(cx).focus_handle(cx).focus(window, cx);
                         }
                     }
@@ -418,7 +432,13 @@ impl CreativeCanvas {
         if matches!(action, ExportAction::Write) {
             let destination = PathBuf::from(dialog.path.read(cx).value().trim());
             if !destination.is_absolute() {
-                dialog.error = Some("请输入完整绝对路径，并保留原格式后缀".into());
+                dialog.error = Some(
+                    tr(
+                        "请输入完整绝对路径，并保留原格式后缀",
+                        "Enter a full absolute path with the original extension",
+                    )
+                    .into(),
+                );
                 cx.notify();
                 return;
             }
@@ -468,7 +488,11 @@ impl CreativeCanvas {
                                     .and_then(|dialog| dialog.gallery_return.take());
                                 this.clear_asset_export();
                                 this.return_to_gallery(saved, window, cx);
-                                this.notice = Some(format!("已导出到 {}", output.path.display()));
+                                this.notice = Some(tr_format!(
+                                    "已导出到 {}",
+                                    "Exported to {}",
+                                    output.path.display()
+                                ));
                             }
                             Err(error) => {
                                 if this
@@ -482,7 +506,10 @@ impl CreativeCanvas {
                                         .and_then(|dialog| dialog.gallery_return.take());
                                     this.clear_asset_export();
                                     this.return_to_gallery(saved, window, cx);
-                                    this.notice = Some(format!("导出已结束：{error}"));
+                                    this.notice = Some(tr_format!(
+                                        "导出已结束：{error}",
+                                        "Export ended: {error}"
+                                    ));
                                 } else if let Some(dialog) = &mut this.export_dialog {
                                     dialog.error = Some(error);
                                 }
@@ -546,11 +573,11 @@ impl CreativeCanvas {
                     .flex()
                     .items_center()
                     .justify_between()
-                    .child(div().text_sm().child("导出素材"))
+                    .child(div().text_sm().child(tr("导出素材", "Export Asset")))
                     .child(self.icon_button(
                         "close-export",
                         "x",
-                        "取消导出",
+                        tr("取消导出", "Cancel export"),
                         Action::ExportAsset(ExportAction::Cancel),
                         false,
                         cx,
@@ -559,30 +586,30 @@ impl CreativeCanvas {
             .child(outputs)
             .child(label(selected.details()))
             .when(matches!(selected, ExportChoice::Stored(_)), |v| {
-                v.child(label("导出已保留的素材文件；不新增节点或改变当前输出"))
+                v.child(label(tr("导出已保留的素材文件；不新增节点或改变当前输出", "Export the stored asset file without adding nodes or changing the current output")))
             })
             .when(matches!(selected, ExportChoice::Vector(_)), |v| {
-                v.child(label("仅形状与笔迹 · 保留图层、线宽和透明度"))
+                v.child(label(tr("仅形状与笔迹 · 保留图层、线宽和透明度", "Shapes and strokes only · Preserves layers, stroke widths, and transparency")))
             })
             .when(matches!(selected, ExportChoice::FramePng(_)), |v| {
-                v.child(label("静态图片、文字、形状与笔迹 · 按画框裁切"))
+                v.child(label(tr("静态图片、文字、形状与笔迹 · 按画框裁切", "Static images, text, shapes, and strokes · Cropped to frame")))
             })
             .when(selected.is_mask(), |v| {
-                v.child(label("灰度Mask：0 保留，255 编辑；未转换供应商语义"))
+                v.child(label(tr("灰度Mask：0 保留，255 编辑；未转换供应商语义", "Grayscale mask · 0 preserves, 255 edits · No provider-specific conversion")))
             })
             .child(self.button(
                 "export-browse",
-                "选择保存位置并导出",
+                tr("选择保存位置并导出", "Choose location and export"),
                 Action::ExportAsset(ExportAction::Browse),
                 busy,
                 cx,
             ))
-            .child(label("或填写完整文件路径"))
+            .child(label(tr("或填写完整文件路径", "Or enter a full file path")))
             .child(
                 Input::new(&dialog.path)
                     .h(px(34.))
                     .disabled(busy)
-                    .aria_label("导出文件绝对路径"),
+                    .aria_label(tr("导出文件绝对路径", "Absolute export file path")),
             )
             .when_some(dialog.error.clone(), |v, error| {
                 v.child(div().text_xs().text_color(rgb(0xa45d48)).child(error))
@@ -593,16 +620,16 @@ impl CreativeCanvas {
                     .justify_between()
                     .items_center()
                     .child(label(if dialog.cancel_requested {
-                        "正在取消导出…"
+                        tr("正在取消导出…", "Canceling export…")
                     } else if self.export_cancel.is_some() {
-                        "正在导出，可取消"
+                        tr("正在导出，可取消", "Exporting · You can cancel")
                     } else {
-                        "原素材保留 · 不覆盖已有文件"
+                        tr("原素材保留 · 不覆盖已有文件", "Original asset retained · Existing files are preserved")
                     }))
                     .child(
                         self.button(
                             "export-write",
-                            "导出",
+                            tr("导出", "Export"),
                             Action::ExportAsset(ExportAction::Write),
                             busy,
                             cx,

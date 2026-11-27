@@ -21,22 +21,34 @@ fn classify_paste(item: ClipboardItem, token: Option<&str>) -> Result<PasteConte
     for entry in item.into_entries() {
         if let ClipboardEntry::Image(candidate) = entry {
             if image.is_some() {
-                return Err("请一次复制一张 PNG 或 JPEG 图片".into());
+                return Err(tr(
+                    "请一次复制一张 PNG 或 JPEG 图片",
+                    "Copy one PNG or JPEG image at a time",
+                )
+                .into());
             }
             if !matches!(
                 candidate.format,
                 gpui::ImageFormat::Png | gpui::ImageFormat::Jpeg
             ) {
-                return Err("剪贴板图片目前支持静态 PNG/JPEG，请用导入入口选择其它格式".into());
+                return Err(tr(
+                    "剪贴板图片目前支持静态 PNG/JPEG，请用导入入口选择其它格式",
+                    "Paste a static PNG or JPEG. For other formats, use Import.",
+                )
+                .into());
             }
             if candidate.bytes.is_empty() || candidate.bytes.len() as u64 > MAX_IMAGE_BYTES {
-                return Err("剪贴板图片不能为空且最多 32 MiB".into());
+                return Err(tr(
+                    "剪贴板图片不能为空且最多 32 MiB",
+                    "Clipboard images must be nonempty and at most 32 MiB",
+                )
+                .into());
             }
             image = Some(candidate);
         }
     }
     image.map(PasteContent::Image).ok_or_else(|| {
-        "剪贴板没有 PNG/JPEG 图片或本画布复制的对象；文字请粘贴到文字编辑框，文件请使用导入".into()
+        tr("剪贴板没有 PNG/JPEG 图片或本画布复制的对象；文字请粘贴到文字编辑框，文件请使用导入", "Copy a PNG or JPEG or an object on this canvas. Paste text into the text editor or use Import for files.").into()
     })
 }
 
@@ -68,7 +80,7 @@ impl CreativeCanvas {
         {
             copied.nodes[0].data["text"]
                 .as_str()
-                .unwrap_or("文字")
+                .unwrap_or(tr("文字", "Text"))
                 .to_owned()
         } else {
             copied
@@ -96,7 +108,13 @@ impl CreativeCanvas {
             token,
             origin: bounds.origin,
         });
-        self.notice = Some("已复制对象，可在本画布粘贴".into());
+        self.notice = Some(
+            tr(
+                "已复制对象，可在本画布粘贴",
+                "Copied objects to paste on this canvas",
+            )
+            .into(),
+        );
         cx.notify();
     }
 
@@ -140,13 +158,13 @@ impl CreativeCanvas {
             return;
         }
         if at.is_some_and(|point| !point.is_finite()) {
-            self.notice = Some("粘贴位置无效".into());
+            self.notice = Some(tr("粘贴位置无效", "Invalid paste position").into());
             cx.notify();
             return;
         }
         let cancel = Arc::new(AtomicBool::new(false));
         self.clipboard_cancel = Some(cancel.clone());
-        self.notice = Some("正在粘贴…按 Esc 可取消".into());
+        self.notice = Some(tr("正在粘贴…按 Esc 可取消", "Pasting… Press Esc to cancel").into());
         self.importing = true;
         self.canvas
             .update(cx, |canvas, cx| canvas.set_editable(false, cx));
@@ -159,12 +177,28 @@ impl CreativeCanvas {
         cx.spawn(async move |this, cx| {
             let read = request
                 .await
-                .map_err(|error| format!("无法读取系统剪贴板：{error}"))
-                .and_then(|item| item.ok_or_else(|| "剪贴板为空或当前系统无法提供图片".into()))
+                .map_err(|error| {
+                    tr_format!(
+                        "无法读取系统剪贴板：{error}",
+                        "Could not read the system clipboard: {error}"
+                    )
+                })
+                .and_then(|item| {
+                    item.ok_or_else(|| {
+                        tr(
+                            "剪贴板为空或当前系统无法提供图片",
+                            "The clipboard is empty or the system cannot supply an image",
+                        )
+                        .into()
+                    })
+                })
                 .and_then(|item| classify_paste(item, owner_token.as_deref()));
             let _ = this.update(cx, |this, cx| {
                 if cancel.load(Ordering::Acquire) {
-                    this.finish_clipboard_paste(Some("已取消粘贴".into()), cx);
+                    this.finish_clipboard_paste(
+                        Some(tr("已取消粘贴", "Paste canceled").into()),
+                        cx,
+                    );
                     return;
                 }
                 match read {
@@ -206,11 +240,23 @@ impl CreativeCanvas {
         cx: &mut Context<Self>,
     ) {
         let Some(mut project) = self.project.clone() else {
-            self.finish_clipboard_paste(Some("请先新建本地项目，再粘贴图片".into()), cx);
+            self.finish_clipboard_paste(
+                Some(
+                    tr(
+                        "请先新建本地项目，再粘贴图片",
+                        "Create a local project before pasting an image",
+                    )
+                    .into(),
+                ),
+                cx,
+            );
             return;
         };
         if self.canvas.read(cx).editor.graph().nodes.len() >= MAX_CARDS {
-            self.finish_clipboard_paste(Some("画布对象数量已达上限".into()), cx);
+            self.finish_clipboard_paste(
+                Some(tr("画布对象数量已达上限", "The canvas is at its object limit").into()),
+                cx,
+            );
             return;
         }
         let project_id = project.metadata().id.clone();
@@ -233,7 +279,7 @@ impl CreativeCanvas {
                     .is_none_or(|project| project.metadata().id != project_id)
                 {
                     this.finish_clipboard_paste(
-                        Some("项目已切换，未向当前画布放置旧图片".into()),
+                        Some(tr("项目已切换，未向当前画布放置旧图片", "The project changed. The image was not placed.").into()),
                         cx,
                     );
                     return;
@@ -249,7 +295,7 @@ impl CreativeCanvas {
                         let notice = if cancel.load(Ordering::Acquire)
                             || this.canvas.read(cx).editor.document() != document
                         {
-                            "粘贴放置已取消；已复制的图片保留在本项目素材中".into()
+                            tr("粘贴放置已取消；已复制的图片保留在本项目素材中", "Placement canceled. The image is still available in Project Assets.").into()
                         } else {
                             let view = this.canvas.read(cx);
                             let id = view
@@ -284,19 +330,19 @@ impl CreativeCanvas {
                                             },
                                             cx,
                                         );
-                                        "已将剪贴板图片复制到本地项目".into()
+                                        tr("已将剪贴板图片复制到本地项目", "Copied the clipboard image into the project").into()
                                     } else {
-                                        "图片已复制，但无法放入该位置；可从本项目素材重新放置"
+                                        tr("图片已复制，但无法放入该位置；可从本项目素材重新放置", "The image could not be placed here. Place it again from Project Assets.")
                                             .into()
                                     }
                                 }
-                                Err(error) => format!("图片已复制，但未放入画布：{error}"),
+                                Err(error) => tr_format!("图片已复制，但未放入画布：{error}", "Copied the image but could not place it on the canvas: {error}"),
                             }
                         };
                         this.finish_clipboard_paste(Some(notice), cx);
                     }
                     Err(error) => {
-                        this.finish_clipboard_paste(Some(format!("粘贴图片失败：{error}")), cx)
+                        this.finish_clipboard_paste(Some(tr_format!("粘贴图片失败：{error}", "Could not paste image: {error}")), cx)
                     }
                 }
             });

@@ -27,7 +27,11 @@ impl LocalProject {
         self.check_revision()?;
         if self.project.assets.len() >= MAX_PROJECT_ASSETS {
             return Err(ProjectError::TooLarge(
-                "project has reached its 512 asset limit".into(),
+                tr(
+                    "项目素材数量已达上限（512）",
+                    "project has reached its 512 asset limit",
+                )
+                .into(),
             ));
         }
         let source = absolute_path(source.as_ref())?;
@@ -36,7 +40,11 @@ impl LocalProject {
         let total = self.project.assets.iter().map(|a| a.byte_len).sum::<u64>();
         if total.saturating_add(bytes.len() as u64) > MAX_PROJECT_ASSET_BYTES {
             return Err(ProjectError::TooLarge(
-                "project assets exceed 512 MiB".into(),
+                tr(
+                    "项目素材总大小超过 512 MiB",
+                    "project assets exceed 512 MiB",
+                )
+                .into(),
             ));
         }
         checked_directory(&self.directory.join("assets"), false)?;
@@ -97,17 +105,29 @@ pub(super) fn verify_media(path: &Path, info: &mut AssetInfo) -> Result<(), Proj
         "wav" => "wav",
         "flac" => "flac",
         "ogg" => "ogg",
-        _ => return Err(ProjectError::Invalid("unsupported media container".into())),
+        _ => {
+            return Err(ProjectError::Invalid(
+                tr("不支持此媒体容器格式", "unsupported media container").into(),
+            ));
+        }
     };
     if !metadata.format.split(',').any(|format| format == expected) {
         return Err(ProjectError::Invalid(
-            "media header and decoded container do not match".into(),
+            tr(
+                "媒体文件头部与解码后的容器格式不匹配",
+                "media header and decoded container do not match",
+            )
+            .into(),
         ));
     }
     if info.media_type.starts_with("video/") {
         if !metadata.has_video {
             return Err(ProjectError::Invalid(
-                "video file has no video stream; import audio as WAV, MP3, FLAC, OGG or M4A".into(),
+                tr(
+                    "文件没有视频轨。请导入 WAV、MP3、FLAC、OGG 或 M4A 格式的音频。",
+                    "video file has no video stream; import audio as WAV, MP3, FLAC, OGG or M4A",
+                )
+                .into(),
             ));
         }
         info.width = metadata.width.unwrap_or(0);
@@ -115,7 +135,7 @@ pub(super) fn verify_media(path: &Path, info: &mut AssetInfo) -> Result<(), Proj
         validate_dimensions(info.width, info.height)?;
     } else if !metadata.has_audio {
         return Err(ProjectError::Invalid(
-            "audio file has no audio stream".into(),
+            tr("音频文件没有音轨", "audio file has no audio stream").into(),
         ));
     }
     Ok(())
@@ -146,7 +166,11 @@ pub(super) fn media_info(
             ("webm", "video/webm")
         } else {
             return Err(ProjectError::Invalid(
-                "choose a local MP4/WebM video or WAV/MP3/FLAC/OGG/M4A audio file".into(),
+                tr(
+                    "请选择本地 MP4、WebM 视频或 WAV、MP3、FLAC、OGG、M4A 音频",
+                    "choose a local MP4/WebM video or WAV/MP3/FLAC/OGG/M4A audio file",
+                )
+                .into(),
             ));
         };
     if required.is_some_and(|kind| match kind {
@@ -155,7 +179,11 @@ pub(super) fn media_info(
         _ => true,
     }) {
         return Err(ProjectError::Invalid(
-            "media container has the wrong asset type".into(),
+            tr(
+                "媒体容器与素材类型不匹配",
+                "media container has the wrong asset type",
+            )
+            .into(),
         ));
     }
     Ok(AssetInfo {

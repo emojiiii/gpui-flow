@@ -21,25 +21,31 @@ fn renamed_graph(
     source: &Node,
     input: &str,
 ) -> Result<Option<gpui_flow_core::Graph>, String> {
-    let current = graph.node(&source.id).ok_or("对象已不存在")?;
+    let current = graph
+        .node(&source.id)
+        .ok_or(tr("对象已不存在", "The object no longer exists"))?;
     if current != source {
-        return Err("对象已变化，请重新打开重命名".into());
+        return Err(tr(
+            "对象已变化，请重新打开重命名",
+            "The object changed. Reopen Rename.",
+        )
+        .into());
     }
     if crate::layer_guard::node_is_locked(graph, &source.id) {
-        return Err("对象或所属画框已锁定".into());
+        return Err(tr("对象或所属画框已锁定", "The object or its frame is locked").into());
     }
     let title = input.trim();
     if title.is_empty() {
-        return Err("请输入对象名称".into());
+        return Err(tr("请输入对象名称", "Enter an object name").into());
     }
     if title.len() > 512 {
-        return Err("名称过长，请缩短后再保存".into());
+        return Err(tr("名称过长，请缩短后再保存", "Shorten the name before saving").into());
     }
     if title
         .chars()
         .any(|c| c.is_control() || matches!(c, '\u{2028}' | '\u{2029}'))
     {
-        return Err("名称请使用单行文字".into());
+        return Err(tr("名称请使用单行文字", "Enter a single-line name").into());
     }
     if title == current.title {
         return Ok(None);
@@ -160,12 +166,12 @@ impl CreativeCanvas {
             .flex()
             .flex_col()
             .gap_2()
-            .child(label("画布对象名称"))
+            .child(label(tr("画布对象名称", "Canvas object name")))
             .child(
                 Input::new(&panel.input)
                     .h(px(32.))
                     .disabled(!editable || self.saving)
-                    .aria_label("对象名称"),
+                    .aria_label(tr("对象名称", "Object name")),
             )
             .when_some(panel.error.clone(), |v, error| {
                 v.child(
@@ -175,7 +181,10 @@ impl CreativeCanvas {
                         .child(error),
                 )
             })
-            .child(label("Enter 应用 · Esc 取消"))
+            .child(label(tr(
+                "Enter 应用 · Esc 取消",
+                "Enter to apply · Esc to cancel",
+            )))
             .child(
                 div()
                     .flex()
@@ -183,14 +192,14 @@ impl CreativeCanvas {
                     .gap_2()
                     .child(self.button(
                         "cancel-node-name",
-                        "取消",
+                        tr("取消", "Cancel"),
                         Action::NodeName(NameAction::Cancel),
                         false,
                         cx,
                     ))
                     .child(self.button(
                         "apply-node-name",
-                        "应用名称",
+                        tr("应用名称", "Apply name"),
                         Action::NodeName(NameAction::Apply),
                         !editable || self.saving,
                         cx,

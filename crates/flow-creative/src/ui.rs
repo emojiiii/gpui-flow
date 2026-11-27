@@ -187,7 +187,7 @@ impl NodeRenderer for CardRenderer {
                 .child(
                     preview
                         .map(|p| p.status)
-                        .unwrap_or_else(|| "自定义类型端口".into()),
+                        .unwrap_or_else(|| tr("自定义类型端口", "Custom ports").into()),
                 )
                 .into_any_element();
         }
@@ -244,7 +244,7 @@ impl NodeRenderer for CardRenderer {
                         .justify_center()
                         .text_sm()
                         .text_color(rgb(0x90939d))
-                        .child("正在读取本地图片…")
+                        .child(tr("正在读取本地图片…", "Loading local image…"))
                         .into_any_element()
                 })
                 .with_fallback(|| {
@@ -255,7 +255,10 @@ impl NodeRenderer for CardRenderer {
                         .justify_center()
                         .text_sm()
                         .text_color(rgb(0xb07150))
-                        .child("图片解码失败，请替换素材")
+                        .child(tr(
+                            "图片解码失败，请替换素材",
+                            "Could not decode the image. Replace the asset.",
+                        ))
                         .into_any_element()
                 })
                 .into_any_element();
@@ -308,10 +311,13 @@ impl NodeRenderer for CardRenderer {
             _ => ("image", 0xf0f1f4),
         };
         let status = match node.data["status"].as_str() {
-            Some("queued") => Some("等待生成"),
-            Some("running") => Some("正在生成…"),
-            Some("failed") => Some("生成失败"),
-            Some("complete") => Some("等待宿主提供素材"),
+            Some("queued") => Some(tr("等待生成", "Queued")),
+            Some("running") => Some(tr("正在生成…", "Generating…")),
+            Some("failed") => Some(tr("生成失败", "Generation failed")),
+            Some("complete") => Some(tr(
+                "等待宿主提供素材",
+                "Waiting for the host to supply an asset",
+            )),
             _ => None,
         };
         div()
@@ -746,7 +752,10 @@ impl CreativeCanvas {
                     this.save_project(cx);
                 }
                 FlowEvent::ConnectionRejected(reason) => {
-                    this.notice = Some(format!("连接被拒绝：{reason}"))
+                    this.notice = Some(tr_format!(
+                        "连接被拒绝：{reason}",
+                        "Connection rejected: {reason}"
+                    ))
                 }
                 _ => {}
             }
@@ -755,7 +764,7 @@ impl CreativeCanvas {
         let observer = cx.observe(&canvas, |_, _, cx| cx.notify());
         let form = cx.new(|cx| {
             TextareaState::new(window, cx)
-                .placeholder("写下你的想法…")
+                .placeholder(tr("写下你的想法…", "Write your prompt…"))
                 .context_menu(false)
         });
         let form_subscription = cx.subscribe(&form, |this, _, event, cx| {
@@ -768,7 +777,7 @@ impl CreativeCanvas {
         });
         let layer_query = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("搜索对象或画框名称…")
+                .placeholder(tr("搜索对象或画框名称…", "Search objects or frames…"))
                 .context_menu(false)
         });
         let layer_query_subscription = cx.subscribe(&layer_query, |_, _, event, cx| {
@@ -872,22 +881,25 @@ impl CreativeCanvas {
             form,
             json: cx.new(|cx| {
                 TextareaState::new(window, cx)
-                    .placeholder("导出文档或加载 records 模板")
+                    .placeholder(tr(
+                        "导出文档或加载 records 模板",
+                        "Export a document or load a records template",
+                    ))
                     .context_menu(false)
             }),
             custom_color: cx.new(|cx| {
                 TextareaState::new(window, cx)
-                    .placeholder("#RRGGBB，例如 #E86452")
+                    .placeholder(tr("#RRGGBB，例如 #E86452", "#RRGGBB, e.g. #E86452"))
                     .context_menu(false)
             }),
             local_path: cx.new(|cx| {
                 TextareaState::new(window, cx)
-                    .placeholder("本地素材绝对路径")
+                    .placeholder(tr("本地素材绝对路径", "Absolute path to a local asset"))
                     .context_menu(false)
             }),
             project_name_input: cx.new(|cx| {
                 TextareaState::new(window, cx)
-                    .placeholder("项目名称")
+                    .placeholder(tr("项目名称", "Project name"))
                     .context_menu(false)
             }),
             show_rename: false,
@@ -980,7 +992,13 @@ impl CreativeCanvas {
             canvas_size: WorldSize::new(780., 700.),
             canvas_origin: WorldPoint::ZERO,
             next_id: 1,
-            notice: Some("拖动端口连接：仅同类型 Output → Input；没有模型调用".into()),
+            notice: Some(
+                tr(
+                    "拖动端口连接：仅同类型 Output → Input；没有模型调用",
+                    "Drag from an output to a matching input. Connections do not run generation.",
+                )
+                .into(),
+            ),
             trace: std::env::args().any(|a| a == "--trace"),
             project: None,
             last_saved_document: None,
@@ -1386,7 +1404,7 @@ impl CreativeCanvas {
             Action::ConfirmRename => {
                 let name = self.project_name_input.read(cx).value().trim().to_string();
                 if name.is_empty() {
-                    self.notice = Some("请输入项目名称".into());
+                    self.notice = Some(tr("请输入项目名称", "Enter a project name").into());
                     cx.notify();
                     return;
                 }
@@ -1529,7 +1547,13 @@ impl CreativeCanvas {
                     self.action(Action::PortColor(data_type, color), window, cx);
                     return;
                 }
-                self.notice = Some("请输入6位十六进制颜色，例如 #E86452".into());
+                self.notice = Some(
+                    tr(
+                        "请输入6位十六进制颜色，例如 #E86452",
+                        "Enter a six-digit hex color, e.g. #E86452",
+                    )
+                    .into(),
+                );
                 cx.notify();
                 return;
             }
@@ -1567,8 +1591,11 @@ impl CreativeCanvas {
                 }
                 if !graph.data.is_object() {
                     self.notice = Some(
-                        "当前文档的 metadata 不是对象，请先在数据面板保留内容并转成对象后设置颜色"
-                            .into(),
+                        tr(
+                            "当前文档的 metadata 不是对象，请先在数据面板保留内容并转成对象后设置颜色",
+                            "Convert the metadata to an object in the data panel before setting a color. Keep the existing metadata.",
+                        )
+                        .into(),
                     );
                     cx.notify();
                     return;
@@ -1583,7 +1610,7 @@ impl CreativeCanvas {
             Action::Generate => {
                 self.action(Action::Apply, window, cx);
                 if !self.generation_available {
-                    self.notice = Some("尚未连接生成服务。提示词与参数仅保存在本地项目。".into());
+                    self.notice = Some(tr("尚未连接生成服务。提示词与参数仅保存在本地项目。", "Connect a generation service to run this node. Prompts and settings stay in the local project.").into());
                     cx.notify();
                     return;
                 }
@@ -1591,7 +1618,13 @@ impl CreativeCanvas {
                     match GenerationRequest::from_node(&node, self.canvas.read(cx).editor.graph()) {
                         Ok(request) => {
                             cx.emit(CreativeEvent::GenerationRequested(request));
-                            self.notice = Some("生成请求已交给宿主；状态和输出由宿主返回".into());
+                            self.notice = Some(
+                                tr(
+                                    "生成请求已交给宿主；状态和输出由宿主返回",
+                                    "Generation request sent to the host.",
+                                )
+                                .into(),
+                            );
                         }
                         Err(error) => self.notice = Some(error.to_string()),
                     }
@@ -1615,7 +1648,7 @@ impl CreativeCanvas {
             }
             Action::Delete => CanvasCommand::DeleteSelection,
             Action::Frame => CanvasCommand::GroupSelection {
-                title: "Frame / 创作分组".into(),
+                title: tr("Frame / 创作分组", "Frame / Creative group").into(),
                 padding: 28.,
             },
             Action::Ungroup => CanvasCommand::UngroupSelection,
@@ -1680,7 +1713,7 @@ impl CreativeCanvas {
                     Ok(value) => {
                         self.json_mode = JsonMode::Document;
                         self.json.update(cx, |s, cx| s.set_value(value, window, cx));
-                        self.notice=Some("已导出当前 FlowDocument，含位置/尺寸/类型端口/连接/Frame/自定义数据与视口".into());
+                        self.notice=Some(tr("已导出当前 FlowDocument，含位置/尺寸/类型端口/连接/Frame/自定义数据与视口", "Exported the FlowDocument with its layout, typed ports, connections, frames, custom data, and viewport.").into());
                     }
                     Err(e) => self.notice = Some(e.to_string()),
                 }
@@ -1692,7 +1725,7 @@ impl CreativeCanvas {
                 let value = serde_json::to_string_pretty(&sample_records())
                     .expect("sample records serialize");
                 self.json.update(cx, |s, cx| s.set_value(value, window, cx));
-                self.notice = Some("records v1：明确kind/ID/端口；缺少位置时使用确定网格".into());
+                self.notice = Some(tr("records v1：明确kind/ID/端口；缺少位置时使用确定网格", "Records v1 specifies node kinds, IDs, and ports. Objects without a position use a grid.").into());
                 cx.notify();
                 return;
             }
@@ -1717,11 +1750,21 @@ impl CreativeCanvas {
                         if self.command(CanvasCommand::ImportDocument(document), cx) {
                             self.form_source = None;
                             self.sync_form(window, cx);
-                            self.notice =
-                                Some("已原子导入；图内容可一步撤销，视口属于导航状态".into());
+                            self.notice = Some(
+                                tr(
+                                    "已原子导入；图内容可一步撤销，视口属于导航状态",
+                                    "Import complete. Undo restores the previous graph while keeping the current viewport.",
+                                )
+                                .into(),
+                            );
                         }
                     }
-                    Err(e) => self.notice = Some(format!("导入被拒绝，原画布保留：{e}")),
+                    Err(e) => {
+                        self.notice = Some(tr_format!(
+                            "导入被拒绝，原画布保留：{e}",
+                            "Import rejected. Canvas unchanged: {e}"
+                        ))
+                    }
                 }
                 cx.notify();
                 return;
@@ -1731,7 +1774,13 @@ impl CreativeCanvas {
                     return;
                 };
                 if self.form_source.as_ref() != Some(&form_identity(&node)) {
-                    self.notice = Some("卡片已变化，请重新编辑".into());
+                    self.notice = Some(
+                        tr(
+                            "卡片已变化，请重新编辑",
+                            "This object changed. Open it again to edit.",
+                        )
+                        .into(),
+                    );
                     self.sync_form(window, cx);
                     cx.notify();
                     return;
@@ -1924,25 +1973,25 @@ impl Render for CreativeCanvas {
             .as_ref()
             .is_some_and(|d| d != &view.editor.document());
         let save_status = if self.export_cancel.is_some() {
-            "正在导出素材…"
+            tr("正在导出素材…", "Exporting…")
         } else if self.image_edit_cancel.is_some() {
-            "正在应用图片编辑…"
+            tr("正在应用图片编辑…", "Applying image edits…")
         } else if self.custom_job.is_some() {
-            "正在运行宿主接口…"
+            tr("正在运行宿主接口…", "Running the host integration…")
         } else if self.processing_job.is_some() {
-            "正在本地处理…"
+            tr("正在本地处理…", "Processing locally…")
         } else if self.mask_cancel.is_some() {
-            "正在应用遮罩…"
+            tr("正在应用遮罩…", "Applying mask…")
         } else if self.importing {
-            "正在复制素材…"
+            tr("正在复制素材…", "Copying assets…")
         } else if self.saving {
-            "正在保存…"
+            tr("正在保存…", "Saving…")
         } else if dirty {
-            "等待保存"
+            tr("等待保存", "Waiting to save")
         } else if self.project.is_some() {
-            "已保存到本地"
+            tr("已保存到本地", "Saved locally")
         } else {
-            "独立画布"
+            tr("独立画布", "Standalone canvas")
         };
         let owner = cx.entity().downgrade();
         let mut surface = div()
@@ -2151,7 +2200,7 @@ impl Render for CreativeCanvas {
                 self.rail_button(
                     "tool-select",
                     "mouse-pointer-2",
-                    "选择对象",
+                    tr("选择对象", "Select objects"),
                     Action::PanTool(false),
                     false,
                     cx,
@@ -2169,7 +2218,10 @@ impl Render for CreativeCanvas {
                 self.rail_button(
                     "tool-hand",
                     "hand",
-                    "移动画布 · 按住空格临时使用",
+                    tr(
+                        "移动画布 · 按住空格临时使用",
+                        "Pan canvas · Hold Space to pan temporarily",
+                    ),
                     Action::PanTool(true),
                     false,
                     cx,
@@ -2180,7 +2232,7 @@ impl Render for CreativeCanvas {
             .child(self.rail_button(
                 "tool-import",
                 "upload",
-                "导入图片、视频或音频",
+                tr("导入图片、视频或音频", "Import images, video, or audio"),
                 Action::ImportImage,
                 !editable || self.saving || count >= MAX_CARDS,
                 cx,
@@ -2188,19 +2240,38 @@ impl Render for CreativeCanvas {
             .child(self.rail_button(
                 "tool-assets",
                 "folder-open",
-                "本项目素材",
+                tr("本项目素材", "Project assets"),
                 Action::BrowseAssets,
                 self.project.is_none(),
                 cx,
             ));
         for (kind, symbol, name) in [
-            ("mask", "paintbrush", "绘制遮罩"),
-            ("edit_image", "image-plus", "图片编辑 · Image/Mask 输入"),
-            ("text", "type", "文字 · T"),
-            ("generate_image", "image", "图片生成 · A"),
-            ("generate_video", "video", "视频生成 · S"),
-            ("generate_audio", "music", "音频生成"),
-            ("generate_model", "box", "3D 模型生成"),
+            ("mask", "paintbrush", tr("绘制遮罩", "Draw mask")),
+            (
+                "edit_image",
+                "image-plus",
+                tr(
+                    "图片编辑 · Image/Mask 输入",
+                    "Edit image · Image and Mask inputs",
+                ),
+            ),
+            ("text", "type", tr("文字 · T", "Text · T")),
+            (
+                "generate_image",
+                "image",
+                tr("图片生成 · A", "Generate image · A"),
+            ),
+            (
+                "generate_video",
+                "video",
+                tr("视频生成 · S", "Generate video · S"),
+            ),
+            ("generate_audio", "music", tr("音频生成", "Generate audio")),
+            (
+                "generate_model",
+                "box",
+                tr("3D 模型生成", "Generate 3D model"),
+            ),
         ] {
             rail = rail.child(
                 self.rail_button(
@@ -2224,7 +2295,7 @@ impl Render for CreativeCanvas {
             self.rail_button(
                 "tool-pencil",
                 "pencil",
-                "自由绘制 · P",
+                tr("自由绘制 · P", "Freehand · P"),
                 Action::Pencil(pencil_tools::PencilAction::Toggle),
                 !editable || count >= MAX_CARDS,
                 cx,
@@ -2235,7 +2306,7 @@ impl Render for CreativeCanvas {
             self.rail_button(
                 "tool-shape",
                 "circle",
-                "绘制图形",
+                tr("绘制图形", "Draw shapes"),
                 Action::Shape(shape_tools::ShapeAction::Menu),
                 !editable || self.saving || count >= MAX_CARDS,
                 cx,
@@ -2249,7 +2320,10 @@ impl Render for CreativeCanvas {
                 self.rail_button(
                     "tool-frame",
                     "grid-2x2",
-                    "画框 · F · 拖动或单击创建",
+                    tr(
+                        "画框 · F · 拖动或单击创建",
+                        "Frame · F · Click or drag to create",
+                    ),
                     Action::FrameEdit(frame_tools::FrameAction::Draw),
                     !editable || self.saving || frame_count >= MAX_CARDS,
                     cx,
@@ -2259,13 +2333,20 @@ impl Render for CreativeCanvas {
             .child(self.rail_button(
                 "tool-processing",
                 "sliders-horizontal",
-                "本地媒体处理",
+                tr("本地媒体处理", "Local media processing"),
                 Action::ProcessingMenu,
                 !editable,
                 cx,
             ))
             .child(div().w(px(24.)).h(px(1.)).my_1().bg(rgb(0xe9eaed)))
-            .child(self.rail_button("tool-layers", "layers", "图层", Action::Layers, false, cx));
+            .child(self.rail_button(
+                "tool-layers",
+                "layers",
+                tr("图层", "Layers"),
+                Action::Layers,
+                false,
+                cx,
+            ));
         surface = surface.child(rail);
         if self.show_shapes {
             surface = surface.child(self.shape_menu(cx));
@@ -2284,7 +2365,7 @@ impl Render for CreativeCanvas {
                 .flex()
                 .flex_col()
                 .gap_2()
-                .child(label("本地处理节点"));
+                .child(label(tr("本地处理节点", "Local processing nodes")));
             for kind in [
                 crate::processing::ProcessingKind::Image,
                 crate::processing::ProcessingKind::Video,
@@ -2300,7 +2381,7 @@ impl Render for CreativeCanvas {
             }
             menu = menu.child(self.button(
                 "add-custom",
-                "＋ 自定义节点",
+                tr("＋ 自定义节点", "＋ Custom node"),
                 Action::NewCustom,
                 !editable || count >= MAX_CARDS,
                 cx,
@@ -2329,17 +2410,23 @@ impl Render for CreativeCanvas {
                         div()
                             .text_size(px(22.))
                             .text_color(rgb(0xa1a5af))
-                            .child("从一张图片开始"),
+                            .child(tr("从一张图片开始", "Start with an image")),
                     )
-                    .child(label("导入本地素材，或在左侧新建生成节点"))
+                    .child(label(tr(
+                        "导入本地素材，或在左侧新建生成节点",
+                        "Import a local asset or add a generation node from the toolbar",
+                    )))
                     .child(self.button(
                         "empty-import",
-                        "＋ 导入本地素材",
+                        tr("＋ 导入本地素材", "＋ Import local assets"),
                         Action::ImportImage,
                         self.project.is_none() || self.saving,
                         cx,
                     ))
-                    .child(label("拖放素材到画布，即可开始创作")),
+                    .child(label(tr(
+                        "拖放素材到画布，即可开始创作",
+                        "Drop files onto the canvas",
+                    ))),
             );
         }
         if let Some(node) = &node {
@@ -2420,12 +2507,19 @@ impl Render for CreativeCanvas {
                     .flex()
                     .flex_col()
                     .gap_3()
-                    .child(div().text_sm().child("按类型统一端口颜色"))
-                    .child(label("同一类型的输入、输出和连线一起更新"))
+                    .child(
+                        div()
+                            .text_sm()
+                            .child(tr("按类型统一端口颜色", "Port colors by type")),
+                    )
+                    .child(label(tr(
+                        "同一类型的输入、输出和连线一起更新",
+                        "Updates inputs, outputs, and connections of the same type",
+                    )))
                     .child(
                         Textarea::new(&self.custom_color)
                             .h(px(38.))
-                            .aria_label("自定义端口十六进制颜色"),
+                            .aria_label(tr("自定义端口十六进制颜色", "Custom port hex color")),
                     );
                 for (index, port) in node.ports.iter().enumerate() {
                     let data_type = port.data_type.clone();
@@ -2468,14 +2562,19 @@ impl Render for CreativeCanvas {
                     }
                     colors = colors.child(row).child(self.button(
                         SharedString::from(format!("custom-port-{index}")),
-                        "使用自定义色",
+                        tr("使用自定义色", "Use custom color"),
                         Action::CustomPortColor(data_type.clone()),
                         !editable,
                         cx,
                     ));
                 }
-                colors =
-                    colors.child(self.button("close-colors", "完成", Action::Colors, false, cx));
+                colors = colors.child(self.button(
+                    "close-colors",
+                    tr("完成", "Done"),
+                    Action::Colors,
+                    false,
+                    cx,
+                ));
                 surface = surface.child(colors);
             }
         }
@@ -2567,30 +2666,41 @@ impl Render for CreativeCanvas {
                     .flex_col()
                     .gap_3()
                     .child(div().text_sm().child(if self.import_replacement.is_some() {
-                        "替换已选择的图片 · 保留节点与连线"
+                        tr(
+                            "替换已选择的图片 · 保留节点与连线",
+                            "Replace selected image · Keep the node and connections",
+                        )
                     } else if self.import_model {
-                        "导入已选择的本地 GLB 模型"
+                        tr(
+                            "导入已选择的本地 GLB 模型",
+                            "Import selected local GLB model",
+                        )
                     } else if self.import_at.is_some() {
-                        "导入到选定画布位置"
+                        tr("导入到选定画布位置", "Import at selected canvas position")
                     } else {
-                        "导入本地图片、视频或音频"
+                        tr(
+                            "导入本地图片、视频或音频",
+                            "Import local images, video, or audio",
+                        )
                     }))
-                    .child(label("文件选择器不可用时，可粘贴文件的绝对路径"))
-                    .child(
-                        Textarea::new(&self.local_path)
-                            .h(px(72.))
-                            .aria_label("要导入的本地素材绝对路径"),
-                    )
+                    .child(label(tr(
+                        "文件选择器不可用时，可粘贴文件的绝对路径",
+                        "If the file picker is unavailable, paste an absolute file path",
+                    )))
+                    .child(Textarea::new(&self.local_path).h(px(72.)).aria_label(tr(
+                        "要导入的本地素材绝对路径",
+                        "Absolute path to the asset to import",
+                    )))
                     .child(self.button(
                         "import-local-path",
-                        "复制到项目并导入",
+                        tr("复制到项目并导入", "Copy to project and import"),
                         Action::ImportImagePath,
                         self.importing || self.saving,
                         cx,
                     ))
                     .child(self.button(
                         "close-import-path",
-                        "取消",
+                        tr("取消", "Cancel"),
                         Action::CloseImportPath,
                         false,
                         cx,
@@ -2612,17 +2722,17 @@ impl Render for CreativeCanvas {
                     .flex()
                     .flex_col()
                     .gap_3()
-                    .child(div().text_sm().child("项目选项"))
+                    .child(div().text_sm().child(tr("项目选项", "Project options")))
                     .child(self.button(
                         "save-project",
-                        "保存项目",
+                        tr("保存项目", "Save project"),
                         Action::Save,
                         self.saving || self.importing,
                         cx,
                     ))
                     .child(self.button(
                         "import-model-option",
-                        "导入本地 GLB",
+                        tr("导入本地 GLB", "Import local GLB"),
                         Action::ImportModel,
                         self.project.is_none() || !editable || self.saving,
                         cx,
@@ -2633,14 +2743,14 @@ impl Render for CreativeCanvas {
                             .gap_2()
                             .child(self.button(
                                 "export-doc",
-                                "导出 JSON",
+                                tr("导出 JSON", "Export JSON"),
                                 Action::Export,
                                 false,
                                 cx,
                             ))
                             .child(self.button(
                                 "records-template",
-                                "records 模板",
+                                tr("records 模板", "Records template"),
                                 Action::Records,
                                 false,
                                 cx,
@@ -2649,19 +2759,25 @@ impl Render for CreativeCanvas {
                     .child(
                         Textarea::new(&self.json)
                             .h(px(320.))
-                            .aria_label("创作画布 JSON"),
+                            .aria_label(tr("创作画布 JSON", "Creative canvas JSON")),
                     )
-                    .child(self.button("import-json", "校验并导入", Action::Import, !editable, cx))
+                    .child(self.button(
+                        "import-json",
+                        tr("校验并导入", "Validate and import"),
+                        Action::Import,
+                        !editable,
+                        cx,
+                    ))
                     .child(self.button(
                         "add-palette",
-                        "＋ 自定义色板",
+                        tr("＋ 自定义色板", "＋ Custom palette"),
                         Action::Add("palette".into()),
                         !editable,
                         cx,
                     ))
                     .child(self.button(
                         "ungroup",
-                        "解除分组",
+                        tr("解除分组", "Ungroup"),
                         Action::Ungroup,
                         selection.groups.is_empty() || !editable,
                         cx,
@@ -2669,9 +2785,9 @@ impl Render for CreativeCanvas {
                     .child(self.button(
                         "readonly",
                         if editable {
-                            "切为只读"
+                            tr("切为只读", "Switch to read-only")
                         } else {
-                            "恢复编辑"
+                            tr("恢复编辑", "Resume editing")
                         },
                         Action::ReadOnly,
                         self.importing,
@@ -2680,13 +2796,13 @@ impl Render for CreativeCanvas {
                     .when(self.project.is_none(), |panel| {
                         panel.child(self.button(
                             "open-document",
-                            "打开 FlowDocument",
+                            tr("打开 FlowDocument", "Open FlowDocument"),
                             Action::Open,
                             !editable,
                             cx,
                         ))
                     })
-                    .child(self.button("close-data", "关闭", Action::Data, false, cx)),
+                    .child(self.button("close-data", tr("关闭", "Close"), Action::Data, false, cx)),
             );
         }
         surface = surface
@@ -2706,7 +2822,7 @@ impl Render for CreativeCanvas {
                     .child(self.icon_button(
                         "home",
                         "arrow-left",
-                        "返回项目",
+                        tr("返回项目", "Back to projects"),
                         Action::Home,
                         self.project.is_none() || self.importing,
                         cx,
@@ -2748,12 +2864,26 @@ impl Render for CreativeCanvas {
                     .flex()
                     .items_center()
                     .gap_1()
-                    .child(self.icon_button("undo", "undo-2", "撤销", Action::Undo, !editable, cx))
-                    .child(self.icon_button("redo", "redo-2", "重做", Action::Redo, !editable, cx))
+                    .child(self.icon_button(
+                        "undo",
+                        "undo-2",
+                        tr("撤销", "Undo"),
+                        Action::Undo,
+                        !editable,
+                        cx,
+                    ))
+                    .child(self.icon_button(
+                        "redo",
+                        "redo-2",
+                        tr("重做", "Redo"),
+                        Action::Redo,
+                        !editable,
+                        cx,
+                    ))
                     .child(self.icon_button(
                         "data-toggle",
                         "ellipsis",
-                        "项目选项与数据",
+                        tr("项目选项与数据", "Project options and data"),
                         Action::Data,
                         false,
                         cx,
@@ -2783,13 +2913,20 @@ impl Render for CreativeCanvas {
                             .child(format!("{:.0}%", zoom * 100.)),
                     )
                     .child(self.button("zoom-in", "+", Action::Zoom(1.2), false, cx))
-                    .child(self.icon_button("fit", "focus", "适应画布", Action::Fit, false, cx))
+                    .child(self.icon_button(
+                        "fit",
+                        "focus",
+                        tr("适应画布", "Fit canvas"),
+                        Action::Fit,
+                        false,
+                        cx,
+                    ))
                     .child(chrome::separator())
                     .child(
                         self.icon_button(
                             "toggle-minimap",
                             "map",
-                            "显示或隐藏小地图",
+                            tr("显示或隐藏小地图", "Toggle minimap"),
                             Action::CanvasAppearance(
                                 canvas_tools::CanvasAppearanceAction::ToggleMinimap,
                             ),
@@ -2804,7 +2941,7 @@ impl Render for CreativeCanvas {
                         self.icon_button(
                             "canvas-background",
                             "palette",
-                            "画布背景",
+                            tr("画布背景", "Canvas background"),
                             Action::CanvasAppearance(
                                 canvas_tools::CanvasAppearanceAction::BackgroundPanel,
                             ),
@@ -2822,7 +2959,10 @@ impl Render for CreativeCanvas {
                         .bottom(px(26.))
                         .text_size(px(10.))
                         .text_color(rgb(0xb2b7c0))
-                        .child("V 选择 · H / Space 平移 · Shift 多选"),
+                        .child(tr(
+                            "V 选择 · H / Space 平移 · Shift 多选",
+                            "V Select · H / Space Pan · Shift Multi-select",
+                        )),
                 )
             });
         if self.background_panel.is_some() {
@@ -2846,11 +2986,11 @@ impl Render for CreativeCanvas {
                     .child(
                         Textarea::new(&self.project_name_input)
                             .h(px(38.))
-                            .aria_label("项目名称"),
+                            .aria_label(tr("项目名称", "Project name")),
                     )
                     .child(self.button(
                         "confirm-project-name",
-                        "完成",
+                        tr("完成", "Done"),
                         Action::ConfirmRename,
                         self.saving || self.importing,
                         cx,

@@ -121,14 +121,20 @@ impl CreativeCanvas {
                     return;
                 };
                 let result = (|| {
-                    let project = self.project.as_ref().ok_or("请先打开本地项目")?;
+                    let project = self
+                        .project
+                        .as_ref()
+                        .ok_or(tr("请先打开本地项目", "Open a local project first"))?;
                     let asset = project
                         .assets()
                         .iter()
                         .find(|a| Some(a.key.as_str()) == node.data["asset"].as_str())
                         .filter(|a| matches!(a.media_type.as_str(), "image/png" | "image/jpeg"))
                         .cloned()
-                        .ok_or("调整支持本地静态PNG/JPEG")?;
+                        .ok_or(tr(
+                            "调整支持本地静态PNG/JPEG",
+                            "Adjustment supports local still PNG and JPEG images",
+                        ))?;
                     ImageAdjustSpec::default()
                         .output_dimensions(asset.width, asset.height)
                         .map_err(|e| e.to_string())?;
@@ -226,15 +232,20 @@ impl CreativeCanvas {
             return div();
         };
         let busy = self.image_edit_cancel.is_some();
-        let mut panel = div()
-            .flex()
-            .flex_col()
-            .gap_1()
-            .child(label("图片调整 · 画布内预览"));
-        for (index, (name, slider)) in ["明暗", "曝光", "饱和度", "自然饱和度", "暗角"]
-            .iter()
-            .zip(&edit.sliders)
-            .enumerate()
+        let mut panel = div().flex().flex_col().gap_1().child(label(tr(
+            "图片调整 · 画布内预览",
+            "Image Adjustments · Canvas Preview",
+        )));
+        for (index, (name, slider)) in [
+            tr("明暗", "Brightness"),
+            tr("曝光", "Exposure"),
+            tr("饱和度", "Saturation"),
+            tr("自然饱和度", "Vibrance"),
+            tr("暗角", "Vignette"),
+        ]
+        .iter()
+        .zip(&edit.sliders)
+        .enumerate()
         {
             let value = slider.read(cx).value().end();
             let text = if index == 1 {
@@ -281,14 +292,18 @@ impl CreativeCanvas {
                     .justify_between()
                     .child(self.button(
                         "adjust-reset",
-                        "重置",
+                        tr("重置", "Reset"),
                         Action::ImageAdjust(AdjustAction::Reset),
                         busy,
                         cx,
                     ))
                     .child(self.button(
                         "adjust-cancel",
-                        if busy { "取消处理" } else { "取消" },
+                        if busy {
+                            tr("取消处理", "Cancel processing")
+                        } else {
+                            tr("取消", "Cancel")
+                        },
                         Action::ImageAdjust(if busy {
                             AdjustAction::CancelApply
                         } else {
@@ -299,12 +314,15 @@ impl CreativeCanvas {
                     ))
                     .child(self.button(
                         "adjust-apply",
-                        "应用调整",
+                        tr("应用调整", "Apply Adjustments"),
                         Action::ImageAdjust(AdjustAction::Apply),
                         busy || !edit.preview.read(cx).ready_for(edit.spec),
                         cx,
                     )),
             )
-            .child(label("原图保留 · Esc取消 · 确认后可撤销"))
+            .child(label(tr(
+                "原图保留 · Esc取消 · 确认后可撤销",
+                "Original retained · Esc cancels · Apply can be undone",
+            )))
     }
 }
