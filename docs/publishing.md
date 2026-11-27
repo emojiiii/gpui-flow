@@ -2,22 +2,24 @@
 
 [Documentation](README.md) · [中文文档目录](README.zh-CN.md)
 
-The project READMEs, the documentation under `docs/`, and the crate guides are
-the source for the searchable MkDocs site. The build keeps documentation
-links and images in the site and opens referenced Rust source on GitHub.
+The searchable VitePress site uses the project READMEs, the documentation under
+`docs/`, and the crate guides. The landing pages and theme live in `.github/pages/`.
+The build keeps documentation links and images in the site and opens referenced
+Rust source on GitHub.
 
 ## Preview locally
 
-Run these commands from the repository root in a Python 3.13 environment:
+Run these commands from the repository root with Node.js 22.12 or later.
 
 ```sh
-python -m pip install -r .github/pages/requirements.txt
-python .github/pages/build.py
-python -m http.server 8000 --bind 127.0.0.1 --directory target/pages
+npm ci --prefix .github/pages
+npm run build --prefix .github/pages
+npm run preview --prefix .github/pages
 ```
 
-Open [the local preview](http://127.0.0.1:8000/) and rerun the build after editing
-Markdown. The build validates Markdown links and heading anchors.
+Open [the local preview](http://127.0.0.1:4173/gpui-flow/). Run the build again
+after editing Markdown to regenerate the site in `target/pages`. Use
+`npm run dev --prefix .github/pages` to work on the VitePress theme.
 
 ## Deploy to GitHub Pages
 
