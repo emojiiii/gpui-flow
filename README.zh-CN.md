@@ -1,6 +1,6 @@
 # gpui-flow
 
-[English](README.md) · **简体中文**
+[English](README.md) · **简体中文** · [在线文档](https://emojiiii.github.io/gpui-flow/README.zh-CN/)
 
 gpui-flow 是一个基于 Rust 和 GPUI 的原生画布工作区。它包含本地桌面创作工作台 **Flow Creative**，可以在无限画布上排布媒体、连接类型化节点，也提供可用于构建自定义画布的库。
 

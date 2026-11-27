@@ -1,6 +1,6 @@
 # gpui-flow
 
-**English** · [简体中文](README.zh-CN.md)
+**English** · [简体中文](README.zh-CN.md) · [Documentation site](https://emojiiii.github.io/gpui-flow/)
 
 gpui-flow is a Rust workspace for building native canvas apps with GPUI. It
 includes **Flow Creative**, a local desktop workbench for arranging media and
