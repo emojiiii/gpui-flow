@@ -213,6 +213,18 @@ impl Render for FlowCanvas {
             let group_id = group.id.clone();
             let selected = self.editor.selection.groups.contains(&group_id);
             let artboard = group.data["flow_creative_frame"].as_u64() == Some(1);
+            let title_above = self.group_titles_above && !artboard;
+            let zoom = viewport.zoom;
+            let border = if title_above {
+                let normal = rgb(theme.border);
+                if selected {
+                    normal.blend(rgb(theme.accent).alpha(0.5))
+                } else {
+                    normal
+                }
+            } else {
+                rgb(theme.accent).alpha(if selected { 0.9 } else { 0.35 })
+            };
             surface = surface.child(
                 div()
                     .absolute()
@@ -221,17 +233,29 @@ impl Render for FlowCanvas {
                     .w(px(r.size.width))
                     .h(px(r.size.height))
                     .border_1()
-                    .border_color(rgb(theme.accent).alpha(if selected { 0.9 } else { 0.35 }))
-                    .when(!artboard, |v| v.rounded_lg())
+                    .border_color(border)
+                    .when(title_above, |v| v.bg(rgb(theme.panel).alpha(0.25)))
+                    .when(title_above, |v| v.rounded(px(4. * zoom)))
+                    .when(!artboard && !title_above, |v| v.rounded_lg())
                     .child(
                         div()
                             .when(artboard, |v| {
                                 v.absolute().top(px(-24.)).left_0().w_full().h(px(24.))
                             })
-                            .px_3()
-                            .py_1()
-                            .text_xs()
-                            .text_color(rgb(theme.accent))
+                            .when_else(
+                                title_above,
+                                |v| {
+                                    v.absolute()
+                                        .top(px(-42. * zoom))
+                                        .left_0()
+                                        .max_w_full()
+                                        .h(px(22. * zoom))
+                                        .line_height(px(20. * zoom))
+                                        .text_size(px(12. * zoom))
+                                        .text_color(rgb(theme.muted))
+                                },
+                                |v| v.px_3().py_1().text_xs().text_color(rgb(theme.accent)),
+                            )
                             .overflow_hidden()
                             .text_ellipsis()
                             .whitespace_nowrap()

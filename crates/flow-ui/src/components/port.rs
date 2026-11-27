@@ -147,7 +147,11 @@ impl RenderOnce for PortHandle {
                         PortState::Disabled => 0.45,
                         _ => 1.,
                     }))
-                    .border_2()
+                    .when_else(
+                        self.diameter < 9.,
+                        |dot| dot.border_1(),
+                        |dot| dot.border_2(),
+                    )
                     .border_color(rgb(if state == PortState::Target {
                         self.theme.foreground
                     } else {

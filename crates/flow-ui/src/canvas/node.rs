@@ -198,6 +198,7 @@ impl FlowCanvas {
                     port,
                 )
                 .anchor(anchor * z)
+                .when(self.scale_port_markers, |port| port.diameter(12. * z))
                 .state(state)
                 .show_label((self.port_labels && selected) || connection.active())
                 .color(graph_port_color(self.editor.graph(), &port.data_type))

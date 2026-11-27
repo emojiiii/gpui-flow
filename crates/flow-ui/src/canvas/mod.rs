@@ -42,6 +42,8 @@ pub struct FlowCanvas {
     host_persistence: bool,
     selection_on_top: bool,
     port_labels: bool,
+    group_titles_above: bool,
+    scale_port_markers: bool,
     pan_mode: bool,
     document_validator: Option<FlowDocumentValidator>,
     context_menu_handler: Option<CanvasContextMenuHandler>,
@@ -95,6 +97,14 @@ impl FlowCanvas {
     /// Compact object editors can keep typed handles without inline labels.
     pub fn set_port_labels(&mut self, value: bool) {
         self.port_labels = value;
+    }
+    /// Use muted titles above ordinary groups and accent only the selected group border.
+    pub fn set_group_titles_above(&mut self, value: bool) {
+        self.group_titles_above = value;
+    }
+    /// Scale the visible port markers with the canvas while keeping their hit targets.
+    pub fn set_scale_port_markers(&mut self, value: bool) {
+        self.scale_port_markers = value;
     }
     pub fn pan_mode(&self) -> bool {
         self.pan_mode
@@ -172,6 +182,8 @@ impl FlowCanvas {
             host_persistence: false,
             selection_on_top: false,
             port_labels: true,
+            group_titles_above: false,
+            scale_port_markers: false,
             pan_mode: false,
             document_validator: None,
             context_menu_handler: None,
