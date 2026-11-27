@@ -7,8 +7,6 @@ const chineseTheme = {
   nav: [
     { text: '文档', link: '/docs/README.zh-CN/' },
     { text: 'Flow Creative 指南', link: '/crates/flow-creative/' },
-    { text: 'English', link: '/' },
-    { text: '简体中文', link: '/README.zh-CN/' },
   ],
   sidebar: [
     {
@@ -48,38 +46,52 @@ const chineseTheme = {
   sidebarMenuLabel: '菜单',
   returnToTopLabel: '返回顶部',
   skipToContentLabel: '跳转到正文',
-  search: {
-    provider: 'local',
-    options: {
-      translations: {
-        button: { buttonText: '搜索', buttonAriaLabel: '搜索文档' },
-        modal: {
-          displayDetails: '显示详细列表',
-          resetButtonTitle: '清空搜索',
-          backButtonTitle: '关闭搜索',
-          noResultsText: '未找到匹配结果',
-          footer: {
-            selectText: '选择',
-            selectKeyAriaLabel: '回车键',
-            navigateText: '切换选项',
-            navigateUpKeyAriaLabel: '上方向键',
-            navigateDownKeyAriaLabel: '下方向键',
-            closeText: '关闭',
-            closeKeyAriaLabel: 'Esc 键',
-          },
-        },
-      },
+} satisfies DefaultTheme.Config
+
+const chineseSearchTranslations = {
+  button: { buttonText: '搜索', buttonAriaLabel: '搜索文档' },
+  modal: {
+    displayDetails: '显示详细列表',
+    resetButtonTitle: '清空搜索',
+    backButtonTitle: '关闭搜索',
+    noResultsText: '未找到匹配结果',
+    footer: {
+      selectText: '选择',
+      selectKeyAriaLabel: '回车键',
+      navigateText: '切换选项',
+      navigateUpKeyAriaLabel: '上方向键',
+      navigateDownKeyAriaLabel: '下方向键',
+      closeText: '关闭',
+      closeKeyAriaLabel: 'Esc 键',
     },
   },
-} satisfies DefaultTheme.Config
+}
 
 const data = useData<DefaultTheme.Config>()
 const storageKey = 'gpui-flow:docs-language'
 const rememberedLanguage = ref<'en' | 'zh-CN'>('en')
 const language = computed(() => data.frontmatter.value.uiLanguage ?? rememberedLanguage.value)
-const theme = computed(() => language.value === 'zh-CN'
-  ? { ...data.theme.value, ...chineseTheme }
-  : data.theme.value)
+const theme = computed<DefaultTheme.Config>(() => {
+  const isChinese = language.value === 'zh-CN'
+  const localized = isChinese ? { ...data.theme.value, ...chineseTheme } : data.theme.value
+  const { search } = localized
+  return {
+    ...localized,
+    nav: [
+      ...(localized.nav ?? []),
+      {
+        text: isChinese ? '简体中文' : 'English',
+        items: [
+          { text: 'English', link: '/' },
+          { text: '简体中文', link: '/README.zh-CN/' },
+        ],
+      },
+    ],
+    search: isChinese && search?.provider === 'local'
+      ? { ...search, options: { ...search.options, translations: chineseSearchTranslations } }
+      : search,
+  }
+})
 
 // Keep VitePress's single local search index across both interface languages.
 provide(dataSymbol, { ...data, lang: language, theme })

@@ -108,12 +108,47 @@ export default defineConfig({
     nav: [
       { text: 'Documentation', link: '/docs/' },
       { text: 'Flow Creative', link: '/docs/flow-creative/' },
-      { text: 'English', link: '/' },
-      { text: '简体中文', link: '/README.zh-CN/' },
     ],
     sidebar,
     socialLinks: [{ icon: 'github', link: repository }],
-    search: { provider: 'local' },
+    search: {
+      provider: 'local',
+      options: {
+        miniSearch: {
+          options: {
+            // VitePress serializes this function for the browser, so it has no closure dependencies.
+            tokenize(text, fieldName) {
+              const tokens = text.split(/[\n\r\p{Z}\p{P}]+/u)
+              if (!/\p{Script=Han}/u.test(text)) return tokens
+
+              const segmenter = new Intl.Segmenter('zh-CN', { granularity: 'word' })
+              return tokens.flatMap((token) => {
+                if (!/\p{Script=Han}/u.test(token)) return [token]
+                if (!fieldName && /^\p{Script=Han}{2,4}$/u.test(token)) return [token]
+
+                const words = new Set([token])
+                for (const { segment, isWordLike } of segmenter.segment(token)) {
+                  if (isWordLike && /\p{Script=Han}/u.test(segment)) words.add(segment)
+                }
+
+                // Index short phrases directly so context-dependent word boundaries cannot hide them.
+                if (fieldName) {
+                  for (const [run] of token.matchAll(/\p{Script=Han}{2,}/gu)) {
+                    const characters = [...run]
+                    for (let start = 0; start < characters.length - 1; start++) {
+                      for (let length = 2; length <= 4 && start + length <= characters.length; length++) {
+                        words.add(characters.slice(start, start + length).join(''))
+                      }
+                    }
+                  }
+                }
+                return [...words]
+              })
+            },
+          },
+        },
+      },
+    },
   },
   markdown: {
     anchor: {
