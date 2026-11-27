@@ -15,6 +15,18 @@ const siteUrl = process.env.PAGES_SITE_URL || 'https://emojiiii.github.io/gpui-f
 const base = `${new URL(siteUrl).pathname.replace(/\/$/, '')}/`
 const pages = await publishedPages()
 const originalPaths = new Map([...pages].map(([original, staged]) => [staged, original]))
+const pageLanguages = new Map([
+  ['index.md', 'en'],
+  ['docs/index.md', 'en'],
+  ['docs/getting-started/index.md', 'en'],
+  ['docs/flow-creative/index.md', 'en'],
+  ['overview/index.md', 'en'],
+  ['README.zh-CN/index.md', 'zh-CN'],
+  ['docs/README.zh-CN/index.md', 'zh-CN'],
+  ['docs/getting-started.zh-CN/index.md', 'zh-CN'],
+  ['crates/flow-creative/index.md', 'zh-CN'],
+  ['overview/zh/index.md', 'zh-CN'],
+])
 
 const sidebar: DefaultTheme.SidebarItem[] = [
   {
@@ -83,6 +95,15 @@ export default defineConfig({
   outDir: '../../target/pages',
   cleanUrls: true,
   sitemap: { hostname: new URL(base, siteUrl).href },
+  transformPageData(page) {
+    const language = pageLanguages.get(page.relativePath)
+    if (language) page.frontmatter.uiLanguage = language
+  },
+  transformHtml(html, _id, { pageData }) {
+    if (pageData.frontmatter.uiLanguage === 'zh-CN') {
+      return html.replace('<html lang="en"', '<html lang="zh-CN"')
+    }
+  },
   themeConfig: {
     nav: [
       { text: 'Documentation', link: '/docs/' },
