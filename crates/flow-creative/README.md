@@ -8,21 +8,41 @@
 媒体直接铺在画布上，选中对象时显示跟随移动的上下工具。类型端口、本地项目与可连接
 生成节点是本项目的扩展，不声称逐像素复刻或使用 Lovart 内部模型。
 
+## 按任务查阅
+
+- [启动与项目目录](#启动)、[画布操作与快捷键](#操作)
+- [图片裁剪与翻转](#图片裁剪旋转与翻转)、[图片调色](#图片调整)、[任意角度旋转](#自定义角度旋转)
+- [文字](#文字放置)、[自由绘制](#自由绘制)、[图形](#基础图形)、[画框](#画框)
+- [项目和资产存储](#本地持久化)、[素材与画框导出](#素材导出)
+- [音视频播放](#本地音视频对象)、[媒体处理节点](#本地媒体处理节点)、[Mask](#独立-mask-节点)、[GLB 预览](#本地-3d-预览)
+- [接入生成服务](#四类生成节点与宿主接入)、[自定义节点](#自定义节点输入与输出)、[可复用 API 与验证](#可复用-api-与验证)
+
 ## 启动
+
+先安装当前 Rust 工具链和对应平台的桌面构建依赖，再在仓库根目录运行。环境准备见[入门指南](../../docs/getting-started.zh-CN.md)。
 
 ```sh
 cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative
-# 指定本地项目目录
-cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative -- --projects-dir ./projects
-# 旧 FlowDocument 独立打开；示例必须显式启动
-cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative -- --file ./board.flow.json
-cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative -- --demo
 ```
 
-启动先进入项目首页。新建项目先在磁盘创建空项目，再打开空白画布。默认位置：
-- Linux：`$XDG_DATA_HOME/gpui-flow/projects`，或 `~/.local/share/gpui-flow/projects`
-- macOS：`~/Library/Application Support/Flow Creative/Projects`
-- Windows：`%LOCALAPPDATA%/Flow Creative/Projects`
+默认启动进入项目首页。新建项目先在磁盘创建空项目，再打开空白画布。各平台的默认项目目录如下。
+
+- Linux 使用 `$XDG_DATA_HOME/gpui-flow/projects`，或 `~/.local/share/gpui-flow/projects`
+- macOS 使用 `~/Library/Application Support/Flow Creative/Projects`
+- Windows 使用 `%LOCALAPPDATA%/Flow Creative/Projects`
+
+也可以选择其他项目目录、打开内置示例，或直接打开一个独立的 `FlowDocument` 文件。每次启动选择一种模式。
+
+```sh
+# 在指定目录中创建和打开项目
+cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative -- --projects-dir ./projects
+# 打开内置示例画布
+cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative -- --demo
+# 打开已有的 FlowDocument JSON 文件
+cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative -- --file ./board.flow.json
+```
+
+`--file` 使用包含 `graph` 和 `viewport` 的 `FlowDocument`。要打开含本地素材的项目，请从首页进入，详见[本地持久化](#本地持久化)。导入和播放本地音视频需要系统提供 FFmpeg 工具，参见[音视频依赖与格式](#本地音视频对象)。
 
 ## 操作
 

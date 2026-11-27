@@ -1,72 +1,91 @@
 # gpui-flow
 
-面向 Rust / GPUI 的本地创作工作台与可复用画布库。当前应用入口是
-[Flow Creative](crates/flow-creative/README.md)：项目首页、无限画布、媒体对象、
-类型化节点与连线，以及选中对象旁的编辑工具。界面和操作持续参考 Lovart，
-当前能力与限制以实际实现为准。
+**English** · [简体中文](README.zh-CN.md)
 
-私有早期开发版本，API 尚未承诺稳定。底层场景树参考 Leafer 的分层思路，
-节点扩展参考 React Flow；不宣称完整 API 兼容。
+gpui-flow is a Rust workspace for building native canvas apps with GPUI. It
+includes **Flow Creative**, a local desktop workbench for arranging media and
+connecting typed nodes on an infinite canvas, and reusable Rust crates for
+building your own canvases.
 
-## 启动工作台
+![Flow Creative's built-in demo showing a reference image, palette node, and typed connection](docs/images/flow-creative-canvas.png)
+
+## Run Flow Creative
+
+Build from the repository root. CI pins Rust 1.98.1. See the
+[setup guide](docs/getting-started.md) for the native dependencies on Windows,
+macOS, and Ubuntu.
 
 ```sh
 cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative
-# 可选：指定项目保存目录
-cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative -- --projects-dir ./projects
 ```
 
-需要 Rust 1.98.1、对应平台的原生依赖与桌面会话。环境准备见
-[入门](docs/getting-started.md)。启动进入项目首页，新建项目打开空白画布。
-项目保存节点、连线、视口和导入的本地资产，退出后可重新打开。
+Create a project from the home screen, then drop a local image onto the canvas.
+Projects save the canvas, viewport, and imported assets locally. Use
+`--projects-dir ./projects` after Cargo's `--` separator to choose a project
+directory.
 
-## 当前能力
-
-- 图片、文字、本地静态 GLB 直接放入画布；图片导入保留原比例
-- 节点选择、移动、缩放、分组、复制、删除，以及事务式撤销和重做
-- 类型端口连线与端口配色；Creative 使用精确类型验证
-- 图片、视频、音频和模型生成节点，分别保存提示词与参数
-- 本地项目和资产持久化；GLB 提供有界 CPU 静态几何预览
-- 可扩展的节点定义、渲染器、records 映射与生成事件接口
-
-默认未连接生成服务。生成节点是宿主接入入口，不会自动调用模型、收费或产生结果。
-GLB 预览的格式、材质和预算范围，以及项目保存边界，见
-[工作台说明](crates/flow-creative/README.md)。
-
-## 库分层
-
-| 模块 | 职责 |
-| --- | --- |
-| `flow-creative` | 当前工作台、项目模型、媒体对象与宿主扩展 |
-| `flow-core` / `flow-runtime` | 图、端口、事务、历史与任务运行 |
-| `flow-scene` / `flow-engine` | 显示对象、场景树、生命周期、属性与缓存 |
-| `flow-layout` / `flow-animation` | 布局、时间线与属性动画 |
-| `flow-editor` / `flow-interaction` | 场景编辑、选择、变换、输入与手势 |
-| `flow-composite` / `flow-text` / `flow-media` | 有界 CPU 合成、文字与媒体能力 |
-| `flow-ui` | GPUI 适配、画布与可复用 UI 组件 |
-
-应用使用现有核心库。原来的 `examples/studio` 演示集合已移除；必要回归留在
-库测试中，独立的 `docs/examples` headless 教程继续保留。旧演示与原生验证的
-历史范围见[迁移说明](docs/studio-retirement.md)，旧命令不再是当前启动入口。
-
-## 开发验证
+To open the bundled sample canvas directly:
 
 ```sh
-cargo test --locked -p gpui-flow-creative --lib
-cargo test --locked -p gpui-flow-interaction --test pan_release
-cargo test --locked -p gpui-flow --lib
-cargo build --locked -p gpui-flow-creative --features desktop --bin flow-creative
+cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative -- --demo
 ```
 
-按改动选择测试；构建通过不代表原生交互或跨平台验收。完整开发规则与文档教程
-检查见[本地验证](docs/testing.md)。
+## What you can do
 
-## 文档
+- Arrange images, audio, video, and supported static GLB models on the canvas.
+  Add text, shapes, or freehand strokes.
+- Edit images in place, organize objects into layers and frames, and undo or redo edits.
+- Export supported frame contents to PNG or SVG, or export local assets in
+  their original format.
+- Connect matching typed ports to pass inputs to image, video, audio, and model
+  generation nodes. A host integration supplies the generation service. The
+  bundled workbench runs without a provider.
 
-- [环境准备与入门](docs/getting-started.md)
-- [Flow Creative 的操作、持久化与宿主接口](crates/flow-creative/README.md)
-- [架构、图模型与持久化](docs/architecture.md)
-- [核心引擎](docs/engine.md)、[显示场景](docs/display-scenes.md)、[组件](docs/components.md)
-- [工作流](docs/workflows.md)、[运行时](docs/runtime.md)、[自定义节点](docs/custom-nodes.md)
-- [合成契约](docs/compositing.md)、[兼容性范围](docs/leafer-compatibility-profile.md)、[已知限制](docs/limitations.md)
-- [本地验证](docs/testing.md)、[旧 Studio 迁移与测试保留](docs/studio-retirement.md)
+For example, connect an image to a local processing node to resize or compress
+it. The output can feed another node or be exported as a file.
+
+```mermaid
+flowchart LR
+    Source["Imported image"] -->|Image port| Process["Resize or compress"]
+    Process -->|Image port| Next["Another canvas node"]
+    Process --> Export["Export processed image"]
+```
+
+See the [Flow Creative guide](docs/flow-creative.md) for canvas controls,
+project storage, and media workflows. The
+[detailed reference (中文)](crates/flow-creative/README.md) covers format limits
+and host integration.
+
+## Build with gpui-flow
+
+Use `gpui-flow` (`crates/flow-ui`) for the GPUI `FlowCanvas` and `SceneView`. Use
+`gpui-flow-creative` for the workbench's `CreativeCanvas`, node registry, and
+local project model. The graph and runtime can also run without a desktop
+session.
+
+| Workspace directories | Responsibility |
+| --- | --- |
+| `flow-core`, `flow-runtime` | Typed graphs, editing transactions, history, and task execution |
+| `flow-scene`, `flow-engine` | Display objects, scene trees, lifecycles, and properties |
+| `flow-layout`, `flow-animation` | Layout, timelines, and property animation |
+| `flow-editor`, `flow-interaction` | Selection, transforms, input routing, and gestures |
+| `flow-composite`, `flow-text`, `flow-media` | CPU compositing, text, and media |
+| `flow-ui`, `flow-creative` | GPUI views and components, plus the desktop workbench |
+
+The Rust APIs are in early development and may change. The scene and node
+layers draw on Leafer and React Flow, respectively. See the
+[Leafer compatibility profile](docs/leafer-compatibility-profile.md) for feature
+coverage.
+
+Try the graph API without opening a window:
+
+```sh
+cargo run --locked --manifest-path docs/examples/Cargo.toml --bin core
+```
+
+## Documentation
+
+- [Documentation index](docs/README.md) and [getting started](docs/getting-started.md)
+- [Graph architecture](docs/architecture.md), [display scenes](docs/display-scenes.md), and [custom nodes](docs/custom-nodes.md)
+- [Local verification](docs/testing.md) and [known limitations](docs/limitations.md)
+- [Preview and publish the docs with GitHub Pages](docs/publishing.md)
