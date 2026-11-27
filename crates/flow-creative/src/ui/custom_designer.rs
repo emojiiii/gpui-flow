@@ -63,9 +63,18 @@ fn draft_field(
 
 impl CustomDesigner {
     fn new(kind: String, window: &mut Window, cx: &mut Context<CreativeCanvas>) -> Self {
-        let (name, name_subscription) = draft_field("自定义节点", "节点名称", window, cx);
-        let (executor, executor_subscription) =
-            draft_field("local.pass_through", "已注册的执行接口 ID", window, cx);
+        let (name, name_subscription) = draft_field(
+            tr("自定义节点", "Custom Node"),
+            tr("节点名称", "Node name"),
+            window,
+            cx,
+        );
+        let (executor, executor_subscription) = draft_field(
+            "local.pass_through",
+            tr("已注册的执行接口 ID", "Registered executor ID"),
+            window,
+            cx,
+        );
         let mut this = Self {
             kind,
             name,
@@ -94,10 +103,14 @@ impl CustomDesigner {
         } else {
             &mut self.outputs
         };
-        let direction = if input { "输入" } else { "输出" };
+        let direction = if input {
+            tr("输入", "Input")
+        } else {
+            tr("输出", "Output")
+        };
         let (label, subscription) = draft_field(
             &format!("{direction} {}", ports.len() + 1),
-            "端口名称",
+            tr("端口名称", "Port name"),
             window,
             cx,
         );
@@ -114,11 +127,15 @@ impl CustomDesigner {
     fn definition(&self, cx: &App) -> Result<CustomNodeDefinition, String> {
         let title = self.name.read(cx).value().trim().to_string();
         if title.is_empty() || title.len() > 512 || title.contains('\0') {
-            return Err("请填写节点名称，长度不超过 512 字节".into());
+            return Err(tr(
+                "请填写节点名称，长度不超过 512 字节",
+                "Enter a node name up to 512 bytes",
+            )
+            .into());
         }
         let executor = self.executor.read(cx).value().trim().to_string();
         if !valid_executor_id(&executor) {
-            return Err("接口 ID 须以英文字母开头，仅可包含字母、数字、点、下划线和短横线".into());
+            return Err(tr("接口 ID 须以英文字母开头，仅可包含字母、数字、点、下划线和短横线", "Executor IDs must begin with an ASCII letter and contain only letters, digits, periods, underscores, or hyphens").into());
         }
         let read_ports = |ports: &[PortDraft]| {
             ports
@@ -126,7 +143,11 @@ impl CustomDesigner {
                 .map(|port| {
                     let label = port.label.read(cx).value().trim().to_string();
                     if label.is_empty() || label.len() > 256 || label.contains('\0') {
-                        return Err("请填写每个端口的名称，长度不超过 256 字节".to_string());
+                        return Err(tr(
+                            "请填写每个端口的名称，长度不超过 256 字节",
+                            "Enter a name up to 256 bytes for each port",
+                        )
+                        .to_string());
                     }
                     Ok(CustomPortDefinition {
                         id: port.id.clone(),
@@ -154,11 +175,22 @@ impl CustomDesigner {
         let executor = self.executor.read(cx).value();
         let executor = executor.trim();
         if !valid_executor_id(executor) {
-            return ("仅填写稳定的接口 ID，不接受 URL 或脚本".into(), false);
+            return (
+                tr(
+                    "仅填写稳定的接口 ID，不接受 URL 或脚本",
+                    "Enter a stable executor ID. URLs and scripts are unsupported.",
+                )
+                .into(),
+                false,
+            );
         }
         if !registered.iter().any(|id| id == executor) {
             return (
-                "尚未接入此接口，节点不可执行；可先保存端口设计".into(),
+                tr(
+                    "尚未接入此接口，节点不可执行；可先保存端口设计",
+                    "This executor is unavailable. You can still save the port design.",
+                )
+                .into(),
                 false,
             );
         }
@@ -171,17 +203,21 @@ impl CustomDesigner {
                     .all(|(input, output)| input.data_type == output.data_type);
             if !matches {
                 return (
-                    "本地透传要求输入与输出数量相等，按顺序每对类型相同；当前配置不可执行".into(),
+                    tr("本地透传要求输入与输出数量相等，按顺序每对类型相同；当前配置不可执行", "Local passthrough requires equal input and output counts with matching types in order. This configuration cannot run.").into(),
                     false,
                 );
             }
             return (
-                "本地透传已接入：按顺序传递同类型数据，连接全部输入后可运行".into(),
+                tr("本地透传已接入：按顺序传递同类型数据，连接全部输入后可运行", "Local passthrough is ready. It passes matching types in order once every input is connected.").into(),
                 true,
             );
         }
         (
-            "接口已在本机注册；实际运行仍需满足该接口的输入与设置要求".into(),
+            tr(
+                "接口已在本机注册；实际运行仍需满足该接口的输入与设置要求",
+                "This executor is registered locally. Its input and settings requirements apply.",
+            )
+            .into(),
             true,
         )
     }
@@ -199,15 +235,15 @@ fn valid_executor_id(id: &str) -> bool {
 
 fn port_types() -> [(&'static str, CustomPortType); 9] {
     [
-        ("Text", CustomPortType::Text),
-        ("Number", CustomPortType::Number),
-        ("Bool", CustomPortType::Bool),
-        ("Object", CustomPortType::Object),
-        ("Image", CustomPortType::Named("image".into())),
-        ("Video", CustomPortType::Named("video".into())),
-        ("Audio", CustomPortType::Named("audio".into())),
-        ("Model", CustomPortType::Named("model".into())),
-        ("Mask", CustomPortType::Named("mask".into())),
+        (tr("文字", "Text"), CustomPortType::Text),
+        (tr("数值", "Number"), CustomPortType::Number),
+        (tr("布尔", "Boolean"), CustomPortType::Bool),
+        (tr("对象", "Object"), CustomPortType::Object),
+        (tr("图片", "Image"), CustomPortType::Named("image".into())),
+        (tr("视频", "Video"), CustomPortType::Named("video".into())),
+        (tr("音频", "Audio"), CustomPortType::Named("audio".into())),
+        (tr("模型", "Model"), CustomPortType::Named("model".into())),
+        (tr("遮罩", "Mask"), CustomPortType::Named("mask".into())),
     ]
 }
 
@@ -215,7 +251,7 @@ fn port_type_label(data_type: &CustomPortType) -> &'static str {
     port_types()
         .into_iter()
         .find_map(|(label, kind)| (&kind == data_type).then_some(label))
-        .unwrap_or("Object")
+        .unwrap_or(tr("对象", "Object"))
 }
 
 impl CreativeCanvas {
@@ -361,12 +397,15 @@ impl CreativeCanvas {
             );
         }
         if registered.is_empty() {
-            interfaces = interfaces.child(label("本机尚未注册任何执行接口"));
+            interfaces = interfaces.child(label(tr(
+                "本机尚未注册任何执行接口",
+                "No executors are registered on this machine",
+            )));
         }
         let mut ports = div().flex().flex_col().gap_2();
         for (input, title, drafts) in [
-            (true, "输入端口", &designer.inputs),
-            (false, "输出端口", &designer.outputs),
+            (true, tr("输入端口", "Input ports"), &designer.inputs),
+            (false, tr("输出端口", "Output ports"), &designer.outputs),
         ] {
             ports = ports.child(
                 div()
@@ -385,7 +424,11 @@ impl CreativeCanvas {
                             } else {
                                 "custom-add-output"
                             },
-                            if input { "+ 输入" } else { "+ 输出" },
+                            if input {
+                                tr("+ 输入", "+ Input")
+                            } else {
+                                tr("+ 输出", "+ Output")
+                            },
                             Action::CustomDesigner(if input {
                                 CustomDesignerAction::AddInput
                             } else {
@@ -398,7 +441,10 @@ impl CreativeCanvas {
                     ),
             );
             if drafts.is_empty() {
-                ports = ports.child(label("无需输入时可留空"));
+                ports = ports.child(label(tr(
+                    "无需输入时可留空",
+                    "Leave empty if no inputs are needed",
+                )));
             }
             for port in drafts {
                 ports = ports.child(self.custom_port_row(
@@ -433,11 +479,11 @@ impl CreativeCanvas {
                         div()
                             .text_size(px(15.))
                             .font_weight(FontWeight::SEMIBOLD)
-                            .child("设计自定义节点"),
+                            .child(tr("设计自定义节点", "Design Custom Node")),
                     )
                     .child(self.button(
                         "custom-close",
-                        "关闭",
+                        tr("关闭", "Close"),
                         Action::CustomDesigner(CustomDesignerAction::Close),
                         false,
                         cx,
@@ -449,21 +495,27 @@ impl CreativeCanvas {
                     .flex()
                     .flex_col()
                     .gap_1()
-                    .child(label("节点名称"))
+                    .child(label(tr("节点名称", "Node name")))
                     .child(
                         Textarea::new(&designer.name)
                             .h(px(34.))
                             .text_size(px(12.))
-                            .aria_label("自定义节点名称"),
+                            .aria_label(tr("自定义节点名称", "Custom node name")),
                     )
-                    .child(label("执行接口 ID"))
+                    .child(label(tr("执行接口 ID", "Executor ID")))
                     .child(
                         Textarea::new(&designer.executor)
                             .h(px(34.))
                             .text_size(px(12.))
-                            .aria_label("执行接口 ID，仅限本机稳定注册 ID"),
+                            .aria_label(tr(
+                                "执行接口 ID，仅限本机稳定注册 ID",
+                                "Stable locally registered executor ID",
+                            )),
                     )
-                    .child(label("本机已注册接口 · 点击选择"))
+                    .child(label(tr(
+                        "本机已注册接口 · 点击选择",
+                        "Registered executors · Click to select",
+                    )))
                     .child(
                         div()
                             .id("custom-registered-executors")
@@ -510,13 +562,14 @@ impl CreativeCanvas {
                             .flex()
                             .items_center()
                             .justify_between()
-                            .child(label(format!(
-                                "{total}/{MAX_CUSTOM_PORTS} 个端口 · 至少保留一个输出"
+                            .child(label(tr_format!(
+                                "{total}/{MAX_CUSTOM_PORTS} 个端口 · 至少保留一个输出",
+                                "{total}/{MAX_CUSTOM_PORTS} ports · Keep at least one output"
                             )))
                             .child(
                                 self.button(
                                     "custom-create",
-                                    "创建节点",
+                                    tr("创建节点", "Create Node"),
                                     Action::CustomDesigner(CustomDesignerAction::Create),
                                     disabled,
                                     cx,
@@ -581,7 +634,11 @@ impl CreativeCanvas {
                             Textarea::new(&port.label)
                                 .h(px(32.))
                                 .text_size(px(12.))
-                                .aria_label(format!("端口 {} 的名称", port.id)),
+                                .aria_label(tr_format!(
+                                    "端口 {} 的名称",
+                                    "Name of port {}",
+                                    port.id
+                                )),
                         ),
                     )
                     .child(
@@ -599,7 +656,7 @@ impl CreativeCanvas {
                     )
                     .child(self.button(
                         SharedString::from(format!("custom-remove-{}", port.id)),
-                        "删除",
+                        tr("删除", "Delete"),
                         Action::CustomDesigner(CustomDesignerAction::RemovePort(port.id.clone())),
                         last_output,
                         cx,

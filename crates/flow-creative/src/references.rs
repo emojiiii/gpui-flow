@@ -32,8 +32,9 @@ pub(crate) fn has_legacy_reference(node: &Node) -> bool {
 
 pub(crate) fn reject_legacy_reference(node: &Node) -> Result<(), CreativeError> {
     if has_legacy_reference(node) {
-        return Err(CreativeError(format!(
+        return Err(CreativeError(tr_format!(
             "{}: 检测到旧版隐藏参考图，请从本地项目列表打开原项目，将它转换为图片输入节点；独立文件请先在原项目中转换后重新导出",
+            "{}: This document has a legacy hidden reference image. Open the original local project to convert it to an image input and export the document again if needed.",
             node.id
         )));
     }
@@ -67,23 +68,33 @@ pub(crate) fn migrate_legacy_references(
     {
         let key = legacy.data["settings"]["reference_asset"]
             .as_str()
-            .ok_or_else(|| CreativeError("旧版参考图资产键必须是字符串".into()))?;
+            .ok_or_else(|| {
+                CreativeError(
+                    crate::tr(
+                        "旧版参考图资产键必须是字符串",
+                        "Legacy reference image asset key must be a string",
+                    )
+                    .into(),
+                )
+            })?;
         if !key.is_empty() {
             if !matches!(
                 GenerationKind::from_node_kind(&legacy.kind),
                 Some(GenerationKind::Image | GenerationKind::Video | GenerationKind::Model)
             ) || !accepts_image_reference(legacy)
             {
-                return Err(CreativeError(format!(
+                return Err(CreativeError(tr_format!(
                     "{}: 此节点不接受图片输入，旧版参考图无法转换",
+                    "{}: This node does not accept an image input, so its legacy reference cannot be converted",
                     legacy.id
                 )));
             }
             if candidate.graph.edges.values().any(|edge| {
                 edge.target.node == legacy.id && edge.target.port.as_str() == "reference"
             }) {
-                return Err(CreativeError(format!(
+                return Err(CreativeError(tr_format!(
                     "{}: 旧版参考图与现有图片输入连线冲突，原项目已保留，请先解决冲突",
+                    "{}: The legacy reference conflicts with the connected image input. Resolve the conflict and reopen the original project.",
                     legacy.id
                 )));
             }
@@ -91,10 +102,19 @@ pub(crate) fn migrate_legacy_references(
                 .iter()
                 .find(|asset| asset.key == key && asset.media_type.starts_with("image/"))
                 .ok_or_else(|| {
-                    CreativeError(format!("旧版参考图必须是本项目已有的图片素材: {key}"))
+                    CreativeError(tr_format!(
+                        "旧版参考图必须是本项目已有的图片素材: {key}",
+                        "The legacy reference must be an image asset in this project: {key}"
+                    ))
                 })?;
             if asset.width == 0 || asset.height == 0 {
-                return Err(CreativeError("旧版参考图尺寸无效".into()));
+                return Err(CreativeError(
+                    crate::tr(
+                        "旧版参考图尺寸无效",
+                        "Legacy reference image dimensions are invalid",
+                    )
+                    .into(),
+                ));
             }
             let source = if let Some(source) =
                 candidate.graph.nodes.values().find(|source| {
@@ -153,7 +173,11 @@ pub(crate) fn migrate_legacy_references(
             .get_mut(&legacy.id)
             .and_then(|node| node.data.get_mut("settings"))
             .and_then(serde_json::Value::as_object_mut)
-            .ok_or_else(|| CreativeError("旧版生成设置无效".into()))?
+            .ok_or_else(|| {
+                CreativeError(
+                    crate::tr("旧版生成设置无效", "Legacy generation settings are invalid").into(),
+                )
+            })?
             .remove("reference_asset");
     }
     registry.validate_document(&candidate)?;

@@ -10,11 +10,21 @@ pub(super) fn mask_info(bytes: &[u8]) -> Result<AssetInfo, ProjectError> {
     let geometry = image_metadata::inspect(bytes, &info)?;
     if geometry.orientation != image::metadata::Orientation::NoTransforms {
         return Err(ProjectError::Invalid(
-            "Mask 像素坐标必须已规范化，不能携带旋转或镜像方向".into(),
+            tr(
+                "Mask 像素坐标必须已规范化，不能携带旋转或镜像方向",
+                "Mask pixels must be normalized without rotation or mirror metadata",
+            )
+            .into(),
         ));
     }
     if info.media_type != "image/png" || bytes.get(24) != Some(&8) || bytes.get(25) != Some(&0) {
-        return Err(ProjectError::Invalid("Mask 输出必须是 8 位灰度 PNG".into()));
+        return Err(ProjectError::Invalid(
+            tr(
+                "Mask 输出必须是 8 位灰度 PNG",
+                "Mask output must be an 8-bit grayscale PNG",
+            )
+            .into(),
+        ));
     }
     info.media_type = MASK_MEDIA_TYPE;
     Ok(info)
@@ -38,7 +48,13 @@ impl LocalProject {
             || raster.height != source.height
             || raster.pixels.len() as u64 != u64::from(source.width) * u64::from(source.height)
         {
-            return Err(ProjectError::Invalid("Mask 尺寸必须与原图一致".into()));
+            return Err(ProjectError::Invalid(
+                tr(
+                    "Mask 尺寸必须与原图一致",
+                    "The mask dimensions must match the source image",
+                )
+                .into(),
+            ));
         }
         let _transaction = transaction()?;
         self.check_revision()?;
@@ -47,12 +63,22 @@ impl LocalProject {
             || original.width != source.width
             || original.height != source.height
         {
-            return Err(ProjectError::Invalid("Mask 原图身份或尺寸已变更".into()));
+            return Err(ProjectError::Invalid(
+                tr(
+                    "Mask 原图身份或尺寸已变更",
+                    "The mask source image or dimensions changed",
+                )
+                .into(),
+            ));
         }
         verify_asset(&source_path, original)?;
         if self.project.assets.len() >= MAX_PROJECT_ASSETS {
             return Err(ProjectError::TooLarge(
-                "project has reached its 512 asset limit".into(),
+                tr(
+                    "项目素材数量已达上限（512）",
+                    "project has reached its 512 asset limit",
+                )
+                .into(),
             ));
         }
         let mut encoded = BoundedMaskBytes(Vec::new(), cancelled);
@@ -66,18 +92,29 @@ impl LocalProject {
             .map_err(|e| ProjectError::Invalid(e.to_string()))?;
         let bytes = encoded.0;
         if cancelled.load(Ordering::Acquire) {
-            return Err(ProjectError::Invalid("遮罩应用已取消".into()));
+            return Err(ProjectError::Invalid(
+                tr("遮罩应用已取消", "Applying the mask was canceled").into(),
+            ));
         }
         let info = mask_info(&bytes)?;
         let total = self.project.assets.iter().map(|a| a.byte_len).sum::<u64>();
         if total.saturating_add(bytes.len() as u64) > MAX_PROJECT_ASSET_BYTES {
             return Err(ProjectError::TooLarge(
-                "project assets exceed 512 MiB".into(),
+                tr(
+                    "项目素材总大小超过 512 MiB",
+                    "project assets exceed 512 MiB",
+                )
+                .into(),
             ));
         }
         let asset = ProjectAsset {
             key: format!("assets/{}.png", unique_name("mask")),
-            name: format!("遮罩 {}×{}.png", source.width, source.height),
+            name: tr_format!(
+                "遮罩 {}×{}.png",
+                "Mask {}×{}.png",
+                source.width,
+                source.height
+            ),
             media_type: MASK_MEDIA_TYPE.into(),
             byte_len: bytes.len() as u64,
             width: info.width,
@@ -98,7 +135,9 @@ impl LocalProject {
             let mut candidate = self.next_revision()?;
             candidate.assets.push(asset.clone());
             if cancelled.load(Ordering::Acquire) {
-                return Err(ProjectError::Invalid("遮罩应用已取消".into()));
+                return Err(ProjectError::Invalid(
+                    tr("遮罩应用已取消", "Applying the mask was canceled").into(),
+                ));
             }
             write_project(&self.directory, &candidate)?;
             self.project = candidate;
@@ -117,10 +156,16 @@ struct BoundedMaskBytes<'a>(Vec<u8>, &'a AtomicBool);
 impl Write for BoundedMaskBytes<'_> {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         if self.1.load(Ordering::Acquire) {
-            return Err(io::Error::other("遮罩应用已取消"));
+            return Err(io::Error::other(tr(
+                "遮罩应用已取消",
+                "Applying the mask was canceled",
+            )));
         }
         if self.0.len().saturating_add(bytes.len()) as u64 > MAX_IMAGE_BYTES {
-            return Err(io::Error::other("Mask PNG exceeds 32 MiB"));
+            return Err(io::Error::other(tr(
+                "遮罩 PNG 超过 32 MiB",
+                "Mask PNG exceeds 32 MiB",
+            )));
         }
         self.0
             .try_reserve_exact(bytes.len())

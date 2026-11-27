@@ -20,7 +20,7 @@ impl CreativeCanvas {
             let mut project = self
                 .project
                 .clone()
-                .ok_or_else(|| "请先打开本地项目".to_string())?;
+                .ok_or_else(|| tr("请先打开本地项目", "Open a local project first").to_string())?;
             let project_id = project.metadata().id.clone();
             let document = self.canvas.read(cx).editor.document();
             let registry = self.registry.clone();
@@ -28,7 +28,13 @@ impl CreativeCanvas {
                 .graph
                 .node(&target)
                 .filter(|n| !n.locked && n.data == expected)
-                .ok_or_else(|| "图片已变更，请重新进入编辑".to_string())?;
+                .ok_or_else(|| {
+                    tr(
+                        "图片已变更，请重新进入编辑",
+                        "The image changed. Restart editing.",
+                    )
+                    .to_string()
+                })?;
             let (width, height) = spec
                 .oriented_dimensions(source.width, source.height)
                 .map_err(|e| e.to_string())?;
@@ -67,7 +73,7 @@ impl CreativeCanvas {
                             )
                             .map_err(|e| e.to_string())?;
                             if task_cancel.load(Ordering::Acquire) {
-                                return Err("图片编辑已取消".into());
+                                return Err(tr("图片编辑已取消", "Image editing canceled").into());
                             }
                             project
                                 .import_image(&scratch.output)
@@ -109,13 +115,13 @@ impl CreativeCanvas {
                                             cx,
                                         ) {
                                             this.notice =
-                                                Some("图片编辑已应用；可从版本面板恢复原图".into());
+                                                Some(tr("图片编辑已应用；可从版本面板恢复原图", "Edits applied. Restore the original from Version History.").into());
                                         }
                                     }
                                     Ok(_) => {
                                         this.clear_image_edit();
                                         this.notice =
-                                            Some("图片已改变或操作已取消，未覆盖当前对象".into());
+                                            Some(tr("图片已改变或操作已取消，未覆盖当前对象", "The image changed or editing was canceled. The current object was preserved.").into());
                                     }
                                     Err(error) => {
                                         this.notice = Some(error);

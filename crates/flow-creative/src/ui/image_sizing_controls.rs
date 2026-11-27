@@ -44,11 +44,15 @@ fn requested_size(
         let value = values[index]
             .trim()
             .parse::<f32>()
-            .map_err(|_| "请输入有效的显示宽高".to_owned())?;
+            .map_err(|_| tr("请输入有效的显示宽高", "Enter valid display dimensions").to_owned())?;
         if !(image_sizing::MIN_IMAGE_DISPLAY_SIZE..=image_sizing::MAX_IMAGE_DISPLAY_SIZE)
             .contains(&value)
         {
-            return Err("显示尺寸须在 0.01 到 16384 之间".into());
+            return Err(tr(
+                "显示尺寸须在 0.01 到 16384 之间",
+                "Display dimensions must be between 0.01 and 16384",
+            )
+            .into());
         }
         Ok(value)
     };
@@ -64,7 +68,11 @@ fn requested_size(
         ([true, true], true) => {
             let result = image_sizing::size_from_width(size, read(0)?, true)?;
             if (result.height - read(1)?).abs() > (result.height * 0.0001).max(0.001) {
-                Err("比例已锁定：请只改 W 或 H，或先关闭比例锁".into())
+                Err(tr(
+                    "比例已锁定：请只改 W 或 H，或先关闭比例锁",
+                    "Aspect ratio is locked. Change one dimension or unlock it first.",
+                )
+                .into())
             } else {
                 Ok(result)
             }
@@ -239,7 +247,14 @@ impl CreativeCanvas {
             [&width, &height],
             locked,
         )
-        .map(|size| format!("应用后 {} × {}", number(size.width), number(size.height)))
+        .map(|size| {
+            tr_format!(
+                "应用后 {} × {}",
+                "After applying · {} × {}",
+                number(size.width),
+                number(size.height)
+            )
+        })
         .unwrap_or_else(|error| error);
         let original = self
             .project
@@ -251,7 +266,14 @@ impl CreativeCanvas {
                     .find(|asset| Some(asset.key.as_str()) == node.data["asset"].as_str())
             })
             .filter(|asset| asset.width > 0 && asset.height > 0)
-            .map(|asset| format!("原图 {} × {} px · 文件不变", asset.width, asset.height));
+            .map(|asset| {
+                tr_format!(
+                    "原图 {} × {} px · 文件不变",
+                    "Original {} × {} px · File preserved",
+                    asset.width,
+                    asset.height
+                )
+            });
         let can_restore = original.is_some();
         let disabled = !editable || self.importing || self.saving;
         div()
@@ -263,18 +285,18 @@ impl CreativeCanvas {
                     .flex()
                     .items_center()
                     .justify_between()
-                    .child(div().text_sm().child("画布显示尺寸"))
+                    .child(div().text_sm().child(tr("画布显示尺寸", "Canvas Display Size")))
                     .child(self.icon_button(
                         "close-image-size",
                         "x",
-                        "取消尺寸草稿",
+                        tr("取消尺寸草稿", "Discard size changes"),
                         Action::ImageSizing(ImageSizingAction::Close),
                         false,
                         cx,
                     )),
             )
             .child(label(
-                original.unwrap_or_else(|| "原图尺寸不可用 · 文件不变".into()),
+                original.unwrap_or_else(|| tr("原图尺寸不可用 · 文件不变", "Original dimensions unavailable · File preserved").into()),
             ))
             .child(
                 div()
@@ -287,7 +309,7 @@ impl CreativeCanvas {
                             .w(px(108.))
                             .h(px(30.))
                             .disabled(disabled)
-                            .aria_label("图片显示宽度"),
+                            .aria_label(tr("图片显示宽度", "Image display width")),
                     )
                     .child(label("H"))
                     .child(
@@ -295,16 +317,16 @@ impl CreativeCanvas {
                             .w(px(108.))
                             .h(px(30.))
                             .disabled(disabled)
-                            .aria_label("图片显示高度"),
+                            .aria_label(tr("图片显示高度", "Image display height")),
                     ),
             )
             .child(
                 self.button(
                     "image-size-lock",
                     if locked {
-                        "已锁定当前比例"
+                        tr("已锁定当前比例", "Current ratio locked")
                     } else {
-                        "自由调整宽高"
+                        tr("自由调整宽高", "Free width and height")
                     },
                     Action::ImageSizing(ImageSizingAction::ToggleLock),
                     disabled,
@@ -313,9 +335,9 @@ impl CreativeCanvas {
                 .when(locked, |button| button.bg(rgb(0xeff4ff))),
             )
             .child(label(if locked {
-                "改 W 或 H 联动；Shift 拖角点临时自由缩放"
+                tr("改 W 或 H 联动；Shift 拖角点临时自由缩放", "Changing one dimension adjusts the other. Hold Shift while dragging a corner to resize freely.")
             } else {
-                "自由宽高可能裁切显示；Shift 拖角点等比"
+                tr("自由宽高可能裁切显示；Shift 拖角点等比", "Free sizing may crop the display. Hold Shift while dragging a corner to keep the ratio.")
             }))
             .child(
                 div()
@@ -334,14 +356,14 @@ impl CreativeCanvas {
                     .justify_between()
                     .child(self.button(
                         "image-size-original",
-                        "恢复原图比例",
+                        tr("恢复原图比例", "Restore Original Ratio"),
                         Action::OriginalRatio,
                         disabled || !can_restore,
                         cx,
                     ))
                     .child(self.button(
                         "image-size-apply",
-                        "应用",
+                        tr("应用", "Apply"),
                         Action::ImageSizing(ImageSizingAction::Apply),
                         disabled,
                         cx,

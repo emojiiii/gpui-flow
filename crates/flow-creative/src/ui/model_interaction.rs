@@ -20,14 +20,20 @@ pub(super) struct ModelDrag {
 impl ModelDrag {
     fn new(source: Node, start: WorldPoint, size: WorldSize) -> Result<Self, String> {
         if !start.is_finite() || !size.is_positive() || !size.is_finite() {
-            return Err("模型手势区域无效".into());
+            return Err(tr("模型手势区域无效", "Invalid model interaction area").into());
         }
         let initial = source
             .data
             .get("camera")
             .map(|value| serde_json::from_value(value.clone()))
             .transpose()
-            .map_err(|_| "模型相机无效，请先复位".to_string())?
+            .map_err(|_| {
+                tr(
+                    "模型相机无效，请先复位",
+                    "Invalid model camera. Reset the view first.",
+                )
+                .to_string()
+            })?
             .unwrap_or_else(|| OrbitCamera::default().state());
         if !initial.yaw_radians.is_finite()
             || !(0. ..=std::f32::consts::TAU).contains(&initial.yaw_radians)
@@ -35,7 +41,11 @@ impl ModelDrag {
             || initial.pitch_radians.abs() > std::f32::consts::FRAC_PI_2 - 0.01
             || !(0.05..=100.).contains(&initial.distance_factor)
         {
-            return Err("模型相机无效，请先复位".into());
+            return Err(tr(
+                "模型相机无效，请先复位",
+                "Invalid model camera. Reset the view first.",
+            )
+            .into());
         }
         Ok(Self {
             source,
@@ -63,7 +73,11 @@ impl ModelDrag {
     }
     fn data_for(&self, current: &Node) -> Result<Option<Value>, String> {
         if current != &self.source {
-            return Err("模型已变化，未完成的视角草稿已取消".into());
+            return Err(tr(
+                "模型已变化，未完成的视角草稿已取消",
+                "The model changed. The unfinished view adjustment was canceled.",
+            )
+            .into());
         }
         if self.initial == self.current {
             return Ok(None);
@@ -93,7 +107,7 @@ impl CreativeCanvas {
         }
         let asset = node.data["asset"].as_str().unwrap_or_default().to_string();
         if asset.is_empty() {
-            self.notice = Some("请先导入本地GLB".into());
+            self.notice = Some(tr("请先导入本地GLB", "Import a local GLB first").into());
             return;
         }
         self.canvas

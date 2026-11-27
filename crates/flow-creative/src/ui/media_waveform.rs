@@ -60,8 +60,13 @@ impl WaveformLoad {
     pub(super) fn render(&self, position: f64) -> AnyElement {
         match &self.state {
             State::Ready(waveform) => waveform_canvas(waveform.clone(), position),
-            State::Pending | State::Loading => label("正在读取真实音频波形…".into()),
-            State::Failed(error) => label(format!("波形不可用：{error}")),
+            State::Pending | State::Loading => {
+                label(tr("正在读取真实音频波形…", "Reading audio waveform…").into())
+            }
+            State::Failed(error) => label(tr_format!(
+                "波形不可用：{error}",
+                "Waveform unavailable: {error}"
+            )),
         }
     }
 }

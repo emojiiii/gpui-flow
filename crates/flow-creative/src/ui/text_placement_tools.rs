@@ -169,7 +169,10 @@ impl CreativeCanvas {
                         .bg(rgb(0xffffff))
                         .shadow_sm()
                         .text_size(px(12.))
-                        .child("点击放置文字 · 拖动设定文本框 · Esc 取消"),
+                        .child(tr(
+                            "点击放置文字 · 拖动设定文本框 · Esc 取消",
+                            "Click to place text · Drag to size a text box · Esc to cancel",
+                        )),
                 )
                 .on_mouse_down(
                     MouseButton::Left,

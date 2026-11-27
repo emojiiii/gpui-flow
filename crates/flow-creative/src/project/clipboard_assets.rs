@@ -40,9 +40,12 @@ impl LocalProject {
         check_project_capacity(&self.project, bytes.len() as u64)?;
         let asset = ProjectAsset {
             key: format!("assets/{}.{}", unique_name("clipboard"), info.extension),
-            name: format!(
+            name: tr_format!(
+                "剪贴板图片 {}×{}.{}",
                 "Clipboard image {}×{}.{}",
-                info.width, info.height, info.extension
+                info.width,
+                info.height,
+                info.extension
             ),
             media_type: info.media_type.into(),
             byte_len: bytes.len() as u64,
@@ -85,7 +88,7 @@ impl LocalProject {
 fn check_active(cancelled: &AtomicBool) -> Result<(), ProjectError> {
     if cancelled.load(Ordering::Acquire) {
         Err(ProjectError::Invalid(
-            "clipboard image import cancelled".into(),
+            tr("已取消导入剪贴板图片", "clipboard image import cancelled").into(),
         ))
     } else {
         Ok(())
@@ -98,16 +101,20 @@ fn invalid(message: &str) -> ProjectError {
 
 fn check_project_capacity(project: &ProjectFile, bytes: u64) -> Result<(), ProjectError> {
     if bytes == 0 {
-        return Err(invalid("clipboard image is empty"));
+        return Err(invalid(tr("剪贴板图片为空", "clipboard image is empty")));
     }
     if bytes > MAX_IMAGE_BYTES {
         return Err(ProjectError::TooLarge(
-            "clipboard image exceeds 32 MiB".into(),
+            tr("剪贴板图片超过 32 MiB", "clipboard image exceeds 32 MiB").into(),
         ));
     }
     if project.assets.len() >= MAX_PROJECT_ASSETS {
         return Err(ProjectError::TooLarge(
-            "project has reached its 512 asset limit".into(),
+            tr(
+                "项目素材数量已达上限（512）",
+                "project has reached its 512 asset limit",
+            )
+            .into(),
         ));
     }
     let total = project
@@ -116,7 +123,11 @@ fn check_project_capacity(project: &ProjectFile, bytes: u64) -> Result<(), Proje
         .fold(bytes, |total, asset| total.saturating_add(asset.byte_len));
     if total > MAX_PROJECT_ASSET_BYTES {
         return Err(ProjectError::TooLarge(
-            "project assets exceed 512 MiB".into(),
+            tr(
+                "项目素材总大小超过 512 MiB",
+                "project assets exceed 512 MiB",
+            )
+            .into(),
         ));
     }
     Ok(())
@@ -130,16 +141,21 @@ fn validate_clipboard_image(
     check_active(cancelled)?;
     if bytes.is_empty() || bytes.len() as u64 > MAX_IMAGE_BYTES {
         return Err(ProjectError::TooLarge(
-            "clipboard image must contain 1 byte to 32 MiB".into(),
+            tr(
+                "剪贴板图片必须在 1 字节至 32 MiB 之间",
+                "clipboard image must contain 1 byte to 32 MiB",
+            )
+            .into(),
         ));
     }
     let format = match expected_media_type {
         "image/png" if bytes.starts_with(b"\x89PNG\r\n\x1a\n") => ImageFormat::Png,
         "image/jpeg" if bytes.starts_with(&[0xff, 0xd8]) => ImageFormat::Jpeg,
         _ => {
-            return Err(invalid(
+            return Err(invalid(tr(
+                "剪贴板图片必须是格式匹配的静态 PNG 或 JPEG",
                 "clipboard image must contain matching static PNG/JPEG bytes",
-            ));
+            )));
         }
     };
     let info = image_info(bytes)?;
@@ -149,7 +165,11 @@ fn validate_clipboard_image(
         || pixels > MAX_CLIPBOARD_PIXELS
     {
         return Err(ProjectError::TooLarge(
-            "clipboard image exceeds 4096 pixels per side or 4,194,304 total pixels".into(),
+            tr(
+                "剪贴板图片每边最多 4096 像素，总计不超过 4,194,304 像素",
+                "clipboard image exceeds 4096 pixels per side or 4,194,304 total pixels",
+            )
+            .into(),
         ));
     }
     match format {
@@ -173,17 +193,27 @@ fn validate_clipboard_image(
     // scanline allocation. Setting limits only after construction is too late.
     reader.limits(limits);
     check_active(cancelled)?;
-    let mut decoder = reader
-        .into_decoder()
-        .map_err(|error| invalid(&format!("invalid clipboard image header: {error}")))?;
-    let geometry = crate::image_orientation::ImageOrientation::from_decoder(&mut decoder)
-        .map_err(|error| invalid(&format!("invalid image orientation: {error}")))?;
+    let mut decoder = reader.into_decoder().map_err(|error| {
+        invalid(&tr_format!(
+            "剪贴板图片头部无效：{error}",
+            "invalid clipboard image header: {error}"
+        ))
+    })?;
+    let geometry = crate::image_orientation::ImageOrientation::from_decoder(&mut decoder).map_err(
+        |error| {
+            invalid(&tr_format!(
+                "图片方向无效：{error}",
+                "invalid image orientation: {error}"
+            ))
+        },
+    )?;
     check_active(cancelled)?;
     let output_bytes = decoder.total_bytes();
     if geometry.oriented_dimensions != (info.width, info.height) || output_bytes > pixels * 8 {
-        return Err(invalid(
+        return Err(invalid(tr(
+            "剪贴板图片解码后的尺寸与文件头部不符",
             "clipboard image decoded geometry disagrees with its header",
-        ));
+        )));
     }
     check_memory(
         encoded_peak
@@ -191,21 +221,34 @@ fn validate_clipboard_image(
             .saturating_add(output_bytes),
     )?;
     check_active(cancelled)?;
-    let output_len = usize::try_from(output_bytes)
-        .map_err(|_| invalid("clipboard image allocation overflow"))?;
+    let output_len = usize::try_from(output_bytes).map_err(|_| {
+        invalid(tr(
+            "剪贴板图片所需内存超出可表示范围",
+            "clipboard image allocation overflow",
+        ))
+    })?;
     let mut output = Vec::new();
-    output
-        .try_reserve_exact(output_len)
-        .map_err(|_| ProjectError::TooLarge("clipboard image allocation failed".into()))?;
+    output.try_reserve_exact(output_len).map_err(|_| {
+        ProjectError::TooLarge(
+            tr(
+                "无法为剪贴板图片分配内存",
+                "clipboard image allocation failed",
+            )
+            .into(),
+        )
+    })?;
     check_memory(
         encoded_peak
             .saturating_add(scratch)
             .saturating_add(output.capacity() as u64),
     )?;
     output.resize(output_len, 0);
-    decoder
-        .read_image(&mut output)
-        .map_err(|error| invalid(&format!("clipboard image decoding failed: {error}")))?;
+    decoder.read_image(&mut output).map_err(|error| {
+        invalid(&tr_format!(
+            "无法解码剪贴板图片：{error}",
+            "clipboard image decoding failed: {error}"
+        ))
+    })?;
     check_active(cancelled)?;
     Ok(info)
 }
@@ -237,7 +280,11 @@ fn admit_decode(
 fn check_memory(bytes: u64) -> Result<(), ProjectError> {
     if bytes > MAX_DECODE_BYTES {
         Err(ProjectError::TooLarge(
-            "clipboard image and decoder scratch exceed 128 MiB".into(),
+            tr(
+                "剪贴板图片及解码所需内存超过 128 MiB",
+                "clipboard image and decoder scratch exceed 128 MiB",
+            )
+            .into(),
         ))
     } else {
         Ok(())
@@ -250,18 +297,29 @@ fn validate_png_container(bytes: &[u8], cancelled: &AtomicBool) -> Result<(), Pr
     let mut data_ended = false;
     for _ in 0..MAX_CONTAINER_PARTS {
         check_active(cancelled)?;
-        let header = bytes
-            .get(offset..offset + 8)
-            .ok_or_else(|| invalid("truncated clipboard PNG chunk"))?;
+        let header = bytes.get(offset..offset + 8).ok_or_else(|| {
+            invalid(tr(
+                "剪贴板 PNG 数据块不完整",
+                "truncated clipboard PNG chunk",
+            ))
+        })?;
         let length = u32::from_be_bytes(header[..4].try_into().expect("PNG chunk size")) as usize;
         let end = offset
             .checked_add(12)
             .and_then(|start| start.checked_add(length))
             .filter(|end| *end <= bytes.len())
-            .ok_or_else(|| invalid("truncated clipboard PNG chunk"))?;
+            .ok_or_else(|| {
+                invalid(tr(
+                    "剪贴板 PNG 数据块不完整",
+                    "truncated clipboard PNG chunk",
+                ))
+            })?;
         let kind = &header[4..];
         if matches!(kind, b"acTL" | b"fcTL" | b"fdAT") {
-            return Err(invalid("animated PNG clipboard images are not supported"));
+            return Err(invalid(tr(
+                "剪贴板图片不支持动画 PNG",
+                "animated PNG clipboard images are not supported",
+            )));
         }
         if !kind.iter().all(u8::is_ascii_alphabetic)
             || !kind[2].is_ascii_uppercase()
@@ -271,17 +329,26 @@ fn validate_png_container(bytes: &[u8], cancelled: &AtomicBool) -> Result<(), Pr
             || (kind == b"PLTE" && saw_data)
             || (kind == b"IDAT" && data_ended)
         {
-            return Err(invalid("invalid clipboard PNG chunk order or type"));
+            return Err(invalid(tr(
+                "剪贴板 PNG 数据块的顺序或类型无效",
+                "invalid clipboard PNG chunk order or type",
+            )));
         }
         let expected_crc = u32::from_be_bytes(bytes[end - 4..end].try_into().expect("PNG CRC"));
         if png_crc(&bytes[offset + 4..end - 4], cancelled)? != expected_crc {
-            return Err(invalid("clipboard PNG chunk checksum is invalid"));
+            return Err(invalid(tr(
+                "剪贴板 PNG 数据块的校验和无效",
+                "clipboard PNG chunk checksum is invalid",
+            )));
         }
         if kind == b"IEND" {
             return if length == 0 && end == bytes.len() && saw_data {
                 Ok(())
             } else {
-                Err(invalid("invalid clipboard PNG ending"))
+                Err(invalid(tr(
+                    "剪贴板 PNG 文件结尾无效",
+                    "invalid clipboard PNG ending",
+                )))
             };
         }
         if kind == b"IDAT" {
@@ -291,7 +358,10 @@ fn validate_png_container(bytes: &[u8], cancelled: &AtomicBool) -> Result<(), Pr
         }
         offset = end;
     }
-    Err(invalid("clipboard PNG has too many chunks"))
+    Err(invalid(tr(
+        "剪贴板 PNG 数据块过多",
+        "clipboard PNG has too many chunks",
+    )))
 }
 
 // Validate the PNG format's required CRCs, including chunks after IDAT which a
@@ -342,7 +412,10 @@ fn validate_jpeg_container(bytes: &[u8], cancelled: &AtomicBool) -> Result<(), P
             }
         }
         if bytes.get(offset) != Some(&0xff) {
-            return Err(invalid("clipboard JPEG is missing a complete ending"));
+            return Err(invalid(tr(
+                "剪贴板 JPEG 缺少完整结尾",
+                "clipboard JPEG is missing a complete ending",
+            )));
         }
         while bytes.get(offset) == Some(&0xff) {
             offset += 1;
@@ -350,40 +423,63 @@ fn validate_jpeg_container(bytes: &[u8], cancelled: &AtomicBool) -> Result<(), P
                 check_active(cancelled)?;
             }
         }
-        let marker = *bytes
-            .get(offset)
-            .ok_or_else(|| invalid("truncated clipboard JPEG marker"))?;
+        let marker = *bytes.get(offset).ok_or_else(|| {
+            invalid(tr(
+                "剪贴板 JPEG 标记不完整",
+                "truncated clipboard JPEG marker",
+            ))
+        })?;
         offset += 1;
         if in_scan && matches!(marker, 0x00 | 0xd0..=0xd7) {
             scan_has_data |= marker == 0x00;
             continue;
         }
         if in_scan && !scan_has_data {
-            return Err(invalid("clipboard JPEG has an empty compressed scan"));
+            return Err(invalid(tr(
+                "剪贴板 JPEG 包含空的压缩扫描段",
+                "clipboard JPEG has an empty compressed scan",
+            )));
         }
         in_scan = false;
         if marker == 0xd9 {
             return if saw_frame && saw_scan && offset == bytes.len() {
                 Ok(())
             } else {
-                Err(invalid("invalid clipboard JPEG ending"))
+                Err(invalid(tr(
+                    "剪贴板 JPEG 文件结尾无效",
+                    "invalid clipboard JPEG ending",
+                )))
             };
         }
         if matches!(marker, 0x00 | 0x01 | 0xd0..=0xd8 | 0xdc) {
-            return Err(invalid("unsupported clipboard JPEG marker"));
+            return Err(invalid(tr(
+                "不支持此剪贴板 JPEG 标记",
+                "unsupported clipboard JPEG marker",
+            )));
         }
-        let length = bytes
-            .get(offset..offset + 2)
-            .ok_or_else(|| invalid("truncated clipboard JPEG segment"))?;
+        let length = bytes.get(offset..offset + 2).ok_or_else(|| {
+            invalid(tr(
+                "剪贴板 JPEG 数据段不完整",
+                "truncated clipboard JPEG segment",
+            ))
+        })?;
         let length = u16::from_be_bytes(length.try_into().expect("JPEG segment size")) as usize;
         let end = offset
             .checked_add(length)
             .filter(|end| length >= 2 && *end <= bytes.len())
-            .ok_or_else(|| invalid("invalid clipboard JPEG segment"))?;
+            .ok_or_else(|| {
+                invalid(tr(
+                    "剪贴板 JPEG 数据段无效",
+                    "invalid clipboard JPEG segment",
+                ))
+            })?;
         if matches!(marker, 0xc0..=0xc3 | 0xc5..=0xc7 | 0xc9..=0xcb | 0xcd..=0xcf) {
             let header = &bytes[offset + 2..end];
             if saw_frame || !matches!(marker, 0xc0..=0xc2) || header.len() < 6 || header[0] != 8 {
-                return Err(invalid("unsupported clipboard JPEG coding mode"));
+                return Err(invalid(tr(
+                    "不支持此剪贴板 JPEG 编码方式",
+                    "unsupported clipboard JPEG coding mode",
+                )));
             }
             let components = usize::from(header[5]);
             if !(1..=4).contains(&components)
@@ -393,20 +489,29 @@ fn validate_jpeg_container(bytes: &[u8], cancelled: &AtomicBool) -> Result<(), P
                         || !(1..=4).contains(&(component[1] & 15))
                 })
             {
-                return Err(invalid("invalid clipboard JPEG component geometry"));
+                return Err(invalid(tr(
+                    "剪贴板 JPEG 颜色分量尺寸无效",
+                    "invalid clipboard JPEG component geometry",
+                )));
             }
             saw_frame = true;
         }
         if marker == 0xda {
             if !saw_frame {
-                return Err(invalid("clipboard JPEG scan has no size header"));
+                return Err(invalid(tr(
+                    "剪贴板 JPEG 扫描段缺少尺寸信息",
+                    "clipboard JPEG scan has no size header",
+                )));
             }
             let header = &bytes[offset + 2..end];
             if header.len() < 6
                 || !(1..=4).contains(&header[0])
                 || header.len() != 4 + 2 * usize::from(header[0])
             {
-                return Err(invalid("invalid clipboard JPEG scan header"));
+                return Err(invalid(tr(
+                    "剪贴板 JPEG 扫描段头部无效",
+                    "invalid clipboard JPEG scan header",
+                )));
             }
             saw_scan = true;
             in_scan = true;
@@ -414,7 +519,10 @@ fn validate_jpeg_container(bytes: &[u8], cancelled: &AtomicBool) -> Result<(), P
         }
         offset = end;
     }
-    Err(invalid("clipboard JPEG has too many segments"))
+    Err(invalid(tr(
+        "剪贴板 JPEG 数据段过多",
+        "clipboard JPEG has too many segments",
+    )))
 }
 
 struct CancelReader<'a> {

@@ -58,7 +58,13 @@ impl CreativeCanvas {
                 .value()
                 .trim()
                 .parse::<f64>()
-                .map_err(|_| "请输入-360到360之间的角度".to_string())?;
+                .map_err(|_| {
+                    tr(
+                        "请输入-360到360之间的角度",
+                        "Enter an angle between −360 and 360",
+                    )
+                    .to_string()
+                })?;
             let spec = ImageRotationSpec { degrees };
             spec.output_dimensions(edit.asset.width, edit.asset.height)
                 .map_err(|e| e.to_string())?;
@@ -108,14 +114,20 @@ impl CreativeCanvas {
                     return;
                 };
                 let result = (|| {
-                    let project = self.project.as_ref().ok_or("请先打开本地项目")?;
+                    let project = self
+                        .project
+                        .as_ref()
+                        .ok_or(tr("请先打开本地项目", "Open a local project first"))?;
                     let asset = project
                         .assets()
                         .iter()
                         .find(|a| Some(a.key.as_str()) == node.data["asset"].as_str())
                         .filter(|a| matches!(a.media_type.as_str(), "image/png" | "image/jpeg"))
                         .cloned()
-                        .ok_or("旋转支持本地静态PNG/JPEG")?;
+                        .ok_or(tr(
+                            "旋转支持本地静态PNG/JPEG",
+                            "Rotation supports local still PNG and JPEG images",
+                        ))?;
                     ImageRotationSpec::default()
                         .output_dimensions(asset.width, asset.height)
                         .map_err(|e| e.to_string())?;
@@ -214,7 +226,7 @@ impl CreativeCanvas {
                     .flex()
                     .items_center()
                     .justify_between()
-                    .child(label("自定义旋转预览"))
+                    .child(label(tr("自定义旋转预览", "Custom Rotation Preview")))
                     .child(label(
                         dimensions
                             .map(|(w, h)| format!("{w} × {h}"))
@@ -232,15 +244,18 @@ impl CreativeCanvas {
                     .flex()
                     .items_center()
                     .gap_2()
-                    .child(label("角度"))
+                    .child(label(tr("角度", "Angle")))
                     .child(
                         Input::new(&edit.angle)
                             .w(px(85.))
                             .h(px(28.))
                             .disabled(busy)
-                            .aria_label("顺时针旋转角度"),
+                            .aria_label(tr("顺时针旋转角度", "Clockwise rotation angle")),
                     )
-                    .child(label("° · 正数顺时针")),
+                    .child(label(tr(
+                        "° · 正数顺时针",
+                        "° · Positive values rotate clockwise",
+                    ))),
             )
             .child(presets)
             .when_some(edit.error.clone(), |v, error| {
@@ -251,10 +266,17 @@ impl CreativeCanvas {
                     .flex()
                     .items_center()
                     .gap_2()
-                    .child(label("透明留边 · 原图保留"))
+                    .child(label(tr(
+                        "透明留边 · 原图保留",
+                        "Transparent padding · Original retained",
+                    )))
                     .child(self.button(
                         "rotation-cancel",
-                        if busy { "取消处理" } else { "取消" },
+                        if busy {
+                            tr("取消处理", "Cancel processing")
+                        } else {
+                            tr("取消", "Cancel")
+                        },
                         Action::ImageRotation(if busy {
                             RotationAction::CancelApply
                         } else {
@@ -265,7 +287,7 @@ impl CreativeCanvas {
                     ))
                     .child(self.button(
                         "rotation-apply",
-                        "应用旋转",
+                        tr("应用旋转", "Apply Rotation"),
                         Action::ImageRotation(RotationAction::Apply),
                         busy || edit.error.is_some() || !edit.preview.read(cx).ready_for(edit.spec),
                         cx,

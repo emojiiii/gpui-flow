@@ -7,7 +7,10 @@ impl CreativeCanvas {
         match crate::object_frame::placed_object_graph(self.canvas.read(cx).editor.graph(), node) {
             Ok((graph, _)) => self.command(CanvasCommand::ImportGraph(graph), cx),
             Err(error) => {
-                self.notice = Some(format!("无法添加对象：{error}"));
+                self.notice = Some(tr_format!(
+                    "无法添加对象：{error}",
+                    "Could not add the object: {error}"
+                ));
                 cx.notify();
                 false
             }
@@ -32,7 +35,10 @@ impl CreativeCanvas {
         let placement = match placement {
             Ok(placement) => placement,
             Err(error) => {
-                self.notice = Some(format!("无法放置新对象：{error}"));
+                self.notice = Some(tr_format!(
+                    "无法放置新对象：{error}",
+                    "Could not place the new object: {error}"
+                ));
                 cx.notify();
                 return false;
             }

@@ -97,7 +97,10 @@ impl CreativeCanvas {
                     preferences.show_minimap = !preferences.show_minimap
                 }
                 CanvasAppearanceAction::ApplyBackground => {
-                    let panel = self.background_panel.as_ref().ok_or("请先打开画布背景")?;
+                    let panel = self.background_panel.as_ref().ok_or(tr(
+                        "请先打开画布背景",
+                        "Open the canvas background panel first",
+                    ))?;
                     preferences.background_rgb = crate::text_appearance::parse_text_color(
                         panel.input.read(cx).value().as_ref(),
                     )?;
@@ -138,7 +141,10 @@ impl CreativeCanvas {
                     !editable,
                     cx,
                 )
-                .accessibility_label(format!("画布背景 #{color:06X}"))
+                .accessibility_label(tr_format!(
+                    "画布背景 #{color:06X}",
+                    "Canvas background #{color:06X}"
+                ))
                 .size(px(28.))
                 .px_0()
                 .border_1()
@@ -152,7 +158,7 @@ impl CreativeCanvas {
             .flex()
             .flex_col()
             .gap_2()
-            .child(label("画布背景"))
+            .child(label(tr("画布背景", "Canvas background")))
             .child(swatches)
             .child(
                 div()
@@ -173,15 +179,14 @@ impl CreativeCanvas {
                                     );
                                 }
                             }))
-                            .child(
-                                Textarea::new(&input)
-                                    .h(px(30.))
-                                    .aria_label("画布背景十六进制颜色"),
-                            ),
+                            .child(Textarea::new(&input).h(px(30.)).aria_label(tr(
+                                "画布背景十六进制颜色",
+                                "Canvas background hex color",
+                            ))),
                     )
                     .child(self.button(
                         "apply-canvas-background",
-                        "应用",
+                        tr("应用", "Apply"),
                         Action::CanvasAppearance(CanvasAppearanceAction::ApplyBackground),
                         !editable,
                         cx,
@@ -189,19 +194,17 @@ impl CreativeCanvas {
             )
             .child(self.button(
                 "reset-canvas-background",
-                "恢复默认背景",
+                tr("恢复默认背景", "Restore default background"),
                 Action::CanvasAppearance(CanvasAppearanceAction::Background(
                     CanvasPreferences::default().background_rgb,
                 )),
                 !editable,
                 cx,
             ))
-            .child(
-                div()
-                    .text_size(px(10.))
-                    .text_color(rgb(0x90939d))
-                    .child("只改变工作区背景 · 随项目保存 · 可撤销"),
-            );
+            .child(div().text_size(px(10.)).text_color(rgb(0x90939d)).child(tr(
+                "只改变工作区背景 · 随项目保存 · 可撤销",
+                "Canvas background only · Saved with project · Undoable",
+            )));
         let size = bounded_panel_size(self.canvas_size, WorldSize::new(280., 178.));
         div()
             .occlude()

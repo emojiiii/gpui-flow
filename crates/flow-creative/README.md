@@ -25,7 +25,8 @@
 cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative
 ```
 
-默认启动进入项目首页。新建项目先在磁盘创建空项目，再打开空白画布。各平台的默认项目目录如下。
+默认启动进入项目首页。右上角的菜单可切换简体中文和 English，选择会保存在本机。
+新建项目先在磁盘创建空项目，再打开空白画布。各平台的默认项目目录如下。
 
 - Linux 使用 `$XDG_DATA_HOME/gpui-flow/projects`，或 `~/.local/share/gpui-flow/projects`
 - macOS 使用 `~/Library/Application Support/Flow Creative/Projects`

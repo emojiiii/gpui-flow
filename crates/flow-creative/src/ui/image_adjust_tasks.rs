@@ -18,7 +18,10 @@ impl CreativeCanvas {
             let _dimensions = spec
                 .output_dimensions(source.width, source.height)
                 .map_err(|e| e.to_string())?;
-            let mut project = self.project.clone().ok_or("请先打开本地项目")?;
+            let mut project = self
+                .project
+                .clone()
+                .ok_or(tr("请先打开本地项目", "Open a local project first"))?;
             let project_id = project.metadata().id.clone();
             let document = self.canvas.read(cx).editor.document();
             let registry = self.registry.clone();
@@ -29,7 +32,10 @@ impl CreativeCanvas {
                     n.data == expected
                         && !crate::layer_guard::node_is_locked(&document.graph, &n.id)
                 })
-                .ok_or("图片已改变，请重新打开调整")?;
+                .ok_or(tr(
+                    "图片已改变，请重新打开调整",
+                    "The image changed. Reopen Adjustments.",
+                ))?;
             let size = node.size;
             let position = node.position;
             let cancel = Arc::new(AtomicBool::new(false));
@@ -56,7 +62,7 @@ impl CreativeCanvas {
                             )
                             .map_err(|e| e.to_string())?;
                             if task_cancel.load(Ordering::Acquire) {
-                                return Err("调整已取消".into());
+                                return Err(tr("调整已取消", "Adjustment canceled").into());
                             }
                             project
                                 .import_image(&scratch.output)
@@ -96,13 +102,13 @@ impl CreativeCanvas {
                                             cx,
                                         ) {
                                             this.notice =
-                                                Some("调整已应用；可从版本面板恢复原图".into());
+                                                Some(tr("调整已应用；可从版本面板恢复原图", "Adjustments applied. Restore the original from Version History.").into());
                                         }
                                     }
                                     Ok(_) => {
                                         this.clear_image_adjustment(cx);
                                         this.notice =
-                                            Some("图片已改变或处理已取消，未覆盖当前对象".into());
+                                            Some(tr("图片已改变或处理已取消，未覆盖当前对象", "The image changed or processing was canceled. The current object was preserved.").into());
                                     }
                                     Err(error) => {
                                         this.notice = Some(error);

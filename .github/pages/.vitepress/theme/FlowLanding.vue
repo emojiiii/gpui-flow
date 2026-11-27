@@ -28,7 +28,7 @@ const { frontmatter } = useData()
         <figure class="flow-preview">
           <div class="flow-preview-frame">
             <img
-              :src="withBase('/docs/images/flow-creative-canvas.png')"
+              :src="withBase(frontmatter.landing.image)"
               :alt="frontmatter.landing.imageAlt"
               width="1400"
               height="900"

@@ -5,7 +5,7 @@ use crate::custom_nodes::{
 use crate::mask_node::ORIENTATION_REVIEW_REQUIRED;
 use crate::processing::ProcessingKind;
 use crate::processing_node::ProcessingNodeData;
-use crate::{CreativeError, MaskNodeData};
+use crate::{CreativeError, MaskNodeData, tr};
 use gpui_flow_core::Graph;
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -39,7 +39,13 @@ pub(super) fn guard_legacy_orientation(
         } else if node.kind == ProcessingKind::Image.node_kind() {
             let mut data = ProcessingNodeData::from_value(&node.data)?;
             if data.settings.kind() != ProcessingKind::Image {
-                return Err(CreativeError("处理参数类型不匹配".into()));
+                return Err(CreativeError(
+                    tr(
+                        "处理参数类型不匹配",
+                        "Processing parameter types do not match",
+                    )
+                    .into(),
+                ));
             }
             if data
                 .source_asset
@@ -49,14 +55,28 @@ pub(super) fn guard_legacy_orientation(
                 data.asset.clear();
                 data.source_asset = None;
                 data.output_settings = None;
-                data.error = Some("原图显示方向已修正，请重新运行本地处理".into());
+                data.error = Some(
+                    tr(
+                        "原图显示方向已修正，请重新运行本地处理",
+                        "The source image orientation was corrected. Run local processing again.",
+                    )
+                    .into(),
+                );
                 replacements.push((node.id.clone(), serde_json::to_value(data)?));
             }
         } else if node.kind.starts_with("custom.") {
             let definition = definitions
                 .iter()
                 .find(|definition| definition.kind == node.kind)
-                .ok_or_else(|| CreativeError("自定义节点缺少已保存的类型定义".into()))?;
+                .ok_or_else(|| {
+                    CreativeError(
+                        tr(
+                            "自定义节点缺少已保存的类型定义",
+                            "The custom node is missing its saved type definition",
+                        )
+                        .into(),
+                    )
+                })?;
             let mut data = CustomNodeData::from_value(&node.data, definition)?;
             let affected_input = data.completed_request.as_ref().is_some_and(|request| {
                 request.inputs.values().any(|input| match &input.value {
@@ -73,7 +93,7 @@ pub(super) fn guard_legacy_orientation(
                 data.outputs.clear();
                 data.completed_request = None;
                 data.status = CustomNodeStatus::Failed;
-                data.error = Some("输入原图显示方向已修正，请检查遮罩并重新运行节点".into());
+                data.error = Some(tr("输入原图显示方向已修正，请检查遮罩并重新运行节点", "The source image orientation was corrected. Check masks and run the node again.").into());
                 replacements.push((node.id.clone(), serde_json::to_value(data)?));
             }
         }

@@ -1,6 +1,7 @@
 //! Atomic insertion and initial Frame membership for newly drawn objects.
 //! The caller commits the returned graph through its normal guarded transaction.
 
+use crate::tr;
 use gpui_flow_core::{Graph, GraphError, GroupId, Node};
 
 /// Add a new node and attach it only when exactly one Frame fully contains its
@@ -25,7 +26,11 @@ pub fn placed_object_graph(
     // origin. Such collapsed bounds cannot establish complete containment.
     if bounds.max_x() <= bounds.min_x() || bounds.max_y() <= bounds.min_y() {
         return Err(GraphError::InvalidGeometry(
-            "Object bounds must have representable positive width and height".into(),
+            tr(
+                "对象边界必须具有可表示的正宽度和高度",
+                "Object bounds must have representable positive width and height",
+            )
+            .into(),
         ));
     }
 
@@ -36,8 +41,9 @@ pub fn placed_object_graph(
             continue;
         }
         if frame.locked {
-            return Err(GraphError::Locked(format!(
+            return Err(GraphError::Locked(tr_format!(
                 "该画框已锁定，请解锁后添加对象（{}）",
+                "Unlock frame {} before adding objects",
                 frame.id
             )));
         }

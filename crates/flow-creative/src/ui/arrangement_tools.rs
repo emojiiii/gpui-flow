@@ -42,7 +42,13 @@ impl CreativeCanvas {
             return;
         }
         if !view.editor.selection.groups.is_empty() {
-            self.notice = Some("请单独选择对象；排列不会改变整个 Frame".into());
+            self.notice = Some(
+                tr(
+                    "请单独选择对象；排列不会改变整个 Frame",
+                    "Select individual objects to arrange them",
+                )
+                .into(),
+            );
             cx.notify();
             return;
         }
@@ -50,7 +56,15 @@ impl CreativeCanvas {
             Ok(Some(command)) => {
                 self.command(command, cx);
             }
-            Ok(None) => self.notice = Some("所选对象已在目标位置".into()),
+            Ok(None) => {
+                self.notice = Some(
+                    tr(
+                        "所选对象已在目标位置",
+                        "Selected objects are already in place",
+                    )
+                    .into(),
+                )
+            }
             Err(error) => self.notice = Some(error.to_string()),
         }
         cx.notify();
@@ -77,11 +91,20 @@ impl CreativeCanvas {
             .iter()
             .any(|id| crate::layer_guard::node_is_locked(graph, id))
         {
-            "含锁定对象，请先解锁后排列"
+            tr(
+                "含锁定对象，请先解锁后排列",
+                "Unlock the selected objects before arranging them",
+            )
         } else if !view.editor.selection.groups.is_empty() {
-            "请选择对象；不排列整个 Frame"
+            tr(
+                "请选择对象；不排列整个 Frame",
+                "Select objects within the frame",
+            )
         } else {
-            "按所选外沿对齐；等间距需 3 个对象及足够空间"
+            tr(
+                "按所选外沿对齐；等间距需 3 个对象及足够空间",
+                "Align to selection bounds. Spacing requires three objects and enough room.",
+            )
         };
         let mut content = div()
             .min_w(px(276.))
@@ -89,17 +112,17 @@ impl CreativeCanvas {
             .flex()
             .flex_col()
             .gap_1()
-            .child(label("排列所选对象"));
+            .child(label(tr("排列所选对象", "Arrange selected objects")));
         for (row_index, actions) in [
             [
-                ("左对齐", AlignLeft),
-                ("水平居中", AlignCenter),
-                ("右对齐", AlignRight),
+                (tr("左对齐", "Align left"), AlignLeft),
+                (tr("水平居中", "Center horizontally"), AlignCenter),
+                (tr("右对齐", "Align right"), AlignRight),
             ],
             [
-                ("顶对齐", AlignTop),
-                ("垂直居中", AlignMiddle),
-                ("底对齐", AlignBottom),
+                (tr("顶对齐", "Align top"), AlignTop),
+                (tr("垂直居中", "Center vertically"), AlignMiddle),
+                (tr("底对齐", "Align bottom"), AlignBottom),
             ],
         ]
         .into_iter()
@@ -122,8 +145,14 @@ impl CreativeCanvas {
         }
         let mut distribution = div().flex().gap_1();
         for (index, (title, action)) in [
-            ("水平等间距", DistributeHorizontal),
-            ("垂直等间距", DistributeVertical),
+            (
+                tr("水平等间距", "Distribute horizontally"),
+                DistributeHorizontal,
+            ),
+            (
+                tr("垂直等间距", "Distribute vertically"),
+                DistributeVertical,
+            ),
         ]
         .into_iter()
         .enumerate()

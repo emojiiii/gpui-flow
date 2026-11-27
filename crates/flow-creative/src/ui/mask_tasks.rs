@@ -13,19 +13,26 @@ impl CreativeCanvas {
             return;
         }
         let result = (|| {
-            let project = self
-                .project
-                .as_ref()
-                .ok_or_else(|| CreativeError("请先打开本地项目".into()))?;
-            let key = image.data["asset"]
-                .as_str()
-                .ok_or_else(|| CreativeError("图片尚无素材".into()))?;
+            let project = self.project.as_ref().ok_or_else(|| {
+                CreativeError(tr("请先打开本地项目", "Open a local project first").into())
+            })?;
+            let key = image.data["asset"].as_str().ok_or_else(|| {
+                CreativeError(tr("图片尚无素材", "The image has no asset yet").into())
+            })?;
             let asset = project
                 .assets()
                 .iter()
                 .find(|asset| asset.key == key)
                 .filter(|asset| matches!(asset.media_type.as_str(), "image/png" | "image/jpeg"))
-                .ok_or_else(|| CreativeError("遮罩编辑当前支持项目中的静态PNG/JPEG图片".into()))?;
+                .ok_or_else(|| {
+                    CreativeError(
+                        tr(
+                            "遮罩编辑当前支持项目中的静态PNG/JPEG图片",
+                            "Mask editing supports still PNG and JPEG images in the project",
+                        )
+                        .into(),
+                    )
+                })?;
             let source = MaskSource::new(key, asset.width, asset.height)
                 .map_err(|e| CreativeError(e.to_string()))?;
             let mut graph = self.canvas.read(cx).editor.graph().clone();
@@ -106,7 +113,9 @@ impl CreativeCanvas {
             crate::mask_node::ensure_orientation_reviewed(&mask.data)?;
             let data = MaskNodeData::from_value(&mask.data)?;
             if !data.output_is_current(&context.source) {
-                return Err(CreativeError("请先应用当前遮罩".into()));
+                return Err(CreativeError(
+                    tr("请先应用当前遮罩", "Apply the current mask first").into(),
+                ));
             }
             let mut graph = self.canvas.read(cx).editor.graph().clone();
             let source = graph
@@ -114,7 +123,9 @@ impl CreativeCanvas {
                 .values()
                 .find(|e| e.target.node == mask.id && e.target.port.as_str() == "image")
                 .map(|e| e.source.clone())
-                .ok_or_else(|| CreativeError("缺少原图输入".into()))?;
+                .ok_or_else(|| {
+                    CreativeError(tr("缺少原图输入", "Missing source image input").into())
+                })?;
             let id: NodeId = graph.fresh_id("image-edit").into();
             let node = self.registry.make_node(
                 "edit_image",
@@ -166,15 +177,20 @@ impl CreativeCanvas {
             return;
         };
         let result = (|| {
-            let mut project = self
-                .project
-                .clone()
-                .ok_or_else(|| CreativeError("请先打开本地项目".into()))?;
+            let mut project = self.project.clone().ok_or_else(|| {
+                CreativeError(tr("请先打开本地项目", "Open a local project first").into())
+            })?;
             let context = self.mask_views.context(&node.id).map_err(CreativeError)?;
             crate::mask_node::ensure_orientation_reviewed(&node.data)?;
             let data = MaskNodeData::from_value(&node.data)?;
             if !data.state.source_matches(&context.source) {
-                return Err(CreativeError("请确认原图并重置遮罩".into()));
+                return Err(CreativeError(
+                    tr(
+                        "请确认原图并重置遮罩",
+                        "Confirm the source image and reset the mask",
+                    )
+                    .into(),
+                ));
             }
             let document = self.canvas.read(cx).editor.document();
             let registry = self.registry.clone();
@@ -188,7 +204,13 @@ impl CreativeCanvas {
             self.mask_cancel = Some(cancel.clone());
             self.importing = true;
             self.canvas.update(cx, |v, cx| v.set_editable(false, cx));
-            self.notice = Some("正在生成与原图同尺寸的Mask…".into());
+            self.notice = Some(
+                tr(
+                    "正在生成与原图同尺寸的Mask…",
+                    "Generating a mask at the source image size…",
+                )
+                .into(),
+            );
             cx.notify();
             cx.spawn(async move |this, cx| {
                 let result = cx
@@ -202,7 +224,7 @@ impl CreativeCanvas {
                         )
                         .map_err(|e| e.to_string())?;
                         if cancel.load(Ordering::Acquire) {
-                            return Err("遮罩应用已取消".to_string());
+                            return Err(tr("遮罩应用已取消", "Applying mask canceled").to_string());
                         }
                         project
                             .save_document(&document, &registry)
@@ -251,7 +273,7 @@ impl CreativeCanvas {
                                                 CanvasCommand::SetNodeData { node: target, data },
                                                 cx,
                                             );
-                                            this.notice = Some("Mask已应用，原图保持不变".into());
+                                            this.notice = Some(tr("Mask已应用，原图保持不变", "Mask applied. The original image was preserved.").into());
                                         }
                                         Err(error) => this.notice = Some(error.to_string()),
                                     }
@@ -259,7 +281,7 @@ impl CreativeCanvas {
                                     this.notice = Some(error);
                                     this.pending_window_close = None;
                                 } else {
-                                    this.notice = Some("遮罩编辑已改变，未覆盖新的节点内容".into());
+                                    this.notice = Some(tr("遮罩编辑已改变，未覆盖新的节点内容", "The mask edit changed. The updated node was preserved.").into());
                                 }
                             }
                         }
@@ -286,7 +308,7 @@ impl CreativeCanvas {
     pub(super) fn cancel_mask_apply(&mut self, cx: &mut Context<Self>) {
         if let Some(cancel) = &self.mask_cancel {
             cancel.store(true, Ordering::Release);
-            self.notice = Some("正在取消遮罩应用…".into());
+            self.notice = Some(tr("正在取消遮罩应用…", "Canceling mask application…").into());
             cx.notify();
         }
     }
@@ -305,15 +327,23 @@ impl CreativeCanvas {
             .text_size(px(11.))
             .text_color(rgb(0x8f8293))
             .py_1()
-            .child(format!(
+            .child(tr_format!(
                 "Image：{} · Mask：{}",
-                if image { "已连接" } else { "未连接" },
-                if !mask {
-                    "未连接"
-                } else if valid {
-                    "已应用"
+                "Image: {} · Mask: {}",
+                if image {
+                    tr("已连接", "Connected")
                 } else {
-                    "需检查原图或应用"
+                    tr("未连接", "Disconnected")
+                },
+                if !mask {
+                    tr("未连接", "Disconnected")
+                } else if valid {
+                    tr("已应用", "Applied")
+                } else {
+                    tr(
+                        "需检查原图或应用",
+                        "Check the source image or apply the mask",
+                    )
                 }
             ))
     }

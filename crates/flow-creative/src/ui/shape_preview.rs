@@ -46,7 +46,10 @@ impl ShapeViews {
             Ok(shape) => shape,
             Err(error) => {
                 self.remove(&node.id);
-                return message(format!("形状数据无效：{error}"));
+                return message(tr_format!(
+                    "形状数据无效：{error}",
+                    "Invalid shape data: {error}"
+                ));
             }
         };
         if !zoom.is_finite()
@@ -55,7 +58,7 @@ impl ShapeViews {
             || !(node.size.height * zoom).is_finite()
         {
             self.remove(&node.id);
-            return message("形状缩放无效");
+            return message(tr("形状缩放无效", "Invalid shape scale"));
         }
         let object = display_object(node, shape);
         if shape.style.opacity == 0.
@@ -78,14 +81,14 @@ impl ShapeViews {
 
     pub(super) fn render_pencil(&self, node: &Node, zoom: f32, cx: &mut App) -> AnyElement {
         let Ok(data) = crate::pencil::PencilData::from_node(node) else {
-            return message("笔迹数据无效");
+            return message(tr("笔迹数据无效", "Invalid stroke data"));
         };
         if !needs_pencil_composite(&data) {
             self.remove(&node.id);
             return pencil_preview::render(node, zoom);
         }
         let Ok(object) = pencil_preview::object_for_node(node) else {
-            return message("笔迹几何无效");
+            return message(tr("笔迹几何无效", "Invalid stroke geometry"));
         };
         self.render_composited(&node.id, object, zoom, false, cx)
     }
@@ -110,7 +113,7 @@ impl ShapeViews {
             || style.validate().is_err()
         {
             self.remove(&id);
-            return message("笔迹预览参数无效");
+            return message(tr("笔迹预览参数无效", "Invalid stroke preview settings"));
         }
         if style.opacity <= 0. || style.opacity >= 1. || points.iter().all(|p| *p == points[0]) {
             self.remove(&id);
@@ -119,7 +122,7 @@ impl ShapeViews {
         let object = pencil_preview::object(id.as_str(), points, style);
         if object.validate().is_err() || object.paint_bounds().is_none() {
             self.remove(&id);
-            return message("笔迹预览几何无效");
+            return message(tr("笔迹预览几何无效", "Invalid stroke preview geometry"));
         }
         let preview = self.render_composited(&id, object, viewport.zoom, true, cx);
         div()
@@ -143,7 +146,10 @@ impl ShapeViews {
         let (view, clear, changed) = {
             let mut cache = self.0.lock().unwrap();
             if !cache.entries.contains_key(id) && cache.entries.len() >= MAX_PREVIEWS {
-                return message("最多同时预览 32 个半透明矢量对象；隐藏其他对象可释放预览");
+                return message(tr(
+                    "最多同时预览 32 个半透明矢量对象；隐藏其他对象可释放预览",
+                    "Preview up to 32 translucent vector objects. Hide others to free preview slots.",
+                ));
             }
             let changed = cache
                 .entries
@@ -527,7 +533,7 @@ fn into_pixels(frame: CpuFrame, scale: f32) -> Result<PreviewPixels, String> {
         || frame.height > MAX_RASTER_EDGE
         || frame.premul_rgba.len() != frame.width as usize * frame.height as usize * 4
     {
-        return Err("形状预览尺寸无效".into());
+        return Err(tr("形状预览尺寸无效", "Invalid shape preview dimensions").into());
     }
     let world_bounds = scene::Bounds::new(
         frame.screen_bounds.origin / scale,
@@ -543,7 +549,7 @@ fn into_pixels(frame: CpuFrame, scale: f32) -> Result<PreviewPixels, String> {
         gpui::swap_rgba_pa_to_bgra(pixel);
     }
     let bgra = image::RgbaImage::from_raw(frame.width, frame.height, pixels)
-        .ok_or_else(|| "形状预览像素无效".to_string())?;
+        .ok_or_else(|| tr("形状预览像素无效", "Invalid shape preview pixels").to_string())?;
     Ok(PreviewPixels { world_bounds, bgra })
 }
 
@@ -583,7 +589,10 @@ impl Render for ShapePreview {
                 )
             })
             .when_some(self.error.clone(), |body, error| {
-                body.child(message(format!("形状预览失败：{error}")))
+                body.child(message(tr_format!(
+                    "形状预览失败：{error}",
+                    "Shape preview failed: {error}"
+                )))
             })
     }
 }

@@ -29,9 +29,9 @@ pub(super) struct ShapeDrag {
 }
 fn kind_title(kind: ShapeKind) -> &'static str {
     match kind {
-        ShapeKind::Rectangle => "矩形",
-        ShapeKind::Ellipse => "椭圆",
-        ShapeKind::Line => "线条",
+        ShapeKind::Rectangle => tr("矩形", "Rectangle"),
+        ShapeKind::Ellipse => tr("椭圆", "Ellipse"),
+        ShapeKind::Line => tr("线条", "Line"),
     }
 }
 fn parse_color(value: &str) -> Result<Option<u32>, String> {
@@ -40,11 +40,15 @@ fn parse_color(value: &str) -> Result<Option<u32>, String> {
         return Ok(None);
     }
     if value.len() != 6 {
-        return Err("颜色应为6位十六进制，留空表示透明".into());
+        return Err(tr(
+            "颜色应为6位十六进制，留空表示透明",
+            "Use a six-digit hex color or leave it blank for transparency",
+        )
+        .into());
     }
     u32::from_str_radix(value, 16)
         .map(Some)
-        .map_err(|_| "请输入有效的十六进制颜色".into())
+        .map_err(|_| tr("请输入有效的十六进制颜色", "Enter a valid hex color").into())
 }
 fn dimension_text(value: f32) -> String {
     format!("{value:.2}")
@@ -58,7 +62,9 @@ fn parse_dimension(value: &str, original: f32) -> Result<f32, String> {
     if value == dimension_text(original) {
         Ok(original)
     } else {
-        value.parse().map_err(|_| "请输入有效数字".to_string())
+        value
+            .parse()
+            .map_err(|_| tr("请输入有效数字", "Enter a valid number").to_string())
     }
 }
 fn field(label_text: &'static str, value: &Entity<InputState>, width: f32, disabled: bool) -> Div {
@@ -175,18 +181,23 @@ impl CreativeCanvas {
                 ShapeAction::Fill(color) => data.style.fill = color,
                 ShapeAction::Stroke(color) => data.style.stroke = color,
                 ShapeAction::Apply => {
-                    let f = self.shape_fields.as_ref().ok_or("请重新选择图形")?;
+                    let f = self
+                        .shape_fields
+                        .as_ref()
+                        .ok_or(tr("请重新选择图形", "Reselect the shape"))?;
                     if f.source != node {
-                        return Err("图形已改变，请重新输入".into());
+                        return Err(tr(
+                            "图形已改变，请重新输入",
+                            "The shape changed. Re-enter the settings.",
+                        )
+                        .into());
                     }
-                    let number = |input: &Entity<InputState>| {
-                        input
-                            .read(cx)
-                            .value()
-                            .trim()
-                            .parse::<f32>()
-                            .map_err(|_| "请输入有效数字".to_string())
-                    };
+                    let number =
+                        |input: &Entity<InputState>| {
+                            input.read(cx).value().trim().parse::<f32>().map_err(|_| {
+                                tr("请输入有效数字", "Enter a valid number").to_string()
+                            })
+                        };
                     data.style.fill = parse_color(&f.fill.read(cx).value())?;
                     data.style.stroke = parse_color(&f.stroke.read(cx).value())?;
                     data.style.stroke_width = number(&f.weight)?;
@@ -238,7 +249,13 @@ impl CreativeCanvas {
         }
         if let Some(source) = drag.source {
             if self.canvas.read(cx).editor.graph().node(&source.id) != Some(&source) {
-                self.notice = Some("图形已改变，旧拖动已取消".into());
+                self.notice = Some(
+                    tr(
+                        "图形已改变，旧拖动已取消",
+                        "The shape changed. The drag was cancelled.",
+                    )
+                    .into(),
+                );
                 cx.notify();
                 return;
             }
@@ -346,7 +363,10 @@ impl CreativeCanvas {
                 .bg(rgb(0xffffff))
                 .shadow_sm()
                 .text_size(px(12.))
-                .child("拖动调整对象 · Esc 取消"),
+                .child(tr(
+                    "拖动调整对象 · Esc 取消",
+                    "Drag to resize · Esc to cancel",
+                )),
         );
         Some(
             overlay
@@ -529,7 +549,11 @@ impl CreativeCanvas {
         }
         swatches = swatches.child(self.button(
             "shape-transparent",
-            if line { "无描边" } else { "无填充" },
+            if line {
+                tr("无描边", "No stroke")
+            } else {
+                tr("无填充", "No fill")
+            },
             Action::Shape(if line {
                 ShapeAction::Stroke(None)
             } else {
@@ -548,22 +572,22 @@ impl CreativeCanvas {
                     .flex()
                     .items_center()
                     .gap_2()
-                    .child(field("填充", &f.fill, 118., disabled || line))
-                    .child(field("描边", &f.stroke, 118., disabled)),
+                    .child(field(tr("填充", "Fill"), &f.fill, 118., disabled || line))
+                    .child(field(tr("描边", "Stroke"), &f.stroke, 118., disabled)),
             )
             .child(
                 div()
                     .flex()
                     .items_center()
                     .gap_2()
-                    .child(field("线宽", &f.weight, 55., disabled))
+                    .child(field(tr("线宽", "Width"), &f.weight, 55., disabled))
                     .child(field(
-                        "圆角",
+                        tr("圆角", "Radius"),
                         &f.radius,
                         55.,
                         disabled || shape.kind != ShapeKind::Rectangle,
                     ))
-                    .child(field("不透明%", &f.opacity, 55., disabled)),
+                    .child(field(tr("不透明%", "Opacity %"), &f.opacity, 55., disabled)),
             )
             .child(swatches)
             .child(
@@ -575,13 +599,16 @@ impl CreativeCanvas {
                     .child(field("H", &f.height, 90., disabled))
                     .child(self.button(
                         "apply-shape-style",
-                        "应用",
+                        tr("应用", "Apply"),
                         Action::Shape(ShapeAction::Apply),
                         disabled,
                         cx,
                     )),
             )
-            .child(label("颜色填 #RRGGBB，留空为透明"))
+            .child(label(tr(
+                "颜色填 #RRGGBB，留空为透明",
+                "Use #RRGGBB or leave it blank for transparency",
+            )))
     }
 }
 

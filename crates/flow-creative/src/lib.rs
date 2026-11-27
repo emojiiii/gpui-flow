@@ -1,5 +1,20 @@
 //! A typed creative-board layer over Flow's existing graph/editor, not a second engine.
 //! Registry callbacks are host code; documents contain only data and stable IDs.
+macro_rules! tr_format {
+    ($chinese:literal, $english:literal $(, $($args:tt)*)?) => {
+        if crate::localization::language() == crate::localization::CreativeLanguage::English {
+            format!($english $(, $($args)*)?)
+        } else {
+            format!($chinese $(, $($args)*)?)
+        }
+    };
+}
+
+mod localization;
+#[cfg(feature = "desktop")]
+pub use localization::initialize_creative_language;
+pub(crate) use localization::tr;
+
 mod model;
 pub use model::*;
 mod guard;

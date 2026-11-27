@@ -24,20 +24,33 @@ pub fn local_custom_executors() -> CustomNodeExecutors {
                     .as_array()
                     .filter(|r| r.len() <= MAX_CUSTOM_PORTS)
                     .ok_or_else(|| {
-                        CustomExecutionError::Failed("透传接口需要已声明的输入输出对应关系".into())
+                        CustomExecutionError::Failed(
+                            crate::tr(
+                                "透传接口需要已声明的输入输出对应关系",
+                                "Pass-through execution requires an input-to-output mapping",
+                            )
+                            .into(),
+                        )
                     })?;
                 let mut outputs = BTreeMap::new();
                 for route in routes {
                     let input = route["input"].as_str().unwrap_or_default();
                     let output = route["output"].as_str().unwrap_or_default();
-                    let value = request
-                        .inputs
-                        .get(input)
-                        .ok_or_else(|| CustomExecutionError::Failed("透传输入不存在".into()))?;
+                    let value = request.inputs.get(input).ok_or_else(|| {
+                        CustomExecutionError::Failed(
+                            crate::tr("透传输入不存在", "Pass-through input does not exist").into(),
+                        )
+                    })?;
                     if output.is_empty()
                         || outputs.insert(output.into(), value.value.clone()).is_some()
                     {
-                        return Err(CustomExecutionError::Failed("透传输出重复或为空".into()));
+                        return Err(CustomExecutionError::Failed(
+                            crate::tr(
+                                "透传输出重复或为空",
+                                "Pass-through output is duplicated or empty",
+                            )
+                            .into(),
+                        ));
                     }
                 }
                 Ok(CustomNodeResult { outputs })
@@ -58,7 +71,7 @@ pub fn configure_pass_through(definition: &mut CustomNodeDefinition) -> Result<(
             .any(|(a, b)| a.data_type != b.data_type)
     {
         return Err(CreativeError(
-            "本地透传要求输入/输出数量相等，按顺序类型一一匹配".into(),
+            crate::tr("本地透传要求输入/输出数量相等，按顺序类型一一匹配", "Local pass-through requires the same number of inputs and outputs, with matching types in order").into(),
         ));
     }
     definition.default_settings = json!({"routes":definition.inputs.iter().zip(&definition.outputs)
@@ -73,10 +86,15 @@ pub fn validate_custom_value_assets(
     let Some(key) = value.asset_key() else {
         return Ok(());
     };
-    let asset = assets
-        .iter()
-        .find(|a| a.key == key)
-        .ok_or_else(|| CreativeError("自定义输出素材不属于当前项目".into()))?;
+    let asset = assets.iter().find(|a| a.key == key).ok_or_else(|| {
+        CreativeError(
+            crate::tr(
+                "自定义输出素材不属于当前项目",
+                "The custom output asset does not belong to this project",
+            )
+            .into(),
+        )
+    })?;
     let valid = match value {
         CustomValue::Image { .. } => asset.media_type.starts_with("image/"),
         CustomValue::Video { .. } => asset.media_type.starts_with("video/"),
@@ -97,7 +115,11 @@ pub fn validate_custom_value_assets(
     };
     if !valid {
         return Err(CreativeError(
-            "自定义输出的素材类型或Mask原图尺寸不匹配".into(),
+            crate::tr(
+                "自定义输出的素材类型或Mask原图尺寸不匹配",
+                "The custom output asset type or mask source dimensions do not match",
+            )
+            .into(),
         ));
     }
     Ok(())

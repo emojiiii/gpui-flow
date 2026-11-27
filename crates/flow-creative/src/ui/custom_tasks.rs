@@ -21,20 +21,20 @@ pub(super) struct CustomPreview {
 fn custom_type_label(data_type: &gpui_flow_core::DataType) -> String {
     use gpui_flow_core::DataType;
     match data_type {
-        DataType::String => "文字".into(),
-        DataType::Number => "数值".into(),
-        DataType::Bool => "布尔".into(),
-        DataType::Object => "对象".into(),
+        DataType::String => tr("文字", "Text").into(),
+        DataType::Number => tr("数值", "Number").into(),
+        DataType::Bool => tr("布尔", "Boolean").into(),
+        DataType::Object => tr("对象", "Object").into(),
         DataType::Named(name) => match name.as_str() {
-            "image" => "图片",
-            "video" => "视频",
-            "audio" => "音频",
-            "model" => "模型",
-            "mask" => "遮罩",
+            "image" => tr("图片", "Image"),
+            "video" => tr("视频", "Video"),
+            "audio" => tr("音频", "Audio"),
+            "model" => tr("模型", "Model"),
+            "mask" => tr("遮罩", "Mask"),
             _ => name,
         }
         .into(),
-        _ => "未支持类型".into(),
+        _ => tr("未支持类型", "Unsupported type").into(),
     }
 }
 
@@ -58,7 +58,7 @@ impl CreativeCanvas {
         cx: &mut Context<Self>,
     ) -> Result<(), String> {
         if self.saving || self.importing || !self.canvas.read(cx).is_editable() {
-            return Err("当前画布不可编辑".into());
+            return Err(tr("当前画布不可编辑", "The canvas is read-only").into());
         }
         // A mismatched pass-through design remains a valid, explicit contract;
         // choose another host interface before executing it.
@@ -70,7 +70,7 @@ impl CreativeCanvas {
         let mut graph = self.canvas.read(cx).editor.graph().clone();
         let mut definitions = custom_definitions_from_graph(&graph).map_err(|e| e.to_string())?;
         if definitions.iter().any(|d| d.kind == definition.kind) {
-            return Err("节点类型名称已存在".into());
+            return Err(tr("节点类型名称已存在", "The node type name already exists").into());
         }
         definitions.push(definition.clone());
         if !graph.data.is_object() {
@@ -133,7 +133,10 @@ impl CreativeCanvas {
             .validate_graph(&graph)
             .map_err(|e| e.to_string())?;
         if !self.command(CanvasCommand::ImportGraph(graph), cx) {
-            return Err(self.notice.clone().unwrap_or_else(|| "创建节点失败".into()));
+            return Err(self
+                .notice
+                .clone()
+                .unwrap_or_else(|| tr("创建节点失败", "Could not create node").into()));
         }
         self.command(
             CanvasCommand::SelectNode {
@@ -173,16 +176,34 @@ impl CreativeCanvas {
                     } else {
                         None
                     },
-                    format!("{} 个类型化输出已就绪", outputs.len()),
+                    tr_format!(
+                        "{} 个类型化输出已就绪",
+                        "{} typed outputs ready",
+                        outputs.len()
+                    ),
                 ),
                 Err(_) => (
                     None,
                     match node.data["status"].as_str() {
-                        Some("failed") => "执行失败，请查看下方详情".into(),
-                        Some("cancelled") => "执行已取消".into(),
-                        Some("unavailable") => "宿主接口尚未接入".into(),
-                        Some("complete") => "输入或参数已变更，请重新运行".into(),
-                        _ => "连接输入后运行已注册接口".into(),
+                        Some("failed") => tr(
+                            "执行失败，请查看下方详情",
+                            "Execution failed. See details below.",
+                        )
+                        .into(),
+                        Some("cancelled") => tr("执行已取消", "Execution canceled").into(),
+                        Some("unavailable") => {
+                            tr("宿主接口尚未接入", "Host executor unavailable").into()
+                        }
+                        Some("complete") => tr(
+                            "输入或参数已变更，请重新运行",
+                            "Inputs or parameters changed. Run again.",
+                        )
+                        .into(),
+                        _ => tr(
+                            "连接输入后运行已注册接口",
+                            "Connect inputs to run the registered executor",
+                        )
+                        .into(),
                     },
                 ),
             };
@@ -194,7 +215,13 @@ impl CreativeCanvas {
         if matches!(action, CustomAction::Cancel) {
             if let Some(job) = &self.custom_job {
                 job.cancel.store(true, Ordering::Release);
-                self.notice = Some("正在等待宿主接口取消…".into());
+                self.notice = Some(
+                    tr(
+                        "正在等待宿主接口取消…",
+                        "Waiting for the host executor to cancel…",
+                    )
+                    .into(),
+                );
                 cx.notify();
             }
             return;
@@ -217,15 +244,28 @@ impl CreativeCanvas {
             let definition = custom_definitions_from_graph(graph)?
                 .into_iter()
                 .find(|d| d.kind == node.kind)
-                .ok_or_else(|| CreativeError("自定义节点声明不存在".into()))?;
+                .ok_or_else(|| {
+                    CreativeError(
+                        tr(
+                            "自定义节点声明不存在",
+                            "The custom node definition is missing",
+                        )
+                        .into(),
+                    )
+                })?;
             if !self.custom_executors.is_available(&definition.executor) {
-                return Err(CreativeError("宿主接口尚未接入，当前不能执行".into()));
+                return Err(CreativeError(
+                    tr(
+                        "宿主接口尚未接入，当前不能执行",
+                        "The host executor is unavailable and cannot run",
+                    )
+                    .into(),
+                ));
             }
             let request = CustomNodeRequest::from_node(&node, graph, &definition)?;
-            let project = self
-                .project
-                .as_ref()
-                .ok_or_else(|| CreativeError("请先打开本地项目".into()))?;
+            let project = self.project.as_ref().ok_or_else(|| {
+                CreativeError(tr("请先打开本地项目", "Open a local project first").into())
+            })?;
             for input in request.inputs.values() {
                 crate::custom_host::validate_custom_value_assets(&input.value, project.assets())?;
             }
@@ -328,7 +368,13 @@ impl CreativeCanvas {
                             }
                         }
                     } else {
-                        this.notice = Some("节点或输入已变化，未接收旧执行结果".into());
+                        this.notice = Some(
+                            tr(
+                                "节点或输入已变化，未接收旧执行结果",
+                                "The node or inputs changed. The previous result was discarded.",
+                            )
+                            .into(),
+                        );
                     }
                     this.queue_autosave(cx);
                     if this.return_after_save || this.pending_window_close.is_some() {
@@ -366,7 +412,7 @@ impl CreativeCanvas {
             .flex()
             .flex_col()
             .gap_2()
-            .child(div().text_sm().child("自定义节点"));
+            .child(div().text_sm().child(tr("自定义节点", "Custom Node")));
         for input in node.inputs() {
             let value = graph
                 .edges
@@ -378,19 +424,24 @@ impl CreativeCanvas {
                 input.label,
                 custom_type_label(&input.data_type),
                 if value.is_some() {
-                    "已连接"
+                    tr("已连接", "Connected")
                 } else {
-                    "等待有效输入"
+                    tr("等待有效输入", "Waiting for valid input")
                 }
             )));
         }
         panel = panel.child(label(if running {
-            "宿主接口执行中…".into()
+            tr("宿主接口执行中…", "Host executor running…").into()
         } else if !ready {
-            "接口尚未接入，当前不能执行".into()
+            tr(
+                "接口尚未接入，当前不能执行",
+                "The executor is unavailable and cannot run",
+            )
+            .into()
         } else {
-            format!(
+            tr_format!(
                 "接口 · {}",
+                "Executor · {}",
                 definition
                     .as_ref()
                     .map(|d| d.executor.as_str())
@@ -408,9 +459,9 @@ impl CreativeCanvas {
         panel.child(self.button(
             "run-custom",
             if running {
-                "取消执行"
+                tr("取消执行", "Cancel execution")
             } else {
-                "运行接口"
+                tr("运行接口", "Run Executor")
             },
             Action::Custom(if running {
                 CustomAction::Cancel

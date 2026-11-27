@@ -135,7 +135,13 @@ impl CreativeCanvas {
         match action {
             ContextAction::Invoke(selection, action) => {
                 if selection != self.canvas.read(cx).editor.selection {
-                    self.notice = Some("所选对象已变化，请重新打开菜单".into());
+                    self.notice = Some(
+                        tr(
+                            "所选对象已变化，请重新打开菜单",
+                            "The selection changed. Reopen the menu.",
+                        )
+                        .into(),
+                    );
                 } else {
                     self.action(*action, window, cx);
                 }
@@ -192,65 +198,73 @@ impl CreativeCanvas {
             .or_else(|| single_group.map(|group| group.title.clone()))
             .unwrap_or_else(|| {
                 if selection.is_empty() {
-                    "画布".into()
+                    tr("画布", "Canvas").into()
                 } else {
-                    format!("{} 项选择", selection.len())
+                    tr_format!("{} 项选择", "{} selected", selection.len())
                 }
             });
         let mut rows = vec![
             (
-                "复制对象",
+                tr("复制对象", "Copy objects"),
                 Action::Context(ContextAction::Copy),
                 !has_objects,
             ),
             (
-                "粘贴到此处",
+                tr("粘贴到此处", "Paste here"),
                 Action::Context(ContextAction::Paste(world)),
                 !editable,
             ),
         ];
         if has_objects {
             rows.push((
-                "定位选中对象",
+                tr("定位选中对象", "Locate selection"),
                 Action::FocusSelection,
                 view.editor.selection_bounds().is_none(),
             ));
-            rows.push(("创建副本", Action::Duplicate, !editable));
+            rows.push((tr("创建副本", "Duplicate"), Action::Duplicate, !editable));
             if selection.groups.is_empty() && !selection.nodes.is_empty() {
                 rows.extend([
                     (
-                        "置于最前",
+                        tr("置于最前", "Bring to front"),
                         Action::Layer(layers::LayerAction::Reorder(NodeOrderAction::BringToFront)),
                         !editable || locked,
                     ),
                     (
-                        "上移一层",
+                        tr("上移一层", "Bring forward"),
                         Action::Layer(layers::LayerAction::Reorder(NodeOrderAction::BringForward)),
                         !editable || locked,
                     ),
                     (
-                        "下移一层",
+                        tr("下移一层", "Send backward"),
                         Action::Layer(layers::LayerAction::Reorder(NodeOrderAction::SendBackward)),
                         !editable || locked,
                     ),
                     (
-                        "置于最后",
+                        tr("置于最后", "Send to back"),
                         Action::Layer(layers::LayerAction::Reorder(NodeOrderAction::SendToBack)),
                         !editable || locked,
                     ),
-                    ("编组", Action::Frame, !editable || locked),
+                    (tr("编组", "Group"), Action::Frame, !editable || locked),
                 ]);
                 if selection.nodes.len() > 1 {
-                    rows.push(("排列所选对象…", Action::Arrange(None), !editable || locked));
+                    rows.push((
+                        tr("排列所选对象…", "Arrange selection…"),
+                        Action::Arrange(None),
+                        !editable || locked,
+                    ));
                 }
             }
             if !selection.groups.is_empty() {
-                rows.push(("取消编组", Action::Ungroup, !editable || locked));
+                rows.push((
+                    tr("取消编组", "Ungroup"),
+                    Action::Ungroup,
+                    !editable || locked,
+                ));
             }
         }
         if let Some(node) = single {
             rows.push((
-                "重命名对象…",
+                tr("重命名对象…", "Rename object…"),
                 Action::NodeName(node_name::NameAction::Begin),
                 !editable || locked,
             ));
@@ -260,25 +274,33 @@ impl CreativeCanvas {
                 .any(|group| group.locked && group.node_ids.contains(&node.id));
             rows.push((
                 if node.locked {
-                    "解锁对象"
+                    tr("解锁对象", "Unlock object")
                 } else {
-                    "锁定对象"
+                    tr("锁定对象", "Lock object")
                 },
                 Action::Layer(layers::LayerAction::ToggleLock(node.id.clone())),
                 !editable || group_locked,
             ));
             if node.kind == "text" {
-                rows.push(("编辑文字", Action::EditText, !editable || locked));
+                rows.push((
+                    tr("编辑文字", "Edit text"),
+                    Action::EditText,
+                    !editable || locked,
+                ));
             }
             if node.kind == "image" {
-                rows.push(("用于图生图", Action::UseReference, !editable || locked));
+                rows.push((
+                    tr("用于图生图", "Use as image reference"),
+                    Action::UseReference,
+                    !editable || locked,
+                ));
             }
             if crate::asset_export::has_media_output(node) {
                 let has_output = self.project.as_ref().is_some_and(|project| {
                     crate::asset_export::export_assets(graph, &node.id, project.assets()).is_ok()
                 });
                 rows.push((
-                    "导出本地素材…",
+                    tr("导出本地素材…", "Export local asset…"),
                     Action::ExportAsset(asset_export_ui::ExportAction::Open),
                     !has_output || self.importing,
                 ));
@@ -287,9 +309,9 @@ impl CreativeCanvas {
         if let Some(group) = single_group {
             rows.push((
                 if group.locked {
-                    "解锁画框"
+                    tr("解锁画框", "Unlock frame")
                 } else {
-                    "锁定画框"
+                    tr("锁定画框", "Lock frame")
                 },
                 Action::FrameEdit(frame_tools::FrameAction::ToggleLock),
                 !editable,
@@ -304,9 +326,9 @@ impl CreativeCanvas {
         {
             rows.push((
                 if selection.groups.len() == 1 {
-                    "导出画框…"
+                    tr("导出画框…", "Export frame…")
                 } else {
-                    "导出矢量 SVG…"
+                    tr("导出矢量 SVG…", "Export SVG…")
                 },
                 Action::ExportAsset(asset_export_ui::ExportAction::Open),
                 self.project.is_none() || self.importing || self.saving,
@@ -318,7 +340,7 @@ impl CreativeCanvas {
                 .iter()
                 .any(|id| graph.groups.get(id).is_some_and(|g| g.locked));
             rows.push((
-                "导入素材到此处…",
+                tr("导入素材到此处…", "Import assets here…"),
                 Action::ImportAt(world),
                 !editable || frame_locked,
             ));
@@ -326,14 +348,18 @@ impl CreativeCanvas {
         if selection.is_empty() {
             rows.extend([
                 (
-                    "添加文字",
+                    tr("添加文字", "Add text"),
                     Action::TextPlacement(text_placement_tools::TextPlacementAction::At(world)),
                     !editable,
                 ),
-                ("适应画布", Action::Fit, false),
+                (tr("适应画布", "Fit canvas"), Action::Fit, false),
             ]);
         } else {
-            rows.push(("删除所选项", Action::Delete, !editable || locked));
+            rows.push((
+                tr("删除所选项", "Delete selection"),
+                Action::Delete,
+                !editable || locked,
+            ));
         }
         let size = bounded_panel_size(
             self.canvas_size,

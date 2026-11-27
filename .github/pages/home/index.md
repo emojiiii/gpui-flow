@@ -14,6 +14,7 @@ landing:
   secondary:
     text: Use Flow Creative
     link: /docs/flow-creative/
+  image: /docs/images/flow-creative-canvas.en.png
   imageAlt: Flow Creative's demo with a reference image, a palette node, and a typed connection to a compose card.
   imageCaption: Flow Creative · Built-in demo
   guidesTitle: Quickstarts and examples

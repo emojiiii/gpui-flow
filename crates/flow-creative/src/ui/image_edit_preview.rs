@@ -118,7 +118,12 @@ impl Render for ImageEditPreview {
                 v.child(div().p_2().text_xs().text_color(rgb(0xa25640)).child(error))
             })
             .when(!self.ready() && self.error.is_none(), |v| {
-                v.child(div().p_2().text_xs().child("正在准备图片编辑预览…"))
+                v.child(
+                    div()
+                        .p_2()
+                        .text_xs()
+                        .child(tr("正在准备图片编辑预览…", "Preparing image edit preview…")),
+                )
             })
     }
 }

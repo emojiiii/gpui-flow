@@ -102,7 +102,13 @@ impl CreativeCanvas {
             // An in-progress stroke/rectangle belongs to its current pointer.
             // Leave the draft intact; release it before starting navigation.
             if self.drawing_in_progress() || self.canvas.read(cx).interactions.has_capture() {
-                self.notice = Some("先松开鼠标完成当前操作，再按住 Space 临时平移".into());
+                self.notice = Some(
+                    tr(
+                        "先松开鼠标完成当前操作，再按住 Space 临时平移",
+                        "Release the mouse to finish the current action, then hold Space to pan.",
+                    )
+                    .into(),
+                );
                 cx.stop_propagation();
                 window.prevent_default();
                 cx.notify();

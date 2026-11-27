@@ -62,7 +62,9 @@ pub(super) fn object_for_node(node: &Node) -> Result<DisplayObject, String> {
 pub(super) fn render(node: &Node, zoom: f32) -> AnyElement {
     match object_for_node(node) {
         Ok(object) => rendered(object, Affine::scale(zoom, zoom)),
-        Err(_) => div().child("笔迹数据无效").into_any_element(),
+        Err(_) => div()
+            .child(tr("笔迹数据无效", "Invalid stroke data"))
+            .into_any_element(),
     }
 }
 

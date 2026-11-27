@@ -131,9 +131,16 @@ impl CreativeCanvas {
         let result: Result<(), String> = (|| {
             match action {
                 FrameAction::Apply => {
-                    let fields = self.frame_fields.as_ref().ok_or("请重新选择画框")?;
+                    let fields = self
+                        .frame_fields
+                        .as_ref()
+                        .ok_or(tr("请重新选择画框", "Reselect the frame"))?;
                     if fields.source != group {
-                        return Err("画框已改变，请重新输入".into());
+                        return Err(tr(
+                            "画框已改变，请重新输入",
+                            "The frame changed. Re-enter the settings.",
+                        )
+                        .into());
                     }
                     let width = fields
                         .width
@@ -141,21 +148,25 @@ impl CreativeCanvas {
                         .value()
                         .trim()
                         .parse::<f32>()
-                        .map_err(|_| "请输入有效宽度")?;
+                        .map_err(|_| tr("请输入有效宽度", "Enter a valid width"))?;
                     let height = fields
                         .height
                         .read(cx)
                         .value()
                         .trim()
                         .parse::<f32>()
-                        .map_err(|_| "请输入有效高度")?;
+                        .map_err(|_| tr("请输入有效高度", "Enter a valid height"))?;
                     if !(frames::MIN_FRAME_SIZE..=frames::MAX_FRAME_SIZE).contains(&width)
                         || !(frames::MIN_FRAME_SIZE..=frames::MAX_FRAME_SIZE).contains(&height)
                     {
-                        return Err("画框宽高应在 32 到 16384 之间".into());
+                        return Err(tr(
+                            "画框宽高应在 32 到 16384 之间",
+                            "Width and height must be between 32 and 16,384",
+                        )
+                        .into());
                     }
                     if fields.title.read(cx).value().trim().is_empty() {
-                        return Err("请输入画框名称".into());
+                        return Err(tr("请输入画框名称", "Enter a frame name").into());
                     }
                     frames::set_frame_bounds(
                         &mut graph,
@@ -227,7 +238,11 @@ impl CreativeCanvas {
         let mut graph = self.canvas.read(cx).editor.graph().clone();
         let result = if let Some(source) = drag.source {
             if graph.groups.get(&source.id) != Some(&source) {
-                Err("画框已改变，未应用旧拖动".to_string())
+                Err(tr(
+                    "画框已改变，未应用旧拖动",
+                    "The frame changed. The drag was cancelled.",
+                )
+                .to_string())
             } else {
                 frames::frame_bounds_from_points(source.bounds.origin, drag.end)
                     .and_then(|bounds| frames::set_frame_bounds(&mut graph, &source.id, bounds))
@@ -243,7 +258,7 @@ impl CreativeCanvas {
                 frames::frame_bounds_from_points(drag.start, drag.end)
             };
             let id = GroupId::from(graph.fresh_id("frame"));
-            let title = format!("画框 {}", graph.groups.len() + 1);
+            let title = tr_format!("画框 {}", "Frame {}", graph.groups.len() + 1);
             bounds
                 .and_then(|bounds| {
                     frames::create_frame(
@@ -329,7 +344,10 @@ impl CreativeCanvas {
                 .bg(rgb(0xffffff))
                 .shadow_sm()
                 .text_size(px(12.))
-                .child("拖动画框 · 单击创建 1024 × 1024 · Esc 取消"),
+                .child(tr(
+                    "拖动画框 · 单击创建 1024 × 1024 · Esc 取消",
+                    "Drag to draw a frame · Click for 1024 × 1024 · Esc to cancel",
+                )),
         );
         Some(
             surface
@@ -423,7 +441,7 @@ impl CreativeCanvas {
                     .w(px(150.))
                     .h(px(28.))
                     .disabled(disabled)
-                    .aria_label("画框名称"),
+                    .aria_label(tr("画框名称", "Frame name")),
             )
             .child(label("W"))
             .child(
@@ -431,7 +449,7 @@ impl CreativeCanvas {
                     .w(px(62.))
                     .h(px(28.))
                     .disabled(disabled)
-                    .aria_label("画框宽度"),
+                    .aria_label(tr("画框宽度", "Frame width")),
             )
             .child(label("H"))
             .child(
@@ -439,11 +457,11 @@ impl CreativeCanvas {
                     .w(px(62.))
                     .h(px(28.))
                     .disabled(disabled)
-                    .aria_label("画框高度"),
+                    .aria_label(tr("画框高度", "Frame height")),
             )
             .child(self.button(
                 "apply-frame",
-                "应用",
+                tr("应用", "Apply"),
                 Action::FrameEdit(FrameAction::Apply),
                 disabled,
                 cx,
@@ -451,7 +469,7 @@ impl CreativeCanvas {
             .child(self.icon_button(
                 "export-frame",
                 "download",
-                "导出画框 · PNG / SVG",
+                tr("导出画框 · PNG / SVG", "Export frame · PNG / SVG"),
                 Action::ExportAsset(asset_export_ui::ExportAction::Open),
                 self.project.is_none() || self.importing || self.saving,
                 cx,
@@ -459,7 +477,7 @@ impl CreativeCanvas {
             .child(self.icon_button(
                 "lock-frame",
                 if group.locked { "lock" } else { "lock-open" },
-                "锁定或解锁画框",
+                tr("锁定或解锁画框", "Lock or unlock frame"),
                 Action::FrameEdit(FrameAction::ToggleLock),
                 !canvas_editable || self.importing || self.saving,
                 cx,
@@ -489,28 +507,29 @@ impl CreativeCanvas {
                             .gap_1()
                             .child(self.button(
                                 "frame-collect",
-                                "收纳框内对象",
+                                tr("收纳框内对象", "Add objects inside frame"),
                                 Action::FrameEdit(FrameAction::Collect),
                                 disabled,
                                 cx,
                             ))
                             .child(self.button(
                                 "frame-release",
-                                "移出全部",
+                                tr("移出全部", "Remove all objects from frame"),
                                 Action::FrameEdit(FrameAction::Release),
                                 disabled || group.node_ids.is_empty(),
                                 cx,
                             ))
                             .child(self.button(
                                 "frame-remove",
-                                "移除画框",
+                                tr("移除画框", "Remove frame"),
                                 Action::FrameEdit(FrameAction::Remove),
                                 disabled,
                                 cx,
                             )),
                     )
-                    .child(label(format!(
+                    .child(label(tr_format!(
                         "{} 个对象 · 调整画框不会裁切或拉伸素材",
+                        "{} objects · Resizing the frame keeps its contents intact",
                         group.node_ids.len()
                     ))),
             );

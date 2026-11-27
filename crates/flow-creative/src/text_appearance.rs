@@ -1,7 +1,7 @@
 //! Optional typography fields alongside the compatible, three-field TextStyle.
 //! Font names are local family names, never file paths or download requests.
 
-use crate::TextStyle;
+use crate::{TextStyle, tr};
 use serde_json::{Value, json};
 
 pub const DEFAULT_TEXT_COLOR: u32 = 0x32343a;
@@ -52,10 +52,18 @@ impl TextAppearance {
                 || name.chars().any(char::is_control)
                 || name.contains(['/', '\\']))
         {
-            return Err("font family must be a non-empty local name of at most 128 bytes".into());
+            return Err(tr(
+                "字体必须使用不超过 128 字节的本地字体名称",
+                "Font family must be a non-empty local name of at most 128 bytes",
+            )
+            .into());
         }
         if self.color > 0xffffff {
-            return Err("text color must be a 24-bit RGB value".into());
+            return Err(tr(
+                "文字颜色必须是 24 位 RGB 值",
+                "Text color must be a 24-bit RGB value",
+            )
+            .into());
         }
         Ok(())
     }
@@ -89,9 +97,13 @@ impl TextAppearance {
 pub fn parse_text_color(value: &str) -> Result<u32, String> {
     let value = value.trim().strip_prefix('#').unwrap_or(value.trim());
     if value.len() != 6 || !value.bytes().all(|c| c.is_ascii_hexdigit()) {
-        return Err("请输入六位颜色，例如 #3B82F6".into());
+        return Err(tr(
+            "请输入六位颜色，例如 #3B82F6",
+            "Enter a six-digit hex color, such as #3B82F6",
+        )
+        .into());
     }
-    u32::from_str_radix(value, 16).map_err(|_| "颜色无效".into())
+    u32::from_str_radix(value, 16).map_err(|_| tr("颜色无效", "Invalid color").into())
 }
 
 #[cfg(test)]

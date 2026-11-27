@@ -62,9 +62,9 @@ impl ProcessingKind {
 
     pub fn title(self) -> &'static str {
         match self {
-            Self::Image => "图片处理",
-            Self::Video => "视频处理",
-            Self::Audio => "音频处理",
+            Self::Image => crate::tr("图片处理", "Image processing"),
+            Self::Video => crate::tr("视频处理", "Video processing"),
+            Self::Audio => crate::tr("音频处理", "Audio processing"),
         }
     }
 

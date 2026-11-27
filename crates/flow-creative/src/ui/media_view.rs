@@ -103,7 +103,7 @@ impl MediaViews {
                         entries.remove(&id);
                     }
                 } else {
-                    return message("选中以预览本地媒体");
+                    return message(tr("选中以预览本地媒体", "Select to preview local media"));
                 }
             }
             let options = PlaybackOptions {
@@ -114,7 +114,12 @@ impl MediaViews {
             };
             let controller = match creative_media_backend().open(path, options) {
                 Ok(controller) => controller,
-                Err(error) => return message(format!("媒体无法打开：{error}")),
+                Err(error) => {
+                    return message(tr_format!(
+                        "媒体无法打开：{error}",
+                        "Cannot open media: {error}"
+                    ));
+                }
             };
             let owner = self.owner.lock().unwrap().clone();
             let audio = matches!(
@@ -340,11 +345,14 @@ impl Render for MediaObjectView {
             .cloned()
             .or_else(|| self.snapshot.error.as_ref().map(ToString::to_string))
         {
-            return message(format!("媒体预览失败：{error}"));
+            return message(tr_format!(
+                "媒体预览失败：{error}",
+                "Media preview failed: {error}"
+            ));
         }
         if self.audio {
             let duration = self.snapshot.metadata.as_ref().map_or_else(
-                || "正在读取本地音频…".to_string(),
+                || tr("正在读取本地音频…", "Reading local audio…").to_string(),
                 |m| format!("{} / {}", clock(self.snapshot.position), clock(m.duration)),
             );
             return div()
@@ -371,7 +379,7 @@ impl Render for MediaObjectView {
                                     div()
                                         .text_size(px(12.))
                                         .text_color(rgb(0x8c7963))
-                                        .child("本地音频"),
+                                        .child(tr("本地音频", "Local Audio")),
                                 ),
                         )
                         .child(
@@ -400,9 +408,15 @@ impl Render for MediaObjectView {
                 .into_any_element();
         }
         if self.snapshot.state == PlaybackState::Ended {
-            return message("播放已结束，点击时间轴可返回任意位置");
+            return message(tr(
+                "播放已结束，点击时间轴可返回任意位置",
+                "Playback ended. Click the timeline to seek.",
+            ));
         }
-        message("正在解码本地视频首帧…")
+        message(tr(
+            "正在解码本地视频首帧…",
+            "Decoding the first video frame…",
+        ))
     }
 }
 pub(super) fn clock(seconds: f64) -> String {
@@ -436,9 +450,9 @@ impl CreativeCanvas {
                 "media-play",
                 if playing { "pause" } else { "play" },
                 if playing {
-                    "暂停"
+                    tr("暂停", "Pause")
                 } else {
-                    "播放本地媒体"
+                    tr("播放本地媒体", "Play local media")
                 },
                 Action::Media(MediaAction::Toggle),
                 !ready,
@@ -447,7 +461,7 @@ impl CreativeCanvas {
             .child(self.icon_button(
                 "media-back",
                 "rotate-ccw",
-                "后退5秒",
+                tr("后退5秒", "Back 5 seconds"),
                 Action::Media(MediaAction::Seek(-5.)),
                 !ready,
                 cx,
@@ -463,7 +477,7 @@ impl CreativeCanvas {
             .child(self.icon_button(
                 "media-forward",
                 "rotate-cw",
-                "前进5秒",
+                tr("前进5秒", "Forward 5 seconds"),
                 Action::Media(MediaAction::Seek(5.)),
                 !ready,
                 cx,
@@ -471,7 +485,7 @@ impl CreativeCanvas {
             .child(self.icon_button(
                 "media-mute",
                 if muted { "volume-x" } else { "volume-2" },
-                "切换静音",
+                tr("切换静音", "Toggle mute"),
                 Action::Media(MediaAction::Mute),
                 !ready || !has_audio,
                 cx,

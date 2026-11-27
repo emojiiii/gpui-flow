@@ -157,7 +157,7 @@ impl CreativeCanvas {
                 self.mask_views.set_draft(None);
             } else if !data.state.source_matches(&context.source) {
                 return Err(CreativeError(
-                    "输入原图已变更；请明确重置遮罩后绘制，旧笔画仍保留".into(),
+                    tr("输入原图已变更；请明确重置遮罩后绘制，旧笔画仍保留", "The source image changed. Reset the mask before painting. Existing strokes are retained.").into(),
                 ));
             }
             self.mask_editing = Some(MaskEditing {
@@ -238,7 +238,13 @@ impl CreativeCanvas {
                 .map(|s| s.points.len())
                 .sum::<usize>();
             if used + stroke.points.len() >= crate::mask::MAX_MASK_POINTS {
-                self.notice = Some("遮罩笔画点数已达上限，请撤销部分笔画或重置".into());
+                self.notice = Some(
+                    tr(
+                        "遮罩笔画点数已达上限，请撤销部分笔画或重置",
+                        "Mask stroke limit reached. Undo some strokes or reset the mask.",
+                    )
+                    .into(),
+                );
                 return;
             }
             stroke.points.push(point);
@@ -271,12 +277,20 @@ impl CreativeCanvas {
                 .graph()
                 .node(&id)
                 .cloned()
-                .ok_or_else(|| CreativeError("遮罩节点已删除".into()))?;
+                .ok_or_else(|| {
+                    CreativeError(tr("遮罩节点已删除", "The mask node was deleted").into())
+                })?;
             let current = self.mask_views.context(&id).map_err(CreativeError)?;
             crate::mask_node::ensure_orientation_reviewed(&node.data)?;
             let mut data = MaskNodeData::from_value(&node.data)?;
             if current.source != source || !data.state.source_matches(&source) {
-                return Err(CreativeError("原图已改变，未完成笔画已取消".into()));
+                return Err(CreativeError(
+                    tr(
+                        "原图已改变，未完成笔画已取消",
+                        "The source image changed. The unfinished stroke was canceled.",
+                    )
+                    .into(),
+                ));
             }
             data.push_stroke(stroke)?;
             self.command(
@@ -401,13 +415,22 @@ impl CreativeCanvas {
         let status = match &context {
             Err(e) => e.clone(),
             Ok(_) => if orientation_changed {
-                crate::mask_node::ORIENTATION_REVIEW_NOTICE
+                crate::mask_node::orientation_review_notice()
             } else if stale {
-                "原图已变更，旧笔画保留；请重置"
+                tr(
+                    "原图已变更，旧笔画保留；请重置",
+                    "The source image changed. Reset to continue. Existing strokes are retained.",
+                )
             } else if ready {
-                "Mask 已应用 · 0 保留 / 255 编辑"
+                tr(
+                    "Mask 已应用 · 0 保留 / 255 编辑",
+                    "Mask applied · 0 preserves / 255 edits",
+                )
             } else {
-                "画笔标记编辑区域 · 原图保持不变"
+                tr(
+                    "画笔标记编辑区域 · 原图保持不变",
+                    "Paint the area to edit · Source image preserved",
+                )
             }
             .into(),
         };
@@ -420,8 +443,8 @@ impl CreativeCanvas {
         let mut tools = div().flex().items_center().gap_1();
         if let Some(edit) = active {
             for (id, label, mode) in [
-                ("mask-paint", "画笔", MaskMode::Paint),
-                ("mask-erase", "橡皮", MaskMode::Erase),
+                ("mask-paint", tr("画笔", "Brush"), MaskMode::Paint),
+                ("mask-erase", tr("橡皮", "Eraser"), MaskMode::Erase),
             ] {
                 tools = tools.child(
                     self.button(
@@ -452,7 +475,7 @@ impl CreativeCanvas {
                 ))
                 .child(self.button(
                     "mask-done",
-                    "完成",
+                    tr("完成", "Done"),
                     Action::Mask(MaskAction::Finish),
                     self.importing,
                     cx,
@@ -460,7 +483,7 @@ impl CreativeCanvas {
         } else {
             tools = tools.child(self.button(
                 "mask-begin",
-                "绘制遮罩",
+                tr("绘制遮罩", "Paint Mask"),
                 Action::Mask(MaskAction::Begin),
                 disabled || stale,
                 cx,
@@ -469,9 +492,9 @@ impl CreativeCanvas {
         tools = tools.child(self.button(
             "mask-reset",
             if stale {
-                "用新原图重置"
+                tr("用新原图重置", "Reset with New Source")
             } else {
-                "重置"
+                tr("重置", "Reset")
             },
             Action::Mask(MaskAction::Reset),
             disabled,
@@ -486,9 +509,9 @@ impl CreativeCanvas {
                 .child(self.button(
                     "mask-apply",
                     if self.importing && self.mask_cancel.is_some() {
-                        "正在应用…"
+                        tr("正在应用…", "Applying…")
                     } else {
-                        "应用遮罩"
+                        tr("应用遮罩", "Apply Mask")
                     },
                     Action::Mask(MaskAction::Apply),
                     disabled || stale || data.as_ref().is_none_or(|d| d.state.source.is_none()),
@@ -497,7 +520,7 @@ impl CreativeCanvas {
                 .when(self.mask_cancel.is_some(), |row| {
                     row.child(self.button(
                         "mask-cancel",
-                        "取消",
+                        tr("取消", "Cancel"),
                         Action::Mask(MaskAction::CancelApply),
                         false,
                         cx,
@@ -505,7 +528,7 @@ impl CreativeCanvas {
                 })
                 .child(self.button(
                     "mask-edit-image",
-                    "用于图片编辑",
+                    tr("用于图片编辑", "Use for Image Editing"),
                     Action::Mask(MaskAction::EditImage),
                     disabled || !ready,
                     cx,

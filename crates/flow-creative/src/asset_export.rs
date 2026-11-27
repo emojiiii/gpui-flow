@@ -1,6 +1,6 @@
 //! Explicit local exports of completed, project-owned media outputs.
 use crate::custom_nodes::{CustomValue, resolve_graph_output};
-use crate::{CreativeError, LocalProject, ProjectAsset, ProjectError};
+use crate::{CreativeError, LocalProject, ProjectAsset, ProjectError, tr};
 use gpui_flow_core::{DataType, Graph, Node, NodeId, PortRef};
 use std::{
     fs::{self, File, OpenOptions},
@@ -33,16 +33,38 @@ pub fn stored_asset_export(
     let asset = assets
         .iter()
         .find(|asset| asset.key == key)
-        .ok_or_else(|| CreativeError("素材不属于当前项目".into()))?;
+        .ok_or_else(|| {
+            CreativeError(
+                tr(
+                    "素材不属于当前项目",
+                    "The asset does not belong to this project",
+                )
+                .into(),
+            )
+        })?;
     let extension = Path::new(&asset.key)
         .extension()
         .and_then(|s| s.to_str())
-        .ok_or_else(|| CreativeError("素材缺少原格式后缀".into()))?;
+        .ok_or_else(|| {
+            CreativeError(tr("素材缺少原格式后缀", "The asset has no file extension").into())
+        })?;
     if !valid_extension(&asset.media_type, &extension.to_ascii_lowercase()) {
-        return Err(CreativeError("不支持该素材格式导出".into()));
+        return Err(CreativeError(
+            tr(
+                "不支持该素材格式导出",
+                "Export is unavailable for this asset format",
+            )
+            .into(),
+        ));
     }
     if asset.byte_len > crate::MAX_MEDIA_BYTES {
-        return Err(CreativeError("单次导出最多128 MiB".into()));
+        return Err(CreativeError(
+            tr(
+                "单次导出最多128 MiB",
+                "The export limit is 128 MiB per file",
+            )
+            .into(),
+        ));
     }
     let stem = Path::new(&asset.name)
         .file_stem()
@@ -88,7 +110,7 @@ pub fn export_assets(
 ) -> Result<Vec<ExportAsset>, CreativeError> {
     let node = graph
         .node(node)
-        .ok_or_else(|| CreativeError("对象已不存在".into()))?;
+        .ok_or_else(|| CreativeError(tr("对象已不存在", "The object no longer exists").into()))?;
     let mut outputs = Vec::new();
     let mut error = None;
     for port in node.outputs() {
@@ -101,18 +123,30 @@ pub fn export_assets(
             let value =
                 resolve_graph_output(graph, &PortRef::new(node.id.clone(), port.id.clone()))?;
             crate::custom_host::validate_custom_value_assets(&value, assets)?;
-            let key = value
-                .asset_key()
-                .ok_or_else(|| CreativeError("输出尚无媒体素材".into()))?;
+            let key = value.asset_key().ok_or_else(|| {
+                CreativeError(tr("输出尚无媒体素材", "The output has no media asset yet").into())
+            })?;
             let asset = assets
                 .iter()
                 .find(|asset| asset.key == key)
-                .ok_or_else(|| CreativeError("素材不属于当前项目".into()))?
+                .ok_or_else(|| {
+                    CreativeError(
+                        tr(
+                            "素材不属于当前项目",
+                            "The asset does not belong to this project",
+                        )
+                        .into(),
+                    )
+                })?
                 .clone();
             let extension = Path::new(&asset.key)
                 .extension()
                 .and_then(|s| s.to_str())
-                .ok_or_else(|| CreativeError("素材缺少原格式后缀".into()))?;
+                .ok_or_else(|| {
+                    CreativeError(
+                        tr("素材缺少原格式后缀", "The asset has no file extension").into(),
+                    )
+                })?;
             let stem = Path::new(&node.title)
                 .file_stem()
                 .and_then(|s| s.to_str())
@@ -137,7 +171,15 @@ pub fn export_assets(
         }
     }
     if outputs.is_empty() {
-        return Err(error.unwrap_or_else(|| CreativeError("没有已完成的本地媒体输出可导出".into())));
+        return Err(error.unwrap_or_else(|| {
+            CreativeError(
+                tr(
+                    "没有已完成的本地媒体输出可导出",
+                    "No completed local media output is available to export",
+                )
+                .into(),
+            )
+        }));
     }
     Ok(outputs)
 }
@@ -170,11 +212,17 @@ pub struct ExportResult {
 
 fn cancelled(cancel: &AtomicBool, started: Instant) -> Result<(), ProjectError> {
     if cancel.load(Ordering::Acquire) {
-        return Err(ProjectError::Invalid("素材导出已取消".into()));
+        return Err(ProjectError::Invalid(
+            tr("素材导出已取消", "Asset export canceled").into(),
+        ));
     }
     if started.elapsed() > Duration::from_secs(60) {
         return Err(ProjectError::Invalid(
-            "素材导出超过60秒，请选择可写的本地目录".into(),
+            tr(
+                "素材导出超过60秒，请选择可写的本地目录",
+                "Export took more than 60 seconds. Choose a writable local directory.",
+            )
+            .into(),
         ));
     }
     Ok(())
@@ -182,22 +230,42 @@ fn cancelled(cancel: &AtomicBool, started: Instant) -> Result<(), ProjectError> 
 
 fn export_destination(project: &LocalProject, destination: &Path) -> Result<PathBuf, ProjectError> {
     if !destination.is_absolute() {
-        return Err(ProjectError::Invalid("请选择导出文件的完整绝对路径".into()));
+        return Err(ProjectError::Invalid(
+            tr(
+                "请选择导出文件的完整绝对路径",
+                "Enter the full absolute path for the export",
+            )
+            .into(),
+        ));
     }
     let filename = destination
         .file_name()
-        .ok_or_else(|| ProjectError::Invalid("请选择文件名".into()))?;
+        .ok_or_else(|| ProjectError::Invalid(tr("请选择文件名", "Choose a file name").into()))?;
     let parent = destination
         .parent()
-        .ok_or_else(|| ProjectError::Invalid("请选择已有的导出目录".into()))?
+        .ok_or_else(|| {
+            ProjectError::Invalid(
+                tr(
+                    "请选择已有的导出目录",
+                    "Choose an existing export directory",
+                )
+                .into(),
+            )
+        })?
         .canonicalize()?;
     if !parent.is_dir() {
-        return Err(ProjectError::Invalid("导出目录不存在".into()));
+        return Err(ProjectError::Invalid(
+            tr("导出目录不存在", "The export directory does not exist").into(),
+        ));
     }
     let destination = parent.join(filename);
     if destination.starts_with(project.directory().canonicalize()?) {
         return Err(ProjectError::Invalid(
-            "请导出到项目目录之外，项目原始素材会保留".into(),
+            tr(
+                "请导出到项目目录之外，项目原始素材会保留",
+                "Choose a location outside the project folder to export a copy",
+            )
+            .into(),
         ));
     }
     Ok(destination)
@@ -255,7 +323,13 @@ pub fn export_frame_png_with_text(
         },
         || {
             if backend.is_some_and(|backend| !backend.current()) {
-                Err(ProjectError::Invalid("文字字体已变化，请重新导出".into()))
+                Err(ProjectError::Invalid(
+                    tr(
+                        "文字字体已变化，请重新导出",
+                        "The text font changed. Export again.",
+                    )
+                    .into(),
+                ))
             } else {
                 Ok(())
             }
@@ -280,8 +354,9 @@ fn export_generated(
         .and_then(|s| s.to_str())
         .is_some_and(|ext| ext.eq_ignore_ascii_case(extension))
     {
-        return Err(ProjectError::Invalid(format!(
-            "导出请使用 .{extension} 后缀"
+        return Err(ProjectError::Invalid(tr_format!(
+            "导出请使用 .{extension} 后缀",
+            "Use the .{extension} extension for this export"
         )));
     }
     let bytes = encode()?;
@@ -289,7 +364,11 @@ fn export_generated(
     current()?;
     if bytes.len() as u64 > crate::MAX_MEDIA_BYTES {
         return Err(ProjectError::Invalid(
-            "生成的导出文件超出128 MiB上限".into(),
+            tr(
+                "生成的导出文件超出128 MiB上限",
+                "The exported file exceeds 128 MiB",
+            )
+            .into(),
         ));
     }
     let mut output = OpenOptions::new()
@@ -298,7 +377,13 @@ fn export_generated(
         .open(&destination)
         .map_err(|error| {
             if error.kind() == std::io::ErrorKind::AlreadyExists {
-                ProjectError::Invalid("目标文件已存在，未覆盖；请换一个文件名".into())
+                ProjectError::Invalid(
+                    tr(
+                        "目标文件已存在，未覆盖；请换一个文件名",
+                        "A file with that name already exists. Choose a different name.",
+                    )
+                    .into(),
+                )
             } else {
                 error.into()
             }
@@ -322,8 +407,9 @@ fn export_generated(
         && let Err(error) = fs::remove_file(&destination)
         && error.kind() != std::io::ErrorKind::NotFound
     {
-        return Err(ProjectError::Invalid(format!(
+        return Err(ProjectError::Invalid(tr_format!(
             "导出未完成，部分文件无法移除，请检查 {}：{error}",
+            "Export did not finish. Check the incomplete file at {}: {error}",
             destination.display()
         )));
     }
@@ -345,9 +431,23 @@ pub fn export_asset(
         .assets()
         .iter()
         .find(|a| a.key == key)
-        .ok_or_else(|| ProjectError::Invalid("素材不属于当前项目".into()))?;
+        .ok_or_else(|| {
+            ProjectError::Invalid(
+                tr(
+                    "素材不属于当前项目",
+                    "The asset does not belong to this project",
+                )
+                .into(),
+            )
+        })?;
     if asset.byte_len > crate::MAX_MEDIA_BYTES {
-        return Err(ProjectError::TooLarge("单次导出最多128 MiB".into()));
+        return Err(ProjectError::TooLarge(
+            tr(
+                "单次导出最多128 MiB",
+                "The export limit is 128 MiB per file",
+            )
+            .into(),
+        ));
     }
     let destination = export_destination(project, destination)?;
     let extension = destination
@@ -357,7 +457,7 @@ pub fn export_asset(
         .to_ascii_lowercase();
     if !valid_extension(&asset.media_type, &extension) {
         return Err(ProjectError::Invalid(
-            "导出保留原格式，请使用建议的文件后缀；转码请用处理节点".into(),
+            tr("导出保留原格式，请使用建议的文件后缀；转码请用处理节点", "Use the suggested extension to preserve the original format. To convert formats, use a processing node.").into(),
         ));
     }
     // Media verification can probe a local container, so this function must not
@@ -372,7 +472,13 @@ pub fn export_asset(
         .open(&destination)
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::AlreadyExists {
-                ProjectError::Invalid("目标文件已存在，未覆盖；请换一个文件名".into())
+                ProjectError::Invalid(
+                    tr(
+                        "目标文件已存在，未覆盖；请换一个文件名",
+                        "A file with that name already exists. Choose a different name.",
+                    )
+                    .into(),
+                )
             } else {
                 e.into()
             }
@@ -388,7 +494,13 @@ pub fn export_asset(
             }
             copied += count as u64;
             if copied > asset.byte_len {
-                return Err(ProjectError::Invalid("源素材在导出时改变".into()));
+                return Err(ProjectError::Invalid(
+                    tr(
+                        "源素材在导出时改变",
+                        "The source asset changed while exporting",
+                    )
+                    .into(),
+                ));
             }
             output.write_all(&buffer[..count])?;
         }
@@ -397,7 +509,13 @@ pub fn export_asset(
             || before.len() != after.len()
             || before.modified()? != after.modified()?
         {
-            return Err(ProjectError::Invalid("源素材在导出时改变".into()));
+            return Err(ProjectError::Invalid(
+                tr(
+                    "源素材在导出时改变",
+                    "The source asset changed while exporting",
+                )
+                .into(),
+            ));
         }
         output.sync_all()?;
         cancelled(cancel, started)?;
@@ -411,8 +529,9 @@ pub fn export_asset(
         && let Err(error) = fs::remove_file(&destination)
         && error.kind() != std::io::ErrorKind::NotFound
     {
-        return Err(ProjectError::Invalid(format!(
+        return Err(ProjectError::Invalid(tr_format!(
             "导出未完成，部分文件无法移除，请检查 {}：{error}",
+            "Export did not finish. Check the incomplete file at {}: {error}",
             destination.display()
         )));
     }

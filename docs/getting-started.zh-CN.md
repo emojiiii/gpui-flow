@@ -51,6 +51,8 @@ xcode-select --install
 cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative
 ```
 
+项目首页右上角可以切换简体中文和 English。应用会记住上次选用的语言。
+
 ![Flow Creative 项目首页。项目名称输入框下方是深色的新建项目按钮。](images/flow-creative-projects.png)
 
 1. 输入项目名称，点击**新建项目**。

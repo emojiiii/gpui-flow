@@ -1,5 +1,6 @@
 //! Typed mask-node payload and source provenance, separate from the editor UI.
 use crate::mask::{MaskSource, MaskState, MaskStroke};
+use crate::tr;
 use crate::{CreativeError, CreativeRegistry, NodeDefinition, ProjectAsset};
 use gpui_flow_core::{DataType, Graph, Node, Port, Size};
 use serde::{Deserialize, Serialize};
@@ -7,8 +8,13 @@ use serde_json::{Value, json};
 
 pub const MASK_MEDIA_TYPE: &str = "application/vnd.gpui-flow.mask+png";
 pub(crate) const ORIENTATION_REVIEW_REQUIRED: &str = "orientation_review_required";
-pub(crate) const ORIENTATION_REVIEW_NOTICE: &str =
-    "原图显示方向已修正，旧笔画仍保留；请重置遮罩后重新绘制";
+
+pub(crate) fn orientation_review_notice() -> &'static str {
+    tr(
+        "原图显示方向已修正，旧笔画仍保留；请重置遮罩后重新绘制",
+        "The source image orientation was corrected. Reset the mask before drawing new strokes.",
+    )
+}
 
 /// This migration-only extension deliberately stays outside the editable typed
 /// payload. Only an explicit reset may serialize that payload back without it.
@@ -16,13 +22,19 @@ pub(crate) fn orientation_review_required(value: &Value) -> Result<bool, Creativ
     match value.get(ORIENTATION_REVIEW_REQUIRED) {
         None => Ok(false),
         Some(Value::Bool(required)) => Ok(*required),
-        Some(_) => Err(CreativeError("遮罩方向复核标记必须为布尔值".into())),
+        Some(_) => Err(CreativeError(
+            tr(
+                "遮罩方向复核标记必须为布尔值",
+                "The mask orientation review flag must be a boolean",
+            )
+            .into(),
+        )),
     }
 }
 
 pub(crate) fn ensure_orientation_reviewed(value: &Value) -> Result<(), CreativeError> {
     if orientation_review_required(value)? {
-        return Err(CreativeError(ORIENTATION_REVIEW_NOTICE.into()));
+        return Err(CreativeError(orientation_review_notice().into()));
     }
     Ok(())
 }
@@ -53,24 +65,41 @@ impl MaskNodeData {
             .map_err(|e| CreativeError(e.to_string()))?;
         if self.asset.is_empty() {
             if self.output_revision.is_some() {
-                return Err(CreativeError("遮罩输出版本缺少对应素材".into()));
+                return Err(CreativeError(
+                    tr(
+                        "遮罩输出版本缺少对应素材",
+                        "The mask output revision has no asset",
+                    )
+                    .into(),
+                ));
             }
         } else {
             if !self.asset.ends_with(".png")
                 || self.output_revision != Some(self.revision)
                 || self.state.source.is_none()
             {
-                return Err(CreativeError("遮罩输出与当前笔画版本不一致".into()));
+                return Err(CreativeError(
+                    tr(
+                        "遮罩输出与当前笔画版本不一致",
+                        "The mask output revision does not match the current strokes",
+                    )
+                    .into(),
+                ));
             }
             MaskSource::new(&self.asset, 1, 1).map_err(|e| CreativeError(e.to_string()))?;
         }
         Ok(())
     }
     fn changed(&mut self) -> Result<(), CreativeError> {
-        self.revision = self
-            .revision
-            .checked_add(1)
-            .ok_or_else(|| CreativeError("遮罩编辑版本已达上限".into()))?;
+        self.revision = self.revision.checked_add(1).ok_or_else(|| {
+            CreativeError(
+                tr(
+                    "遮罩编辑版本已达上限",
+                    "The mask edit revision has reached its limit",
+                )
+                .into(),
+            )
+        })?;
         self.asset.clear();
         self.output_revision = None;
         Ok(())
@@ -111,18 +140,34 @@ pub fn mask_source(
         .edges
         .values()
         .find(|e| e.target.node == node.id && e.target.port.as_str() == "image")
-        .ok_or_else(|| CreativeError("请先连接一个图片节点".into()))?;
+        .ok_or_else(|| {
+            CreativeError(tr("请先连接一个图片节点", "Connect an image node first").into())
+        })?;
     let value = crate::custom_nodes::resolve_graph_output(graph, &edge.source)?;
     value.validate_for(&DataType::Named("image".into()))?;
-    let key = value
-        .asset_key()
-        .ok_or_else(|| CreativeError("图片输入尚无素材".into()))?;
+    let key = value.asset_key().ok_or_else(|| {
+        CreativeError(tr("图片输入尚无素材", "The image input has no asset yet").into())
+    })?;
     let asset = assets
         .iter()
         .find(|asset| asset.key == key)
-        .ok_or_else(|| CreativeError("遮罩只编辑当前项目的本地图片".into()))?;
+        .ok_or_else(|| {
+            CreativeError(
+                tr(
+                    "遮罩只编辑当前项目的本地图片",
+                    "Mask editing requires a local image from this project",
+                )
+                .into(),
+            )
+        })?;
     if !matches!(asset.media_type.as_str(), "image/png" | "image/jpeg") {
-        return Err(CreativeError("遮罩编辑当前支持静态 PNG/JPEG 图片".into()));
+        return Err(CreativeError(
+            tr(
+                "遮罩编辑当前支持静态 PNG/JPEG 图片",
+                "Mask editing supports static PNG and JPEG images",
+            )
+            .into(),
+        ));
     }
     MaskSource::new(key, asset.width, asset.height).map_err(|e| CreativeError(e.to_string()))
 }
@@ -137,20 +182,48 @@ pub(crate) fn validate_edit_inputs(node: &Node, graph: &Graph) -> Result<(), Cre
         .edges
         .values()
         .find(|e| e.target.node == node.id && e.target.port.as_str() == "image")
-        .ok_or_else(|| CreativeError("图片编辑需要 Image 输入".into()))?;
+        .ok_or_else(|| {
+            CreativeError(
+                tr(
+                    "图片编辑需要 Image 输入",
+                    "Image editing requires an Image input",
+                )
+                .into(),
+            )
+        })?;
     let image = crate::custom_nodes::resolve_graph_output(graph, &image_edge.source)?;
     image.validate_for(&DataType::Named("image".into()))?;
     let mask_edge = graph
         .edges
         .values()
         .find(|e| e.target.node == node.id && e.target.port.as_str() == "mask")
-        .ok_or_else(|| CreativeError("图片编辑需要独立 Mask 输入".into()))?;
+        .ok_or_else(|| {
+            CreativeError(
+                tr(
+                    "图片编辑需要独立 Mask 输入",
+                    "Image editing requires a separate Mask input",
+                )
+                .into(),
+            )
+        })?;
     let mask = crate::custom_nodes::resolve_graph_output(graph, &mask_edge.source)?;
     let crate::custom_nodes::CustomValue::Mask { source, .. } = mask else {
-        return Err(CreativeError("Mask 输入必须是可验证的独立遮罩输出".into()));
+        return Err(CreativeError(
+            tr(
+                "Mask 输入必须是可验证的独立遮罩输出",
+                "The Mask input must come from a verifiable standalone mask",
+            )
+            .into(),
+        ));
     };
     if image.asset_key() != Some(source.asset_key.as_str()) {
-        return Err(CreativeError("Mask 与 Image 输入的原图身份不一致".into()));
+        return Err(CreativeError(
+            tr(
+                "Mask 与 Image 输入的原图身份不一致",
+                "The Mask and Image inputs refer to different source images",
+            )
+            .into(),
+        ));
     }
 
     Ok(())
@@ -160,11 +233,15 @@ pub(crate) fn register_mask_nodes(registry: &mut CreativeRegistry) {
     registry
         .register(NodeDefinition::new(
             "mask",
-            "遮罩",
+            tr("遮罩", "Mask"),
             Size::new(400., 300.),
             vec![
-                Port::input("image", "原图", DataType::Named("image".into())),
-                Port::output("mask", "遮罩", DataType::Named("mask".into())),
+                Port::input(
+                    "image",
+                    tr("原图", "Source image"),
+                    DataType::Named("image".into()),
+                ),
+                Port::output("mask", tr("遮罩", "Mask"), DataType::Named("mask".into())),
             ],
             json!(MaskNodeData::default()),
             |value| {

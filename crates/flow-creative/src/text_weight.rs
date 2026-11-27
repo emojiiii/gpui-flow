@@ -2,7 +2,7 @@
 //! Reading legacy data never rewrites it. Explicit edits keep the legacy `bold`
 //! field synchronized so consumers without font-weight support remain compatible.
 
-use crate::TextStyle;
+use crate::{TextStyle, tr};
 use serde_json::{Value, json};
 
 pub const MIN_TEXT_FONT_WEIGHT: u16 = 100;
@@ -37,7 +37,11 @@ pub fn read_weight(data: &Value) -> Result<u16, String> {
 pub fn write_weight(data: &Value, weight: u16) -> Result<Value, String> {
     read_weight(data)?;
     if !(MIN_TEXT_FONT_WEIGHT..=MAX_TEXT_FONT_WEIGHT).contains(&weight) {
-        return Err(INVALID_WEIGHT.into());
+        return Err(tr(
+            "字重必须在 100 到 900 之间",
+            "Font weight must be between 100 and 900",
+        )
+        .into());
     }
     let mut style = TextStyle::from_data(data)?;
     style.bold = weight >= 600;

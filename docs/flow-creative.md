@@ -12,7 +12,7 @@ Local projects keep `project.json` and copies of imported assets in the project 
 
 ## Navigate and edit the canvas
 
-![Flow Creative demo showing the left toolbar, bottom-left zoom controls, and a connection from a text object to a compose card.](images/flow-creative-canvas.png)
+![Flow Creative demo in English showing the left toolbar, bottom-left zoom controls, and a connection from a text object to a compose card.](images/flow-creative-canvas.en.png)
 
 The built-in demo shows the tool rail on the left and zoom and fit controls at the bottom left.
 

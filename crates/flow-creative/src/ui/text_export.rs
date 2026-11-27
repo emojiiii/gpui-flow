@@ -28,9 +28,10 @@ pub(super) fn frame_text_backend_for(
     font_families: Arc<Vec<String>>,
     cx: &App,
 ) -> Result<FrameTextBackend, String> {
-    let backend = cx
-        .try_global::<CreativeTextExportBackend>()
-        .ok_or("当前宿主未接入同一应用的文字导出服务")?;
+    let backend = cx.try_global::<CreativeTextExportBackend>().ok_or(tr(
+        "当前宿主未接入同一应用的文字导出服务",
+        "Text export requires the application's text backend",
+    ))?;
     FrameTextBackend::new(
         &backend.0,
         cx.theme().font_family.to_string(),

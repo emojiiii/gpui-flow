@@ -162,12 +162,11 @@ impl Render for RotationPreview {
                 v.child(div().p_3().text_xs().text_color(rgb(0xa25640)).child(error))
             })
             .when(self.image.is_none() && self.error.is_none(), |v| {
-                v.child(
-                    div()
-                        .p_3()
-                        .text_xs()
-                        .child(format!("正在预览 {}°…", self.desired.degrees)),
-                )
+                v.child(div().p_3().text_xs().child(tr_format!(
+                    "正在预览 {}°…",
+                    "Previewing {}°…",
+                    self.desired.degrees
+                )))
             })
     }
 }

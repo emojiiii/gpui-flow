@@ -151,17 +151,22 @@ impl CreativeCanvas {
                 return;
             };
             let result = (|| {
-                let project = self
-                    .project
-                    .as_ref()
-                    .ok_or_else(|| "请先打开本地项目".to_string())?;
+                let project = self.project.as_ref().ok_or_else(|| {
+                    tr("请先打开本地项目", "Open a local project first").to_string()
+                })?;
                 let asset = project
                     .assets()
                     .iter()
                     .find(|a| Some(a.key.as_str()) == node.data["asset"].as_str())
                     .filter(|a| matches!(a.media_type.as_str(), "image/png" | "image/jpeg"))
                     .cloned()
-                    .ok_or_else(|| "当前图片编辑支持本地静态PNG/JPEG".to_string())?;
+                    .ok_or_else(|| {
+                        tr(
+                            "当前图片编辑支持本地静态PNG/JPEG",
+                            "Image editing supports local still PNG and JPEG images",
+                        )
+                        .to_string()
+                    })?;
                 ImageEditSpec::default()
                     .oriented_dimensions(asset.width, asset.height)
                     .map_err(|e| e.to_string())?;
@@ -321,7 +326,7 @@ impl CreativeCanvas {
         cx: &mut Context<Self>,
     ) -> Result<(), String> {
         let Some(edit) = &mut self.image_editing else {
-            return Err("图片编辑已结束".into());
+            return Err(tr("图片编辑已结束", "Image editing ended").into());
         };
         let w = edit
             .width
@@ -329,20 +334,24 @@ impl CreativeCanvas {
             .value()
             .trim()
             .parse::<u32>()
-            .map_err(|_| "宽度必须为正整数".to_string())?;
+            .map_err(|_| tr("宽度必须为正整数", "Width must be a positive integer").to_string())?;
         let h = edit
             .height
             .read(cx)
             .value()
             .trim()
             .parse::<u32>()
-            .map_err(|_| "高度必须为正整数".to_string())?;
+            .map_err(|_| tr("高度必须为正整数", "Height must be a positive integer").to_string())?;
         let (sw, sh) = edit
             .spec
             .oriented_dimensions(edit.asset.width, edit.asset.height)
             .map_err(|e| e.to_string())?;
         if w == 0 || h == 0 || w > sw || h > sh {
-            return Err("裁剪尺寸必须在原图范围内，不会拉伸或放大".into());
+            return Err(tr(
+                "裁剪尺寸必须在原图范围内，不会拉伸或放大",
+                "The crop must fit within the original image without stretching or enlarging it",
+            )
+            .into());
         }
         if edit
             .spec
@@ -640,7 +649,7 @@ impl CreativeCanvas {
                 .map(|(_, label)| label.to_string())
                 .unwrap_or_else(|| format!("{r:.2}:1"))
             })
-            .unwrap_or_else(|| "自由".into());
+            .unwrap_or_else(|| tr("自由", "Free").into());
         let mut bar = div()
             .occlude()
             .h(px(38.))
@@ -652,7 +661,7 @@ impl CreativeCanvas {
             .items_center()
             .gap_1()
             .child(chrome::icon("crop", 16.))
-            .child(label("裁剪"))
+            .child(label(tr("裁剪", "Crop")))
             .child(
                 self.button(
                     "crop-ratio",
@@ -676,7 +685,7 @@ impl CreativeCanvas {
                             .flex_shrink_0()
                             .h(px(28.))
                             .disabled(disabled)
-                            .aria_label("裁剪宽度像素"),
+                            .aria_label(tr("裁剪宽度像素", "Crop width in pixels")),
                     )
                     .child(label("H"))
                     .child(
@@ -685,7 +694,7 @@ impl CreativeCanvas {
                             .flex_shrink_0()
                             .h(px(28.))
                             .disabled(disabled)
-                            .aria_label("裁剪高度像素"),
+                            .aria_label(tr("裁剪高度像素", "Crop height in pixels")),
                     )
                     .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
                         if event.keystroke.key == "enter" {
@@ -702,7 +711,7 @@ impl CreativeCanvas {
             .child(
                 self.button(
                     "crop-apply",
-                    "应用",
+                    tr("应用", "Apply"),
                     Action::ImageEdit(ImageEditAction::Apply),
                     disabled || !valid,
                     cx,
@@ -712,7 +721,7 @@ impl CreativeCanvas {
             )
             .child(self.button(
                 "crop-cancel",
-                "取消",
+                tr("取消", "Cancel"),
                 Action::ImageEdit(if self.importing {
                     ImageEditAction::CancelApply
                 } else {
@@ -735,9 +744,9 @@ impl CreativeCanvas {
                 .flex()
                 .flex_col();
             for (label, ratio) in [
-                ("自由", None),
+                (tr("自由", "Free"), None),
                 (
-                    "原图",
+                    tr("原图", "Original"),
                     edit.spec
                         .oriented_dimensions(edit.asset.width, edit.asset.height)
                         .ok()
@@ -768,31 +777,31 @@ impl CreativeCanvas {
             (
                 "image-left",
                 "rotate-ccw",
-                "左转90°",
+                tr("左转90°", "Rotate 90° Left"),
                 ImageEditAction::Rotate(false),
             ),
             (
                 "image-right",
                 "rotate-cw",
-                "右转90°",
+                tr("右转90°", "Rotate 90° Right"),
                 ImageEditAction::Rotate(true),
             ),
             (
                 "image-flip-h",
                 "flip-horizontal-2",
-                "水平翻转",
+                tr("水平翻转", "Flip Horizontal"),
                 ImageEditAction::Flip(true),
             ),
             (
                 "image-flip-v",
                 "flip-vertical-2",
-                "垂直翻转",
+                tr("垂直翻转", "Flip Vertical"),
                 ImageEditAction::Flip(false),
             ),
             (
                 "image-reset",
                 "undo-2",
-                "重置本次编辑",
+                tr("重置本次编辑", "Reset Edits"),
                 ImageEditAction::Reset,
             ),
         ] {
@@ -805,6 +814,9 @@ impl CreativeCanvas {
                 cx,
             ));
         }
-        bar.child(label("Esc 取消 · 原图保留"))
+        bar.child(label(tr(
+            "Esc 取消 · 原图保留",
+            "Esc cancels · Original retained",
+        )))
     }
 }

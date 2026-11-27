@@ -1,5 +1,6 @@
 //! Typed local processing nodes and provenance for completed outputs.
 use crate::processing::{ProcessingKind, ProcessingSettings};
+use crate::tr;
 use crate::{CreativeError, CreativeRegistry, NodeDefinition, ProjectAsset};
 use gpui_flow_core::{Graph, Node, Port, Size};
 use serde::{Deserialize, Serialize};
@@ -30,17 +31,35 @@ impl ProcessingNodeData {
             .validate()
             .map_err(|e| CreativeError(e.to_string()))?;
         if data.error.as_ref().is_some_and(|s| s.len() > 4096) {
-            return Err(CreativeError("处理错误信息过长".into()));
+            return Err(CreativeError(
+                tr(
+                    "处理错误信息过长",
+                    "Processing error exceeds the length limit",
+                )
+                .into(),
+            ));
         }
         if data.asset.is_empty() {
             if data.source_asset.is_some() || data.output_settings.is_some() {
-                return Err(CreativeError("处理输出缺少对应素材".into()));
+                return Err(CreativeError(
+                    tr(
+                        "处理输出缺少对应素材",
+                        "Processing output is missing its asset",
+                    )
+                    .into(),
+                ));
             }
         } else {
             valid_key(&data.asset)?;
             valid_key(data.source_asset.as_deref().unwrap_or_default())?;
             if data.output_settings.as_ref() != Some(&data.settings) {
-                return Err(CreativeError("处理参数已变更，请重新处理".into()));
+                return Err(CreativeError(
+                    tr(
+                        "处理参数已变更，请重新处理",
+                        "Settings changed. Run processing again",
+                    )
+                    .into(),
+                ));
             }
         }
         Ok(data)
@@ -50,7 +69,13 @@ impl ProcessingNodeData {
             .validate()
             .map_err(|e| CreativeError(e.to_string()))?;
         if settings.kind() != self.settings.kind() {
-            return Err(CreativeError("不能改变处理节点的媒体类型".into()));
+            return Err(CreativeError(
+                tr(
+                    "不能改变处理节点的媒体类型",
+                    "The processing node's media type cannot change",
+                )
+                .into(),
+            ));
         }
         if settings != self.settings {
             self.settings = settings;
@@ -67,42 +92,72 @@ fn valid_key(key: &str) -> Result<(), CreativeError> {
 }
 fn input_key(graph: &Graph, node: &Node, depth: usize) -> Result<String, CreativeError> {
     if depth > crate::MAX_CARDS {
-        return Err(CreativeError("处理输入存在循环".into()));
+        return Err(CreativeError(
+            tr("处理输入存在循环", "Processing inputs contain a cycle").into(),
+        ));
     }
-    let kind = ProcessingKind::from_node_kind(&node.kind)
-        .ok_or_else(|| CreativeError("节点不是媒体处理节点".into()))?;
+    let kind = ProcessingKind::from_node_kind(&node.kind).ok_or_else(|| {
+        CreativeError(tr("节点不是媒体处理节点", "This node does not process media").into())
+    })?;
     let edge = graph
         .edges
         .values()
         .find(|e| e.target.node == node.id && e.target.port.as_str() == "input")
-        .ok_or_else(|| CreativeError("请连接对应类型的媒体输入".into()))?;
+        .ok_or_else(|| {
+            CreativeError(
+                tr(
+                    "请连接对应类型的媒体输入",
+                    "Connect a media input of the matching type",
+                )
+                .into(),
+            )
+        })?;
     let source = graph
         .node(&edge.source.node)
-        .ok_or_else(|| CreativeError("输入节点不存在".into()))?;
+        .ok_or_else(|| CreativeError(tr("输入节点不存在", "Input node not found").into()))?;
     if !source.ports.iter().any(|p| {
         p.id == edge.source.port
             && p.direction == gpui_flow_core::PortDirection::Output
             && p.data_type == kind.input_type()
     }) {
-        return Err(CreativeError("输入端口媒体类型不匹配".into()));
+        return Err(CreativeError(
+            tr(
+                "输入端口媒体类型不匹配",
+                "Input port media type does not match",
+            )
+            .into(),
+        ));
     }
     if source.kind.starts_with("custom.") {
         let value = crate::custom_nodes::resolve_graph_output(graph, &edge.source)?;
         value.validate_for(&kind.input_type())?;
-        value
-            .asset_key()
-            .map(str::to_string)
-            .ok_or_else(|| CreativeError("自定义输入没有媒体输出".into()))
+        value.asset_key().map(str::to_string).ok_or_else(|| {
+            CreativeError(
+                tr(
+                    "自定义输入没有媒体输出",
+                    "The custom input has no media output",
+                )
+                .into(),
+            )
+        })
     } else if ProcessingKind::from_node_kind(&source.kind).is_some() {
         if edge.source.port.as_str() != "output" {
-            return Err(CreativeError("处理节点输出端口无效".into()));
+            return Err(CreativeError(
+                tr("处理节点输出端口无效", "Invalid processing output port").into(),
+            ));
         }
         output_key(graph, source, depth + 1)
     } else {
         if crate::GenerationKind::from_node_kind(&source.kind).is_some()
             && source.data["status"].as_str() != Some("complete")
         {
-            return Err(CreativeError("输入生成节点尚未完成".into()));
+            return Err(CreativeError(
+                tr(
+                    "输入生成节点尚未完成",
+                    "The source generation node has not finished",
+                )
+                .into(),
+            ));
         }
         let key = source.data["asset"].as_str().unwrap_or_default();
         valid_key(key)?;
@@ -113,7 +168,13 @@ fn output_key(graph: &Graph, node: &Node, depth: usize) -> Result<String, Creati
     let data = ProcessingNodeData::from_value(&node.data)?;
     let source = input_key(graph, node, depth)?;
     if data.asset.is_empty() || data.source_asset.as_deref() != Some(source.as_str()) {
-        return Err(CreativeError("输入已变更或尚未处理，请运行本地处理".into()));
+        return Err(CreativeError(
+            tr(
+                "输入已变更或尚未处理，请运行本地处理",
+                "Run local processing for the current input",
+            )
+            .into(),
+        ));
     }
     Ok(data.asset)
 }
@@ -126,19 +187,31 @@ pub fn processing_source(
     assets: &[ProjectAsset],
 ) -> Result<ProjectAsset, CreativeError> {
     let key = input_key(graph, node, 0)?;
-    let kind = ProcessingKind::from_node_kind(&node.kind)
-        .ok_or_else(|| CreativeError("节点不是媒体处理节点".into()))?;
-    let asset = assets
-        .iter()
-        .find(|a| a.key == key)
-        .ok_or_else(|| CreativeError("输入素材不在当前本地项目".into()))?;
+    let kind = ProcessingKind::from_node_kind(&node.kind).ok_or_else(|| {
+        CreativeError(tr("节点不是媒体处理节点", "This node does not process media").into())
+    })?;
+    let asset = assets.iter().find(|a| a.key == key).ok_or_else(|| {
+        CreativeError(
+            tr(
+                "输入素材不在当前本地项目",
+                "The input asset is not in the current project",
+            )
+            .into(),
+        )
+    })?;
     let compatible = match kind {
         ProcessingKind::Image => matches!(asset.media_type.as_str(), "image/png" | "image/jpeg"),
         ProcessingKind::Video => asset.media_type.starts_with("video/"),
         ProcessingKind::Audio => asset.media_type.starts_with("audio/"),
     };
     if !compatible {
-        return Err(CreativeError("输入格式不受此处理节点支持".into()));
+        return Err(CreativeError(
+            tr(
+                "输入格式不受此处理节点支持",
+                "This processing node does not support the input format",
+            )
+            .into(),
+        ));
     }
     Ok(asset.clone())
 }
@@ -161,14 +234,18 @@ pub(crate) fn register_processing_nodes(registry: &mut CreativeRegistry) {
                     },
                 ),
                 vec![
-                    Port::input("input", "输入", kind.input_type()),
-                    Port::output("output", "输出", kind.output_type()),
+                    Port::input("input", tr("输入", "Input"), kind.input_type()),
+                    Port::output("output", tr("输出", "Output"), kind.output_type()),
                 ],
                 serde_json::to_value(ProcessingNodeData::new(kind)).expect("settings serialize"),
                 move |value| {
                     let data = ProcessingNodeData::from_value(value).map_err(|e| e.to_string())?;
                     if data.settings.kind() != kind {
-                        return Err("处理参数类型不匹配".into());
+                        return Err(tr(
+                            "处理参数类型不匹配",
+                            "Processing settings do not match the node type",
+                        )
+                        .into());
                     }
                     Ok(())
                 },

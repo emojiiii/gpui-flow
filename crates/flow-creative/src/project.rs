@@ -9,7 +9,7 @@
 //! stale cloned handles fail with `Conflict` rather than overwriting newer work.
 
 use crate::model_preview::{MAX_GLB_BYTES, PreviewError, parse_glb};
-use crate::{CreativeError, CreativeRegistry, MAX_CARDS, MAX_JSON_BYTES, MAX_LINKS};
+use crate::{CreativeError, CreativeRegistry, MAX_CARDS, MAX_JSON_BYTES, MAX_LINKS, tr};
 use gpui_flow_core::FlowDocument;
 use serde::{Deserialize, Serialize};
 #[cfg(any(unix, test))]
@@ -59,7 +59,10 @@ impl fmt::Display for ProjectError {
             Self::Io(error) => error.fmt(f),
             Self::Json(error) => error.fmt(f),
             Self::Invalid(message) | Self::TooLarge(message) => message.fmt(f),
-            Self::Conflict => f.write_str("project changed on disk; reopen before saving"),
+            Self::Conflict => f.write_str(tr(
+                "磁盘上的项目已更改，请重新打开后再保存",
+                "project changed on disk; reopen before saving",
+            )),
         }
     }
 }
@@ -166,7 +169,15 @@ impl ProjectStore {
                 std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share"))
             })
             .map(|path| path.join("gpui-flow/projects"));
-        root.ok_or_else(|| ProjectError::Invalid("could not locate the local project home".into()))
+        root.ok_or_else(|| {
+            ProjectError::Invalid(
+                tr(
+                    "无法定位本地项目目录",
+                    "could not locate the local project home",
+                )
+                .into(),
+            )
+        })
     }
 
     pub fn root(&self) -> &Path {
@@ -510,7 +521,11 @@ impl LocalProject {
         self.check_revision()?;
         if self.project.assets.len() >= MAX_PROJECT_ASSETS {
             return Err(ProjectError::TooLarge(
-                "project has reached its 512 asset limit".into(),
+                tr(
+                    "项目素材数量已达上限（512）",
+                    "project has reached its 512 asset limit",
+                )
+                .into(),
             ));
         }
         let source = absolute_path(source)?;
@@ -524,7 +539,11 @@ impl LocalProject {
             .sum::<u64>();
         if total.saturating_add(bytes.len() as u64) > MAX_PROJECT_ASSET_BYTES {
             return Err(ProjectError::TooLarge(
-                "project assets exceed 512 MiB".into(),
+                tr(
+                    "项目素材总大小超过 512 MiB",
+                    "project assets exceed 512 MiB",
+                )
+                .into(),
             ));
         }
         let key = format!("assets/{}.{}", unique_name("a"), format.extension);
@@ -600,7 +619,13 @@ impl LocalProject {
             .iter()
             .find(|asset| asset.key == key)
             .ok_or_else(|| {
-                ProjectError::Invalid("asset is not in this project's manifest".into())
+                ProjectError::Invalid(
+                    tr(
+                        "当前项目的素材清单中没有此素材",
+                        "asset is not in this project's manifest",
+                    )
+                    .into(),
+                )
             })?;
         let path = self.directory.join(key);
         check_asset_file(&path, asset)?;
@@ -619,10 +644,9 @@ impl LocalProject {
 
     fn next_revision(&self) -> Result<ProjectFile, ProjectError> {
         let mut candidate = self.project.clone();
-        candidate.revision = candidate
-            .revision
-            .checked_add(1)
-            .ok_or_else(|| ProjectError::Invalid("project revision overflow".into()))?;
+        candidate.revision = candidate.revision.checked_add(1).ok_or_else(|| {
+            ProjectError::Invalid(tr("项目修订号超出范围", "project revision overflow").into())
+        })?;
         candidate.schema_version = PROJECT_SCHEMA_VERSION;
         candidate.metadata.updated_at_ms = now_ms().max(candidate.metadata.updated_at_ms);
         Ok(candidate)
@@ -630,9 +654,9 @@ impl LocalProject {
 }
 
 fn transaction() -> Result<std::sync::MutexGuard<'static, ()>, ProjectError> {
-    TRANSACTION
-        .lock()
-        .map_err(|_| ProjectError::Invalid("project storage lock was poisoned".into()))
+    TRANSACTION.lock().map_err(|_| {
+        ProjectError::Invalid(tr("项目存储锁状态异常", "project storage lock was poisoned").into())
+    })
 }
 
 fn now_ms() -> u64 {
@@ -643,7 +667,7 @@ fn now_ms() -> u64 {
         .min(u64::MAX as u128) as u64
 }
 
-fn unique_name(prefix: &str) -> String {
+pub(crate) fn unique_name(prefix: &str) -> String {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -662,7 +686,9 @@ fn validate_id(id: &str) -> Result<(), ProjectError> {
             .bytes()
             .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
     {
-        return Err(ProjectError::Invalid("invalid project ID".into()));
+        return Err(ProjectError::Invalid(
+            tr("项目 ID 无效", "invalid project ID").into(),
+        ));
     }
     Ok(())
 }
@@ -670,7 +696,11 @@ fn validate_id(id: &str) -> Result<(), ProjectError> {
 fn validate_name(name: &str) -> Result<(), ProjectError> {
     if name.trim().is_empty() || name.len() > 512 || name.chars().any(char::is_control) {
         return Err(ProjectError::Invalid(
-            "project name must contain 1–512 bytes of printable text".into(),
+            tr(
+                "项目名称必须包含 1–512 字节的可打印文本",
+                "project name must contain 1–512 bytes of printable text",
+            )
+            .into(),
         ));
     }
     Ok(())
@@ -703,7 +733,11 @@ pub(crate) fn validate_asset_key(key: &str) -> Result<(), ProjectError> {
     });
     if !valid {
         return Err(ProjectError::Invalid(
-            "invalid project-relative asset key".into(),
+            tr(
+                "相对于项目目录的素材键无效",
+                "invalid project-relative asset key",
+            )
+            .into(),
         ));
     }
     Ok(())
@@ -725,7 +759,11 @@ fn validate_document_assets(
                     })
                 {
                     return Err(ProjectError::Invalid(
-                        "图片版本素材不属于本项目静态图片".into(),
+                        tr(
+                            "图片版本素材不属于本项目静态图片",
+                            "The image version asset is not a still image in this project",
+                        )
+                        .into(),
                     ));
                 }
             }
@@ -736,23 +774,48 @@ fn validate_document_assets(
                 let original = assets
                     .iter()
                     .find(|asset| asset.key == source.asset_key)
-                    .ok_or_else(|| ProjectError::Invalid("Mask 原图不属于当前项目".into()))?;
+                    .ok_or_else(|| {
+                        ProjectError::Invalid(
+                            tr(
+                                "Mask 原图不属于当前项目",
+                                "The mask source image does not belong to this project",
+                            )
+                            .into(),
+                        )
+                    })?;
                 if !matches!(original.media_type.as_str(), "image/png" | "image/jpeg")
                     || (!crate::mask_node::orientation_review_required(&node.data)?
                         && (original.width != source.width || original.height != source.height))
                 {
-                    return Err(ProjectError::Invalid("Mask 原图尺寸或类型不匹配".into()));
+                    return Err(ProjectError::Invalid(
+                        tr(
+                            "Mask 原图尺寸或类型不匹配",
+                            "The mask source image dimensions or type do not match",
+                        )
+                        .into(),
+                    ));
                 }
                 if !data.asset.is_empty() {
                     let output = assets
                         .iter()
                         .find(|asset| asset.key == data.asset)
-                        .ok_or_else(|| ProjectError::Invalid("Mask 输出素材不存在".into()))?;
+                        .ok_or_else(|| {
+                            ProjectError::Invalid(
+                                tr("Mask 输出素材不存在", "The mask output asset is missing")
+                                    .into(),
+                            )
+                        })?;
                     if output.media_type != crate::MASK_MEDIA_TYPE
                         || output.width != source.width
                         || output.height != source.height
                     {
-                        return Err(ProjectError::Invalid("Mask 输出与原图尺寸不匹配".into()));
+                        return Err(ProjectError::Invalid(
+                            tr(
+                                "Mask 输出与原图尺寸不匹配",
+                                "The mask output dimensions do not match the source image",
+                            )
+                            .into(),
+                        ));
                     }
                 }
             }
@@ -764,7 +827,15 @@ fn validate_document_assets(
                 let source = assets
                     .iter()
                     .find(|asset| &asset.key == key)
-                    .ok_or_else(|| ProjectError::Invalid("处理输出缺少原素材".into()))?;
+                    .ok_or_else(|| {
+                        ProjectError::Invalid(
+                            tr(
+                                "处理输出缺少原素材",
+                                "The processing output is missing its source asset",
+                            )
+                            .into(),
+                        )
+                    })?;
                 let matches = match kind {
                     crate::processing::ProcessingKind::Image => {
                         matches!(source.media_type.as_str(), "image/png" | "image/jpeg")
@@ -777,7 +848,13 @@ fn validate_document_assets(
                     }
                 };
                 if !matches {
-                    return Err(ProjectError::Invalid("处理输出的原素材类型不匹配".into()));
+                    return Err(ProjectError::Invalid(
+                        tr(
+                            "处理输出的原素材类型不匹配",
+                            "The processing output's source asset type does not match",
+                        )
+                        .into(),
+                    ));
                 }
             }
             if !data.asset.is_empty()
@@ -786,7 +863,13 @@ fn validate_document_assets(
                     .find(|asset| asset.key == data.asset)
                     .is_none_or(|asset| asset.media_type != data.settings.media_type())
             {
-                return Err(ProjectError::Invalid("处理输出格式与参数不匹配".into()));
+                return Err(ProjectError::Invalid(
+                    tr(
+                        "处理输出格式与参数不匹配",
+                        "The processing output format does not match its settings",
+                    )
+                    .into(),
+                ));
             }
         }
         // Only the legacy envelope reader admits this key. Public document
@@ -798,7 +881,13 @@ fn validate_document_assets(
                 .and_then(|settings| settings.get("reference_asset"))
         {
             let key = value.as_str().ok_or_else(|| {
-                ProjectError::Invalid("legacy reference asset must be a string".into())
+                ProjectError::Invalid(
+                    tr(
+                        "旧版参考素材必须是字符串",
+                        "legacy reference asset must be a string",
+                    )
+                    .into(),
+                )
             })?;
             if !key.is_empty() {
                 if !matches!(
@@ -811,7 +900,11 @@ fn validate_document_assets(
                 ) || !crate::references::accepts_image_reference(node)
                 {
                     return Err(ProjectError::Invalid(
-                        "this node does not accept a legacy image reference".into(),
+                        tr(
+                            "此节点不接受旧版参考图片",
+                            "this node does not accept a legacy image reference",
+                        )
+                        .into(),
                     ));
                 }
                 validate_asset_key(key)?;
@@ -819,11 +912,18 @@ fn validate_document_assets(
                     .iter()
                     .find(|asset| asset.key == key)
                     .ok_or_else(|| {
-                        ProjectError::Invalid(format!("missing legacy reference asset: {key}"))
+                        ProjectError::Invalid(tr_format!(
+                            "缺少旧版参考素材：{key}",
+                            "missing legacy reference asset: {key}"
+                        ))
                     })?;
                 if !asset.media_type.starts_with("image/") {
                     return Err(ProjectError::Invalid(
-                        "legacy reference attachments must be project-owned images".into(),
+                        tr(
+                            "旧版参考图片必须属于当前项目",
+                            "legacy reference attachments must be project-owned images",
+                        )
+                        .into(),
                     ));
                 }
             }
@@ -831,9 +931,9 @@ fn validate_document_assets(
         let Some(value) = node.data.get("asset") else {
             continue;
         };
-        let key = value
-            .as_str()
-            .ok_or_else(|| ProjectError::Invalid("asset key must be a string".into()))?;
+        let key = value.as_str().ok_or_else(|| {
+            ProjectError::Invalid(tr("素材键必须是字符串", "asset key must be a string").into())
+        })?;
         // Empty and simple symbolic keys are host-owned built-ins/placeholders.
         // They can never be passed to filesystem resolution by this module.
         if key.len() <= 128
@@ -847,7 +947,12 @@ fn validate_document_assets(
         let asset = assets
             .iter()
             .find(|asset| asset.key == key)
-            .ok_or_else(|| ProjectError::Invalid(format!("missing project asset: {key}")))?;
+            .ok_or_else(|| {
+                ProjectError::Invalid(tr_format!(
+                    "缺少项目素材：{key}",
+                    "missing project asset: {key}"
+                ))
+            })?;
         // Model output has a strict contract. Existing image/compose cards and
         // host-defined image kinds retain their compatibility; do not invent an
         // allowlist for unknown host kinds. Raster posters for existing video
@@ -866,9 +971,11 @@ fn validate_document_assets(
             AssetKind::Image => !matches!(node.kind.as_str(), "model" | "generate_model" | "mask"),
         };
         if !compatible {
-            return Err(ProjectError::Invalid(format!(
+            return Err(ProjectError::Invalid(tr_format!(
+                "素材类型 {} 与节点类型 {} 不兼容",
                 "asset type {} is incompatible with node kind {}",
-                asset.media_type, node.kind
+                asset.media_type,
+                node.kind
             )));
         }
     }
@@ -877,7 +984,8 @@ fn validate_document_assets(
 
 fn validate_project(project: &ProjectFile, id: &str) -> Result<(), ProjectError> {
     if !matches!(project.schema_version, 1 | PROJECT_SCHEMA_VERSION) {
-        return Err(ProjectError::Invalid(format!(
+        return Err(ProjectError::Invalid(tr_format!(
+            "不支持的项目格式版本：{}",
             "unsupported project schema version: {}",
             project.schema_version
         )));
@@ -885,19 +993,25 @@ fn validate_project(project: &ProjectFile, id: &str) -> Result<(), ProjectError>
     validate_id(&project.metadata.id)?;
     if project.metadata.id != id {
         return Err(ProjectError::Invalid(
-            "project ID does not match its directory".into(),
+            tr(
+                "项目 ID 与其文件夹不匹配",
+                "project ID does not match its directory",
+            )
+            .into(),
         ));
     }
     validate_name(&project.metadata.name)?;
     if project.metadata.updated_at_ms < project.metadata.created_at_ms {
-        return Err(ProjectError::Invalid("invalid project timestamps".into()));
+        return Err(ProjectError::Invalid(
+            tr("项目时间戳无效", "invalid project timestamps").into(),
+        ));
     }
     if project.document.graph.nodes.len() > MAX_CARDS
         || project.document.graph.edges.len() > MAX_LINKS
         || project.document.graph.groups.len() > MAX_CARDS
     {
         return Err(ProjectError::TooLarge(
-            "creative board size limit exceeded".into(),
+            tr("画布对象数量超过上限", "creative board size limit exceeded").into(),
         ));
     }
     project
@@ -906,12 +1020,12 @@ fn validate_project(project: &ProjectFile, id: &str) -> Result<(), ProjectError>
         .map_err(|error| ProjectError::Invalid(error.to_string()))?;
     if serde_json::to_vec(&project.document)?.len() > MAX_JSON_BYTES {
         return Err(ProjectError::TooLarge(
-            "creative document exceeds 32 MiB".into(),
+            tr("画布文档超过 32 MiB", "creative document exceeds 32 MiB").into(),
         ));
     }
     if project.assets.len() > MAX_PROJECT_ASSETS {
         return Err(ProjectError::TooLarge(
-            "project has more than 512 assets".into(),
+            tr("项目素材数量超过 512", "project has more than 512 assets").into(),
         ));
     }
     let mut keys = BTreeSet::new();
@@ -919,13 +1033,17 @@ fn validate_project(project: &ProjectFile, id: &str) -> Result<(), ProjectError>
     for asset in &project.assets {
         validate_asset_key(&asset.key)?;
         if !keys.insert(&asset.key) {
-            return Err(ProjectError::Invalid("duplicate project asset key".into()));
+            return Err(ProjectError::Invalid(
+                tr("项目素材键重复", "duplicate project asset key").into(),
+            ));
         }
         if asset.name.is_empty()
             || asset.name.len() > 1024
             || asset.name.chars().any(char::is_control)
         {
-            return Err(ProjectError::Invalid("invalid asset display name".into()));
+            return Err(ProjectError::Invalid(
+                tr("素材显示名称无效", "invalid asset display name").into(),
+            ));
         }
         let expected_type = match asset.key.rsplit('.').next() {
             Some("png") if asset.media_type == crate::MASK_MEDIA_TYPE => crate::MASK_MEDIA_TYPE,
@@ -941,14 +1059,20 @@ fn validate_project(project: &ProjectFile, id: &str) -> Result<(), ProjectError>
             Some("flac") => "audio/flac",
             Some("ogg") => "audio/ogg",
             Some("m4a") => "audio/mp4",
-            _ => return Err(ProjectError::Invalid("unsupported asset extension".into())),
+            _ => {
+                return Err(ProjectError::Invalid(
+                    tr("不支持的素材文件扩展名", "unsupported asset extension").into(),
+                ));
+            }
         };
         let kind = AssetKind::from_media_type(&asset.media_type)?;
         if asset.media_type != expected_type
             || asset.byte_len == 0
             || asset.byte_len > kind.max_bytes()
         {
-            return Err(ProjectError::Invalid("invalid asset type or size".into()));
+            return Err(ProjectError::Invalid(
+                tr("素材类型或大小无效", "invalid asset type or size").into(),
+            ));
         }
         match kind {
             AssetKind::Image | AssetKind::Mask | AssetKind::Video => {
@@ -956,13 +1080,21 @@ fn validate_project(project: &ProjectFile, id: &str) -> Result<(), ProjectError>
             }
             AssetKind::Audio if asset.width != 0 || asset.height != 0 => {
                 return Err(ProjectError::Invalid(
-                    "audio assets must have zero dimensions".into(),
+                    tr(
+                        "音频素材的宽高必须均为零",
+                        "audio assets must have zero dimensions",
+                    )
+                    .into(),
                 ));
             }
             AssetKind::Audio => {}
             AssetKind::Model if asset.width != 0 || asset.height != 0 => {
                 return Err(ProjectError::Invalid(
-                    "model assets must have zero width and height".into(),
+                    tr(
+                        "模型素材的宽高必须均为零",
+                        "model assets must have zero width and height",
+                    )
+                    .into(),
                 ));
             }
             AssetKind::Model => {}
@@ -971,7 +1103,11 @@ fn validate_project(project: &ProjectFile, id: &str) -> Result<(), ProjectError>
     }
     if total > MAX_PROJECT_ASSET_BYTES {
         return Err(ProjectError::TooLarge(
-            "project assets exceed 512 MiB".into(),
+            tr(
+                "项目素材总大小超过 512 MiB",
+                "project assets exceed 512 MiB",
+            )
+            .into(),
         ));
     }
     validate_document_assets(&project.document, &project.assets)
@@ -992,14 +1128,20 @@ fn write_project(directory: &Path, project: &ProjectFile) -> Result<(), ProjectE
     validate_project(project, &project.metadata.id)?;
     let bytes = serde_json::to_vec_pretty(project)?;
     if bytes.len() as u64 > MAX_PROJECT_BYTES {
-        return Err(ProjectError::TooLarge("project JSON exceeds 34 MiB".into()));
+        return Err(ProjectError::TooLarge(
+            tr("项目 JSON 超过 34 MiB", "project JSON exceeds 34 MiB").into(),
+        ));
     }
     checked_directory(directory, false)?;
     let target = directory.join(PROJECT_FILE);
     match fs::symlink_metadata(&target) {
         Ok(metadata) if !metadata.is_file() || is_link(&metadata) => {
             return Err(ProjectError::Invalid(
-                "project.json must be a regular file".into(),
+                tr(
+                    "project.json 必须是常规文件",
+                    "project.json must be a regular file",
+                )
+                .into(),
             ));
         }
         Ok(_) => {}
@@ -1034,7 +1176,11 @@ fn write_project(directory: &Path, project: &ProjectFile) -> Result<(), ProjectE
 fn absolute_path(path: &Path) -> Result<PathBuf, ProjectError> {
     if path.as_os_str().is_empty() || path.components().any(|c| matches!(c, Component::ParentDir)) {
         return Err(ProjectError::Invalid(
-            "empty paths and parent traversal are not allowed".into(),
+            tr(
+                "路径不能为空，也不能指向父目录",
+                "empty paths and parent traversal are not allowed",
+            )
+            .into(),
         ));
     }
     let path = if path.is_absolute() {
@@ -1055,7 +1201,7 @@ fn checked_directory(path: &Path, create: bool) -> Result<(), ProjectError> {
     while let Some(component) = components.next() {
         if matches!(component, Component::ParentDir) {
             return Err(ProjectError::Invalid(
-                "parent traversal is not allowed".into(),
+                tr("路径不能指向父目录", "parent traversal is not allowed").into(),
             ));
         }
         current.push(component.as_os_str());
@@ -1080,7 +1226,11 @@ fn checked_directory(path: &Path, create: bool) -> Result<(), ProjectError> {
         };
         if is_link(&metadata) || !metadata.is_dir() {
             return Err(ProjectError::Invalid(
-                "project paths cannot contain symlinks or non-directories".into(),
+                tr(
+                    "项目路径只能由常规目录组成，不能包含符号链接",
+                    "project paths cannot contain symlinks or non-directories",
+                )
+                .into(),
             ));
         }
     }
@@ -1088,14 +1238,18 @@ fn checked_directory(path: &Path, create: bool) -> Result<(), ProjectError> {
 }
 
 fn regular_metadata(path: &Path) -> Result<fs::Metadata, ProjectError> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| ProjectError::Invalid("file has no parent".into()))?;
+    let parent = path.parent().ok_or_else(|| {
+        ProjectError::Invalid(tr("文件没有所在目录", "file has no parent").into())
+    })?;
     checked_directory(parent, false)?;
     let metadata = fs::symlink_metadata(path)?;
     if is_link(&metadata) || !metadata.is_file() {
         return Err(ProjectError::Invalid(
-            "expected a regular file, not a symlink".into(),
+            tr(
+                "请选择常规文件，不能使用符号链接",
+                "expected a regular file, not a symlink",
+            )
+            .into(),
         ));
     }
     Ok(metadata)
@@ -1117,7 +1271,7 @@ fn read_regular(path: &Path, limit: u64) -> Result<Vec<u8>, ProjectError> {
     let before = regular_metadata(path)?;
     if before.len() > limit {
         return Err(ProjectError::TooLarge(
-            "file exceeds its allowed size".into(),
+            tr("文件超过允许大小", "file exceeds its allowed size").into(),
         ));
     }
     let mut options = OpenOptions::new();
@@ -1137,7 +1291,11 @@ fn read_regular(path: &Path, limit: u64) -> Result<Vec<u8>, ProjectError> {
     let opened = file.metadata()?;
     if !opened.is_file() || opened.len() > limit {
         return Err(ProjectError::Invalid(
-            "file changed or exceeds its allowed size".into(),
+            tr(
+                "文件已更改或超过允许大小",
+                "file changed or exceeds its allowed size",
+            )
+            .into(),
         ));
     }
     #[cfg(unix)]
@@ -1145,7 +1303,7 @@ fn read_regular(path: &Path, limit: u64) -> Result<Vec<u8>, ProjectError> {
         use std::os::unix::fs::MetadataExt;
         if before.dev() != opened.dev() || before.ino() != opened.ino() {
             return Err(ProjectError::Invalid(
-                "file changed while being opened".into(),
+                tr("文件在打开过程中已更改", "file changed while being opened").into(),
             ));
         }
     }
@@ -1153,7 +1311,7 @@ fn read_regular(path: &Path, limit: u64) -> Result<Vec<u8>, ProjectError> {
     file.take(limit + 1).read_to_end(&mut bytes)?;
     if bytes.len() as u64 > limit {
         return Err(ProjectError::TooLarge(
-            "file exceeds its allowed size".into(),
+            tr("文件超过允许大小", "file exceeds its allowed size").into(),
         ));
     }
     regular_metadata(path)?;
@@ -1163,7 +1321,8 @@ fn read_regular(path: &Path, limit: u64) -> Result<Vec<u8>, ProjectError> {
 fn check_asset_file(path: &Path, asset: &ProjectAsset) -> Result<(), ProjectError> {
     let metadata = regular_metadata(path)?;
     if metadata.len() != asset.byte_len {
-        return Err(ProjectError::Invalid(format!(
+        return Err(ProjectError::Invalid(tr_format!(
+            "素材大小已更改：{}",
             "asset size changed: {}",
             asset.key
         )));
@@ -1198,7 +1357,8 @@ fn verify_asset(path: &Path, asset: &ProjectAsset) -> Result<(), ProjectError> {
         || info.height != asset.height
         || info.media_type != asset.media_type
     {
-        return Err(ProjectError::Invalid(format!(
+        return Err(ProjectError::Invalid(tr_format!(
+            "素材与项目清单不匹配：{}",
             "asset does not match its manifest: {}",
             asset.key
         )));
@@ -1233,7 +1393,9 @@ impl AssetKind {
             "audio/wav" | "audio/mpeg" | "audio/flac" | "audio/ogg" | "audio/mp4" => {
                 Ok(Self::Audio)
             }
-            _ => Err(ProjectError::Invalid("unsupported asset media type".into())),
+            _ => Err(ProjectError::Invalid(
+                tr("不支持的素材媒体类型", "unsupported asset media type").into(),
+            )),
         }
     }
 
@@ -1291,7 +1453,11 @@ fn validate_dimensions(width: u32, height: u32) -> Result<(), ProjectError> {
         || u64::from(width) * u64::from(height) > MAX_IMAGE_PIXELS
     {
         return Err(ProjectError::TooLarge(
-            "image dimensions must be nonzero, at most 32768 per side and 64 megapixels".into(),
+            tr(
+                "图片宽高必须大于零，每边最多 32768 像素，总计不超过 6400 万像素",
+                "image dimensions must be nonzero, at most 32768 per side and 64 megapixels",
+            )
+            .into(),
         ));
     }
     Ok(())
@@ -1305,7 +1471,15 @@ fn image_info(bytes: &[u8]) -> Result<AssetInfo, ProjectError> {
 }
 
 fn encoded_image_info(bytes: &[u8]) -> Result<AssetInfo, ProjectError> {
-    let invalid = || ProjectError::Invalid("choose a valid PNG, JPEG, GIF, or WebP image".into());
+    let invalid = || {
+        ProjectError::Invalid(
+            tr(
+                "请选择有效的 PNG、JPEG、GIF 或 WebP 图片",
+                "choose a valid PNG, JPEG, GIF, or WebP image",
+            )
+            .into(),
+        )
+    };
     let be32 = |slice: &[u8]| u32::from_be_bytes(slice.try_into().expect("four checked bytes"));
     let le24 = |slice: &[u8]| {
         u32::from(slice[0]) | (u32::from(slice[1]) << 8) | (u32::from(slice[2]) << 16)

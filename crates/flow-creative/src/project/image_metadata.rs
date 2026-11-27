@@ -19,14 +19,21 @@ pub(super) fn inspect(bytes: &[u8], info: &AssetInfo) -> Result<ImageOrientation
     let geometry = ImageOrientation::from_decoder(&mut decoder).map_err(image_error)?;
     if geometry.raw_dimensions != (info.width, info.height) {
         return Err(ProjectError::Invalid(
-            "image decoder disagrees with encoded dimensions".into(),
+            tr(
+                "解码后的图片尺寸与文件头部不符",
+                "image decoder disagrees with encoded dimensions",
+            )
+            .into(),
         ));
     }
     Ok(geometry)
 }
 
 fn image_error(error: image::ImageError) -> ProjectError {
-    ProjectError::Invalid(format!("图片方向或图像头无效：{error}"))
+    ProjectError::Invalid(tr_format!(
+        "图片方向或图像头无效：{error}",
+        "Invalid image orientation or header: {error}"
+    ))
 }
 
 fn reconcile_image(
@@ -42,7 +49,8 @@ fn reconcile_image(
         || raw.media_type != asset.media_type
         || (saved != geometry.oriented_dimensions && !(legacy && saved == geometry.raw_dimensions))
     {
-        return Err(ProjectError::Invalid(format!(
+        return Err(ProjectError::Invalid(tr_format!(
+            "素材与项目清单不匹配：{}",
             "asset does not match its manifest: {}",
             asset.key
         )));
@@ -110,7 +118,11 @@ pub(super) fn reconcile_preview(
         if cancelled.load(Ordering::Acquire) || start.elapsed() > std::time::Duration::from_secs(4)
         {
             return Err(ProjectError::Invalid(
-                "Project preview metadata cancelled or timed out".into(),
+                tr(
+                    "项目预览读取已取消或超时",
+                    "Project preview metadata cancelled or timed out",
+                )
+                .into(),
             ));
         }
         reconcile_image(directory, asset, true)?;
