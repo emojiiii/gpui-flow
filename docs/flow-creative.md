@@ -40,7 +40,9 @@ Drop files onto the canvas to place them at the pointer. Use the folder icon on 
 | WAV, MP3, FLAC, OGG, M4A | Play, pause, or seek with waveform and timeline controls. |
 | Supported static GLB | Preview the embedded mesh and orbit the viewpoint. |
 
-Install [FFmpeg tools](getting-started.md#optional-media-tools) for audio and video. See [local media and models](creative-reference.en.md#local-media-and-models) for format and size limits.
+Flow Creative prefers system-installed FFmpeg tools. On Windows, it can use Media Foundation to import and preview supported H.264 MP4 files when the relevant tools are missing. Saved projects still open, and any nodes that need the missing tools show a playback error. See the [media tool requirements](getting-started.md#optional-media-tools) and [local media and models](creative-reference.en.md#local-media-and-models) for format and size limits.
+
+To capture a still, select a video, seek to the moment you want, and choose **Capture preview frame** in the video controls. The PNG is saved in the project and placed on the canvas at the preview resolution.
 
 ## Connect nodes and process an image
 

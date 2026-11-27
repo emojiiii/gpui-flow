@@ -18,6 +18,7 @@ pub(crate) struct Engine {
     backend: FfmpegBackend,
     options: PlaybackOptions,
     metadata: MediaMetadata,
+    quarter_turn: bool,
     snapshot: PlaybackSnapshot,
     shared: Arc<Mutex<PlaybackSnapshot>>,
     session: Option<DecodeSession>,
@@ -34,20 +35,37 @@ impl Engine {
         shared: Arc<Mutex<PlaybackSnapshot>>,
         cancel: Arc<AtomicBool>,
     ) {
-        let metadata = match probe::probe(&source, &backend.tools, &backend.limits, &cancel) {
-            Ok(value) => value,
-            Err(error) => {
-                let mut state = shared.lock().unwrap_or_else(|e| e.into_inner());
-                state.state = if cancel.load(Ordering::Acquire) {
-                    PlaybackState::Stopped
-                } else {
-                    PlaybackState::Error
-                };
-                state.error = (!cancel.load(Ordering::Acquire)).then_some(error);
-                state.revision += 1;
-                return;
-            }
-        };
+        let playback =
+            match probe::probe_playback(&source, &backend.tools, &backend.limits, &cancel) {
+                Ok(value) => value,
+                Err(error) => {
+                    let mut state = shared.lock().unwrap_or_else(|e| e.into_inner());
+                    state.state = if cancel.load(Ordering::Acquire) {
+                        PlaybackState::Stopped
+                    } else {
+                        PlaybackState::Error
+                    };
+                    state.error = (!cancel.load(Ordering::Acquire)).then_some(error);
+                    state.revision += 1;
+                    return;
+                }
+            };
+        Self::run_probed(source, backend, options, commands, shared, cancel, playback);
+    }
+
+    pub(crate) fn run_probed(
+        source: PathBuf,
+        backend: FfmpegBackend,
+        options: PlaybackOptions,
+        commands: Receiver<Command>,
+        shared: Arc<Mutex<PlaybackSnapshot>>,
+        cancel: Arc<AtomicBool>,
+        playback: probe::PlaybackProbe,
+    ) {
+        let probe::PlaybackProbe {
+            metadata,
+            quarter_turn,
+        } = playback;
         let mut snapshot = PlaybackSnapshot::loading(&options);
         snapshot.metadata = Some(metadata.clone());
         snapshot.state = PlaybackState::Ready;
@@ -57,6 +75,7 @@ impl Engine {
             backend,
             options,
             metadata,
+            quarter_turn,
             snapshot,
             shared,
             session: None,
@@ -119,6 +138,7 @@ impl Engine {
             &self.backend,
             &self.options,
             &self.metadata,
+            self.quarter_turn,
             self.snapshot.position,
             playing,
         )?);

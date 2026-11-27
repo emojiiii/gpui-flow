@@ -659,20 +659,62 @@ mod tests {
     }
 
     #[test]
-    fn image_cancel_and_existing_output_leave_sources_intact() {
-        let _gate = PROCESS_GATE.lock().unwrap();
+    fn rgba_png_write_rejects_existing_destinations_and_preserves_files() {
         let directory = TestDirectory::new();
-        let (source, asset) = png_source(&directory);
-        let output = directory.0.join("output.jpg");
-        let settings = ProcessingKind::Image.default_settings();
+        let (source, _) = png_source(&directory);
+        let original = fs::read(&source).unwrap();
+        let output = directory.0.join("output.png");
+        let pixels = asymmetric_pixels();
         assert!(matches!(
-            execute(&settings, &source, &asset, &output, &AtomicBool::new(true)),
+            write_rgba_png(
+                &source,
+                &pixels,
+                &output,
+                &AtomicBool::new(true),
+                Instant::now()
+            ),
             Err(ProcessingError::Cancelled)
         ));
         assert!(!output.exists());
         fs::write(&output, b"existing").unwrap();
-        assert!(execute(&settings, &source, &asset, &output, &AtomicBool::new(false)).is_err());
+        let alias = directory.0.join("hard-link.png");
+        fs::hard_link(&source, &alias).unwrap();
+        let cancel = AtomicBool::new(false);
+        for destination in [&output, &source, &alias] {
+            assert!(matches!(
+                write_rgba_png(&source, &pixels, destination, &cancel, Instant::now()),
+                Err(ProcessingError::InvalidOutput(_))
+            ));
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+
+            let link = directory.0.join("symlink.png");
+            symlink(&source, &link).unwrap();
+            assert!(matches!(
+                write_rgba_png(&source, &pixels, &link, &cancel, Instant::now()),
+                Err(ProcessingError::InvalidOutput(_))
+            ));
+            assert_eq!(fs::read_link(link).unwrap(), source);
+
+            let linked_directory = directory.0.join("linked-directory");
+            symlink(&directory.0, &linked_directory).unwrap();
+            assert!(
+                write_rgba_png(
+                    &source,
+                    &pixels,
+                    &linked_directory.join("inside.png"),
+                    &cancel,
+                    Instant::now()
+                )
+                .is_err()
+            );
+            assert!(!directory.0.join("inside.png").exists());
+        }
         assert_eq!(fs::read(output).unwrap(), b"existing");
+        assert_eq!(fs::read(alias).unwrap(), original);
+        assert_eq!(fs::read(source).unwrap(), original);
     }
 
     #[test]

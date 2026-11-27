@@ -71,7 +71,7 @@ impl LocalProject {
                 .into(),
             ));
         }
-        verify_asset(&source_path, original)?;
+        verify_asset(&source_path, original, false)?;
         if self.project.assets.len() >= MAX_PROJECT_ASSETS {
             return Err(ProjectError::TooLarge(
                 tr(

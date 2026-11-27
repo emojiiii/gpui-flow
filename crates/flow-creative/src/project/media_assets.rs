@@ -1,7 +1,9 @@
 //! Explicit local audio/video import. Files are copied before probing so the
 //! inspected bytes are exactly the project-owned bytes that will be committed.
 use super::*;
-use gpui_flow_media::{FfmpegBackend, MediaLimits};
+#[cfg(windows)]
+use gpui_flow_media::WindowsVideoBackend;
+use gpui_flow_media::{FfmpegBackend, MediaError, MediaLimits, MediaMetadata};
 use std::time::Duration;
 
 pub const MAX_MEDIA_BYTES: u64 = 128 * 1024 * 1024;
@@ -21,7 +23,7 @@ pub fn creative_media_backend() -> FfmpegBackend {
 
 impl LocalProject {
     /// Import an explicit user-selected local clip; never persist its source
-    /// path. Requires host-installed FFprobe and must run off the UI thread.
+    /// path. Media inspection must run off the UI thread.
     pub fn import_media(&mut self, source: impl AsRef<Path>) -> Result<ProjectAsset, ProjectError> {
         let _transaction = transaction()?;
         self.check_revision()?;
@@ -95,9 +97,39 @@ impl LocalProject {
 }
 
 pub(super) fn verify_media(path: &Path, info: &mut AssetInfo) -> Result<(), ProjectError> {
-    let metadata = creative_media_backend()
-        .probe(path)
-        .map_err(|e| ProjectError::Invalid(e.to_string()))?;
+    let metadata = probe_media(path, info.extension)
+        .map_err(|error| ProjectError::Invalid(error.to_string()))?;
+    verify_media_metadata(info, metadata)
+}
+
+pub(super) fn probe_media(path: &Path, extension: &str) -> Result<MediaMetadata, MediaError> {
+    let ffmpeg = creative_media_backend();
+    let result = ffmpeg.probe(path);
+    #[cfg(windows)]
+    if extension == "mp4"
+        && let Err(MediaError::ToolUnavailable(message)) = &result
+    {
+        let native = WindowsVideoBackend {
+            limits: ffmpeg.limits,
+        };
+        return native.probe(path).map_err(|error| match error {
+            native_error @ (MediaError::InvalidMedia(_)
+            | MediaError::Process(_)
+            | MediaError::ToolUnavailable(_)) => {
+                MediaError::ToolUnavailable(format!("{message}. {native_error}"))
+            }
+            error => error,
+        });
+    }
+    #[cfg(not(windows))]
+    let _ = extension;
+    result
+}
+
+pub(super) fn verify_media_metadata(
+    info: &mut AssetInfo,
+    metadata: MediaMetadata,
+) -> Result<(), ProjectError> {
     let expected = match info.extension {
         "mp4" | "m4a" => "mov",
         "webm" => "webm",

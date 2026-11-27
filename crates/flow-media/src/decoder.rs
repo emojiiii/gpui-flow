@@ -46,14 +46,20 @@ impl DecodeSession {
         backend: &FfmpegBackend,
         options: &PlaybackOptions,
         metadata: &MediaMetadata,
+        quarter_turn: bool,
         position: f64,
         playing: bool,
     ) -> Result<Self, MediaError> {
-        let scale = (options.max_width as f64 / metadata.width.unwrap_or(1) as f64)
-            .min(options.max_height as f64 / metadata.height.unwrap_or(1) as f64)
+        let (mut width, mut height) = (metadata.width.unwrap_or(1), metadata.height.unwrap_or(1));
+        if quarter_turn {
+            // FFmpeg applies display rotation before the scale filter.
+            std::mem::swap(&mut width, &mut height);
+        }
+        let scale = (options.max_width as f64 / width as f64)
+            .min(options.max_height as f64 / height as f64)
             .min(1.);
-        let width = ((metadata.width.unwrap_or(1) as f64 * scale).floor() as u32).max(1);
-        let height = ((metadata.height.unwrap_or(1) as f64 * scale).floor() as u32).max(1);
+        let width = ((width as f64 * scale).floor() as u32).max(1);
+        let height = ((height as f64 * scale).floor() as u32).max(1);
         let (sender, frames) = mpsc::sync_channel(2);
         let cancel = Arc::new(AtomicBool::new(false));
         let mut session = Self {

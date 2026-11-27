@@ -1,4 +1,5 @@
-//! Local-file audio/video playback using host-installed FFmpeg tools.
+//! Local-file audio/video playback with a Windows MP4 backend and a portable
+//! backend using host-installed FFmpeg tools.
 //!
 //! No shell or network sources are accepted. Decode workers and the audio output
 //! process are owned by a player and killed/reaped on pause, seek, stop and drop.
@@ -16,6 +17,8 @@ mod probe;
 mod process;
 mod types;
 mod waveform;
+#[cfg(target_os = "windows")]
+mod windows_video;
 
 pub use backend::*;
 pub use image_loader::*;
@@ -24,3 +27,5 @@ pub use player::*;
 pub use pooled_backend::*;
 pub use types::*;
 pub use waveform::AudioWaveform;
+#[cfg(target_os = "windows")]
+pub use windows_video::WindowsVideoBackend;

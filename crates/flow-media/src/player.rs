@@ -33,7 +33,7 @@ pub trait MediaController: Send + Sync {
     fn shutdown(&self);
 }
 /// Thread-safe handle. Commands never block the UI. `shutdown` and `Drop` stop
-/// and join the worker, which kills/reaps every subprocess it owns.
+/// and join the playback worker.
 pub struct MediaPlayer {
     commands: SyncSender<Command>,
     shared: Arc<Mutex<PlaybackSnapshot>>,
@@ -46,6 +46,21 @@ impl MediaPlayer {
         backend: FfmpegBackend,
         options: PlaybackOptions,
     ) -> Result<Self, MediaError> {
+        Self::spawn_worker(options, move |options, receiver, state, cancelled| {
+            crate::engine::Engine::run(source, backend, options, receiver, state, cancelled);
+        })
+    }
+
+    pub(crate) fn spawn_worker(
+        options: PlaybackOptions,
+        run: impl FnOnce(
+            PlaybackOptions,
+            mpsc::Receiver<Command>,
+            Arc<Mutex<PlaybackSnapshot>>,
+            Arc<AtomicBool>,
+        ) + Send
+        + 'static,
+    ) -> Result<Self, MediaError> {
         let (commands, receiver) = mpsc::sync_channel(32);
         let shared = Arc::new(Mutex::new(PlaybackSnapshot::loading(&options)));
         let cancel = Arc::new(AtomicBool::new(false));
@@ -53,9 +68,7 @@ impl MediaPlayer {
         let cancelled = cancel.clone();
         let worker = thread::Builder::new()
             .name("flow-media-player".into())
-            .spawn(move || {
-                crate::engine::Engine::run(source, backend, options, receiver, state, cancelled);
-            })
+            .spawn(move || run(options, receiver, state, cancelled))
             .map_err(|error| MediaError::Process(error.to_string()))?;
         Ok(Self {
             commands,

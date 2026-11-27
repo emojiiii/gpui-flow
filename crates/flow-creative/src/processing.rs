@@ -5,14 +5,17 @@
 //! never updates a project or resolves a path from serialized node settings.
 //! A completed output belongs to the caller; incomplete outputs are removed.
 
-use crate::ProjectAsset;
+use crate::{
+    ProjectAsset, ProjectError,
+    project::{checked_directory, regular_metadata},
+};
 use gpui_flow_core::DataType;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
     fs::{self, File, OpenOptions},
     io::{self, Read},
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
     sync::{
         Mutex,
         atomic::{AtomicBool, Ordering},
@@ -330,32 +333,14 @@ fn check_deadline(
     }
 }
 
-fn checked_components(path: &Path) -> Result<(), ProcessingError> {
-    if !path.is_absolute()
-        || path
-            .components()
-            .any(|part| matches!(part, Component::ParentDir))
-    {
-        return Err(ProcessingError::InvalidSource(
-            "processing requires absolute local paths without parent traversal".into(),
-        ));
+fn processing_path_error(
+    error: ProjectError,
+    invalid: fn(String) -> ProcessingError,
+) -> ProcessingError {
+    match error {
+        ProjectError::Io(error) => ProcessingError::Io(error),
+        error => invalid(error.to_string()),
     }
-    let mut current = PathBuf::new();
-    for component in path.components() {
-        current.push(component.as_os_str());
-        // A Windows prefix such as `\\?\C:` only names a filesystem path
-        // once the following root separator has been appended.
-        if matches!(component, Component::Prefix(_)) {
-            continue;
-        }
-        let metadata = fs::symlink_metadata(&current)?;
-        if metadata.file_type().is_symlink() {
-            return Err(ProcessingError::InvalidSource(
-                "symlink path components are not accepted".into(),
-            ));
-        }
-    }
-    Ok(())
 }
 
 fn checked_source(
@@ -364,10 +349,14 @@ fn checked_source(
     kind: ProcessingKind,
     limit: u64,
 ) -> Result<PathBuf, ProcessingError> {
-    checked_components(path)?;
-    let path = path.canonicalize()?;
-    let metadata = fs::metadata(&path)?;
-    if !metadata.is_file() || metadata.len() == 0 || metadata.len() > limit {
+    if !path.is_absolute() {
+        return Err(ProcessingError::InvalidSource(
+            "processing requires an absolute local source path".into(),
+        ));
+    }
+    let metadata = regular_metadata(path)
+        .map_err(|error| processing_path_error(error, ProcessingError::InvalidSource))?;
+    if metadata.len() == 0 || metadata.len() > limit {
         return Err(ProcessingError::ResourceLimit(
             "source must be a nonempty regular local file within the processing byte limit".into(),
         ));
@@ -393,22 +382,23 @@ fn checked_source(
             "source asset has the wrong exact media type for this processor".into(),
         ));
     }
-    Ok(path)
+    Ok(path.canonicalize()?)
 }
 
 fn checked_destination(source: &Path, output: &Path) -> Result<PathBuf, ProcessingError> {
+    if !output.is_absolute() {
+        return Err(ProcessingError::InvalidOutput(
+            "processing requires an absolute local output path".into(),
+        ));
+    }
     let parent = output.parent().ok_or_else(|| {
         ProcessingError::InvalidOutput("output needs a local parent directory".into())
     })?;
     let name = output
         .file_name()
         .ok_or_else(|| ProcessingError::InvalidOutput("output needs a filename".into()))?;
-    checked_components(parent)?;
-    if !fs::metadata(parent)?.is_dir() {
-        return Err(ProcessingError::InvalidOutput(
-            "output parent is not a directory".into(),
-        ));
-    }
+    checked_directory(parent, false)
+        .map_err(|error| processing_path_error(error, ProcessingError::InvalidOutput))?;
     let output = parent.canonicalize()?.join(name);
     if output == source {
         return Err(ProcessingError::InvalidOutput(
@@ -634,24 +624,5 @@ mod tests {
             Err(ProcessingError::Cancelled)
         ));
         assert!(!cancelled.exists());
-    }
-
-    #[test]
-    fn source_and_existing_alias_destinations_are_rejected() {
-        let directory = TestDirectory::new();
-        let source = directory.0.join("source.png");
-        fs::write(&source, b"unchanged").unwrap();
-        assert!(checked_destination(&source, &source).is_err());
-        let alias = directory.0.join("alias.png");
-        fs::hard_link(&source, &alias).unwrap();
-        assert!(checked_destination(&source, &alias).is_err());
-        #[cfg(unix)]
-        {
-            let symlink = directory.0.join("symlink.png");
-            std::os::unix::fs::symlink(&source, &symlink).unwrap();
-            assert!(checked_destination(&source, &symlink).is_err());
-            assert!(checked_components(&symlink).is_err());
-        }
-        assert_eq!(fs::read(source).unwrap(), b"unchanged");
     }
 }

@@ -76,7 +76,8 @@ pub(super) fn reconcile_assets(
                 changed.insert(asset.key.clone());
             }
         } else {
-            verify_asset(&directory.join(&asset.key), asset)?;
+            // Keep saved media on the board when an optional system tool is missing.
+            verify_asset(&directory.join(&asset.key), asset, true)?;
         }
         checkpoint()?;
     }

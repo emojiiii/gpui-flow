@@ -599,7 +599,7 @@ impl LocalProject {
     /// UI code can use `resolve_asset_path` and let its media player decode later.
     pub fn resolve_asset(&self, key: &str) -> Result<PathBuf, ProjectError> {
         let (path, asset) = self.asset_path(key)?;
-        verify_asset(&path, asset)?;
+        verify_asset(&path, asset, false)?;
         Ok(path)
     }
 
@@ -1195,7 +1195,7 @@ fn absolute_path(path: &Path) -> Result<PathBuf, ProjectError> {
         .collect())
 }
 
-fn checked_directory(path: &Path, create: bool) -> Result<(), ProjectError> {
+pub(crate) fn checked_directory(path: &Path, create: bool) -> Result<(), ProjectError> {
     let mut current = PathBuf::new();
     let mut components = path.components().peekable();
     while let Some(component) = components.next() {
@@ -1237,7 +1237,7 @@ fn checked_directory(path: &Path, create: bool) -> Result<(), ProjectError> {
     Ok(())
 }
 
-fn regular_metadata(path: &Path) -> Result<fs::Metadata, ProjectError> {
+pub(crate) fn regular_metadata(path: &Path) -> Result<fs::Metadata, ProjectError> {
     let parent = path.parent().ok_or_else(|| {
         ProjectError::Invalid(tr("文件没有所在目录", "file has no parent").into())
     })?;
@@ -1330,7 +1330,11 @@ fn check_asset_file(path: &Path, asset: &ProjectAsset) -> Result<(), ProjectErro
     Ok(())
 }
 
-fn verify_asset(path: &Path, asset: &ProjectAsset) -> Result<(), ProjectError> {
+fn verify_asset(
+    path: &Path,
+    asset: &ProjectAsset,
+    allow_unavailable_media_probe: bool,
+) -> Result<(), ProjectError> {
     let kind = AssetKind::from_media_type(&asset.media_type)?;
     let bytes = read_regular(path, kind.max_bytes())?;
     let mut info = if matches!(kind, AssetKind::Model) {
@@ -1349,13 +1353,25 @@ fn verify_asset(path: &Path, asset: &ProjectAsset) -> Result<(), ProjectError> {
     } else {
         kind.inspect(&bytes)?
     };
-    if matches!(kind, AssetKind::Video | AssetKind::Audio) {
-        media_assets::verify_media(path, &mut info)?;
-    }
+    let dimensions_verified = if matches!(kind, AssetKind::Video | AssetKind::Audio) {
+        match media_assets::probe_media(path, info.extension) {
+            Ok(metadata) => {
+                media_assets::verify_media_metadata(&mut info, metadata)?;
+                true
+            }
+            Err(gpui_flow_media::MediaError::ToolUnavailable(_))
+                if allow_unavailable_media_probe =>
+            {
+                false
+            }
+            Err(error) => return Err(ProjectError::Invalid(error.to_string())),
+        }
+    } else {
+        true
+    };
     if bytes.len() as u64 != asset.byte_len
-        || info.width != asset.width
-        || info.height != asset.height
         || info.media_type != asset.media_type
+        || (dimensions_verified && (info.width != asset.width || info.height != asset.height))
     {
         return Err(ProjectError::Invalid(tr_format!(
             "素材与项目清单不匹配：{}",

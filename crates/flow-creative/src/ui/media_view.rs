@@ -1,8 +1,10 @@
 //! Project-owned media objects. The existing decoder owns its bounded workers;
 //! this adapter owns images and keeps transport controls outside the media.
 use super::*;
+#[cfg(windows)]
+use gpui_flow_media::WindowsVideoBackend;
 use gpui_flow_media::{
-    MediaBackend, MediaController, PlaybackOptions, PlaybackSnapshot, PlaybackState,
+    MediaBackend, MediaController, PlaybackOptions, PlaybackSnapshot, PlaybackState, VideoFrame,
 };
 use std::time::Duration;
 
@@ -112,7 +114,19 @@ impl MediaViews {
                 max_height: 360,
                 ..PlaybackOptions::default()
             };
-            let controller = match creative_media_backend().open(path, options) {
+            let ffmpeg = creative_media_backend();
+            #[cfg(windows)]
+            let controller = if path.extension().is_some_and(|extension| extension == "mp4") {
+                WindowsVideoBackend {
+                    limits: ffmpeg.limits.clone(),
+                }
+                .open_preferring_ffmpeg(path, options, ffmpeg)
+            } else {
+                ffmpeg.open(path, options)
+            };
+            #[cfg(not(windows))]
+            let controller = ffmpeg.open(path, options);
+            let controller = match controller {
                 Ok(controller) => controller,
                 Err(error) => {
                     return message(tr_format!(
@@ -144,6 +158,21 @@ impl MediaViews {
             .unwrap()
             .get(node)
             .map(|entry| entry.view.read(cx).snapshot.clone())
+    }
+    pub(super) fn displayed_video_frame(&self, node: &Node, cx: &App) -> Option<VideoFrame> {
+        let entries = self.entries.lock().unwrap();
+        let entry = entries
+            .get(&node.id)
+            .filter(|entry| Some(entry.asset.as_str()) == node.data["asset"].as_str())?;
+        let view = entry.view.read(cx);
+        if view.audio
+            || view.command_error.is_some()
+            || view.snapshot.error.is_some()
+            || view.image.is_none()
+        {
+            return None;
+        }
+        view.snapshot.frame.clone()
     }
     pub(super) fn command(&self, node: &NodeId, action: MediaAction, cx: &mut App) {
         let entries = self.entries.lock().unwrap();
@@ -442,6 +471,10 @@ impl CreativeCanvas {
             .as_ref()
             .and_then(|s| s.metadata.as_ref())
             .map_or(0., |m| m.duration);
+        let video = matches!(
+            node.kind.as_str(),
+            "video" | "generate_video" | "process_video"
+        );
         let transport = div()
             .flex()
             .items_center()
@@ -489,7 +522,20 @@ impl CreativeCanvas {
                 Action::Media(MediaAction::Mute),
                 !ready || !has_audio,
                 cx,
-            ));
+            ))
+            .when(video && self.project.is_some(), |transport| {
+                transport.child(self.icon_button(
+                    "media-capture",
+                    "camera",
+                    tr("截取预览帧", "Capture preview frame"),
+                    Action::CaptureVideoFrame(node.id.clone()),
+                    self.saving
+                        || self.importing
+                        || !self.canvas.read(cx).is_editable()
+                        || self.media_views.displayed_video_frame(node, cx).is_none(),
+                    cx,
+                ))
+            });
         div()
             .flex()
             .flex_col()

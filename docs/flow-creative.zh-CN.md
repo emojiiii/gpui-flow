@@ -40,7 +40,9 @@
 | WAV、MP3、FLAC、OGG、M4A | 使用波形和时间轴播放、暂停或跳转。 |
 | 受支持的静态 GLB | 预览内嵌网格并旋转视角。 |
 
-音视频功能需要 [FFmpeg 工具](getting-started.zh-CN.md#可选的媒体工具)。更多格式和模型细节见[完整手册](../crates/flow-creative/README.md#按任务查阅)。
+Flow Creative 优先使用系统上安装的 FFmpeg 工具。Windows 缺少相关工具时，可用 Media Foundation 导入和预览受支持的 H.264 MP4。已保存的项目仍可打开，需要缺失工具的节点会显示播放错误。其他格式与平台的依赖见[媒体工具](getting-started.zh-CN.md#可选的媒体工具)，格式和模型限制见[完整手册](../crates/flow-creative/README.md#按任务查阅)。
+
+要截取静帧，选中视频并跳转到目标位置，在视频控件中点击**截取预览帧**。应用会按预览分辨率生成 PNG，保存到项目并放到画布上。
 
 ## 连线与图片处理
 

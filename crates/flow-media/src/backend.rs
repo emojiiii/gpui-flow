@@ -52,30 +52,27 @@ impl FfmpegBackend {
     }
     /// Bounded executable detection. This runs processes; call off the UI thread.
     pub fn availability(&self) -> ToolAvailability {
-        let version = |path: &Path| {
-            let mut command = process::command(path);
-            command.arg("-version");
-            process::capture(
-                &mut command,
-                Duration::from_secs(3),
-                &Arc::new(AtomicBool::new(false)),
-                64 * 1024,
-            )
-            .map(|bytes| {
-                String::from_utf8_lossy(&bytes)
-                    .lines()
-                    .next()
-                    .unwrap_or("unknown version")
-                    .to_owned()
-            })
-        };
+        let cancel = Arc::new(AtomicBool::new(false));
         ToolAvailability {
-            ffmpeg: version(&self.tools.ffmpeg),
-            ffprobe: version(&self.tools.ffprobe),
-            ffplay: version(&self.tools.ffplay),
+            ffmpeg: tool_version(&self.tools.ffmpeg, &cancel),
+            ffprobe: tool_version(&self.tools.ffprobe, &cancel),
+            ffplay: tool_version(&self.tools.ffplay, &cancel),
         }
     }
 }
+
+pub(crate) fn tool_version(path: &Path, cancel: &Arc<AtomicBool>) -> Result<String, MediaError> {
+    let mut command = process::command(path);
+    command.arg("-version");
+    process::capture(&mut command, Duration::from_secs(3), cancel, 64 * 1024).map(|bytes| {
+        String::from_utf8_lossy(&bytes)
+            .lines()
+            .next()
+            .unwrap_or("unknown version")
+            .to_owned()
+    })
+}
+
 impl MediaBackend for FfmpegBackend {
     fn open(
         &self,

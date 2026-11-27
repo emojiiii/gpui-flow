@@ -517,7 +517,7 @@ mod tests {
     }
 
     #[test]
-    fn png_output_is_new_rgba_and_refuses_existing_files_and_source_aliases() {
+    fn adjusted_png_roundtrips_exposure_and_neutral_rgba() {
         let directory = TestDirectory::new();
         let source = directory.0.join("source.png");
         let base = RgbaImage::from_raw(
@@ -530,7 +530,6 @@ mod tests {
         .unwrap();
         base.save_with_format(&source, ::image::ImageFormat::Png)
             .unwrap();
-        let original = fs::read(&source).unwrap();
         let cancel = AtomicBool::new(false);
         let spec = ImageAdjustSpec {
             exposure: 1.0,
@@ -554,7 +553,6 @@ mod tests {
         let decoded = ::image::open(&output).unwrap();
         assert_eq!(decoded.color(), ::image::ColorType::Rgba8);
         assert_eq!(decoded.into_rgba8(), apply(&base, spec));
-        let output_bytes = fs::read(&output).unwrap();
         let neutral_output = directory.0.join("neutral.png");
         adjust_and_write(
             base.clone(),
@@ -566,36 +564,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(::image::open(&neutral_output).unwrap().into_rgba8(), base);
-        let alias = directory.0.join("alias.png");
-        fs::hard_link(&source, &alias).unwrap();
-        for destination in [&source, &alias, &output] {
-            assert!(matches!(
-                adjust_and_write(
-                    base.clone(),
-                    &source,
-                    &spec,
-                    destination,
-                    &cancel,
-                    Instant::now()
-                ),
-                Err(ProcessingError::InvalidOutput(_))
-            ));
-        }
-        #[cfg(unix)]
-        {
-            let link = directory.0.join("symlink.png");
-            std::os::unix::fs::symlink(&source, &link).unwrap();
-            assert!(matches!(
-                adjust_and_write(base.clone(), &source, &spec, &link, &cancel, Instant::now()),
-                Err(ProcessingError::InvalidOutput(_))
-            ));
-        }
         let cancelled = directory.0.join("cancelled.png");
         let asset = ProjectAsset {
             key: "assets/source.png".into(),
             name: "source".into(),
             media_type: "image/png".into(),
-            byte_len: original.len() as u64,
+            byte_len: fs::metadata(&source).unwrap().len(),
             width: 2,
             height: 2,
         };
@@ -617,8 +591,5 @@ mod tests {
             Err(ProcessingError::Timeout)
         ));
         assert!(!expired.exists());
-        assert_eq!(fs::read(&source).unwrap(), original);
-        assert_eq!(fs::read(&alias).unwrap(), original);
-        assert_eq!(fs::read(&output).unwrap(), output_bytes);
     }
 }

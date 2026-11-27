@@ -316,13 +316,12 @@ mod tests {
     }
 
     #[test]
-    fn edited_png_roundtrips_alpha_and_refuses_source_aliases_or_existing_output() {
+    fn edited_png_roundtrips_cropped_pixels_and_alpha() {
         let directory = TestDirectory::new();
         let source = directory.0.join("source.png");
         asymmetric_source()
             .save_with_format(&source, ::image::ImageFormat::Png)
             .unwrap();
-        let original = fs::read(&source).unwrap();
         let spec = ImageEditSpec {
             quarter_turns: 1,
             crop: Rect::new(Point::new(1.0 / 3.0, 0.0), Size::new(2.0 / 3.0, 0.5)),
@@ -338,43 +337,5 @@ mod tests {
         assert_eq!((result.width, result.height), (2, 1));
         assert_eq!(result.byte_len, fs::metadata(&output).unwrap().len());
         assert_pixels(&::image::open(&output).unwrap().into_rgba8(), &[3, 1]);
-        let output_bytes = fs::read(&output).unwrap();
-        assert!(
-            processing_image::write_rgba_png(&source, &edited, &output, &cancel, Instant::now())
-                .is_err()
-        );
-        assert_eq!(fs::read(&output).unwrap(), output_bytes);
-        assert!(
-            processing_image::write_rgba_png(&source, &edited, &source, &cancel, Instant::now())
-                .is_err()
-        );
-        let alias = directory.0.join("alias.png");
-        fs::hard_link(&source, &alias).unwrap();
-        assert!(
-            processing_image::write_rgba_png(&source, &edited, &alias, &cancel, Instant::now())
-                .is_err()
-        );
-        #[cfg(unix)]
-        {
-            let link = directory.0.join("symlink.png");
-            std::os::unix::fs::symlink(&source, &link).unwrap();
-            assert!(
-                processing_image::write_rgba_png(&source, &edited, &link, &cancel, Instant::now())
-                    .is_err()
-            );
-        }
-        let cancelled = directory.0.join("cancelled.png");
-        assert!(matches!(
-            processing_image::write_rgba_png(
-                &source,
-                &edited,
-                &cancelled,
-                &AtomicBool::new(true),
-                Instant::now()
-            ),
-            Err(ProcessingError::Cancelled)
-        ));
-        assert!(!cancelled.exists());
-        assert_eq!(fs::read(&source).unwrap(), original);
     }
 }

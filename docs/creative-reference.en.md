@@ -6,7 +6,7 @@
 
 | Asset | Requirements and limits |
 | --- | --- |
-| Audio and video | MP4 and WebM video, or WAV, MP3, FLAC, OGG, and M4A audio. Install `ffmpeg`, `ffprobe`, and `ffplay`. Each asset is limited to 128 MiB and 30 minutes. |
+| Audio and video | MP4 and WebM video, or WAV, MP3, FLAC, OGG, and M4A audio. On Windows, Media Foundation can preview H.264 MP4 with optional AAC audio when FFmpeg tools are unavailable. See the [media tool requirements](getting-started.md#optional-media-tools) for other formats and platforms. Each asset is limited to 128 MiB and 30 minutes. |
 | 3D models | GLB 2.0 with embedded buffers and textures. The static preview supports triangle meshes and opaque base colors. Animation, skinning, and external resources are outside the preview format. The file limit is 32 MiB, with an additional limit of 100,000 vertices and 50,000 triangles. |
 | Clipboard images | Static PNG or JPEG. Each image is limited to 32 MiB, 4,096 pixels per axis, and 4,194,304 pixels in total. |
 

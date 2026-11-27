@@ -43,7 +43,7 @@ xcode-select --install
 
 ### 可选的媒体工具
 
-将 `ffmpeg`、`ffprobe` 和 `ffplay` 加入 `PATH`，即可使用本地音视频功能。
+Flow Creative 优先使用 `PATH` 中的 `ffmpeg`、`ffprobe` 和 `ffplay`。Windows 缺少播放所需的工具时，会通过 Media Foundation 播放受支持的 H.264 MP4 和 AAC 伴音。WebM、独立音频和媒体转码使用外部工具。macOS 和 Linux 的音视频功能也使用这套工具。
 
 ## 启动 Flow Creative
 

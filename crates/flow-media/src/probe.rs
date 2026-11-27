@@ -29,9 +29,23 @@ pub(crate) fn probe(
     limits: &MediaLimits,
     cancel: &Arc<AtomicBool>,
 ) -> Result<MediaMetadata, MediaError> {
+    probe_playback(path, tools, limits, cancel).map(|playback| playback.metadata)
+}
+
+pub(crate) struct PlaybackProbe {
+    pub metadata: MediaMetadata,
+    pub quarter_turn: bool,
+}
+
+pub(crate) fn probe_playback(
+    path: &Path,
+    tools: &FfmpegTools,
+    limits: &MediaLimits,
+    cancel: &Arc<AtomicBool>,
+) -> Result<PlaybackProbe, MediaError> {
     let mut command = process::command(&tools.ffprobe);
     command.args(["-v","error","-max_alloc","67108864","-protocol_whitelist","file","-format_whitelist",process::FORMAT_WHITELIST,
-        "-show_entries","format=format_name,duration:stream=codec_type,width,height,sample_rate,channels,duration","-of","json"])
+        "-show_entries","format=format_name,duration:stream=codec_type,width,height,sample_rate,channels,duration:stream_side_data=rotation","-of","json"])
         .arg(path);
     let bytes = process::capture(&mut command, limits.probe_timeout, cancel, 1024 * 1024)?;
     let value: serde_json::Value =
@@ -85,7 +99,11 @@ pub(crate) fn probe(
             "video dimensions are missing or too large".into(),
         ));
     }
-    Ok(MediaMetadata {
+    let quarter_turn = video
+        .and_then(|stream| stream["side_data_list"].as_array())
+        .and_then(|entries| entries.iter().find_map(|entry| entry["rotation"].as_i64()))
+        .is_some_and(|rotation| rotation.rem_euclid(180) == 90);
+    let metadata = MediaMetadata {
         duration,
         width,
         height,
@@ -99,5 +117,9 @@ pub(crate) fn probe(
             .as_str()
             .unwrap_or("unknown")
             .into(),
+    };
+    Ok(PlaybackProbe {
+        metadata,
+        quarter_turn,
     })
 }

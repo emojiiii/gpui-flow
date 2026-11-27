@@ -108,6 +108,9 @@ impl CreativeCanvas {
         if node.kind == "mask" {
             return WorldSize::new(360., 164.);
         }
+        if node.kind == "video" && self.project.is_some() {
+            return WorldSize::new(304., 72.);
+        }
         if matches!(node.kind.as_str(), "video" | "audio") {
             return WorldSize::new(272., 72.);
         }

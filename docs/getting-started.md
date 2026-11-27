@@ -43,7 +43,7 @@ For Metal or SDK build errors, check the selected Xcode with `xcode-select -p`. 
 
 ### Optional media tools
 
-Put `ffmpeg`, `ffprobe`, and `ffplay` on `PATH` for local audio and video.
+Flow Creative prefers `ffmpeg`, `ffprobe`, and `ffplay` from `PATH`. When the tools needed for playback are missing on Windows, supported H.264 MP4 files with optional AAC audio use Media Foundation. WebM, standalone audio, and media conversion use the external tools. macOS and Linux use them for audio and video.
 
 ## Open Flow Creative
 

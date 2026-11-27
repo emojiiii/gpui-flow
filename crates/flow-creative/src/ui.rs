@@ -467,6 +467,7 @@ enum Action {
     EditText,
     FinishText,
     Media(media_view::MediaAction),
+    CaptureVideoFrame(NodeId),
     TextSize(f32),
     TextBold,
     TextAlign(TextAlignment),
@@ -1358,6 +1359,10 @@ impl CreativeCanvas {
                 }
                 return;
             }
+            Action::CaptureVideoFrame(node) => {
+                self.capture_video_frame(&node, cx);
+                return;
+            }
             Action::EditText => {
                 if let Some(node) = self.selected(cx).filter(|n| n.kind == "text") {
                     self.begin_text_edit(node.id, window, cx);
@@ -1931,6 +1936,7 @@ mod text_appearance_tools;
 mod text_objects;
 mod text_placement_tools;
 mod tool_navigation;
+mod video_frame_capture;
 mod workbench;
 pub use workbench::CreativeWorkbench;
 
