@@ -2,13 +2,20 @@
 
 [English](README.md) · [项目说明](../README.zh-CN.md)
 
-在 Flow Creative 中创建和导出本地画布项目，也可以使用 Rust 库在 GPUI 应用中嵌入节点图或保留式显示场景。
+使用 gpui-flow SDK 构建自己的画布应用，或在 Flow Creative 中编辑本地画布项目。
 
 ## 入门与工作台
 
-- [安装并启动 Flow Creative](getting-started.zh-CN.md)，适用于 Windows、macOS 和 Ubuntu。
-- [Flow Creative 使用手册](../crates/flow-creative/README.md)涵盖画布工具、图层与画框、本地媒体、素材导出、项目存储和生成节点。
-- [在无桌面环境运行示例](getting-started.zh-CN.md#在无桌面环境运行示例)，了解图编辑、后台任务和工作流。
+### 使用 gpui-flow SDK 开发
+
+- [SDK 入门](library.zh-CN.md)介绍如何构建类型化节点图，以及在 GPUI 宿主中使用 `FlowCanvas` 和 `SceneView`。
+- [可运行的 SDK 示例](library.zh-CN.md#在无桌面环境运行示例)涵盖图编辑、后台任务和工作流，无需桌面会话。
+
+### 使用 Flow Creative
+
+- [桌面安装与启动](getting-started.zh-CN.md)适用于 Windows、macOS 和 Ubuntu。
+- [工作台指南](flow-creative.zh-CN.md)介绍素材排布、节点连线和画框导出。
+- [完整工作台参考](../crates/flow-creative/README.md)涵盖素材格式、保存行为和宿主扩展契约。
 
 ## 库与宿主集成
 

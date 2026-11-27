@@ -1,5 +1,5 @@
 import { posix } from 'node:path'
-import { defineConfig, type DefaultTheme } from 'vitepress'
+import { defineConfig } from 'vitepress'
 import { publishedPages } from '../stage.mjs'
 
 const repository = 'https://github.com/emojiiii/gpui-flow'
@@ -15,58 +15,21 @@ const siteUrl = process.env.PAGES_SITE_URL || 'https://emojiiii.github.io/gpui-f
 const base = `${new URL(siteUrl).pathname.replace(/\/$/, '')}/`
 const pages = await publishedPages()
 const originalPaths = new Map([...pages].map(([original, staged]) => [staged, original]))
-const pageLanguages = new Map([
-  ['index.md', 'en'],
-  ['docs/index.md', 'en'],
-  ['docs/getting-started/index.md', 'en'],
-  ['docs/flow-creative/index.md', 'en'],
-  ['overview/index.md', 'en'],
-  ['README.zh-CN/index.md', 'zh-CN'],
-  ['docs/README.zh-CN/index.md', 'zh-CN'],
-  ['docs/getting-started.zh-CN/index.md', 'zh-CN'],
-  ['crates/flow-creative/index.md', 'zh-CN'],
-  ['overview/zh/index.md', 'zh-CN'],
+const translatedRoutes = [
+  ['/', '/README.zh-CN/'],
+  ['/docs/', '/docs/README.zh-CN/'],
+  ['/docs/library/', '/docs/library.zh-CN/'],
+  ['/overview/', '/overview/zh/'],
+  ['/docs/getting-started/', '/docs/getting-started.zh-CN/'],
+  ['/docs/flow-creative/', '/docs/flow-creative.zh-CN/'],
+] as const
+const creativeRoutes = new Set([
+  '/docs/getting-started/',
+  '/docs/getting-started.zh-CN/',
+  '/docs/flow-creative/',
+  '/docs/flow-creative.zh-CN/',
+  '/crates/flow-creative/',
 ])
-
-const sidebar: DefaultTheme.SidebarItem[] = [
-  {
-    text: 'Get started',
-    items: [
-      { text: 'Documentation index', link: '/docs/' },
-      { text: 'Installation and first project', link: '/docs/getting-started/' },
-      { text: 'Flow Creative guide', link: '/docs/flow-creative/' },
-      { text: 'Project overview', link: '/overview/' },
-    ],
-  },
-  {
-    text: 'Library',
-    items: [
-      { text: 'Graph architecture', link: '/docs/architecture/' },
-      { text: 'Custom nodes', link: '/docs/custom-nodes/' },
-      { text: 'Workflows and runners', link: '/docs/workflows/' },
-      { text: 'Display scenes', link: '/docs/display-scenes/' },
-      { text: 'Components', link: '/docs/components/' },
-      { text: 'Compatibility', link: '/docs/leafer-compatibility-profile/' },
-    ],
-  },
-  {
-    text: 'Development',
-    items: [
-      { text: 'Testing', link: '/docs/testing/' },
-      { text: 'Known limitations', link: '/docs/limitations/' },
-      { text: 'Publishing the documentation', link: '/docs/publishing/' },
-    ],
-  },
-  {
-    text: '简体中文',
-    items: [
-      { text: '文档目录', link: '/docs/README.zh-CN/' },
-      { text: '环境准备与入门', link: '/docs/getting-started.zh-CN/' },
-      { text: 'Flow Creative 操作指南', link: '/crates/flow-creative/' },
-      { text: '项目概览', link: '/overview/zh/' },
-    ],
-  },
-]
 
 function rewriteLink(source: string, link: string) {
   if (/^(?:[\w+.-]+:|\/|#)/.test(link)) return link
@@ -96,8 +59,18 @@ export default defineConfig({
   cleanUrls: true,
   sitemap: { hostname: new URL(base, siteUrl).href },
   transformPageData(page) {
-    const language = pageLanguages.get(page.relativePath)
-    if (language) page.frontmatter.uiLanguage = language
+    const route = `/${page.relativePath.replace(/index\.md$/, '')}`
+    if (creativeRoutes.has(route)) page.frontmatter.docsSection = 'creative'
+
+    const translation = translatedRoutes.find(([en, zh]) => route === en || route === zh)
+    if (translation) {
+      const [en, zh] = translation
+      page.frontmatter.uiLanguage = route === zh ? 'zh-CN' : 'en'
+      page.frontmatter.languageLinks = { en, zh }
+    } else if (route === '/crates/flow-creative/') {
+      page.frontmatter.uiLanguage = 'zh-CN'
+      page.frontmatter.languageLinks = { en: '/docs/flow-creative/', zh: route }
+    }
   },
   transformHtml(html, _id, { pageData }) {
     if (pageData.frontmatter.uiLanguage === 'zh-CN') {
@@ -105,11 +78,6 @@ export default defineConfig({
     }
   },
   themeConfig: {
-    nav: [
-      { text: 'Documentation', link: '/docs/' },
-      { text: 'Flow Creative', link: '/docs/flow-creative/' },
-    ],
-    sidebar,
     socialLinks: [{ icon: 'github', link: repository }],
     search: {
       provider: 'local',

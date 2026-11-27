@@ -4,18 +4,16 @@
 
 ## Set up the build
 
-From the repository root, select the Rust toolchain used by CI:
+Select the Rust toolchain used by CI from the repository root.
 
 ```sh
 rustup toolchain install 1.98.1 --component rustfmt --component clippy
 rustup override set 1.98.1
 ```
 
-Use `--locked` with Cargo build and test commands to use the dependency versions and Git revisions in the lockfile. The first build may need network access to fetch dependencies.
+The first build may need network access to fetch the dependencies pinned in `Cargo.lock`.
 
 ### Ubuntu 24.04
-
-Install the native build dependencies:
 
 ```sh
 sudo apt-get update
@@ -27,7 +25,7 @@ sudo apt-get install -y \
   libzstd-dev
 ```
 
-Run the workbench in a desktop session with fonts and a working graphics backend.
+Run the workbench in a desktop session with a working graphics backend.
 
 ### Windows
 
@@ -35,18 +33,17 @@ Use Git, the MSVC Rust toolchain, and Visual Studio 2022 Build Tools with the **
 
 ### macOS
 
-Install the Xcode Command Line Tools and check that the selected SDK exposes Clang:
+Install the Xcode Command Line Tools.
 
 ```sh
 xcode-select --install
-xcrun --find clang
 ```
 
-For Metal or SDK build errors, check the selected toolchain with `xcode-select -p`. Some SDK configurations require the full Xcode installation.
+For Metal or SDK build errors, check the selected Xcode with `xcode-select -p`. Some SDK configurations require full Xcode.
 
 ### Optional media tools
 
-Put `ffmpeg`, `ffprobe`, and `ffplay` on `PATH` to use local audio and video features. Playback with sound also needs a system audio device. See the [media backend guide (中文)](media.md).
+Put `ffmpeg`, `ffprobe`, and `ffplay` on `PATH` for local audio and video.
 
 ## Open Flow Creative
 
@@ -54,20 +51,22 @@ Put `ffmpeg`, `ffprobe`, and `ffplay` on `PATH` to use local audio and video fea
 cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative
 ```
 
-The workbench opens to the project home. Its current controls are labeled in Chinese.
+The desktop app currently displays its controls in Chinese.
 
-1. Select **新建项目** (New project) to open a blank canvas.
-2. Drop a local PNG or JPEG onto the canvas from your file manager. You can also right-click the canvas and choose **导入素材到此处…** (Import assets here).
-3. Press **T** with the canvas focused, click to place a text object, and enter a caption. Select the image or text to see its editing controls.
-4. Return to the project home and reopen the project to see your objects, imported assets, and viewport restored.
+![Flow Creative project home with the project name field above a dark create button.](images/flow-creative-projects.png)
 
-To explore a populated board with sample nodes, open the built-in demo directly:
+1. Enter a project name and click the **+** button below the name field.
+2. Drag a local PNG or JPEG from your file manager onto the blank canvas.
+3. Press **T** with the canvas focused, click the canvas, then type a caption. Press **Esc** when done.
+4. Use the back arrow in the upper-left corner and reopen the project to see the saved canvas.
+
+To open the built-in demo, run the same command with `--demo` after Cargo's `--` separator.
 
 ```sh
 cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative -- --demo
 ```
 
-Continue with the [Flow Creative guide](flow-creative.md) to organize a canvas, connect nodes for local image processing, or export a frame.
+See the [demo screenshot and canvas controls](flow-creative.md#navigate-and-edit-the-canvas).
 
 ## Choose where projects are saved
 
@@ -77,42 +76,15 @@ Continue with the [Flow Creative guide](flow-creative.md) to organize a canvas, 
 | macOS | `~/Library/Application Support/Flow Creative/Projects` |
 | Windows | `%LOCALAPPDATA%/Flow Creative/Projects` |
 
-Use `--projects-dir` to open the project home at a different location:
+To change where the app looks for projects, pass `--projects-dir` after Cargo's `--` separator.
 
 ```sh
 cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative -- --projects-dir ./projects
 ```
 
-Use `--file` to open an existing standalone `FlowDocument` (graph and viewport):
+Use `--file ./board.flow.json` to open a standalone `FlowDocument` containing a graph and viewport. For project asset storage, see the [Flow Creative guide](flow-creative.md#create-and-reopen-a-project).
 
-```sh
-cargo run --locked -p gpui-flow-creative --features desktop --bin flow-creative -- --file ./board.flow.json
-```
+<a id="run-examples-without-a-desktop-session"></a>
+<a id="embed-a-canvas-in-your-app"></a>
 
-Projects store their document and imported assets together. See [project storage](flow-creative.md#create-and-reopen-a-project) and [local persistence (中文)](../crates/flow-creative/README.md#本地持久化).
-
-## Run examples without a desktop session
-
-The [documentation examples](examples/src/bin/) use a standalone Cargo workspace. Run these from the repository root:
-
-```sh
-cargo run --locked --manifest-path docs/examples/Cargo.toml --bin core
-cargo run --locked --manifest-path docs/examples/Cargo.toml --bin runner
-cargo run --locked --manifest-path docs/examples/Cargo.toml --bin workflow
-```
-
-`core` checks typed connections, transactions, undo/redo, and a document round trip. `runner` shows progress, completion, and retry for an independent task. `workflow` passes a value through two connected nodes and prints `HELLO CANVAS`. The examples make no external service calls.
-
-To run just the graph model and runtime tests:
-
-```sh
-cargo test --locked -p gpui-flow-core -p gpui-flow-runtime
-```
-
-## Embed a canvas in your app
-
-- Use `CreativeCanvas`, `CreativeRegistry`, and `ProjectStore` from `gpui-flow-creative` for creative objects and local projects. Enable its `desktop` feature for `CreativeCanvas`.
-- Use `FlowCanvas` from `gpui-flow` for a node graph with your own node definitions and renderers, or `SceneView` for a retained display scene.
-- Use the core and runtime crates directly for graph editing and task execution outside GPUI.
-
-Use a GPUI dependency compatible with the pinned workspace revision. For asset setup, `gpui_kit::init(cx)`, and the shared text export backend, follow the [desktop entry point](../crates/flow-creative/src/main.rs). Continue with the [architecture and API guides](README.md#library-and-host-integration) or [local validation commands (中文)](testing.md).
+For library development, [run headless examples](library.md#run-examples-without-a-desktop-session) or [embed a canvas in your app](library.md#embed-a-canvas-in-your-app).

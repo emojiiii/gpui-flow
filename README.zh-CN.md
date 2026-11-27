@@ -38,7 +38,7 @@ flowchart LR
     Process --> Export["导出处理后的图片"]
 ```
 
-操作方式、支持的媒体和导出格式、项目保存与宿主接入见 [Flow Creative 指南](crates/flow-creative/README.md)。
+画布操作、素材处理和导出见 [Flow Creative 指南](docs/flow-creative.zh-CN.md)，格式限制与宿主接入见[详细参考](crates/flow-creative/README.md)。
 
 ## 在应用中复用
 
@@ -63,7 +63,7 @@ cargo run --locked --manifest-path docs/examples/Cargo.toml --bin core
 
 ## 文档
 
-- [文档索引](docs/README.zh-CN.md)与[入门指南](docs/getting-started.zh-CN.md)
-- [图架构](docs/architecture.md)、[显示场景](docs/display-scenes.md)与[自定义节点](docs/custom-nodes.md)
-- [本地验证](docs/testing.md)与[已知限制](docs/limitations.md)
+- **gpui-flow 库** · [从 Rust 示例开始](docs/library.zh-CN.md)
+- **Flow Creative 工作台** · [安装并创建首个项目](docs/getting-started.zh-CN.md) · [画布工作流](docs/flow-creative.zh-CN.md)
+- [文档索引](docs/README.zh-CN.md)
 - [本地预览文档与发布到 GitHub Pages（英文）](docs/publishing.md)

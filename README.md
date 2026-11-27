@@ -52,9 +52,8 @@ flowchart LR
 ```
 
 See the [Flow Creative guide](docs/flow-creative.md) for canvas controls,
-project storage, and media workflows. The
-[detailed reference (中文)](crates/flow-creative/README.md) covers format limits
-and host integration.
+project storage, and media workflows. Format limits and host integration are
+covered in the [detailed Chinese reference](crates/flow-creative/README.md).
 
 ## Build with gpui-flow
 
@@ -85,7 +84,7 @@ cargo run --locked --manifest-path docs/examples/Cargo.toml --bin core
 
 ## Documentation
 
-- [Documentation index](docs/README.md) and [getting started](docs/getting-started.md)
-- [Graph architecture](docs/architecture.md), [display scenes](docs/display-scenes.md), and [custom nodes](docs/custom-nodes.md)
-- [Local verification](docs/testing.md) and [known limitations](docs/limitations.md)
+- **gpui-flow library** · [Start with a Rust example](docs/library.md)
+- **Flow Creative app** · [Install and open your first project](docs/getting-started.md) · [Canvas workflows](docs/flow-creative.md)
+- [Documentation index](docs/README.md)
 - [Preview and publish the docs with GitHub Pages](docs/publishing.md)
